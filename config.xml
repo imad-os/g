@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Verify every value against the current Samsung docs before submitting.
+     Bump SHELL in js/boot/loader.js and "shell" in app-manifest.json whenever this file changes. -->
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
+        id="https://imad-os.github.io/g/arcade" version="1.0.0" viewmodes="maximized">
+    <tizen:application id="XXXXXXXXXX.arcade" package="XXXXXXXXXX" required_version="4.0"/>
+    <name>Arcade</name>
+    <icon src="icon.png"/>
+    <content src="index.html"/>
+    <feature name="http://tizen.org/feature/screen.size.all"/>
+    <tizen:profile name="tv"/>
+    <!-- WARP mode. Do NOT add tizen:allow-navigation (it switches the app to a strict CSP). -->
+    <access origin="*" subdomains="true"/>
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable"
+                   encryption="disable" install-location="auto" hwkey-event="enable"/>
+    <tizen:metadata key="http://samsung.com/tv/metadata/multitasking.support" value="true"/>
+</widget>

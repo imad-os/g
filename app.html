@@ -1,0 +1,70 @@
+<!-- Launcher markup. Injected into <body> by js/boot/loader.js (bundled package or hosted copy). -->
+<div id="stage" class="stage">
+
+    <!-- Main menu -->
+    <main id="menu" class="screen menu" aria-labelledby="menu-title">
+        <header class="menu-head">
+            <h1 id="menu-title" class="logo" data-i18n="appTitle">Arcade</h1>
+            <div class="head-right">
+                <span id="input-indicator" class="chip" role="status"></span>
+                <button id="btn-settings" class="btn" data-focus data-i18n="settings">Settings</button>
+            </div>
+        </header>
+        <div id="game-grid" class="grid" role="list"></div>
+    </main>
+
+    <!-- Settings -->
+    <section id="settings" class="screen settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+        <h2 id="settings-title" class="screen-title" data-i18n="settings">Settings</h2>
+        <div id="settings-list" class="settings-list"></div>
+    </section>
+
+    <!-- Text pages: controller help, privacy policy, about -->
+    <section id="page" class="screen page" role="dialog" aria-modal="true" aria-labelledby="page-title" hidden>
+        <h2 id="page-title" class="screen-title"></h2>
+        <div id="page-body" class="page-body"></div>
+        <button id="page-close" class="btn btn-primary" data-focus data-i18n="close">Close</button>
+    </section>
+
+    <!-- Game layer: one game at a time, in an iframe created by js/launcher/game-host.js -->
+    <section id="game-layer" class="game-layer" tabindex="-1" hidden>
+        <div id="game-frame-box" class="game-frame-box"></div>
+
+        <div id="game-loading" class="game-loading" hidden>
+            <div id="game-loading-title" class="loading-title"></div>
+            <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" data-i18n-aria-label="loading">
+                <div id="game-loading-fill" class="bar-fill"></div>
+            </div>
+        </div>
+
+        <div id="game-error" class="dialog" role="dialog" aria-modal="true" aria-labelledby="game-error-text" hidden>
+            <p id="game-error-text" class="dialog-text" data-i18n="loadError">The game could not be loaded.</p>
+            <div class="dialog-buttons">
+                <button id="game-error-retry" class="btn btn-primary" data-focus data-i18n="retry">Retry</button>
+                <button id="game-error-back" class="btn" data-focus data-i18n="backToMenu">Back to menu</button>
+            </div>
+        </div>
+
+        <div id="pause" class="pause" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden>
+            <div class="pause-box">
+                <h2 id="pause-title" class="pause-title" data-i18n="paused">Paused</h2>
+                <div id="pause-items" class="pause-items"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Generic confirmation dialog (exit, reset progress) -->
+    <div id="dialog-backdrop" class="backdrop" hidden>
+        <div id="dialog" class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="dialog-text">
+            <h2 id="dialog-title" class="dialog-title"></h2>
+            <p id="dialog-text" class="dialog-text"></p>
+            <div class="dialog-buttons">
+                <button id="dialog-yes" class="btn btn-primary" data-focus></button>
+                <button id="dialog-no" class="btn" data-focus></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+    <div id="a11y-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+</div>

@@ -1,0 +1,170 @@
+/* UI strings (en, fr, es, ar). Markup uses data-i18n / data-i18n-aria-label; code uses I18n.t(). */
+var I18n = (function () {
+    'use strict';
+
+    var LANGS = ['en', 'fr', 'es', 'ar'];
+    var NAMES = { en: 'English', fr: 'Français', es: 'Español', ar: 'العربية' };
+
+    var S = {
+        en: {
+            appTitle: 'Arcade', games: 'Games', settings: 'Settings', play: 'Play',
+            badgeNew: 'New', badgeUpdated: 'Updated', lastPlayed: 'Last played',
+            language: 'Language', musicVol: 'Music volume', sfxVol: 'Sound effects volume',
+            graphics: 'Graphics quality', gfxAuto: 'Auto', gfxLow: 'Low', gfxMid: 'Medium', gfxHigh: 'High',
+            controls: 'Controller help', resetProgress: 'Reset progress', privacy: 'Privacy policy',
+            about: 'About', close: 'Close', back: 'Back',
+            exitTitle: 'Exit Arcade?', exitText: 'Do you want to close the app?', yes: 'Yes', no: 'No',
+            resetTitle: 'Reset progress?', resetText: 'All saved progress and high scores will be deleted.',
+            resetDone: 'Progress reset',
+            paused: 'Paused', resume: 'Resume', quitToMenu: 'Quit to menu',
+            loading: 'Loading', loadError: 'The game could not be loaded.', retry: 'Retry', backToMenu: 'Back to menu',
+            padOn: 'Gamepad connected', padOff: 'Gamepad disconnected. Game paused.',
+            inputRemote: 'Remote', inputPad: 'Gamepad', inputKeys: 'Keyboard',
+            version: 'Version', build: 'Build', online: 'Online update', onlineYes: 'Yes (hosted copy)',
+            onlineNo: 'No (bundled copy)', device: 'Device profile',
+            adjustHint: 'Use left and right to change',
+            controlsText: [
+                'Remote: arrows move, OK jumps or confirms, hold OK to jump higher, Back pauses.',
+                'Red key: run on or off (for remote-only play). Play/Pause key: pause.',
+                'Gamepad: D-pad or left stick to move, A to jump, B or X to run or fire, Start or Select to pause.',
+                'Keyboard: arrows, Space or Z to jump, Shift or X to run, Esc to pause.'
+            ],
+            privacyText: [
+                'Arcade does not collect, store or share any personal data.',
+                'Game progress and settings are saved only on this TV and can be deleted with Reset progress.',
+                'At start-up the app downloads update files from imad-os.github.io. No identifier is sent.',
+                'There are no ads, accounts or in-app purchases.'
+            ]
+        },
+        fr: {
+            appTitle: 'Arcade', games: 'Jeux', settings: 'Paramètres', play: 'Jouer',
+            badgeNew: 'Nouveau', badgeUpdated: 'Mis à jour', lastPlayed: 'Dernier joué',
+            language: 'Langue', musicVol: 'Volume de la musique', sfxVol: 'Volume des effets',
+            graphics: 'Qualité graphique', gfxAuto: 'Auto', gfxLow: 'Basse', gfxMid: 'Moyenne', gfxHigh: 'Haute',
+            controls: 'Aide des commandes', resetProgress: 'Réinitialiser la progression', privacy: 'Politique de confidentialité',
+            about: 'À propos', close: 'Fermer', back: 'Retour',
+            exitTitle: 'Quitter Arcade ?', exitText: "Voulez-vous fermer l'application ?", yes: 'Oui', no: 'Non',
+            resetTitle: 'Réinitialiser ?', resetText: 'Toute la progression et les meilleurs scores seront supprimés.',
+            resetDone: 'Progression réinitialisée',
+            paused: 'Pause', resume: 'Reprendre', quitToMenu: 'Retour au menu',
+            loading: 'Chargement', loadError: "Le jeu n'a pas pu être chargé.", retry: 'Réessayer', backToMenu: 'Retour au menu',
+            padOn: 'Manette connectée', padOff: 'Manette déconnectée. Jeu en pause.',
+            inputRemote: 'Télécommande', inputPad: 'Manette', inputKeys: 'Clavier',
+            version: 'Version', build: 'Build', online: 'Mise à jour en ligne', onlineYes: 'Oui (copie en ligne)',
+            onlineNo: 'Non (copie intégrée)', device: "Profil de l'appareil",
+            adjustHint: 'Utilisez gauche et droite pour modifier',
+            controlsText: [
+                'Télécommande : flèches pour bouger, OK pour sauter ou valider, maintenir OK pour sauter plus haut, Retour pour la pause.',
+                'Touche rouge : course activée ou non. Touche Lecture/Pause : pause.',
+                'Manette : croix ou stick gauche pour bouger, A pour sauter, B ou X pour courir ou tirer, Start ou Select pour la pause.',
+                'Clavier : flèches, Espace ou Z pour sauter, Maj ou X pour courir, Échap pour la pause.'
+            ],
+            privacyText: [
+                "Arcade ne collecte, ne stocke et ne partage aucune donnée personnelle.",
+                'La progression et les réglages sont enregistrés uniquement sur ce téléviseur.',
+                "Au démarrage, l'application télécharge des fichiers de mise à jour depuis imad-os.github.io. Aucun identifiant n'est envoyé.",
+                "Pas de publicité, de compte ni d'achat intégré."
+            ]
+        },
+        es: {
+            appTitle: 'Arcade', games: 'Juegos', settings: 'Ajustes', play: 'Jugar',
+            badgeNew: 'Nuevo', badgeUpdated: 'Actualizado', lastPlayed: 'Último jugado',
+            language: 'Idioma', musicVol: 'Volumen de la música', sfxVol: 'Volumen de efectos',
+            graphics: 'Calidad gráfica', gfxAuto: 'Auto', gfxLow: 'Baja', gfxMid: 'Media', gfxHigh: 'Alta',
+            controls: 'Ayuda de controles', resetProgress: 'Borrar progreso', privacy: 'Política de privacidad',
+            about: 'Acerca de', close: 'Cerrar', back: 'Atrás',
+            exitTitle: '¿Salir de Arcade?', exitText: '¿Quieres cerrar la aplicación?', yes: 'Sí', no: 'No',
+            resetTitle: '¿Borrar progreso?', resetText: 'Se eliminarán todo el progreso y las mejores puntuaciones.',
+            resetDone: 'Progreso borrado',
+            paused: 'Pausa', resume: 'Continuar', quitToMenu: 'Salir al menú',
+            loading: 'Cargando', loadError: 'No se pudo cargar el juego.', retry: 'Reintentar', backToMenu: 'Volver al menú',
+            padOn: 'Mando conectado', padOff: 'Mando desconectado. Juego en pausa.',
+            inputRemote: 'Mando a distancia', inputPad: 'Mando', inputKeys: 'Teclado',
+            version: 'Versión', build: 'Compilación', online: 'Actualización en línea', onlineYes: 'Sí (copia en línea)',
+            onlineNo: 'No (copia integrada)', device: 'Perfil del dispositivo',
+            adjustHint: 'Usa izquierda y derecha para cambiar',
+            controlsText: [
+                'Mando a distancia: flechas para moverse, OK para saltar o confirmar, mantén OK para saltar más, Atrás para pausar.',
+                'Tecla roja: correr sí o no. Tecla Reproducir/Pausa: pausa.',
+                'Mando: cruceta o stick izquierdo para moverse, A para saltar, B o X para correr o disparar, Start o Select para pausar.',
+                'Teclado: flechas, Espacio o Z para saltar, Mayús o X para correr, Esc para pausar.'
+            ],
+            privacyText: [
+                'Arcade no recopila, guarda ni comparte datos personales.',
+                'El progreso y los ajustes se guardan solo en este televisor.',
+                'Al iniciar, la aplicación descarga archivos de actualización desde imad-os.github.io. No se envía ningún identificador.',
+                'Sin anuncios, cuentas ni compras.'
+            ]
+        },
+        ar: {
+            appTitle: 'آركيد', games: 'الألعاب', settings: 'الإعدادات', play: 'العب',
+            badgeNew: 'جديد', badgeUpdated: 'محدّث', lastPlayed: 'آخر لعبة',
+            language: 'اللغة', musicVol: 'مستوى الموسيقى', sfxVol: 'مستوى المؤثرات',
+            graphics: 'جودة الرسوم', gfxAuto: 'تلقائي', gfxLow: 'منخفضة', gfxMid: 'متوسطة', gfxHigh: 'عالية',
+            controls: 'مساعدة التحكم', resetProgress: 'إعادة ضبط التقدم', privacy: 'سياسة الخصوصية',
+            about: 'حول', close: 'إغلاق', back: 'رجوع',
+            exitTitle: 'الخروج من آركيد؟', exitText: 'هل تريد إغلاق التطبيق؟', yes: 'نعم', no: 'لا',
+            resetTitle: 'إعادة ضبط التقدم؟', resetText: 'سيتم حذف كل التقدم وأفضل النتائج.',
+            resetDone: 'تمت إعادة الضبط',
+            paused: 'إيقاف مؤقت', resume: 'متابعة', quitToMenu: 'العودة إلى القائمة',
+            loading: 'جارٍ التحميل', loadError: 'تعذّر تحميل اللعبة.', retry: 'إعادة المحاولة', backToMenu: 'العودة إلى القائمة',
+            padOn: 'تم توصيل وحدة التحكم', padOff: 'تم فصل وحدة التحكم. اللعبة متوقفة.',
+            inputRemote: 'جهاز التحكم', inputPad: 'وحدة تحكم', inputKeys: 'لوحة المفاتيح',
+            version: 'الإصدار', build: 'البناء', online: 'تحديث عبر الإنترنت', onlineYes: 'نعم (نسخة مستضافة)',
+            onlineNo: 'لا (نسخة مدمجة)', device: 'ملف الجهاز',
+            adjustHint: 'استخدم اليسار واليمين للتغيير',
+            controlsText: [
+                'جهاز التحكم: الأسهم للتحرك، OK للقفز أو التأكيد، اضغط مطولاً على OK لقفزة أعلى، رجوع للإيقاف المؤقت.',
+                'الزر الأحمر: تشغيل أو إيقاف الركض. زر تشغيل/إيقاف: إيقاف مؤقت.',
+                'وحدة التحكم: الأسهم أو العصا اليسرى للتحرك، A للقفز، B أو X للركض أو الإطلاق، Start أو Select للإيقاف المؤقت.',
+                'لوحة المفاتيح: الأسهم، المسافة أو Z للقفز، Shift أو X للركض، Esc للإيقاف المؤقت.'
+            ],
+            privacyText: [
+                'لا يجمع آركيد أي بيانات شخصية ولا يخزنها ولا يشاركها.',
+                'يتم حفظ التقدم والإعدادات على هذا التلفاز فقط.',
+                'عند التشغيل يقوم التطبيق بتنزيل ملفات التحديث من imad-os.github.io. لا يتم إرسال أي معرّف.',
+                'لا توجد إعلانات أو حسابات أو مشتريات.'
+            ]
+        }
+    };
+
+    var lang = Store.get('lang', null);
+    if (LANGS.indexOf(lang) < 0) {
+        var nav = (navigator.language || 'en').slice(0, 2).toLowerCase();
+        lang = LANGS.indexOf(nav) >= 0 ? nav : 'en';
+    }
+
+    function t(k) {
+        var v = S[lang][k];
+        return v === undefined ? (S.en[k] === undefined ? k : S.en[k]) : v;
+    }
+
+    // Picks the current language from a {en:'..', fr:'..'} object (used by game manifests).
+    function pick(obj) {
+        if (!obj || typeof obj === 'string') return obj || '';
+        return obj[lang] || obj.en || '';
+    }
+
+    function apply(root) {
+        root = root || document;
+        var html = document.documentElement;
+        html.setAttribute('lang', lang);
+        html.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+        var list = root.querySelectorAll('[data-i18n]'), i;
+        for (i = 0; i < list.length; i++) list[i].textContent = t(list[i].getAttribute('data-i18n'));
+        list = root.querySelectorAll('[data-i18n-aria-label]');
+        for (i = 0; i < list.length; i++) list[i].setAttribute('aria-label', t(list[i].getAttribute('data-i18n-aria-label')));
+    }
+
+    function setLang(l) {
+        if (LANGS.indexOf(l) < 0) return;
+        lang = l;
+        Store.set('lang', l);
+        apply();
+    }
+
+    return {
+        LANGS: LANGS, NAMES: NAMES, t: t, pick: pick, apply: apply, setLang: setLang,
+        lang: function () { return lang; }, rtl: function () { return lang === 'ar'; }
+    };
+})();

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arcade</title>
+
+    <!-- Tizen WebAPI: must stay a static tag in the packaged page ($WEBAPIS is resolved by the TV runtime).
+         On a PC browser it simply fails to load, which is harmless. -->
+    <script src="$WEBAPIS/webapis/webapis.js"></script>
+
+    <!-- Splash shown while js/boot/loader.js picks the hosted or the bundled app -->
+    <style>
+        html, body { margin: 0; height: 100%; background: #0f1226; overflow: hidden; }
+        #boot-splash { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #0f1226; z-index: 10000;
+                       display: -webkit-box; display: -webkit-flex; display: flex;
+                       -webkit-box-align: center; -webkit-align-items: center; align-items: center;
+                       -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; }
+        #boot-splash img { width: 256px; height: 256px; }
+    </style>
+</head>
+<body>
+    <div id="boot-splash" aria-hidden="true"><img src="icon.png" alt=""></div>
+
+    <!-- Loads app.html + app-manifest.json (CSS/JS) from the hosted copy when available, else from this package -->
+    <script src="js/boot/loader.js"></script>
+</body>
+</html>
