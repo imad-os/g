@@ -278,7 +278,7 @@ neon city, motion blur feel, nitro, drifting. One track, marked **Experimental**
 
 ## Progress
 
-- [ ] TODO 1: standalone games + Firebase hub
-- [ ] TODO 2: full screen on every resolution
-- [ ] TODO 3: profiles
-- [ ] TODO 4: 3D racing (experimental)
+- [x] TODO 1: standalone games + Firebase hub (done; owner still has to follow `firebase/SETUP.md`)
+- [x] TODO 2: full screen on every resolution
+- [x] TODO 3: profiles
+- [ ] TODO 4: 3D racing (experimental) (postponed by the owner)

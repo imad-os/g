@@ -10,10 +10,10 @@ Office submission.
 |---|---|---|
 | Back on the main menu opens the exit confirmation | `js/launcher/main.js` route(): `confirm(exitTitle…)` | Automated ✅ |
 | Yes exits with `tizen.application.getCurrentApplication().exit()` | `exitApp()` | On TV |
-| Back in a game opens the pause menu | `GameHost.onAction` | Automated ✅ |
-| Pause menu → Quit to menu returns to the launcher and refocuses the game tile | `GameHost.exit` → `onGameExit` | Automated ✅ |
+| Back in a game opens the pause menu | `GameShell.onAction` (game.html) | Automated ✅ |
+| Pause menu → Quit to menu returns to the launcher and refocuses the game tile | `GameShell.exit` → `index.html?from=<id>` | Automated ✅ |
 | Back on the settings, help, privacy and about screens closes them and restores focus | router | Browser ✅ / On TV |
-| Back while a game loads cancels the load (a late response is ignored) | `GameHost.onAction` | Browser ✅ / On TV |
+| Back while a game loads cancels the load (a late response is ignored) | `GameShell.onAction` | Browser ✅ / On TV |
 | Back is handled in exactly one place, with no `tizenhwkey` listener | `Input.onKey` → router | Code review ✅ |
 | Home key, then relaunch from recent apps: the game is paused and stays paused until Resume | `visibilitychange` → `openPause()`, `AudioContext.suspend()` | On TV |
 
@@ -33,7 +33,7 @@ Office submission.
 
 | Check | Status |
 |---|---|
-| The UI is laid out at 1920×1080 and scaled to the window (tested at 1280×720 and 960×540) | ✅ |
+| The UI is laid out at 1920×1080 and scaled to the window (tested at 1280×720, 1920×1080, 3840×2160, 1920×1080@2x, 21:9 and 32:9; game canvases = CSS size × dpr, capped per tier; 5% safe area) | ✅ |
 | No CSS that needs Chromium > 56 (no nesting, `@layer`, range media queries, `oklch()`, `:has()` or flex `gap`) | Code review ✅ |
 | ES5 JavaScript only (runs on Tizen 4.0 and newer) | Code review ✅ |
 | All 4 languages fit (the longest strings are FR and ES; text that might be long has ellipsis) | Browser ✅ / On TV |
@@ -73,7 +73,7 @@ Office submission.
 
 | Check | Result |
 |---|---|
-| 20 launch/exit cycles: no iframe left, every AudioContext closed, every loop stopped, JS heap within +10% | Automated ✅ |
+| 20 launch/exit cycles: no iframe left, every AudioContext closed, every loop stopped, JS heap within +10% (first-party and remote games) | Automated ✅ |
 | Super Jumper stage load (including the 1.2 s title card) | 1.1 s at 1×, 1.4 s at 6× and 2.3 s at 12× CPU throttle ✅ |
 | Fallback when frames drop: fewer effects → 30 fps rendering → half resolution | Verified under 6× and 12× throttle ✅ |
 | Steady 60 fps on a 2022 TV in the busiest stage (w3-4) | On TV |
@@ -86,3 +86,17 @@ Office submission.
 - The game titles avoid trademarks: "Block Drop", not Tetris, and "Tile Merge", not 2048-branded.
 - No personal data is collected. The privacy text is in Settings → Privacy policy. Age rating:
   everyone (cartoon action, no violence beyond stomping).
+
+## Game platform (remote games, profiles)
+
+| Check | How it works | Status |
+|---|---|---|
+| Back on `game.html` never exits the app (pause → Quit to menu → home) | `GameShell.onAction`, loading/error states also go home | Automated ✅ |
+| Back handling, network popup, Voice Guide, multitasking pause live in the packaged pages, not in games | `js/game/shell.js`, `js/core/net.js` | Automated ✅ |
+| Remote games run in one sandboxed iframe (`allow-scripts allow-same-origin`, another origin); the top-level page stays packaged (no `tizen:allow-navigation`) | `js/game/remote.js` | Automated ✅ |
+| Remote games are listed only if they use the same SDK version and need no new privileges (`sdk`, `minShell` in the registry) | `Registry.usable()` | Automated ✅ |
+| Launch: loading screen on the first frame, byte-weighted bar, Voice Guide "Loading", every 25%, "Ready"; failures show Retry / Back | `game.html`, `js/game/loading.js` | Automated ✅ / On TV (launch < 10 s) |
+| Home → game and back stay within the 10 s launch rule and < 1 s return | page switches reuse the cached boot decision (`sessionStorage`) | On TV |
+| Profile picker: Voice Guide labels, Back closes it and restores focus, Default checkbox, 4 languages | `js/core/picker.js` | Automated ✅ / On TV |
+| Deleting a profile deletes its data; a deleted registry game loses its saves and scores | `Profiles.remove`, `Store.dropGame` | Automated ✅ |
+| The admin page is not in the `.wgt` (`tools/build-wgt.sh` copies only runtime files) | build script | Code review ✅ |

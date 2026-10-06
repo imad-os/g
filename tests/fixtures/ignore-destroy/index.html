@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Fixture: ignores destroy</title></head>
+<body style="background:#123;color:#fff">
+<!-- Speaks the raw SDK protocol and never answers `destroy`: the hub must still remove the page. -->
+<script>
+window.addEventListener('message', function (e) {
+    var m = e.data;
+    if (!m || m.v !== 1) return;
+    if (m.type === 'init') { parent.postMessage({ v: 1, type: 'ready', id: 0, data: null }, '*'); parent.postMessage({ v: 1, type: 'loaded', id: 0, data: null }, '*'); }
+});
+parent.postMessage({ v: 1, type: 'hello', id: 0, data: { sdk: 1 } }, '*');
+</script></body></html>

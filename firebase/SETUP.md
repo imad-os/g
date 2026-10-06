@@ -1,7 +1,7 @@
 # Firebase setup (project `tvgames-f984d`)
 
 The TVs only **read** the game list. You manage it from the admin page
-(`https://imad-os.github.io/g/admin/`, built in TODO 1) after signing in with Google.
+(`https://imad-os.github.io/g/admin/`) after signing in with Google.
 
 ## 1. Firestore database
 1. Go to Firebase console → **Build → Firestore Database** → *Create database*. Production mode,
@@ -51,3 +51,10 @@ In the Firestore **Rules** tab → *Rules Playground*:
 - An unauthenticated `get` on `/games/x` → allowed.
 - An unauthenticated `create` on `/games/x` → denied.
 - An authenticated `create` with your UID (after step 2.5) → allowed.
+
+## 6. Admin page
+`admin/index.html` (published with the rest of the repo on GitHub Pages, never in the `.wgt`) lists the games and
+lets you add (paste a URL: its `game-manifest.json` prefills the form), enable/disable, delete, reorder (drag or
+▲ ▼), preview, and "Import bundled games" (writes the first-party games with `bundled: true`). Fields are checked
+with the same rules as `firestore.rules` before saving; a rejected write shows the reason. For local tests a
+game URL may be `http://localhost:<port>/` on the TV side only; the rules still require https for writes.

@@ -1,6 +1,6 @@
 {
   "id": "merge",
-  "build": 3,
+  "build": 4,
   "minShell": 2,
   "sdk": 1,
   "entry": "index.html",

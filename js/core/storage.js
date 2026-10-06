@@ -143,7 +143,7 @@ var Profiles = (function () {
         if (out.length === l.length) return false;
         Store.rawSet(KEY, out);
         Store.dropProfile(id);
-        if (defaultId() === id) clearDefault();
+        if (Store.rawGet(DEFAULT_KEY) === id) clearDefault();
         if (Store.profile() === id) Store.setProfile(out.length ? out[0].id : GUEST.id);
         return true;
     }

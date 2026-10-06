@@ -1,0 +1,21 @@
+// Unit tests of the admin page logic (validation mirrors firebase/firestore.rules).
+import { createRequire } from 'node:module';
+const L = createRequire(import.meta.url)('../admin/admin-lib.js');
+let failures = 0;
+const check = (c, m) => { console.log((c ? '  ok   ' : '  FAIL ') + m); if (!c) failures++; };
+console.log('admin-lib');
+const good = { title: { en: 'Neon Rush' }, url: 'https://x.github.io/neon/', enabled: true, order: 10 };
+check(L.validate('neon-rush', good).length === 0, 'a valid game passes');
+check(L.validate('Neon Rush', good).length === 1, 'bad id is rejected');
+check(L.validate('ab', Object.assign({}, good, { url: 'http://x.io/' })).length === 1, 'http URL is rejected');
+check(L.validate('ab', Object.assign({}, good, { url: 'games/ab/' })).length === 1, 'games/<id>/ needs bundled: true');
+check(L.validate('ab', Object.assign({}, good, { url: 'games/ab/', bundled: true })).length === 0, 'bundled game passes');
+check(L.validate('ab', Object.assign({}, good, { order: 1000 })).length === 1, 'order must be 0-999');
+check(L.validate('ab', Object.assign({}, good, { title: { fr: 'x' } })).length === 1, 'English title required');
+check(L.validate('ab', Object.assign({}, good, { extra: 1 })).length === 1, 'unknown field rejected');
+check(L.validate('ab', Object.assign({}, good, { tags: [1, 2, 3, 4, 5, 6] })).length === 1, 'at most 5 tags');
+const p = L.prefill('https://x.github.io/neon?x=1', { id: 'Neon Rush', title: { en: 'Neon Rush', de: 'x' }, cover: 'cover.png', build: 3, tags: ['experimental'] });
+check(p.id === 'neon-rush' && p.data.url === 'https://x.github.io/neon/' && p.data.cover === 'https://x.github.io/neon/cover.png' && !p.data.title.de && p.data.sdk === 1, 'prefill from a game manifest');
+check(JSON.stringify(L.renumber(L.move(['a', 'b', 'c'], 0, 2))) === '[{"id":"b","order":0},{"id":"c","order":10},{"id":"a","order":20}]', 'reorder renumbers 0, 10, 20');
+console.log(failures ? failures + ' FAILED' : 'all admin-lib checks passed');
+process.exit(failures ? 1 : 0);

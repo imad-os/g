@@ -1,6 +1,6 @@
 {
   "id": "parchis",
-  "build": 1,
+  "build": 2,
   "minShell": 2,
   "sdk": 1,
   "entry": "index.html",

@@ -80,8 +80,10 @@ Second player on the same keyboard: W A S D, F (jump), G (run/fire).
   the 30 fps fallback.
 
 Memory and CPU rules followed everywhere:
-- One game at a time, in an iframe that is destroyed on exit. The launcher hides its DOM, releases
-  the cover images and starts no timers while a game runs.
+- Two packaged pages, never both in memory: `index.html` (home) and `game.html` (one game). Launching
+  and quitting navigate with `location.replace`, so the browser discards the whole previous document
+  (covers, DOM, JS heap). First-party games run directly in `game.html` (no iframe); remote games run
+  in one sandboxed iframe that is destroyed on exit.
 - No `setTimeout`/`setInterval` in games: one rAF loop. Fixed-size pools are used for particles,
   fireballs, rocks, items and popups, so nothing is allocated per frame.
 - Platformer tiles are pre-rendered into 128 px chunks that are built lazily and LRU-capped at 8
@@ -97,17 +99,23 @@ Memory and CPU rules followed everywhere:
 
 ```
 config.xml               Tizen config (privileges: internet, tv.inputdevice)
-index.html               shell: webapis.js + splash + js/boot/loader.js
-app.html                 launcher markup (injected by the loader)
-app-manifest.json        { build, version, shell, css[], js[], games[] }
-js/boot/loader.js        hosted vs bundled selection, blacklist, AppBoot.ready()
-js/core/                 storage, i18n (en/fr/es/ar), a11y, audio prefs, perf, input, focus
-js/launcher/             menu.js (grid, settings, pages), game-host.js (iframe lifecycle, pause menu), main.js (router)
-games/shared/            gamekit.js (loop, adaptive quality, synth, pools), game.css, strings.js
-games/<id>/              game-manifest.json, index.html, js/, cover.png
+index.html               home shell: webapis.js + splash + js/boot/loader.js
+game.html                game shell: webapis.js + instant loading screen + js/boot/loader.js
+app.html, game-app.html  markup of the two pages (injected by the loader)
+app-manifest.json        { build, version, shell, css[], js[], game{html,css[],js[]}, games[] }
+js/boot/loader.js        hosted vs bundled selection (cached per app start), blacklist, AppBoot.ready()
+js/core/                 storage + profiles, gamedata (per-game quota), i18n (en/fr/es/ar), a11y, scores, audio prefs,
+                         perf, input, focus, net (network popup, fit), avatars, picker (profile picker)
+js/launcher/             home page: registry.js (Firestore), menu.js (grid, settings), profiles-ui.js, main.js (router)
+js/game/                 game page: loading.js (progress bar + loader), remote.js (iframe bridge), shell.js (state, pause, scores)
+sdk/arcade-sdk.js        the SDK every game includes; sdk/example/ = a minimal standalone game (docs/game-sdk.md)
+admin/                   registry admin page (GitHub Pages only, never in the .wgt)
+firebase/                firebase-config.js, firestore.rules, SETUP.md
+games/shared/            gamekit.js (optional helper on the SDK: loop, adaptive quality, synth, pools), game.css, strings.js
+games/<id>/              game-manifest.json (scripts, styles, assets, sizes), index.html, js/, cover.png
 games/jumper/assets/levels/  Tiled-compatible JSON stages + index.json
 tools/                   gen-levels.mjs, level-chunks.mjs, validate-levels.mjs, make-covers.mjs, build-wgt.sh
-tests/run-tests.mjs      Playwright acceptance tests
+tests/                   run-tests.mjs (hub, games, boot), platform-tests.mjs (registry, remote games, loading, full screen, profiles), admin-lib.test.mjs
 docs/certification.md    certification walk-through
 ```
 
@@ -205,7 +213,7 @@ Snapvine, Bristle, Pebbler and Slab, plus three bosses: King Blorp, Sand Crab an
 
 ```sh
 npm i -D playwright http-server
-npm test        # node tests/run-tests.mjs
+npm test        # admin-lib + run-tests + platform-tests
 ```
 
 The tests run headless Chromium with mocked `tizen` and `webapis` and cover these cases:
@@ -223,3 +231,31 @@ The tests run headless Chromium with mocked `tizen` and `webapis` and cover thes
   its own hero, respawn, both players entering initials at game over, and unplug → pause.
 
 `npm run covers` regenerates the menu covers from real gameplay frames.
+- platform tests (`tests/platform-tests.mjs`): registry (mocked Firestore: add, disable, reorder, cache, bundled
+  fallback, deleted-game data), a remote game from a second origin (sandbox, SDK protocol, input, pause menu,
+  save quota, scores), 20 remote launch/exit cycles within +10% heap, a game that ignores `destroy`, a broken
+  URL, the byte-weighted loading bar (throttled network, missing asset, throttled repaint), full screen at
+  1280x720, 1920x1080, 3840x2160, 1920x1080@2x and ultrawide (canvas = CSS size x dpr x scale), and profiles
+  (picker, Default checkbox, skip after restart, Switch profile, delete, max 8, per-profile data).
+
+## Game platform
+
+Games are separate web apps; the hub lists them, launches them and gives them shared services (input, scores,
+storage, profiles). Adding a game = adding its URL to the registry.
+
+- **Registry:** Firestore project `tvgames-f984d`, collection `games` (`firebase/SETUP.md`). TVs read it with the
+  REST API (no SDK, 3 s timeout), cache the last good list and fall back to the bundled games: the home is
+  never empty. Manage it at `https://imad-os.github.io/g/admin/` (Google sign-in, admins only): add by URL,
+  enable/disable, reorder, delete, preview, "Import bundled games".
+- **Writing a game:** `docs/game-sdk.md` and `sdk/example/`.
+- **Loading:** every game gets a loading screen with a real byte-weighted bar (manifest lists scripts, styles,
+  assets and sizes; run `npm run manifests` after changing a game's files).
+- **Profiles:** up to 8 profiles (name, avatar, colour) plus Guest. Starting a game opens a picker unless a
+  default profile was chosen (`arc_default_profile`); "Switch profile" in Settings and the pause menu brings it back.
+  Named profiles get their name in the top 10; only guests type initials. Settings (language, volumes,
+  graphics) stay global, game data is per profile.
+- **Full screen:** the UI is a 1920x1080 stage scaled to any viewport (centred, background fill on ultrawide).
+  Game canvases are CSS size x devicePixelRatio, capped by the quality tier (960x540 / 1920x1080 / 3840x2160),
+  with a 5% safe area passed to games.
+- **Note on scores/saves keys:** saves are `arc_<profile>_game_<gameId>_<key>` (profile-first, same isolation as
+  `game_<id>_<profile>_<key>`, and compatible with data saved by earlier versions).

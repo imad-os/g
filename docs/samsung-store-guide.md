@@ -62,8 +62,8 @@ Upload them right the first time.
    unplugged.
 3. Check that the version is higher than the last upload, `<name>` = Seller Office title, and the
    same author certificate is used.
-4. If you changed `config.xml`, `index.html` or the loader since the last release: bump `SHELL`
-   and `shell` (README → Online updates).
+4. If you changed `config.xml`, `index.html`, `game.html` or the loader since the last release: bump `SHELL`
+   and `shell` (README → Online updates). The two-page game platform (build 5, `SHELL` 2) needs a new `.wgt`.
 5. Fill the App UI Description (section 5) and attach it.
 
 ## 5. App UI Description: content for Samsung's template
@@ -116,3 +116,12 @@ works fully without a network.
 - [Certification Process Q&A](https://developer.samsung.com/tv-seller-office/faq/certification-process.html)
 - [Application UI Description](https://developer.samsung.com/tv/distribute/launch-checklist/application-ui-description)
 - [AppCommon API (screensaver)](https://developer.samsung.com/SmartTV/develop/api-references/samsung-product-api-references/appcommon-api.html)
+
+## Remote games and Samsung review
+
+Remote games change what the certified app shows after release. Rules followed: only games using the same SDK
+version and needing no new privileges are listed; they run in one sandboxed iframe inside the packaged
+`game.html`, so Back, Voice Guide, the network popup and multitasking stay under the app's control; the
+registry is read-only for TVs and writable only by admins. State this clearly in the App UI Description
+("Additional games may be added online"). Anything needing a new privilege or a new shell goes through a new
+Seller Office submission.

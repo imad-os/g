@@ -75,8 +75,7 @@
             id: gameId, lang: init.lang, rtl: !!init.rtl, quality: init.quality, volume: init.volume,
             profile: init.profile, device: init.device, viewport: init.viewport, saves: data, sdk: PROTOCOL,
             input: { isDown: isDown, isDownDev: isDownDev, poll: function () {}, device: function () { return init.device; }, lastDevice: function () { return lastDev; } },
-            // keys pressed while this iframe has focus go to the hub, which turns them into actions
-            forwardKey: function (e, down) { post('key', { keyCode: e.keyCode, down: down, repeat: !!e.repeat }); },
+            forwardKey: function () {},     // the SDK itself forwards keys (see frameKeys)
             announce: function (text) { post('announce', { text: String(text) }); },
             save: function (k, v) { data[k] = v; post('save', { key: k, value: v }); return true; },
             load: function (k, def) { return data.hasOwnProperty(k) ? data[k] : def; },
@@ -94,6 +93,21 @@
             stageLoading: function (title) { post('stageLoading', { title: title || '' }); },
             stageLoaded: function () { post('stageLoaded'); }
         };
+    }
+
+    // Keys pressed while this iframe has focus go to the hub, which turns them into actions and sends them back.
+    var frameKeysOn = false;
+    function frameKey(e) {
+        if (!ALONE_KEYS[e.keyCode] && !(e.keyCode >= 400 || e.keyCode === 19 || e.keyCode === 8 || e.keyCode === 10009)) return;
+        if (e.preventDefault) e.preventDefault();
+        post('key', { keyCode: e.keyCode, down: e.type === 'keydown', repeat: !!e.repeat });
+    }
+    function frameKeys(on) {
+        if (on === frameKeysOn) return;
+        frameKeysOn = on;
+        var f = on ? 'addEventListener' : 'removeEventListener';
+        document[f]('keydown', frameKey, false);
+        document[f]('keyup', frameKey, false);
     }
 
     function request(type, data, cb) {
@@ -120,6 +134,7 @@
                 inited = true;
                 vp = d.viewport || viewport();
                 host = makeFrameHost(d);
+                frameKeys(true);
                 post('ready');
                 try { api.init(host); } catch (err) { post('failed', { reason: 'init: ' + err }); }
                 break;
@@ -140,6 +155,7 @@
                 break;
             case 'destroy':
                 try { api.destroy(); } catch (e6) {}
+                frameKeys(false);
                 resetInput();
                 post('destroyed');
                 break;

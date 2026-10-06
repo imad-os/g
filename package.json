@@ -8,7 +8,8 @@
     "levels": "node tools/gen-levels.mjs",
     "validate": "node tools/validate-levels.mjs",
     "covers": "node tools/make-covers.mjs http://localhost:8080/",
-    "test": "node tests/run-tests.mjs",
+    "test": "node tests/admin-lib.test.mjs && node tests/run-tests.mjs && node tests/platform-tests.mjs",
+    "manifests": "node tools/make-manifests.mjs",
     "wgt": "sh tools/build-wgt.sh"
   },
   "devDependencies": {

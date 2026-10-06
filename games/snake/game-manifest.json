@@ -1,6 +1,6 @@
 {
   "id": "snake",
-  "build": 2,
+  "build": 3,
   "minShell": 2,
   "sdk": 1,
   "entry": "index.html",

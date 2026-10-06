@@ -89,7 +89,8 @@ var Registry = (function () {
                 var d = s[i];
                 if (!usable(d, shell)) continue;
                 if (isBundled(d)) { if (bundledIds.indexOf(d.id) >= 0) out.push({ id: d.id, bundled: true, doc: d }); continue; }
-                if (!/^https:\/\//.test(d.url)) continue;
+                // https only (the Firestore rules enforce it too); http://localhost lets tests and developers try a game
+                if (!/^(https:\/\/|http:\/\/(localhost|127\.0\.0\.1)[:\/])/.test(d.url)) continue;
                 if (source !== 'network' && offline) continue;      // cached remote games only while online
                 out.push({ id: d.id, bundled: false, doc: d });
             }
