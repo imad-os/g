@@ -105,7 +105,7 @@ var Menu = (function () {
         return [
             { id: 'lang', label: I18n.t('language'), value: I18n.NAMES[I18n.lang()], adjust: function (d) {
                 var l = I18n.LANGS, i = (l.indexOf(I18n.lang()) + d + l.length) % l.length;
-                I18n.setLang(l[i]); render();
+                I18n.setLang(l[i]); render(); App.refresh();
             } },
             { id: 'music', label: I18n.t('musicVol'), html: volBar(AudioPrefs.music()), value: String(AudioPrefs.music()),
               adjust: function (d) { AudioPrefs.setMusic(AudioPrefs.music() + d); } },

@@ -2,9 +2,10 @@
 (function () {
     'use strict';
 
-    var COLS = 10, ROWS = 20, CELL = 12;
+    var COLS = 12, ROWS = 18, CELL = 13;
     var BX = (480 - COLS * CELL) / 2, BY = (270 - ROWS * CELL) / 2;
-    var COLORS = ['#000', '#3ad6e8', '#f2c94c', '#b06cf0', '#4cd97b', '#f25c5c', '#4c7cf2', '#f2994a'];
+    // own colour set (not the usual guideline colours per piece)
+    var COLORS = ['#000', '#ff7eb6', '#7ee0c3', '#ffd166', '#9b8cff', '#5ec8ff', '#ff9f68', '#c3e86b'];
     var SHAPES = [
         null,
         [[0, 1], [1, 1], [2, 1], [3, 1]],  // I
@@ -65,7 +66,7 @@
     function spawn() {
         var type = nextType;
         nextType = take();
-        piece = { type: type, rot: 0, x: 3, y: type === 1 ? -1 : 0 };
+        piece = { type: type, rot: 0, x: 4, y: type === 1 ? -1 : 0 };
         lockT = 0; lockResets = 0; fall = 0;
         if (!fits(piece.type, piece.rot, piece.x, piece.y)) gameOver();
     }
@@ -241,11 +242,12 @@
         onMenu: function (gk, id) { if (id === 'restart') reset(); }
     };
 
+    // rounded "gem" blocks with a shine dot
     function block(c, x, y, col, size) {
         var s = size || CELL;
-        c.fillStyle = col; c.fillRect(x, y, s - 1, s - 1);
-        c.fillStyle = 'rgba(255,255,255,0.35)'; c.fillRect(x, y, s - 1, 2);
-        c.fillStyle = 'rgba(0,0,0,0.25)'; c.fillRect(x, y + s - 3, s - 1, 2);
+        c.fillStyle = col; GK.roundRect(c, x + 0.5, y + 0.5, s - 2, s - 2, 3); c.fill();
+        c.fillStyle = 'rgba(255,255,255,0.45)'; c.fillRect(x + 3, y + 3, 3, 2);
+        c.fillStyle = 'rgba(0,0,0,0.18)'; c.fillRect(x + 2, y + s - 4, s - 5, 2);
     }
 
     GK.create(def);

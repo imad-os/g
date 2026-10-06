@@ -47,6 +47,15 @@ Office submission.
 | A broken hosted build is blacklisted and the bundled copy runs | Automated ✅ |
 | No CDN or third-party library is loaded | ✅ |
 
+## Store-specific checks
+
+| Check | Status |
+|---|---|
+| Network disconnected → notification popup (and "connected" on return), in menus and during games | Automated ✅ / On TV (unplug the cable) |
+| Screensaver disabled during play, restored when paused or in the menu | On TV (play with a gamepad for 10+ minutes) |
+| App icon 512×423 24-bit PNG < 300 KB, declared in `config.xml` | Automated ✅ |
+| Language change updates every text on screen | Browser ✅ |
+
 ## Input
 
 | Check | Status |

@@ -7,6 +7,7 @@ var I18n = (function () {
 
     var S = {
         en: {
+            netOff: 'No network connection. Your games keep working offline.', netOn: 'Network connected',
             scores: 'Top scores', newHigh: 'New high score!', rank: 'Rank', entryHint: 'Up and down: change letter. Left and right: move. OK: save.', save: 'Save', letter: 'Letter', of: 'of', noScores: 'No scores yet', player: 'Player', points: 'points',
             appTitle: 'Arcade', games: 'Games', settings: 'Settings', play: 'Play',
             badgeNew: 'New', badgeUpdated: 'Updated', lastPlayed: 'Last played',
@@ -39,6 +40,7 @@ var I18n = (function () {
             ]
         },
         fr: {
+            netOff: 'Pas de connexion réseau. Vos jeux fonctionnent hors ligne.', netOn: 'Réseau connecté',
             scores: 'Meilleurs scores', newHigh: 'Nouveau record !', rank: 'Rang', entryHint: 'Haut et bas : changer la lettre. Gauche et droite : se déplacer. OK : enregistrer.', save: 'Enregistrer', letter: 'Lettre', of: 'sur', noScores: 'Aucun score', player: 'Joueur', points: 'points',
             appTitle: 'Arcade', games: 'Jeux', settings: 'Paramètres', play: 'Jouer',
             badgeNew: 'Nouveau', badgeUpdated: 'Mis à jour', lastPlayed: 'Dernier joué',
@@ -71,6 +73,7 @@ var I18n = (function () {
             ]
         },
         es: {
+            netOff: 'Sin conexión de red. Tus juegos siguen funcionando sin conexión.', netOn: 'Red conectada',
             scores: 'Mejores puntuaciones', newHigh: '¡Nuevo récord!', rank: 'Puesto', entryHint: 'Arriba y abajo: cambiar letra. Izquierda y derecha: mover. OK: guardar.', save: 'Guardar', letter: 'Letra', of: 'de', noScores: 'Sin puntuaciones', player: 'Jugador', points: 'puntos',
             appTitle: 'Arcade', games: 'Juegos', settings: 'Ajustes', play: 'Jugar',
             badgeNew: 'Nuevo', badgeUpdated: 'Actualizado', lastPlayed: 'Último jugado',
@@ -103,6 +106,7 @@ var I18n = (function () {
             ]
         },
         ar: {
+            netOff: 'لا يوجد اتصال بالشبكة. ألعابك تعمل دون اتصال.', netOn: 'تم الاتصال بالشبكة',
             scores: 'أفضل النتائج', newHigh: 'نتيجة قياسية جديدة!', rank: 'المرتبة', entryHint: 'أعلى وأسفل: تغيير الحرف. يسار ويمين: تنقل. OK: حفظ.', save: 'حفظ', letter: 'الحرف', of: 'من', noScores: 'لا توجد نتائج بعد', player: 'اللاعب', points: 'نقطة',
             appTitle: 'آركيد', games: 'الألعاب', settings: 'الإعدادات', play: 'العب',
             badgeNew: 'جديد', badgeUpdated: 'محدّث', lastPlayed: 'آخر لعبة',

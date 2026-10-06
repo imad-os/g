@@ -43,6 +43,37 @@ var App = (function () {
         toastTimer = setTimeout(function () { t.hidden = true; }, 2600);
     }
 
+    /* ---------- network status popup ----------
+     * Uses the browser online/offline events and, on the TV, webapis.network (privilege
+     * network.public). The app keeps working offline; this only informs the user. */
+    var netDown = false, netTimer = 0;
+    function showNet(ok) {
+        var el = $('netpop');
+        $('netpop-text').textContent = I18n.t(ok ? 'netOn' : 'netOff');
+        el.className = 'netpop' + (ok ? ' ok' : '');
+        el.hidden = false;
+        A11y.announce(I18n.t(ok ? 'netOn' : 'netOff'));
+        clearTimeout(netTimer);
+        netTimer = setTimeout(function () { el.hidden = true; }, ok ? 3000 : 7000);
+    }
+    function netChange(online) {
+        if (online === !netDown) return;
+        netDown = !online;
+        showNet(online);
+    }
+    function watchNetwork() {
+        window.addEventListener('offline', function () { netChange(false); });
+        window.addEventListener('online', function () { netChange(true); });
+        try {
+            var NS = webapis.network.NetworkState;
+            webapis.network.addNetworkStateChangeListener(function (v) {
+                if (v === NS.GATEWAY_DISCONNECTED || v === NS.LAN_CABLE_DETACHED || v === NS.WIFI_MODULE_STATE_DETACHED) netChange(false);
+                else if (v === NS.GATEWAY_CONNECTED) netChange(true);
+            });
+        } catch (e) {}
+        if (navigator.onLine === false) netChange(false);
+    }
+
     function exitApp() {
         try { tizen.application.getCurrentApplication().exit(); return; } catch (e) {}
         try { window.close(); } catch (e2) {}
@@ -162,6 +193,7 @@ var App = (function () {
         Input.onDevice(updateIndicator);
         updateIndicator();
         GameHost.init();
+        watchNetwork();
         $('dialog-yes').onclick = function () { var cb = dialogYes; closeDialog(); if (cb) cb(); };
         $('dialog-no').onclick = closeDialog;
 
@@ -185,7 +217,10 @@ var App = (function () {
         });
     }
 
-    return { start: start, confirm: confirm, toast: toast };
+    // re-applies texts that are not data-i18n driven (called after a language change)
+    function refresh() { updateIndicator(); }
+
+    return { start: start, confirm: confirm, toast: toast, refresh: refresh };
 })();
 
 App.start();

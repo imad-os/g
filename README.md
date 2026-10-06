@@ -135,6 +135,17 @@ you submit a new `.wgt`, its `build` must be at least the hosted one.
 `.nojekyll` makes GitHub Pages serve every file. GitHub Pages content is public, even for a private
 repository.
 
+## Store assets and Samsung rules
+
+`node tools/make-store-assets.mjs http://localhost:8080/` regenerates these from the game art:
+- the 512×423 app icon (`icon.png`);
+- the browser favicons (`favicon.ico`, `icon-32.png`, `icon-192.png`, `apple-touch-icon.png`);
+- the Seller Office logo, background and 4 screenshots in `store/`.
+
+`privacy.html` is the privacy policy URL to give Seller Office.
+**Read `docs/samsung-store-guide.md` before submitting.** It has the full checklist, the usual
+rejection reasons mapped to how the app handles them, and the App UI Description content.
+
 ## Packaging and signing (.wgt)
 
 1. Install Tizen Studio with the TV extensions.

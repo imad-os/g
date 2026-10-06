@@ -12,6 +12,7 @@
 //   6. destroy() closes the AudioContext, stops the rAF loop; Back opens pause; Back on menu asks to exit
 //   7. Super Jumper: every stage loads and can be finished
 //   8. top-10 tables: a qualifying score asks for initials and appears on the Scores screen
+//  10. network loss shows a popup (Samsung checklist), reconnecting shows another; favicon served
 //   9. Super Jumper 2-player co-op: arrows + WASD, and two gamepads, each drive only their own hero
 
 import http from 'node:http';
@@ -347,6 +348,37 @@ async function main() {
         check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'unplugging a gamepad pauses the game');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await ctx.close();
+    }
+
+    console.log('10. network popup and icons');
+    {
+        const page = await newPage(browser, base);
+        await routeHosted(page, { offline: true });
+        const icons = [];
+        page.on('response', (r) => { if (/favicon\.ico|icon-32\.png|icon\.png/.test(r.url())) icons.push(r.status()); });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('.tile');
+        check(await page.evaluate(() => document.getElementById('netpop').hidden), 'no network popup while online');
+        await page.focus('[data-game="snake"]'); await page.keyboard.press('Enter');
+        await page.waitForFunction(() => window.GameHost.state() === 'running');
+        await page.context().setOffline(true);
+        await page.waitForTimeout(200);
+        const off = await page.evaluate(() => { const e = document.getElementById('netpop'); return !e.hidden && e.getAttribute('role') === 'alert' && e.textContent; });
+        check(!!off && /No network/.test(off), 'network loss during a game shows a popup: "' + off + '"');
+        check(await page.evaluate(() => window.GameHost.state()) === 'running', 'the game keeps running offline');
+        await page.context().setOffline(false);
+        await page.waitForTimeout(200);
+        check(/Network connected/.test(await page.textContent('#netpop')), 'reconnecting shows "Network connected"');
+        const fav = await page.evaluate(() => [...document.querySelectorAll('link[rel~="icon"]')].map((l) => l.getAttribute('href')));
+        // headless Chromium never requests favicons itself: fetch the declared files
+        let served = true;
+        for (const f of fav) served = served && (await page.request.get(base + f)).status() === 200;
+        check(fav.indexOf('favicon.ico') >= 0 && served && icons.every((st) => st === 200), 'favicon declared and served (' + fav.join(', ') + ')');
+        await page.context().close();
+        const { size } = fs.statSync(path.join(ROOT, 'icon.png'));
+        const png = fs.readFileSync(path.join(ROOT, 'icon.png'));
+        check(png.readUInt32BE(16) === 512 && png.readUInt32BE(20) === 423 && png[25] === 2 && size < 300 * 1024,
+            'icon.png is 512x423, 24-bit RGB, ' + Math.round(size / 1024) + ' KB (< 300 KB)');
     }
 
     await browser.close();

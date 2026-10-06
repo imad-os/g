@@ -1,6 +1,6 @@
 {
   "id": "blocks",
-  "build": 2,
+  "build": 3,
   "minShell": 1,
   "entry": "index.html",
   "cover": "cover.png",

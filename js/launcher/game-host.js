@@ -24,6 +24,15 @@ var GameHost = (function () {
 
     function $(id) { return document.getElementById(id); }
 
+    // The TV screensaver watches the remote only: someone playing with a gamepad would see it
+    // kick in. It is off while a game runs and back on when paused or in the menu.
+    function screenSaver(on) {
+        try {
+            var S = webapis.appcommon.AppCommonScreenSaverState;
+            webapis.appcommon.setScreenSaver(on ? S.SCREEN_SAVER_ON : S.SCREEN_SAVER_OFF, function () {}, function () {});
+        } catch (e) {}
+    }
+
     function abs(u) { var a = document.createElement('a'); a.href = u; return a.href; }
 
     function title() { return game ? I18n.pick(game.manifest.title) : ''; }
@@ -115,7 +124,9 @@ var GameHost = (function () {
         clearTimeout(loadTimer);
         $('game-loading').hidden = true;
         state = 'running';
-        Input.setExternalPoll(true);     // the game polls gamepads at the start of each frame
+        Input.setExternalPoll(true);
+        screenSaver(false);     // the game polls gamepads at the start of each frame
+        screenSaver(false);
         $('game-layer').setAttribute('aria-label', title());
         $('game-layer').focus();
         try { api.start(); } catch (e) { fail('start: ' + e); }
@@ -169,6 +180,7 @@ var GameHost = (function () {
         try { api.pause(); } catch (e) {}
         Input.releaseAll();
         Input.setExternalPoll(false);   // the game loop is stopped: the launcher reads the gamepads
+        screenSaver(true);
         var first = renderPause();
         $('pause').hidden = false;
         Focus.push($('pause'), first);
@@ -182,6 +194,7 @@ var GameHost = (function () {
         Focus.reset();
         state = 'running';
         Input.setExternalPoll(true);
+        screenSaver(false);
         $('game-layer').focus();
         try { api.resume(); } catch (e) {}
     }
@@ -215,6 +228,7 @@ var GameHost = (function () {
         removeFrame();
         Input.setExternalPoll(false);
         Input.releaseAll();
+        screenSaver(true);
     }
 
     function exit() {

@@ -5,8 +5,9 @@
     var N = 4, CELL = 52, GAP = 6, SIZE = N * CELL + (N + 1) * GAP;
     var OX = (480 - SIZE) / 2, OY = (270 - SIZE) / 2 + 12;
     var ANIM = 7;
-    var COLORS = { 2: '#eee4da', 4: '#ede0c8', 8: '#f2b179', 16: '#f59563', 32: '#f67c5f', 64: '#f65e3b', 128: '#edcf72',
-                   256: '#edcc61', 512: '#edc850', 1024: '#edc53f', 2048: '#edc22e' };
+    // own palette: cool blues to warm pinks (deliberately unlike other number-merging games)
+    var COLORS = { 2: '#d7f0ff', 4: '#b5e3fb', 8: '#7fd1f0', 16: '#4fb9e8', 32: '#4c8df2', 64: '#6c63f0', 128: '#9a5cf0',
+                   256: '#c158e0', 512: '#e055c0', 1024: '#f25c8f', 2048: '#ffb03a' };
     var MUSIC = {
         bpm: 96,
         tracks: [
@@ -142,9 +143,9 @@
         },
         render: function (gk, alpha) {
             var c = gk.ctx, x, y, i;
-            c.fillStyle = '#faf8ef'; c.fillRect(0, 0, 480, 270);
-            c.fillStyle = '#bbada0'; GK.roundRect(c, OX, OY, SIZE, SIZE, 6); c.fill();
-            c.fillStyle = '#cdc1b4';
+            c.fillStyle = '#121636'; c.fillRect(0, 0, 480, 270);
+            c.fillStyle = '#232a63'; GK.roundRect(c, OX, OY, SIZE, SIZE, 6); c.fill();
+            c.fillStyle = '#2f377a';
             for (y = 0; y < N; y++) for (x = 0; x < N; x++) { GK.roundRect(c, OX + GAP + x * (CELL + GAP), OY + GAP + y * (CELL + GAP), CELL, CELL, 4); c.fill(); }
             var p = Math.min(1, (animT + alpha) / ANIM);
             for (i = 0; i < tiles.length; i++) {
@@ -154,10 +155,10 @@
                 var s = tl.born ? p : tl.merged && p >= 1 ? 1 : tl.merged ? 1 + Math.sin(p * Math.PI) * 0.12 : 1;
                 var v = tl.dead ? tl.v : tl.merged && p < 0.6 ? tl.v / 2 : tl.v;
                 var cx = OX + GAP + tx * (CELL + GAP) + CELL / 2, cy = OY + GAP + ty * (CELL + GAP) + CELL / 2, h = CELL * s / 2;
-                c.fillStyle = COLORS[v] || '#3c3a32';
+                c.fillStyle = COLORS[v] || '#ff7a3a';
                 GK.roundRect(c, cx - h, cy - h, h * 2, h * 2, 4); c.fill();
                 var fs = v < 100 ? 24 : v < 1000 ? 20 : 15;
-                GK.text(c, String(v), cx, cy + 1, fs * s, v <= 4 ? '#776e65' : '#f9f6f2', 'center');
+                GK.text(c, String(v), cx, cy + 1, fs * s, v <= 8 ? '#14204a' : '#ffffff', 'center');
             }
         },
         menuItems: function () { return [{ id: 'restart', label: t.s('restart') }]; },
