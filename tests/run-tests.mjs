@@ -452,6 +452,8 @@ async function main() {
         await page.goto(base + 'index.html');
         await page.waitForFunction(() => { const b = document.getElementById('profile-name'); return b && b.textContent; }, null, { timeout: 5000 }).catch(() => {});
         check(await page.textContent('#profile-name') === 'Player 1', 'a first profile "Player 1" exists');
+        const ver = JSON.parse(fs.readFileSync(path.join(ROOT, 'app-manifest.json'), 'utf8'));
+        check(await page.textContent('#app-version') === 'v' + ver.version + ' (Build ' + ver.build + ')', 'home shows the version: ' + await page.textContent('#app-version'));
         await page.evaluate(() => { AudioPrefs.setMusic(3); Scores.add('snake', 'PPP', 70); });
         await page.focus('#btn-profile'); await page.keyboard.press('Enter');
         check(await page.evaluate(() => !document.getElementById('profiles').hidden), 'the profile button opens the Profiles screen');

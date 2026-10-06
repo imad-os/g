@@ -194,6 +194,7 @@ var App = (function () {
         Input.setHandler(route);
         Input.onDevice(updateIndicator);
         updateIndicator();
+        showVersion();
         GameHost.init();
         watchNetwork();
         $('dialog-yes').onclick = function () { var cb = dialogYes; closeDialog(); if (cb) cb(); };
@@ -221,7 +222,13 @@ var App = (function () {
     }
 
     // re-applies texts that are not data-i18n driven (called after a language change)
-    function refresh() { updateIndicator(); ProfilesUI.renderButton(); }
+    // Version on the home screen, so it is easy to see that an online update arrived
+    // (the hosted copy is picked up on the next start, no new package needed).
+    function showVersion() {
+        $('app-version').textContent = 'v' + AppBoot.version() + ' (' + I18n.t('build') + ' ' + AppBoot.build() + ')';
+    }
+
+    function refresh() { updateIndicator(); ProfilesUI.renderButton(); showVersion(); }
 
     return { start: start, confirm: confirm, toast: toast, refresh: refresh };
 })();
