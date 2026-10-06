@@ -61,6 +61,41 @@ its own GitHub Pages URL. The hub only lists them, launches them, and gives them
      focused tile in < 1 s. Covers must load lazily, only the visible ones.
    - **Multitasking:** `visibilitychange` works the same on both pages. Back on `game.html` never
      exits the app (pause → quit to home).
+0b. **Loading screen with a real progress bar (every game, first-party or remote).**
+   - **Instant screen:** `game.html` shows its loading screen on the very first frame, before any
+     game code is fetched: game title, cover (only if already in the HTTP cache), progress bar and
+     percentage text.
+   - **Manifest-driven loading:** the game's `game-manifest.json` lists everything to load:
+     `scripts` (JS, in order), `styles`, `assets` (images, audio, level/JSON files) and
+     `sizeBytes` per file (or a total `sizeMB`).
+   - **Byte-weighted progress:** the loader fetches them with XHR, measuring
+     `onprogress`/`loaded` bytes. The bar shows the **real downloaded bytes / total**, not a fake
+     animation. Files without a known size count by file.
+   - **Phases:** scripts are injected in order after download (`async=false`), assets are decoded
+     (`Image.decode()`, `AudioContext.decodeAudioData`), then the game reports its own init
+     progress through the SDK (`progress 0..1`). Split the bar into phases, e.g. download 0–80%,
+     decode/init 80–100%. The bar never moves backwards.
+   - **Remote games (iframe):** the SDK reports the iframe's own download/init progress with
+     `progress` messages. If a remote game sends nothing, show a steady indeterminate animation,
+     and never a frozen screen.
+   - **Load on demand:** load what the first screen needs. Big games (e.g. Super Jumper levels,
+     racing track data) load later parts per stage with the same progress-bar component (stage
+     loading screen).
+   - **Errors:**
+     - A failed file is retried once.
+     - Then show Retry / Back to menu.
+     - Timeout: 20 s without any progress.
+     - Hosted file fails → fall back to the bundled copy of that game if there is one.
+   - **Accessibility:** Voice Guide announces "Loading <game>", then every 25% at most (not every
+     tick), then "Ready". The bar has `role="progressbar"` with `aria-valuenow`.
+   - **Low-end TVs:** the bar only touches one element's `width` (or `transform: scaleX`), at
+     most about 10 updates per second. No CSS animations running while bytes download.
+   - **Tests:**
+     - The bar reaches 100% only after all listed files have loaded.
+     - Progress values are non-decreasing.
+     - A missing asset shows the error dialog.
+     - A throttled network (Playwright route delay) shows intermediate values.
+
 1. **Game SDK (standard entry and exit points).** Create `sdk/arcade-sdk.js`: one small ES5 file
    that every game includes.
    - **Transport:** direct calls when the game runs in `game.html` itself, `postMessage` when it
