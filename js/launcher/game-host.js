@@ -44,6 +44,7 @@ var GameHost = (function () {
         return {
             id: id,
             lang: I18n.lang(),
+            profile: { id: Profiles.current().id, name: Profiles.name(null, I18n.t('player')) },
             rtl: I18n.rtl(),
             quality: Perf.profile(),
             volume: { music: AudioPrefs.music() / 10, sfx: AudioPrefs.sfx() / 10 },

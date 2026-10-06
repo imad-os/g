@@ -20,7 +20,13 @@ var Scores = (function () {
         Store.set(key(id), l);
         return i + 1;
     }
-    function lastName(slot) { return Store.get('last_initials_' + (slot || 1), slot === 2 ? 'PL2' : 'AAA'); }
+    // Player 1 starts from the profile name's first letters (e.g. "Imad" -> IMA)
+    function profileInitials() {
+        var p = typeof Profiles !== 'undefined' ? Profiles.current() : null;
+        var n = ((p && p.name) || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        return n ? (n + 'AA').slice(0, 3) : 'AAA';
+    }
+    function lastName(slot) { return Store.get('last_initials_' + (slot || 1), slot === 2 ? 'PL2' : profileInitials()); }
     function setLastName(slot, n) { Store.set('last_initials_' + (slot || 1), n); }
 
     return { MAX: MAX, list: list, qualifies: qualifies, add: add, lastName: lastName, setLastName: setLastName };

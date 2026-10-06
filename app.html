@@ -7,6 +7,7 @@
             <h1 id="menu-title" class="logo" data-i18n="appTitle">Arcade</h1>
             <div class="head-right">
                 <span id="input-indicator" class="chip" role="status"></span>
+                <button id="btn-profile" class="btn btn-profile" data-focus><span id="profile-avatar" class="avatar" aria-hidden="true"></span><span id="profile-name"></span></button>
                 <button id="btn-scores" class="btn" data-focus data-i18n="scores">Top scores</button>
                 <button id="btn-settings" class="btn" data-focus data-i18n="settings">Settings</button>
             </div>
@@ -19,6 +20,28 @@
         <h2 id="settings-title" class="screen-title" data-i18n="settings">Settings</h2>
         <div id="settings-list" class="settings-list"></div>
     </section>
+
+    <!-- Player profiles: switch, create, rename, delete -->
+    <section id="profiles" class="screen profiles" role="dialog" aria-modal="true" aria-labelledby="profiles-title" hidden>
+        <h2 id="profiles-title" class="screen-title" data-i18n="profiles">Profiles</h2>
+        <p class="profiles-hint" data-i18n="profilesHint"></p>
+        <div id="profiles-list" class="profiles-list" role="list"></div>
+        <div class="profiles-buttons">
+            <button id="profile-new" class="btn btn-primary" data-focus data-i18n="newProfile">New profile</button>
+            <button id="profile-rename" class="btn" data-focus data-i18n="renameProfile">Rename</button>
+            <button id="profile-delete" class="btn" data-focus data-i18n="deleteProfile">Delete</button>
+            <button id="profiles-close" class="btn" data-focus data-i18n="close">Close</button>
+        </div>
+    </section>
+
+    <!-- Name entry with an on-screen keyboard (works with the remote; a PC keyboard can type too) -->
+    <div id="namer" class="backdrop namer" hidden>
+        <div class="dialog namer-box" role="dialog" aria-modal="true" aria-labelledby="namer-title">
+            <h2 id="namer-title" class="dialog-title"></h2>
+            <div id="namer-text" class="namer-text" aria-live="polite"></div>
+            <div id="namer-keys" class="namer-keys"></div>
+        </div>
+    </div>
 
     <!-- Top-10 tables of every game -->
     <section id="scores" class="screen scores" role="dialog" aria-modal="true" aria-labelledby="scores-title" hidden>

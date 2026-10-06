@@ -46,7 +46,9 @@ var Menu = (function () {
             img.alt = '';
             img.setAttribute('data-src', g.base + 'games/' + g.id + '/' + (m.cover || 'cover.png'));
             img.src = img.getAttribute('data-src');
-            img.onerror = function () { this.style.visibility = 'hidden'; };
+            // hide a broken cover, but not the "error" of releaseImages() clearing it while a game runs
+            img.onerror = function () { if (this.getAttribute('src')) this.style.visibility = 'hidden'; };
+            img.onload = function () { this.style.visibility = ''; };
             imgBox.appendChild(img);
             b.appendChild(imgBox);
             var tx = el('span', 'tile-text');
@@ -66,6 +68,12 @@ var Menu = (function () {
         onPlay(g);
     }
 
+    // another profile is active: its own last game, "new" badges and scores
+    function profileChanged() {
+        lastPlayed = Store.get('last_game', null);
+        render();
+    }
+
     function tileFor(id) { return grid.querySelector('[data-game="' + id + '"]'); }
 
     function show() {
@@ -80,11 +88,16 @@ var Menu = (function () {
     // Frees decoded cover images while a game runs (RAM on low-end TVs).
     function releaseImages() {
         var imgs = grid.querySelectorAll('img');
-        for (var i = 0; i < imgs.length; i++) imgs[i].src = '';
+        // removeAttribute, not src = '': an empty src fires "error", which used to hide the cover for good
+        for (var i = 0; i < imgs.length; i++) imgs[i].removeAttribute('src');
     }
     function restoreImages() {
         var imgs = grid.querySelectorAll('img');
-        for (var i = 0; i < imgs.length; i++) if (!imgs[i].getAttribute('src')) imgs[i].src = imgs[i].getAttribute('data-src');
+        for (var i = 0; i < imgs.length; i++) {
+            if (imgs[i].getAttribute('src')) continue;
+            imgs[i].style.visibility = '';
+            imgs[i].src = imgs[i].getAttribute('data-src');
+        }
     }
 
     function confirmFocused() {
@@ -205,6 +218,7 @@ var Menu = (function () {
         var first = null;
         for (var i = 0; i < games.length; i++) {
             var g = games[i], title = I18n.pick(g.manifest.title), list = Scores.list(g.id);
+            if (g.manifest.scores === false) continue;       // e.g. Parchís: a winner, no points
             // a focusable div (a <button> would centre the list vertically)
             var col = el('div', 'score-col');
             col.setAttribute('data-focus', '');
@@ -301,7 +315,7 @@ var Menu = (function () {
     return {
         init: init, show: show, hide: hide, render: render, releaseImages: releaseImages,
         confirmFocused: confirmFocused, openSettings: openSettings, closeSettings: closeSettings,
-        settingsAdjust: settingsAdjust, closePage: closePage, openScores: openScores, closeScores: closeScores, tileFor: tileFor,
+        settingsAdjust: settingsAdjust, profileChanged: profileChanged, closePage: closePage, openScores: openScores, closeScores: closeScores, tileFor: tileFor,
         games: function () { return games; }
     };
 })();

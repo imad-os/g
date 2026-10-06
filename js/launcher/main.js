@@ -102,6 +102,8 @@ var App = (function () {
         if (!pressed) return;
         var isBack = (action === 'back' || action === 'cancel') && !repeat;
 
+        if (ProfilesUI.namerOpen()) return ProfilesUI.namerAction(action, repeat);
+        if (ProfilesUI.screenOpen()) return ProfilesUI.screenAction(action, repeat);
         if (!$('page').hidden) {
             if (isBack) Menu.closePage();
             else if (action === 'confirm' && !repeat) Menu.confirmFocused();
@@ -207,6 +209,7 @@ var App = (function () {
 
         loadGames(function (games) {
             Menu.init(games, play);
+            ProfilesUI.init(Menu.profileChanged);
             Menu.show();
             I18n.apply();
             AppBoot.ready();
@@ -218,7 +221,7 @@ var App = (function () {
     }
 
     // re-applies texts that are not data-i18n driven (called after a language change)
-    function refresh() { updateIndicator(); }
+    function refresh() { updateIndicator(); ProfilesUI.renderButton(); }
 
     return { start: start, confirm: confirm, toast: toast, refresh: refresh };
 })();

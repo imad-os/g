@@ -14,6 +14,12 @@
 //   8. top-10 tables: a qualifying score asks for initials and appears on the Scores screen
 //  10. network loss shows a popup (Samsung checklist), reconnecting shows another; favicon served
 //   9. Super Jumper 2-player co-op: arrows + WASD, and two gamepads, each drive only their own hero
+//  11. Super Jumper controls: stable ground contact, Down ducks, steering and momentum in the air
+//  12. menu covers come back after a game
+//  13. profiles: create, switch from home, separate saves, shared settings, delete
+//  14. Parchís: Moroccan rules, a full CPU game, a person's turn
+//
+//  CHROMIUM_PATH=/path/to/chrome uses an existing Chromium instead of Playwright's download.
 
 import http from 'node:http';
 import fs from 'node:fs';
@@ -98,7 +104,7 @@ async function playable(page, id = 'blocks') {
 async function main() {
     const srv = await serve();
     const base = `http://localhost:${srv.address().port}/`;
-    const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', '--js-flags=--expose-gc', '--enable-precise-memory-info'] });
+    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--autoplay-policy=no-user-gesture-required', '--js-flags=--expose-gc', '--enable-precise-memory-info'] });
 
     console.log('1. hosted newer build runs');
     {
@@ -379,6 +385,156 @@ async function main() {
         const png = fs.readFileSync(path.join(ROOT, 'icon.png'));
         check(png.readUInt32BE(16) === 512 && png.readUInt32BE(20) === 423 && png[25] === 2 && size < 300 * 1024,
             'icon.png is 512x423, 24-bit RGB, ' + Math.round(size / 1024) + ' KB (< 300 KB)');
+    }
+
+    console.log('11. Super Jumper controls: stable ground, duck, air steering');
+    {
+        const page = await newPage(browser, base);
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('[data-game="jumper"]');
+        await page.focus('[data-game="jumper"]'); await page.keyboard.press('Enter');
+        await page.waitForFunction(() => window.GameHost.state() === 'running');
+        await page.waitForTimeout(300);
+        const G = 'document.querySelector("iframe").contentWindow';
+        const dbg = () => page.evaluate(G + '.JumperDebug()');
+        await page.evaluate(G + '.JumperCheat.enter("w1-1")');
+        await page.waitForFunction(G + '.JumperDebug().mode === "play"');
+        await page.waitForTimeout(800);
+        let grounded = true;
+        for (let i = 0; i < 12; i++) { grounded = grounded && (await dbg()).onGround; await page.waitForTimeout(17); }
+        check(grounded, 'standing hero stays on the ground every frame (no flicker)');
+        await page.keyboard.down('ArrowDown');
+        let ducked = true, pounded = false;
+        for (let i = 0; i < 10; i++) { await page.waitForTimeout(40); const d = await dbg(); ducked = ducked && d.crouch && /crouch/.test(d.frameName); pounded = pounded || d.gp > 0 || !d.onGround; }
+        await page.keyboard.up('ArrowDown');
+        check(ducked && !pounded, 'Down while standing ducks (no ground-pound slam)');
+        await page.waitForTimeout(200);
+        let d = await dbg(); const x0 = d.x;
+        await page.keyboard.down('Space'); await page.waitForTimeout(60);
+        await page.keyboard.down('ArrowRight'); await page.waitForTimeout(350);
+        await page.keyboard.up('ArrowRight');
+        d = await dbg();
+        const airX = d.x;
+        check(!d.onGround && d.x - x0 > 12, 'Right steers the hero in the air without run (' + Math.round(d.x - x0) + ' px)');
+        await page.waitForTimeout(150);
+        d = await dbg();
+        check(d.x - airX > 6, 'the jump keeps its momentum after the arrow is released (remote friendly)');
+        await page.keyboard.up('Space');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('12. covers come back after a game');
+    {
+        const page = await newPage(browser, base);
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('[data-game="snake"]');
+        await page.waitForFunction(() => [...document.querySelectorAll('.tile img')].every((i) => i.complete));
+        await page.focus('[data-game="snake"]'); await page.keyboard.press('Enter');
+        await page.waitForFunction(() => window.GameHost.state() === 'running');
+        check(await page.evaluate(() => [...document.querySelectorAll('.tile img')].every((i) => !i.getAttribute('src'))), 'covers are released while a game runs');
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
+        await page.waitForFunction(() => window.GameHost.state() === 'idle');
+        await page.waitForFunction(() => [...document.querySelectorAll('.tile img')].every((i) => i.complete), null, { timeout: 5000 }).catch(() => {});
+        const vis = await page.evaluate(() => [...document.querySelectorAll('.tile img')].map((i) => i.style.visibility !== 'hidden' && i.naturalWidth > 0));
+        check(vis.length === 7 && vis.every(Boolean), 'all 7 covers visible again on the home screen');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('13. profiles');
+    {
+        const page = await newPage(browser, base);
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForFunction(() => { const b = document.getElementById('profile-name'); return b && b.textContent; }, null, { timeout: 5000 }).catch(() => {});
+        check(await page.textContent('#profile-name') === 'Player 1', 'a first profile "Player 1" exists');
+        await page.evaluate(() => { AudioPrefs.setMusic(3); Scores.add('snake', 'PPP', 70); });
+        await page.focus('#btn-profile'); await page.keyboard.press('Enter');
+        check(await page.evaluate(() => !document.getElementById('profiles').hidden), 'the profile button opens the Profiles screen');
+        await page.focus('#profile-new'); await page.keyboard.press('Enter');
+        // remote: OK on the focused "A" key, then a PC keyboard types the rest
+        await page.keyboard.press('Enter');
+        await page.keyboard.type('na');
+        check(await page.textContent('#namer-text') === 'Ana', 'on-screen keyboard and PC keys type a name');
+        await page.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
+        check(await page.evaluate(() => Store.profile() === 'p2' && Profiles.current().name === 'Ana'), 'a new profile is created and becomes active');
+        check(await page.evaluate(() => Scores.list('snake').length === 0 && Store.get('vol_music') === 3), 'the new profile has its own scores; settings are shared');
+        check(await page.evaluate(() => Scores.lastName(1)) === 'ANA', 'initials start from the profile name');
+        await page.keyboard.press('Escape');
+        check(/Ana/.test(await page.textContent('#btn-profile')), 'home shows the active profile');
+        await page.reload();
+        await page.waitForFunction(() => { const b = document.getElementById('profile-name'); return b && b.textContent; });
+        check(await page.evaluate(() => Store.profile()) === 'p2', 'the active profile is remembered');
+        await page.focus('#btn-profile'); await page.keyboard.press('Enter');
+        await page.focus('[data-profile="p1"]'); await page.keyboard.press('Enter');
+        check(await page.evaluate(() => Store.profile() === 'p1' && Scores.list('snake').length === 1 && document.getElementById('profiles').hidden), 'switching back from the home screen restores that profile');
+        await page.focus('#btn-profile'); await page.keyboard.press('Enter');
+        await page.focus('[data-profile="p2"]'); await page.keyboard.press('Enter');
+        await page.focus('#btn-profile'); await page.keyboard.press('Enter');
+        await page.focus('#profile-delete'); await page.keyboard.press('Enter');
+        await page.focus('#dialog-yes'); await page.keyboard.press('Enter');
+        check(await page.evaluate(() => Profiles.list().length === 1 && Store.profile() === 'p1' && !Object.keys(localStorage).some((k) => k.indexOf('arc_p2_') === 0)), 'deleting a profile removes it and its data');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('14. Parchís (Moroccan rules)');
+    {
+        const page = await newPage(browser, base);
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('[data-game="parchis"]');
+        await page.evaluate(() => Store.set('game_parchis_setup', { n: 4, cpu: [true, true, true, true] }));
+        await page.focus('[data-game="parchis"]'); await page.keyboard.press('Enter');
+        await page.waitForFunction(() => window.GameHost.state() === 'running');
+        await page.waitForTimeout(200);
+        const G = 'document.querySelector("iframe").contentWindow';
+        const C = G + '.ParchisCheat';
+        const rule = (js) => page.evaluate(C + js);
+        check(await rule('.tryMove(0, 0, 4)') === null && (await rule('.tryMove(0, 0, 5)')).to === 0, 'a piece leaves the nest only with a 5');
+        await rule('.set(1, 0, 61)');                                         // blue on square 14 (not safe)
+        await rule('.set(0, 1, 7)');
+        check(JSON.stringify((await rule('.tryMove(0, 1, 3)')).capture) === '[1,0]', 'landing on a lone rival captures it');
+        await rule('.set(1, 0, 58)'); await rule('.set(0, 1, 4)');            // blue on safe square 11
+        const sm = await rule('.tryMove(0, 1, 3)');
+        check(sm && sm.capture === null, 'no capture on a safe square');
+        await rule('.set(2, 0, 60)'); await rule('.set(2, 1, 60)'); await rule('.set(0, 2, 24)');   // red wall on square 30
+        check(await rule('.tryMove(0, 2, 4)') === null && await rule('.tryMove(0, 2, 1)') !== null, 'two pieces of one colour make a wall nobody passes');
+        await rule('.set(0, 3, 69)');
+        check(await rule('.tryMove(0, 3, 3)') === null && (await rule('.tryMove(0, 3, 2)')).to === 71, 'the centre needs the exact number');
+        await rule('.set(0, 2, -1)'); await rule('.set(1, 1, 51)');           // blue on yellow's exit
+        check(JSON.stringify((await rule('.tryMove(0, 2, 5)')).capture) === '[1,1]', 'coming out captures a rival on the exit square');
+        // a full 4-CPU game reaches a winner
+        await page.keyboard.press('Enter');
+        await rule('.turbo(40)');
+        await page.waitForFunction(G + '.ParchisDebug().state === "over"', null, { timeout: 120000 }).catch(() => {});
+        const end = await page.evaluate(G + '.ParchisDebug()');
+        check(end.state === 'over' && end.pieces[end.winner].every((v) => v === 71), 'a 4-player CPU game ends with a winner (' + ['yellow', 'blue', 'red', 'green'][end.winner] + ')');
+        await rule('.turbo(1)');
+        // a person plays: OK rolls, a single legal move plays by itself
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[1].click(); });   // New game
+        await page.waitForFunction(G + '.ParchisDebug().state === "setup"');
+        // setup with the remote: Players 4 -> 2, Yellow CPU -> Person, then Start game
+        for (const k of ['ArrowDown', 'ArrowLeft', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'ArrowDown', 'ArrowDown', 'Enter']) { await page.keyboard.press(k); await page.waitForTimeout(40); }
+        await page.waitForFunction(G + '.ParchisDebug().state === "roll"');
+        const st = await page.evaluate(G + '.ParchisDebug()');
+        check(st.turn === 0 && JSON.stringify(st.seats) === '[0,2]', '2 players sit opposite each other; yellow starts');
+        await rule('.die(5)');
+        await page.keyboard.press('Enter');
+        await page.waitForFunction(G + '.ParchisDebug().pieces[0].indexOf(0) >= 0', null, { timeout: 5000 }).catch(() => {});
+        check((await page.evaluate(G + '.ParchisDebug()')).pieces[0].indexOf(0) >= 0, 'OK rolls; a 5 brings a piece out');
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
+        await page.waitForFunction(() => window.GameHost.state() === 'idle');
+        await page.focus('#btn-scores'); await page.keyboard.press('Enter');
+        check(await page.evaluate(() => document.querySelectorAll('.score-col').length) === 6, 'Parchís (no points) has no top-10 column');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
     }
 
     await browser.close();
