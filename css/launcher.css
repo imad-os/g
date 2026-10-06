@@ -40,11 +40,11 @@ button { font: inherit; color: inherit; border: 0; background: none; padding: 0;
 .tile:focus { border-color: #ffd23f; background: #262c66; }
 .hi .tile { -webkit-transition: -webkit-transform 0.14s; transition: transform 0.14s; }
 .hi .tile:focus { -webkit-transform: scale(1.04); transform: scale(1.04); }
-.tile-img { display: block; width: 100%; height: 296px; background: #0b0d1c; }
+.tile-img { display: block; width: 100%; height: 284px; background: #0b0d1c; }
 .tile-img img { display: block; width: 100%; height: 100%; }
-.tile-text { padding: 14px 24px 0; }
+.tile-text { display: block; padding: 12px 24px 0; }
 .tile-title { display: block; font-size: 36px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile-desc { display: block; font-size: 24px; color: #b9c0ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
+.tile-desc { display: block; font-size: 24px; line-height: 1.35; color: #b9c0ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
 .badge { position: absolute; top: 16px; right: 16px; padding: 6px 18px; border-radius: 20px; font-size: 24px; font-weight: 700;
          background: #ff5d73; color: #fff; }
 .badge-upd { background: #2bb673; }
