@@ -1,0 +1,139 @@
+{
+ "stages": [
+  {
+   "id": "w1-1",
+   "world": 1,
+   "n": 1,
+   "name": "Sunny Meadow",
+   "fortress": false,
+   "secret": false,
+   "water": false
+  },
+  {
+   "id": "w1-2",
+   "world": 1,
+   "n": 2,
+   "name": "Pipe Hills",
+   "fortress": false,
+   "secret": true,
+   "water": false
+  },
+  {
+   "id": "w1-3",
+   "world": 1,
+   "n": 3,
+   "name": "Breezy Bridges",
+   "fortress": false,
+   "secret": false,
+   "water": false
+  },
+  {
+   "id": "w1-4",
+   "world": 1,
+   "n": 4,
+   "name": "Bramble Run",
+   "fortress": false,
+   "secret": false,
+   "water": false
+  },
+  {
+   "id": "w1-5",
+   "world": 1,
+   "n": 5,
+   "name": "Mossy Keep",
+   "fortress": true,
+   "secret": false,
+   "water": false
+  },
+  {
+   "id": "w2-1",
+   "world": 2,
+   "n": 1,
+   "name": "Dune Trail",
+   "fortress": false,
+   "secret": false,
+   "water": false
+  },
+  {
+   "id": "w2-2",
+   "world": 2,
+   "n": 2,
+   "name": "Coral Shallows",
+   "fortress": false,
+   "secret": false,
+   "water": true
+  },
+  {
+   "id": "w2-3",
+   "world": 2,
+   "n": 3,
+   "name": "Oasis Pipes",
+   "fortress": false,
+   "secret": true,
+   "water": false
+  },
+  {
+   "id": "w2-4",
+   "world": 2,
+   "n": 4,
+   "name": "Scorching Steps",
+   "fortress": false,
+   "secret": false,
+   "water": false
+  },
+  {
+   "id": "w2-5",
+   "world": 2,
+   "n": 5,
+   "name": "Sandstone Fort",
+   "fortress": true,
+   "secret": false,
+   "water": false
+  },
+  {
+   "id": "w3-1",
+   "world": 3,
+   "n": 1,
+   "name": "Frosty Hollow",
+   "fortress": false,
+   "secret": false,
+   "water": false
+  },
+  {
+   "id": "w3-2",
+   "world": 3,
+   "n": 2,
+   "name": "Glacier Lake",
+   "fortress": false,
+   "secret": false,
+   "water": true
+  },
+  {
+   "id": "w3-3",
+   "world": 3,
+   "n": 3,
+   "name": "Crystal Tunnels",
+   "fortress": false,
+   "secret": true,
+   "water": false
+  },
+  {
+   "id": "w3-4",
+   "world": 3,
+   "n": 4,
+   "name": "Icicle Heights",
+   "fortress": false,
+   "secret": false,
+   "water": false
+  },
+  {
+   "id": "w3-5",
+   "world": 3,
+   "n": 5,
+   "name": "Frozen Citadel",
+   "fortress": true,
+   "secret": false,
+   "water": false
+  }
+ ]
+}

@@ -1,0 +1,97 @@
+/* Launcher styles. Plain CSS that works on Chromium 56+ (Tizen 4.0):
+   no nesting, no @layer, no media range syntax, no oklch()/color-mix(), no :has(), no flex gap.
+   Designed for 1920x1080; js/launcher/main.js scales #stage to fit any other window size. */
+
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0f1226; }
+body { font-family: "Samsung One", "SamsungOne", Roboto, "Segoe UI", Arial, sans-serif; color: #f2f4ff; }
+* { box-sizing: border-box; }
+button { font: inherit; color: inherit; border: 0; background: none; padding: 0; margin: 0; cursor: pointer; }
+[hidden] { display: none !important; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden;
+         background: #0f1226; -webkit-transform-origin: 0 0; transform-origin: 0 0; }
+.hi .stage { background: -webkit-linear-gradient(top, #1b1f45 0%, #0f1226 60%); background: linear-gradient(to bottom, #1b1f45 0%, #0f1226 60%); }
+
+.screen { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; padding: 64px 96px; }
+
+/* ---------- buttons ---------- */
+.btn { display: inline-block; min-width: 200px; padding: 18px 40px; font-size: 32px; font-weight: 600; line-height: 1.2;
+       border-radius: 16px; background: #2a2f63; border: 4px solid transparent; text-align: center; outline: none; }
+.btn-primary { background: #3d46a8; }
+.btn:focus { border-color: #ffd23f; background: #4c56c9; }
+.hi .btn { -webkit-transition: -webkit-transform 0.12s; transition: transform 0.12s; }
+.hi .btn:focus { -webkit-transform: scale(1.05); transform: scale(1.05); }
+
+/* ---------- main menu ---------- */
+.menu-head { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: center; -webkit-align-items: center; align-items: center;
+             -webkit-box-pack: justify; -webkit-justify-content: space-between; justify-content: space-between; height: 112px; margin-bottom: 40px; }
+.logo { margin: 0; font-size: 72px; font-weight: 800; letter-spacing: 2px; color: #ffd23f; }
+.head-right { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: center; -webkit-align-items: center; align-items: center; }
+.head-right .btn { margin-left: 32px; }
+[dir="rtl"] .head-right .btn { margin-left: 0; margin-right: 32px; }
+.chip { font-size: 26px; padding: 8px 20px; border-radius: 24px; background: #20244d; color: #b9c0ff; }
+
+.grid { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 0 -20px; }
+.tile { position: relative; width: 536px; height: 400px; margin: 0 20px 40px; border-radius: 22px; overflow: hidden; outline: none;
+        background: #1c2150; border: 5px solid transparent; text-align: left; }
+[dir="rtl"] .tile { text-align: right; }
+.tile:focus { border-color: #ffd23f; background: #262c66; }
+.hi .tile { -webkit-transition: -webkit-transform 0.14s; transition: transform 0.14s; }
+.hi .tile:focus { -webkit-transform: scale(1.04); transform: scale(1.04); }
+.tile-img { display: block; width: 100%; height: 284px; background: #0b0d1c; }
+.tile-img img { display: block; width: 100%; height: 100%; }
+.tile-text { display: block; padding: 12px 24px 0; }
+.tile-title { display: block; font-size: 36px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-desc { display: block; font-size: 24px; line-height: 1.35; color: #b9c0ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
+.badge { position: absolute; top: 16px; right: 16px; padding: 6px 18px; border-radius: 20px; font-size: 24px; font-weight: 700;
+         background: #ff5d73; color: #fff; }
+.badge-upd { background: #2bb673; }
+[dir="rtl"] .badge { right: auto; left: 16px; }
+
+/* ---------- settings ---------- */
+.screen-title { margin: 0 0 40px; font-size: 56px; font-weight: 800; color: #ffd23f; }
+.settings { background: #0f1226; }
+.settings-list { width: 1100px; height: 860px; overflow: hidden; }
+.row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: center; -webkit-align-items: center; align-items: center;
+       -webkit-box-pack: justify; -webkit-justify-content: space-between; justify-content: space-between;
+       width: 100%; min-height: 80px; margin-bottom: 14px; padding: 12px 32px; border-radius: 16px; background: #1c2150;
+       border: 4px solid transparent; font-size: 32px; outline: none; text-align: left; }
+[dir="rtl"] .row { text-align: right; }
+.row:focus { border-color: #ffd23f; background: #2a3078; }
+.row-value { color: #ffd23f; font-weight: 700; }
+.row-value .arrows { color: #8088cc; }
+.vol { display: inline-block; width: 300px; height: 18px; border-radius: 9px; background: #10132e; vertical-align: middle; margin: 0 16px; overflow: hidden; }
+.vol-fill { height: 100%; background: #ffd23f; }
+
+/* ---------- text pages ---------- */
+.page { background: #0f1226; }
+.page-body { width: 1500px; font-size: 32px; line-height: 1.5; color: #dfe3ff; margin-bottom: 48px; }
+.page-body p { margin: 0 0 22px; }
+.page-body .kv { color: #ffd23f; }
+
+/* ---------- dialogs ---------- */
+.backdrop { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: rgba(5, 6, 18, 0.78); z-index: 50; }
+.dialog { position: absolute; left: 50%; top: 50%; width: 900px; margin-left: -450px; margin-top: -200px; padding: 48px;
+          border-radius: 28px; background: #1f2458; border: 4px solid #3d46a8; text-align: center; z-index: 60; }
+.dialog-title { margin: 0 0 18px; font-size: 48px; color: #ffd23f; }
+.dialog-text { margin: 0 0 36px; font-size: 32px; line-height: 1.4; }
+.dialog-buttons .btn { margin: 0 14px; }
+
+/* ---------- game layer ---------- */
+.game-layer { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: #000; outline: none; z-index: 20; }
+.game-frame-box, .game-frame-box iframe { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; border: 0; }
+.game-loading { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: #0f1226; padding-top: 420px; text-align: center; }
+.loading-title { font-size: 56px; font-weight: 800; color: #ffd23f; margin-bottom: 48px; }
+.bar { width: 900px; height: 28px; margin: 0 auto; border-radius: 14px; background: #20244d; overflow: hidden; }
+.bar-fill { width: 0; height: 100%; background: #ffd23f; }
+
+.pause { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: rgba(5, 6, 18, 0.72); z-index: 40; }
+.pause-box { position: absolute; left: 50%; top: 50%; width: 760px; margin-left: -380px; -webkit-transform: translateY(-50%); transform: translateY(-50%);
+             padding: 48px 56px; border-radius: 28px; background: #1f2458; border: 4px solid #3d46a8; text-align: center; }
+.pause-title { margin: 0 0 32px; font-size: 56px; color: #ffd23f; }
+.pause-items .btn { display: block; width: 100%; margin: 0 0 18px; }
+
+.toast { position: absolute; left: 50%; bottom: 64px; width: 1000px; margin-left: -500px; padding: 22px 32px; border-radius: 18px;
+         background: #1f2458; border: 3px solid #ffd23f; font-size: 30px; text-align: center; z-index: 90; }

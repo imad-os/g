@@ -1,0 +1,18 @@
+{
+  "name": "arcade-tv",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Samsung Tizen TV game launcher with Super Jumper and five mini games",
+  "scripts": {
+    "serve": "http-server -p 8080 -c-1 .",
+    "levels": "node tools/gen-levels.mjs",
+    "validate": "node tools/validate-levels.mjs",
+    "covers": "node tools/make-covers.mjs http://localhost:8080/",
+    "test": "node tests/run-tests.mjs",
+    "wgt": "sh tools/build-wgt.sh"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1",
+    "playwright": "^1.56.0"
+  }
+}
