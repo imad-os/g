@@ -1,0 +1,15 @@
+/* Shared game page styles. The iframe is 1920x1080 in launcher coordinates. Chromium 56+ safe. */
+html, body { margin: 0; padding: 0; width: 1920px; height: 1080px; overflow: hidden; background: #000; }
+body { font-family: "Samsung One", Roboto, Arial, sans-serif; color: #fff; }
+#game { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+.pixel #game { image-rendering: -webkit-optimize-contrast; image-rendering: pixelated; }
+.hud { position: absolute; left: 0; top: 0; width: 1920px; pointer-events: none; font-weight: 800; }
+.hud-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: justify; -webkit-justify-content: space-between; justify-content: space-between; padding: 24px 48px; }
+.hud-item { font-size: 40px; text-shadow: 0 3px 0 #000, 3px 0 0 #000, -3px 0 0 #000, 0 -3px 0 #000; white-space: nowrap; }
+.hud-item small { font-size: 28px; opacity: 0.85; margin-right: 10px; }
+[dir="rtl"] .hud-item small { margin-right: 0; margin-left: 10px; }
+.hc .hud-item { background: #000; color: #ff0; padding: 4px 16px; border-radius: 8px; text-shadow: none; }
+.banner { position: absolute; left: 0; top: 380px; width: 1920px; text-align: center; font-size: 88px; font-weight: 900; color: #ffd23f;
+          text-shadow: 0 6px 0 #000, 6px 0 0 #000, -6px 0 0 #000, 0 -6px 0 #000; pointer-events: none; }
+.banner small { display: block; font-size: 44px; color: #fff; margin-top: 18px; }
+[hidden] { display: none !important; }

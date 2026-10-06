@@ -144,7 +144,13 @@ var GK = (function () {
         if (song._parsed) return song;
         for (var i = 0; i < song.tracks.length; i++) {
             var tr = song.tracks[i], toks = (tr.notes || tr.drums).split(/\s+/), out = [];
-            for (var j = 0; j < toks.length; j++) if (toks[j]) out.push(toks[j]);
+            // "A4:4" = note held for 4 steps, ".:8" = 8 steps of rest, "k:2" = drum + 1 empty step
+            for (var j = 0; j < toks.length; j++) {
+                if (!toks[j]) continue;
+                var p = toks[j].split(':'), n = p.length > 1 ? parseInt(p[1], 10) : 1;
+                out.push(p[0]);
+                for (var r = 1; r < n; r++) out.push(p[0] === '.' ? '.' : tr.drums ? '.' : '-');
+            }
             tr.steps = out;
             tr.len = [];
             for (j = 0; j < out.length; j++) {
@@ -432,5 +438,35 @@ var GK = (function () {
     // Picks the current language from { en, fr, es, ar } tables.
     function tr(table, lang) { return function (k) { var t = table[lang] || table.en; return t[k] !== undefined ? t[k] : table.en[k]; }; }
 
-    return { create: create, rng: rng, clamp: clamp, text: text, roundRect: roundRect, tr: tr, Particles: Particles, W: W, H: H };
+    // DOM HUD (crisp text at any canvas resolution, only touched when a value changes).
+    // hud([['score', 'Score'], ...]) -> { score: <span>, ... }
+    function hud(items, rows) {
+        var root = document.getElementById('hud'), out = {};
+        root.innerHTML = '';
+        var row = document.createElement('div');
+        row.className = 'hud-row';
+        root.appendChild(row);
+        for (var i = 0; i < items.length; i++) {
+            if (items[i] === '|') { row = document.createElement('div'); row.className = 'hud-row'; root.appendChild(row); continue; }
+            var d = document.createElement('div'), s = document.createElement('small'), v = document.createElement('span');
+            d.className = 'hud-item';
+            s.textContent = items[i][1];
+            if (items[i][1]) d.appendChild(s);
+            d.appendChild(v);
+            row.appendChild(d);
+            out[items[i][0]] = v;
+            out[items[i][0] + 'Box'] = d;
+        }
+        return out;
+    }
+    function banner(title, sub) {
+        var b = document.getElementById('banner');
+        if (!title) { b.hidden = true; return; }
+        b.innerHTML = '';
+        b.appendChild(document.createTextNode(title));
+        if (sub) { var s = document.createElement('small'); s.textContent = sub; b.appendChild(s); }
+        b.hidden = false;
+    }
+
+    return { create: create, rng: rng, hud: hud, banner: banner, clamp: clamp, text: text, roundRect: roundRect, tr: tr, Particles: Particles, W: W, H: H };
 })();
