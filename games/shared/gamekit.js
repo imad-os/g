@@ -243,7 +243,7 @@ var GK = (function () {
         var host = null, canvas = null, ctx = null;
         var raf = 0, running = false, last = 0, acc = 0, frameN = 0;
         var edges = [], edgeN = 0;
-        var perf = { level: 0, sum: 0, n: 0, grace: 120, slowWindows: 0 };
+        var perf = { level: 0, sum: 0, n: 0, grace: 2000, slowWindows: 0 };
         var started = false, destroyed = false;
         var onKeyDown = null, onKeyUp = null;
 
@@ -257,7 +257,7 @@ var GK = (function () {
             load: function (k, d) { return host ? host.load(k, d) : d; },
             exit: function () { if (host) host.exitToMenu(); },
             pause: function () { if (host) host.pause(); },
-            perfGrace: function (f) { perf.grace = f || 90; perf.sum = perf.n = 0; },
+            perfGrace: function (f) { perf.grace = (f || 90) * STEP; perf.sum = perf.n = 0; },
             setText: function (el, v) { v = String(v); if (el._v !== v) { el._v = v; el.textContent = v; } }
         };
 
@@ -271,40 +271,39 @@ var GK = (function () {
             ctx.webkitImageSmoothingEnabled = !def.pixelArt;
         }
 
-        // Adaptive quality: average frame time over ~2 s windows.
+        // Adaptive quality: measured over 1 s windows (time-based, so a slow TV reacts as fast as a
+        // fast one). Two slow windows in a row (< 50 fps) lower the quality one step:
+        //   1 fewer effects -> 2 render at 30 fps (gameplay stays 60 Hz) -> 3+ halve the canvas resolution
         function monitor(dt) {
-            if (perf.grace > 0) { perf.grace--; return; }
+            if (perf.grace > 0) { perf.grace -= dt; return; }
             perf.sum += dt; perf.n++;
-            if (perf.n < 120) return;
-            var avg = perf.sum / perf.n * gk.renderEvery;   // per rendered frame
-            var fps = 1000 / (perf.sum / perf.n);
+            if (perf.sum < 1000) return;
+            var fps = perf.n * 1000 / perf.sum;
             perf.sum = perf.n = 0;
             gk.fps = Math.round(fps);
-            if (fps >= 52) { perf.slowWindows = 0; return; }
+            if (fps >= 50) { perf.slowWindows = 0; return; }
             if (++perf.slowWindows < 2) return;
             perf.slowWindows = 0;
-            degrade(avg);
+            degrade();
         }
 
         function degrade() {
-            var q = gk.q;
+            var q = gk.q, before = perf.level;
             if (perf.level === 0 && q.auto) {
                 perf.level = 1;
                 q.particles = Math.max(12, q.particles >> 1);
                 q.parallax = Math.max(1, q.parallax - 1);
                 q.clouds = false;
-                if (def.onQuality) def.onQuality(gk, 1);
-            } else if (perf.level <= 1) {
+            } else if (gk.renderEvery === 1) {
                 perf.level = 2;
                 gk.renderEvery = 2;                         // 30 fps rendering, 60 Hz gameplay
-                if (def.onQuality) def.onQuality(gk, 2);
-            } else if (perf.level === 2 && q.auto && gk.scale > (def.minScale || 1)) {
-                perf.level = 3;
+            } else if (q.auto && gk.scale > (def.minScale || 1)) {
+                perf.level++;
                 q.scale = Math.max(def.minScale || 1, gk.scale >> 1);
                 setupCanvas();
-                if (def.onQuality) def.onQuality(gk, 3);
             }
-            perf.grace = 60;
+            if (perf.level !== before && def.onQuality) def.onQuality(gk, perf.level);
+            perf.grace = 500;
             try { console.log('[GameKit] quality level ' + perf.level + ' (scale ' + gk.scale + ', render every ' + gk.renderEvery + ')'); } catch (e) {}
         }
 

@@ -20,7 +20,7 @@ var GameHost = (function () {
     var state = 'idle';         // idle | loading | running | paused | error
     var game = null, base = '', triedBundled = false;
     var iframe = null, api = null, gameWin = null, loadTimer = 0, onExitCb = null;
-    var pauseItems = [];
+    var pauseItems = [], loadSeq = 0;
 
     function $(id) { return document.getElementById(id); }
 
@@ -83,8 +83,9 @@ var GameHost = (function () {
         clearTimeout(loadTimer);
         loadTimer = setTimeout(function () { fail('timeout'); }, LOAD_TIMEOUT_MS);
 
+        var token = ++loadSeq;
         AppBoot.get(dir + entry + '?b=' + build, FILE_TIMEOUT_MS, function (err, html) {
-            if (state !== 'loading') return;
+            if (state !== 'loading' || token !== loadSeq) return;   // cancelled or superseded
             if (err || !html) return fail(entry + ' ' + err);
             html = html.replace(/<head([^>]*)>/i, '<head$1><base href="' + dir + '">');
             // cache-bust the game's own scripts with its build number
@@ -213,6 +214,7 @@ var GameHost = (function () {
 
     function exit() {
         if (state === 'idle') return;
+        loadSeq++;
         clearTimeout(loadTimer);
         teardown();
         state = 'idle';
