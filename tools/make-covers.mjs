@@ -13,6 +13,8 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BASE = process.argv[2] || 'http://localhost:8080/';
+const ONLY = process.argv.slice(3);                 // optional game ids, e.g. "parchis"
+const CHROMIUM = process.env.CHROMIUM_PATH || undefined;
 
 // what to do in each game before the screenshot
 const SCRIPTS = {
@@ -27,16 +29,23 @@ const SCRIPTS = {
     hopper: async (p) => { await p.keyboard.press('Enter'); await p.keyboard.down('ArrowRight'); await p.waitForTimeout(1600); await p.keyboard.up('ArrowRight'); },
     snake: async (p) => { await p.keyboard.press('Enter'); await p.waitForTimeout(900); await p.keyboard.press('ArrowDown'); await p.waitForTimeout(500); await p.keyboard.press('ArrowRight'); await p.waitForTimeout(400); },
     breaker: async (p) => { await p.keyboard.press('Enter'); await p.keyboard.press('Space'); await p.waitForTimeout(1800); },
+    parchis: async (p, G) => {
+        // 4 players: Down wraps to the "Players" row, Right twice, Up wraps to "Start game"
+        for (const k of ['ArrowDown', 'ArrowRight', 'ArrowRight', 'ArrowUp', 'Enter']) { await p.keyboard.press(k); await p.waitForTimeout(60); }
+        await p.evaluate(G + '.ParchisCheat.set(0, 0, 9); ' + G + '.ParchisCheat.set(0, 1, 30); ' + G + '.ParchisCheat.set(2, 0, 20); ' + G + '.ParchisCheat.set(1, 0, 5); ' + G + '.ParchisCheat.set(3, 2, 66)');
+        await p.waitForTimeout(400);
+    },
     merge: async (p) => { await p.keyboard.press('Enter'); for (let i = 0; i < 24; i++) { await p.keyboard.press(['ArrowLeft', 'ArrowDown', 'ArrowRight', 'ArrowDown'][i % 4]); await p.waitForTimeout(150); } }
 };
 
-const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
+const browser = await chromium.launch({ executablePath: CHROMIUM, args: ['--autoplay-policy=no-user-gesture-required'] });
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
 await page.route('**/imad-os.github.io/**', (r) => r.abort());
 await page.goto(BASE + 'index.html');
 await page.waitForSelector('.tile');
 const G = 'document.querySelector("iframe").contentWindow';
 for (const id of Object.keys(SCRIPTS)) {
+    if (ONLY.length && ONLY.indexOf(id) < 0) continue;
     await page.focus(`[data-game="${id}"]`);
     await page.keyboard.press('Enter');
     await page.waitForFunction(() => window.GameHost.state() === 'running');

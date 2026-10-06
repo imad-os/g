@@ -12,7 +12,7 @@
         id="https://imad-os.github.io/g/arcade" version="1.0.0" viewmodes="maximized">
     <tizen:application id="XXXXXXXXXX.arcade" package="XXXXXXXXXX" required_version="4.0"/>
     <name>Arcade</name>
-    <description>Six original arcade games for your TV: a platformer with 3 worlds and 2-player co-op, plus falling blocks, sky hopping, snake, brick breaking and tile merging.</description>
+    <description>Seven arcade and board games for your TV: a platformer with 3 worlds and 2-player co-op, Parchís for 2 to 4 players with Moroccan rules, plus falling blocks, sky hopping, snake, brick breaking and tile merging. Player profiles keep everyone's progress apart.</description>
     <icon src="icon.png" width="512" height="423"/>
     <content src="index.html"/>
     <feature name="http://tizen.org/feature/screen.size.all"/>

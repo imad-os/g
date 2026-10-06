@@ -1,6 +1,6 @@
 # Arcade: Samsung TV games app
 
-A Samsung Smart TV (Tizen) web app: a game launcher with six original games, playable with the TV
+A Samsung Smart TV (Tizen) web app: a game launcher with seven games, playable with the TV
 remote, a gamepad or a keyboard. It also runs in any desktop browser.
 
 | Game | Type | Notes |
@@ -11,6 +11,7 @@ remote, a gamepad or a keyboard. It also runs in any desktop browser.
 | **Neon Snake** | snake | input queue, speed-up, bonus fruit |
 | **Brick Breaker** | breakout | 5 layouts, wide/slow/multi-ball power-ups |
 | **Tile Merge** | sliding number puzzle | animated slides and merges |
+| **Parchís** | board game, 2 to 4 players | Moroccan rules, turn by turn on one remote, any seat can be a CPU |
 
 All art is drawn by code at load time and all music and sound effects are synthesized with Web Audio.
 There are no image or audio files to download or decode, and no third-party libraries. Names,
@@ -19,8 +20,21 @@ characters, levels and melodies are original. Nothing uses Nintendo or Tetris na
 **Top scores:** every game keeps a top-10 table on the TV, managed by `js/core/scores.js`. When a game
 ends with a score that makes the table, the launcher asks for 3 initials, arcade style: Up/Down
 changes the letter, Left/Right moves, OK saves. The last initials are remembered. The **Top scores**
-button on the main menu shows all six tables. Voice Guide reads each table. *Reset progress* clears
+button on the main menu shows the tables (Parchís has a winner, not points, so it has none). Voice Guide reads each table. *Reset progress* clears
 them. Games report scores with `host.submitScore(score, { player, players })`.
+
+**Profiles:** the profile button at the top of the home screen opens the Profiles screen. There you
+can switch profile, create one (name typed with an on-screen keyboard; a PC keyboard can type too),
+rename it or delete it. Each profile has its own saves, top scores and last played game. Language,
+volumes and graphics are shared by the whole TV. Storage keys are `arc_<profile>_<key>` and
+`arc_dev_<key>` (`js/core/storage.js`).
+
+**Parchís (Moroccan rules):** one die. A 5 brings a piece out, and it must come out if it can. A 6
+rolls again, and a third 6 sends the last moved piece back to its nest. Captures happen outside the
+safe squares (circles) and give 20 squares to move. Bringing a piece home gives 10. Two pieces of one
+colour make a wall that nobody passes. The centre needs the exact number. Set up 2, 3 or 4 players
+and make each seat a person or a CPU; people take turns on the same remote (OK rolls, left/right
+picks a piece when there is a choice).
 
 **Super Jumper 2-player co-op:**
 - **Joining:** open the pause menu and choose *Two players*. Player 2 then presses OK / A on **their

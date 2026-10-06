@@ -1044,7 +1044,7 @@
     // read-only state for automated tests (tests/*.spec.js)
     window.JumperDebug = function () {
         var a = players[0], b = players[1];
-        return { mode: mode, stage: stage && stage.id, x: a && a.x, y: a && a.y, power: a && a.power,
+        return { mode: mode, stage: stage && stage.id, x: a && a.x, y: a && a.y, vx: a && a.vx, vy: a && a.vy, onGround: a && a.onGround, crouch: a && a.crouch, gp: a && a.gp, frameName: a && a.frame(0), power: a && a.power,
                  lives: a && a.lives, time: time, coins: coins, score: a && a.score, ents: ents.length, camX: cam.x, camY: cam.y, h: a && a.h,
                  twoP: twoP, joinWait: joinWait, p1Dev: a && a.dev,
                  p2: b ? { x: b.x, y: b.y, lives: b.lives, score: b.score, dead: b.dead, out: b.out, dev: b.dev } : null };

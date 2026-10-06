@@ -102,6 +102,8 @@ var App = (function () {
         if (!pressed) return;
         var isBack = (action === 'back' || action === 'cancel') && !repeat;
 
+        if (ProfilesUI.namerOpen()) return ProfilesUI.namerAction(action, repeat);
+        if (ProfilesUI.screenOpen()) return ProfilesUI.screenAction(action, repeat);
         if (!$('page').hidden) {
             if (isBack) Menu.closePage();
             else if (action === 'confirm' && !repeat) Menu.confirmFocused();
@@ -192,6 +194,7 @@ var App = (function () {
         Input.setHandler(route);
         Input.onDevice(updateIndicator);
         updateIndicator();
+        showVersion();
         GameHost.init();
         watchNetwork();
         $('dialog-yes').onclick = function () { var cb = dialogYes; closeDialog(); if (cb) cb(); };
@@ -207,6 +210,7 @@ var App = (function () {
 
         loadGames(function (games) {
             Menu.init(games, play);
+            ProfilesUI.init(Menu.profileChanged);
             Menu.show();
             I18n.apply();
             AppBoot.ready();
@@ -218,7 +222,13 @@ var App = (function () {
     }
 
     // re-applies texts that are not data-i18n driven (called after a language change)
-    function refresh() { updateIndicator(); }
+    // Version on the home screen, so it is easy to see that an online update arrived
+    // (the hosted copy is picked up on the next start, no new package needed).
+    function showVersion() {
+        $('app-version').textContent = 'v' + AppBoot.version() + ' (' + I18n.t('build') + ' ' + AppBoot.build() + ')';
+    }
+
+    function refresh() { updateIndicator(); ProfilesUI.renderButton(); showVersion(); }
 
     return { start: start, confirm: confirm, toast: toast, refresh: refresh };
 })();

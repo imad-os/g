@@ -2,7 +2,7 @@
   "name": "arcade-tv",
   "version": "1.0.0",
   "private": true,
-  "description": "Samsung Tizen TV game launcher with Super Jumper and five mini games",
+  "description": "Samsung Tizen TV game launcher with Super Jumper, Parchís and five mini games",
   "scripts": {
     "serve": "http-server -p 8080 -c-1 .",
     "levels": "node tools/gen-levels.mjs",

@@ -27,7 +27,9 @@ var Actors = (function () {
         a.onGround = false;
         var l = (a.x / T) | 0, r = ((a.x + a.w - 1) / T) | 0, tx, ty;
         if (a.vy > 0) {
-            ty = ((a.y + a.h - 1) / T) | 0;
+            // Bottom edge minus a hair (not a whole pixel): sinking less than 1 px into the floor
+            // must still count as landing, or a standing actor's onGround flickers every frame.
+            ty = ((a.y + a.h - 0.001) / T) | 0;
             for (tx = l; tx <= r; tx++) {
                 if (lv.solid(tx, ty) || (lv.oneway(tx, ty) && prevBottom <= ty * T + 0.5)) {
                     a.y = ty * T - a.h; a.vy = 0; a.onGround = true; return;
@@ -122,10 +124,11 @@ var Actors = (function () {
             else if (!lv.solid((this.x / T) | 0, ((this.y - 8) / T) | 0) && !lv.solid(((this.x + this.w - 1) / T) | 0, ((this.y - 8) / T) | 0)) { this.y -= 8; this.h = 22; this.crouch = false; }
         } else this.crouch = wantCrouch;
 
-        // horizontal
-        var max = this.swim ? 1.3 : inp.run ? 2.6 : 1.5;
-        var acc = this.swim ? 0.05 : this.onGround ? (inp.run ? 0.09 : 0.07) : 0.06;
-        var dec = this.onGround ? 0.09 : 0.03;
+        // horizontal: snappy on the ground, full steering in the air, and the jump keeps its
+        // momentum when no direction is held (a TV remote often drops the arrow when OK is pressed)
+        var max = this.swim ? 1.3 : inp.run ? 2.6 : 1.8;
+        var acc = this.swim ? 0.05 : this.onGround ? (inp.run ? 0.12 : 0.11) : 0.1;
+        var dec = this.onGround ? 0.12 : 0.008;
         if (slip) { acc *= 0.45; dec = 0.025; }
         this.skid = false;
         if (this.gp) dir = 0;
@@ -160,8 +163,8 @@ var Actors = (function () {
             W.dust(this.x + (this.face < 0 ? this.w : 0), this.y + this.h / 2);
         }
 
-        // ground pound
-        if (inp.downPressed && !this.onGround && !this.swim && !this.gp && this.power >= 0) { this.gp = 1; this.gpT = 12; this.vx = 0; this.vy = 0; W.sfx('kick', 0.5); }
+        // ground pound: only from a real jump or fall (never while standing or crouching)
+        if (inp.downPressed && !this.onGround && this.coyote === 0 && !this.crouch && !this.swim && !this.gp) { this.gp = 1; this.gpT = 12; this.vx = 0; this.vy = 0; W.sfx('kick', 0.5); }
 
         // gravity
         if (this.gp === 1) { this.vy = 0; if (--this.gpT <= 0) { this.gp = 2; this.vy = 6; } }
