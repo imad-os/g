@@ -1,0 +1,60 @@
+rules_version = '2';
+
+// Arcade game hub: Firestore security rules.
+//  - Anyone (the TVs) can READ the game list. TVs never sign in.
+//  - Only signed-in admins can create / update / delete games.
+//  - An admin is a user whose UID has a document in /admins (created by hand in the console).
+//  - Writes are validated so a mistake in the admin page cannot break every TV.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // { en: '...', fr: '...', es: '...', ar: '...' }  (en required)
+    function validText(t) {
+      return t is map && t.keys().hasAll(['en']) && t.keys().hasOnly(['en', 'fr', 'es', 'ar'])
+          && t.en is string && t.en.size() > 0 && t.en.size() <= 80;
+    }
+
+    function validGame(d) {
+      return d.keys().hasAll(['title', 'url', 'enabled', 'order'])
+          && d.keys().hasOnly(['title', 'description', 'url', 'cover', 'enabled', 'order', 'minShell',
+                               'sdk', 'build', 'tags', 'bundled', 'updatedAt'])
+          && validText(d.title)
+          && (!('description' in d) || validText(d.description))
+          // https only; bundled first-party games use a relative path like "games/jumper/"
+          && d.url is string && d.url.size() <= 300
+          && (d.url.matches('^https://[a-zA-Z0-9.-]+/.*') || d.url.matches('^games/[a-z0-9-]+/$'))
+          && (!('cover' in d) || (d.cover is string && d.cover.size() <= 300))
+          && d.enabled is bool
+          && d.order is int && d.order >= 0 && d.order < 1000
+          && (!('minShell' in d) || d.minShell is int)
+          && (!('sdk' in d) || d.sdk is int)
+          && (!('build' in d) || d.build is int)
+          && (!('bundled' in d) || d.bundled is bool)
+          && (!('tags' in d) || (d.tags is list && d.tags.size() <= 5))
+          && (!('updatedAt' in d) || d.updatedAt is timestamp);
+    }
+
+    // Game list read by every TV (REST: .../documents/games)
+    match /games/{gameId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && gameId.matches('^[a-z0-9-]{2,32}$') && validGame(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // Admin list: each admin can only check their own entry; managed in the console only.
+    match /admins/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Everything else is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

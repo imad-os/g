@@ -35,43 +35,81 @@
 its own GitHub Pages URL. The hub only lists them, launches them, and gives them shared services
 (input, scores, storage, profiles). Adding a game = adding its URL.
 
+0. **Two pages (decided by the owner): home and game, never both in memory.**
+   - `index.html` = **home**: the game list with covers, profiles and settings.
+   - **Launching:** home navigates to `game.html?id=<gameId>&profile=<id>` with
+     `location.replace` (no history growth). The browser then discards the whole home document:
+     covers, DOM, JS heap.
+   - **Exiting:** "Quit to menu" navigates back to `index.html?from=<gameId>`. The game document
+     is discarded and home refocuses that tile.
+   - **`game.html`** is a small packaged shell:
+     - it has the static `$WEBAPIS/webapis/webapis.js` tag, a loading bar, the pause menu, the
+       initials entry and the network popup;
+     - it uses the same core modules (input, a11y, i18n, storage, scores) and the same Back /
+       multitasking rules, and loads **no home code and no covers**.
+   - **First-party games** (bundled under `games/`): their scripts load **directly into
+     `game.html`** (no iframe at all = least memory).
+   - **Remote games** (another GitHub Pages origin): loaded in **one** sandboxed iframe inside
+     `game.html`, talking to it through the SDK. The TV top-level page stays packaged, so Back,
+     Tizen APIs and certification behaviour are kept. Navigating the top level to an outside URL
+     would need `tizen:allow-navigation`, which switches the app to a strict CSP and loses the
+     Back handling.
+   - **Hosted vs bundled:** the loader decision (`js/boot/loader.js`) is made once per app start,
+     then cached in `sessionStorage`, so page switches do not re-check the network. `game.html`
+     uses the same source (hosted or bundled) as home.
+   - **Speed:** page switch → first frame of the loading bar in < 300 ms; back to home with the
+     focused tile in < 1 s. Covers must load lazily, only the visible ones.
+   - **Multitasking:** `visibilitychange` works the same on both pages. Back on `game.html` never
+     exits the app (pause → quit to home).
 1. **Game SDK (standard entry and exit points).** Create `sdk/arcade-sdk.js`: one small ES5 file
-   that every game includes. It talks to the hub with `postMessage`, so games can live on any
-   origin. Versioned protocol: `{ v: 1, type, id, data }`.
-   - **Hub → game:** `init {lang, quality, volume, profile, device}`, `start`, `pause`, `resume`,
-     `destroy`, `input {action, pressed, repeat, dev}`, `menu {id}`.
+   that every game includes.
+   - **Transport:** direct calls when the game runs in `game.html` itself, `postMessage` when it
+     is a remote iframe. Same API either way. Versioned protocol: `{ v: 1, type, id, data }`.
+   - **Hub → game:** `init {lang, quality, volume, profile, device, viewport}`, `start`, `pause`,
+     `resume`, `destroy`, `input {action, pressed, repeat, dev}`, `menu {id}`, `resize`.
    - **Game → hub:** `ready`, `progress {0..1}`, `loaded`, `failed {reason}`,
      `menuItems [...]`, `submitScore {score, player}`, `save {key, value}`, `load {key}` → reply,
      `announce {text}`, `exit`, `requestPause`.
-   - The game must answer `destroy` by stopping rAF and timers, closing its AudioContext and
-     replying `destroyed`. The hub then removes the iframe.
+   - **Shutdown:** the game must stop rAF and timers and close its AudioContext / GL context on
+     `destroy` (even though the page navigation frees everything, this keeps remote iframes
+     clean).
    - Write `docs/game-sdk.md`, a guide to building a game for the hub, with a minimal example
-     game in `sdk/example/`.
-   - Keep `gamekit.js` as an optional helper on top of the SDK.
-2. **Hub stays in control.** Back, pause menu, network popup, initials entry and profiles stay in
-   the hub, so a game cannot break certification rules.
-   - Input is captured by the hub and forwarded. A key pressed while the game iframe has focus is
-     also forwarded by the SDK.
-   - The game page cannot touch hub DOM or storage. Use a sandboxed cross-origin iframe:
-     `sandbox="allow-scripts allow-same-origin"` on its own origin.
+     game in `sdk/example/` that runs standalone on GitHub Pages.
+   - `games/shared/gamekit.js` becomes an optional helper on top of the SDK.
+2. **The game page stays in control.** Back, pause menu, network popup, initials entry and
+   profiles belong to `game.html`, so a game cannot break certification rules.
+   - Input is captured by `game.html` and forwarded. The SDK forwards keys pressed while a remote
+     iframe has focus.
+   - Remote iframes: `sandbox="allow-scripts allow-same-origin"` (they are on another origin, so
+     they cannot touch the hub's DOM or storage).
 3. **Storage and scores for any game.**
    - `save`/`load` go through the hub, namespaced as `game_<id>_<profile>_<key>`.
    - `submitScore` uses `js/core/scores.js`, with tables per game, and stores the profile name.
    - Per-game quota (e.g. 64 KB) so one game cannot fill the TV storage.
    - **Reset progress** and deleting a game clear its data.
-4. **Game registry in Firebase (Firestore).** Collection `games`, document per game:
-   `{ id, title{en,fr,es,ar}, description{...}, url, cover, minShell, sdk, enabled, order,
-   updatedAt, tags:[experimental?] }`.
-   - **TV reads:** use the **Firestore REST API** (plain XHR, no SDK: lighter on the TV, nothing
-     loaded from a CDN). 3 s timeout.
-   - **Caching:** cache the last good list in localStorage. Offline or on error, use the cache,
-     then the bundled `app-manifest.json` games. Never show an empty or black hub.
-   - **Admin:** an admin page `admin/index.html` on GitHub Pages, using Firebase Auth (Google
-     sign-in, owner e-mail only) plus Firestore security rules (public read; write only for the
-     owner UID).
-     - Add a game (URL + metadata, validated by fetching its `game-manifest.json`).
-     - Enable/disable, delete, reorder (drag or up/down), and preview a game.
-   - Ship `firestore.rules` and document the Firebase project setup in the README.
+4. **Game registry in Firebase (Firestore): project `tvgames-f984d`.** Config:
+   `firebase/firebase-config.js`. Rules: `firebase/firestore.rules`. Setup steps for the owner:
+   `firebase/SETUP.md`. Collection `games`, document id = game id; fields as described in
+   `SETUP.md` (`title`, `description`, `url`, `cover`, `enabled`, `order`, `minShell`, `sdk`,
+   `build`, `bundled`, `tags`, `updatedAt`).
+   - **TV reads:** the **Firestore REST API** with plain XHR, no Firebase SDK, nothing from a CDN
+     (`GET https://firestore.googleapis.com/v1/projects/tvgames-f984d/databases/(default)/documents/games?key=...`).
+     3 s timeout. Show only `enabled` games, sorted by `order`.
+   - **Caching and fallback:**
+     - Cache the last good list in localStorage.
+     - Offline or on error: use the cache, then the bundled `app-manifest.json` games. Never an
+       empty or black home.
+     - Bundled games (`bundled: true`, url `games/<id>/`) always run from the package.
+   - **Admin page:** `admin/index.html` on GitHub Pages, desktop browser only, never in the `.wgt`.
+     - It may use the Firebase JS SDK v12 modules from gstatic. That is fine because it is not
+       the TV app.
+     - Google sign-in. Writes are allowed only for UIDs listed in `/admins` (see rules).
+     - Features: list, **add** (paste a URL → fetch its `game-manifest.json` → prefill title,
+       description, cover → validate), **enable/disable**, **delete** (with confirmation),
+       **reorder** (up/down + drag), **preview** (open the game URL), and show the rule
+       validation errors clearly.
+   - **Seeding:** the admin page has a one-click "import bundled games" that writes the 6
+     first-party games with `bundled: true`.
 5. **Migrate the 6 current games** to the SDK. Keep them in this repo under `games/` (as
    "first-party standalone" games, each one runnable alone at its own URL), listed in Firestore.
    - Bundled copies of these 6 stay in the `.wgt`, so the app works with no network and passes
@@ -93,8 +131,9 @@ its own GitHub Pages URL. The hub only lists them, launches them, and gives them
 - **Remote code and Samsung:** remote games change what the certified app does. [Default: only
   list games that use the same SDK version and need no new privileges. Mark this clearly in the
   App UI Description. Bigger changes go through a new Seller Office submission.]
-- **Ask the owner:** is a separate Firebase project needed? This task needs the Firebase config
-  (apiKey, projectId) from the owner.
+- Firebase: done. The owner provided the config (`firebase/firebase-config.js`). The owner must
+  follow `firebase/SETUP.md` (create Firestore, publish rules, enable Google sign-in, add their UID
+  to `/admins`) before the admin page can write.
 
 ---
 
@@ -158,8 +197,9 @@ neon city, motion blur feel, nitro, drifting. One track, marked **Experimental**
 
 - **Name and IP:** original name [default: "Neon Rush"]. Original car models, track and music.
   Never "Asphalt" or real car brands/logos.
-- **Delivery:** a standalone game using the SDK from TODO 1. If TODO 1 is not done yet, use the
-  current GameKit contract.
+- **Delivery:** a standalone first-party game using the SDK from TODO 1. It runs directly in
+  `game.html` and is also runnable alone. If TODO 1 is not done yet, use the current GameKit
+  contract.
 - **Rendering:**
   - Tech: **WebGL 1** (TVs from 2018 support it) with a small custom renderer (preferred: no
     library, keep it < 60 KB). Bundled three.js only if really needed: no CDN, and look at its
