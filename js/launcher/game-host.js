@@ -17,7 +17,7 @@ var GameHost = (function () {
 
     var LOAD_TIMEOUT_MS = 20000, FILE_TIMEOUT_MS = 10000;
 
-    var state = 'idle';         // idle | loading | running | paused | error
+    var state = 'idle';         // idle | loading | running | paused | entry | error
     var game = null, base = '', triedBundled = false;
     var iframe = null, api = null, gameWin = null, loadTimer = 0, onExitCb = null;
     var pauseItems = [], loadSeq = 0;
@@ -38,7 +38,7 @@ var GameHost = (function () {
             rtl: I18n.rtl(),
             quality: Perf.profile(),
             volume: { music: AudioPrefs.music() / 10, sfx: AudioPrefs.sfx() / 10 },
-            input: { isDown: Input.isDown, poll: Input.poll, device: Input.device },
+            input: { isDown: Input.isDown, isDownDev: Input.isDownDev, poll: Input.poll, device: Input.device, lastDevice: Input.lastDevice },
             forwardKey: function (e, down) { Input.onKey(e, down); },
             announce: function (text) { A11y.announce(text); },
             save: function (k, v) { return Store.set('game_' + id + '_' + k, v); },
@@ -47,7 +47,10 @@ var GameHost = (function () {
             loaded: onLoaded,
             failed: function (msg) { fail(msg || 'game reported failure'); },
             pause: function () { openPause(); },
-            exitToMenu: function () { setTimeout(exit, 0); }
+            exitToMenu: function () { setTimeout(exit, 0); },
+            // Top-10 tables: the game reports a final score; the launcher asks for initials if it qualifies.
+            submitScore: function (score, opts) { submitScore(id, score, opts || {}); },
+            topScores: function () { return Scores.list(id); }
         };
     }
 
@@ -165,6 +168,7 @@ var GameHost = (function () {
         state = 'paused';
         try { api.pause(); } catch (e) {}
         Input.releaseAll();
+        Input.setExternalPoll(false);   // the game loop is stopped: the launcher reads the gamepads
         var first = renderPause();
         $('pause').hidden = false;
         Focus.push($('pause'), first);
@@ -177,6 +181,7 @@ var GameHost = (function () {
         Focus.pop();
         Focus.reset();
         state = 'running';
+        Input.setExternalPoll(true);
         $('game-layer').focus();
         try { api.resume(); } catch (e) {}
     }
@@ -218,6 +223,8 @@ var GameHost = (function () {
         clearTimeout(loadTimer);
         teardown();
         state = 'idle';
+        entryQueue.length = 0; entryCur = null;
+        $('entry').hidden = true;
         $('pause').hidden = true;
         $('game-error').hidden = true;
         $('game-loading').hidden = true;
@@ -244,13 +251,84 @@ var GameHost = (function () {
         load();
     }
 
+    /* ---------- top-10 initials entry ---------- */
+
+    var CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    var entryQueue = [], entryCur = null, entryLetters = [];
+
+    function submitScore(id, score, opts) {
+        score = Math.floor(score) || 0;
+        if (!Scores.qualifies(id, score)) return;
+        entryQueue.push({ id: id, score: score, slot: opts.player || 1, multi: (opts.players || 1) > 1 });
+        if (state === 'running') nextEntry();
+    }
+
+    function nextEntry() {
+        entryCur = entryQueue.shift();
+        if (!entryCur) return;
+        state = 'entry';
+        Input.releaseAll();
+        var name = Scores.lastName(entryCur.slot), box = $('entry-letters');
+        box.innerHTML = '';
+        entryLetters = [];
+        for (var i = 0; i < 3; i++) {
+            var b = document.createElement('button');
+            b.className = 'btn';
+            b.setAttribute('data-focus', '');
+            b.setAttribute('data-idx', i);
+            entryLetters.push(name.charAt(i) || 'A');
+            b.onclick = (function (k) { return function () { Focus.focus(k < 2 ? box.childNodes[k + 1] : $('entry-ok')); }; })(i);
+            box.appendChild(b);
+        }
+        drawLetters();
+        var who = entryCur.multi || entryCur.slot > 1 ? I18n.t('player') + ' ' + entryCur.slot + ': ' : '';
+        $('entry-title').textContent = who + I18n.t('newHigh');
+        $('entry-score').textContent = entryCur.score + ' ' + I18n.t('points');
+        I18n.apply($('entry'));
+        $('entry').hidden = false;
+        Focus.push($('entry'), box.firstChild);
+        A11y.announce(who + I18n.t('newHigh') + ' ' + entryCur.score + ' ' + I18n.t('points') + '. ' + I18n.t('entryHint'));
+    }
+
+    function drawLetters() {
+        var box = $('entry-letters');
+        for (var i = 0; i < 3; i++) {
+            box.childNodes[i].textContent = entryLetters[i];
+            box.childNodes[i].setAttribute('aria-label', I18n.t('letter') + ' ' + (i + 1) + ' ' + I18n.t('of') + ' 3: ' + entryLetters[i]);
+        }
+    }
+
+    function changeLetter(d) {
+        var c = Focus.current(), i = c ? +c.getAttribute('data-idx') : NaN;
+        if (isNaN(i) || c.getAttribute('data-idx') === null) return;
+        var k = (CHARS.indexOf(entryLetters[i]) + d + CHARS.length) % CHARS.length;
+        entryLetters[i] = CHARS.charAt(k);
+        drawLetters();
+        A11y.announce(entryLetters[i]);
+    }
+
+    function saveEntry() {
+        if (state !== 'entry' || !entryCur) return;
+        var name = entryLetters.join('');
+        Scores.setLastName(entryCur.slot, name);
+        var rank = Scores.add(entryCur.id, name, entryCur.score);
+        $('entry').hidden = true;
+        Focus.pop();
+        Focus.reset();
+        entryCur = null;
+        A11y.announce(I18n.t('rank') + ' ' + rank);
+        state = 'running';
+        $('game-layer').focus();
+        if (entryQueue.length) nextEntry();
+    }
+
     /* ---------- input routing (called by the router in main.js) ---------- */
 
-    function onAction(action, pressed, repeat) {
+    function onAction(action, pressed, repeat, dev) {
         if (state === 'running') {
             if (pressed && !repeat && (action === 'back' || action === 'pause')) return openPause();
             if (action === 'padLost') { openPause(); A11y.announce(I18n.t('padOff')); return; }
-            if (api && api.onAction) { try { api.onAction(action, pressed, repeat); } catch (e) {} }
+            if (api && api.onAction) { try { api.onAction(action, pressed, repeat, dev); } catch (e) {} }
             return;
         }
         if (!pressed) return;
@@ -258,6 +336,11 @@ var GameHost = (function () {
             if (action === 'back' || action === 'cancel' || action === 'pause') { if (!repeat) resume(); }
             else if (action === 'up' || action === 'down') Focus.move(action);
             else if (action === 'confirm' && !repeat) { var c = Focus.current(); if (c) c.click(); }
+        } else if (state === 'entry') {
+            if ((action === 'back' || action === 'cancel') && !repeat) saveEntry();
+            else if (action === 'up' || action === 'down') changeLetter(action === 'up' ? 1 : -1);
+            else if (action === 'left' || action === 'right') Focus.move(action);
+            else if (action === 'confirm' && !repeat) { var f = Focus.current(); if (f) f.click(); }
         } else if (state === 'error') {
             if (action === 'back' || action === 'cancel') { if (!repeat) { Focus.pop(); exit(); } }
             else if (action === 'left' || action === 'right') Focus.move(action);
@@ -270,6 +353,7 @@ var GameHost = (function () {
     function init() {
         $('game-error-retry').onclick = retry;
         $('game-error-back').onclick = function () { Focus.pop(); exit(); };
+        $('entry-ok').onclick = saveEntry;
     }
 
     return {

@@ -5,25 +5,29 @@
 
     var T = 16, ID = Level.ID;
     var STR = {
-        en: { world: 'World', lives: 'Lives', coins: 'Coins', time: 'Time', score: 'Score', restartStage: 'Restart stage', worldMap: 'World map',
+        en: { twoP: 'Two players', p2Join: 'Player 2: press OK or A on your own controller', p2Joined: 'Player 2 joined', p2Left: 'Player 2 left', p2Back: 'is back',
+              world: 'World', lives: 'Lives', coins: 'Coins', time: 'Time', score: 'Score', restartStage: 'Restart stage', worldMap: 'World map',
               assist: 'Assist mode', autoRun: 'Auto-run', contrast: 'High contrast HUD', on: 'On', off: 'Off', clear: 'Stage clear!',
               gameOver: 'Game over', checkpoint: 'Checkpoint', hurry: 'Hurry up!', secret: 'Secret exit found!', locked: 'Locked',
               cleared: 'cleared', starCoins: 'star coins', of: 'of', pressOk: 'Press OK to play', loadFail: 'Could not load the stage',
               runOn: 'Run on', runOff: 'Run off', fortress: 'Fortress', mapHelp: 'Left and right: choose a stage. Up and down: change world. OK: play.',
               worlds: ['Grassland', 'Desert and Beach', 'Ice Caves'], bossHit: 'Hit!', allClear: 'All worlds cleared!' },
-        fr: { world: 'Monde', lives: 'Vies', coins: 'Pièces', time: 'Temps', score: 'Score', restartStage: 'Recommencer le niveau', worldMap: 'Carte du monde',
+        fr: { twoP: 'Deux joueurs', p2Join: 'Joueur 2 : appuyez sur OK ou A sur votre manette', p2Joined: 'Le joueur 2 a rejoint la partie', p2Left: 'Le joueur 2 est parti', p2Back: 'revient',
+              world: 'Monde', lives: 'Vies', coins: 'Pièces', time: 'Temps', score: 'Score', restartStage: 'Recommencer le niveau', worldMap: 'Carte du monde',
               assist: 'Mode assistance', autoRun: 'Course auto', contrast: 'Affichage contrasté', on: 'Oui', off: 'Non', clear: 'Niveau terminé !',
               gameOver: 'Partie terminée', checkpoint: 'Point de contrôle', hurry: 'Dépêchez-vous !', secret: 'Sortie secrète trouvée !', locked: 'Verrouillé',
               cleared: 'terminé', starCoins: 'pièces étoile', of: 'sur', pressOk: 'Appuyez sur OK pour jouer', loadFail: 'Impossible de charger le niveau',
               runOn: 'Course activée', runOff: 'Course désactivée', fortress: 'Forteresse', mapHelp: 'Gauche et droite : choisir un niveau. Haut et bas : changer de monde. OK : jouer.',
               worlds: ['Prairie', 'Désert et plage', 'Grottes de glace'], bossHit: 'Touché !', allClear: 'Tous les mondes terminés !' },
-        es: { world: 'Mundo', lives: 'Vidas', coins: 'Monedas', time: 'Tiempo', score: 'Puntos', restartStage: 'Reiniciar nivel', worldMap: 'Mapa del mundo',
+        es: { twoP: 'Dos jugadores', p2Join: 'Jugador 2: pulsa OK o A en tu propio mando', p2Joined: 'Se unió el jugador 2', p2Left: 'El jugador 2 salió', p2Back: 'vuelve',
+              world: 'Mundo', lives: 'Vidas', coins: 'Monedas', time: 'Tiempo', score: 'Puntos', restartStage: 'Reiniciar nivel', worldMap: 'Mapa del mundo',
               assist: 'Modo asistido', autoRun: 'Correr siempre', contrast: 'Marcador de alto contraste', on: 'Sí', off: 'No', clear: '¡Nivel superado!',
               gameOver: 'Fin del juego', checkpoint: 'Punto de control', hurry: '¡Date prisa!', secret: '¡Salida secreta encontrada!', locked: 'Bloqueado',
               cleared: 'superado', starCoins: 'monedas estrella', of: 'de', pressOk: 'Pulsa OK para jugar', loadFail: 'No se pudo cargar el nivel',
               runOn: 'Correr activado', runOff: 'Correr desactivado', fortress: 'Fortaleza', mapHelp: 'Izquierda y derecha: elegir nivel. Arriba y abajo: cambiar de mundo. OK: jugar.',
               worlds: ['Pradera', 'Desierto y playa', 'Cuevas de hielo'], bossHit: '¡Golpe!', allClear: '¡Todos los mundos superados!' },
-        ar: { world: 'العالم', lives: 'المحاولات', coins: 'العملات', time: 'الوقت', score: 'النقاط', restartStage: 'إعادة المرحلة', worldMap: 'خريطة العالم',
+        ar: { twoP: 'لاعبان', p2Join: 'اللاعب 2: اضغط OK أو A على وحدة التحكم الخاصة بك', p2Joined: 'انضم اللاعب 2', p2Left: 'غادر اللاعب 2', p2Back: 'عاد',
+              world: 'العالم', lives: 'المحاولات', coins: 'العملات', time: 'الوقت', score: 'النقاط', restartStage: 'إعادة المرحلة', worldMap: 'خريطة العالم',
               assist: 'وضع المساعدة', autoRun: 'ركض تلقائي', contrast: 'واجهة عالية التباين', on: 'تشغيل', off: 'إيقاف', clear: 'اكتملت المرحلة!',
               gameOver: 'انتهت اللعبة', checkpoint: 'نقطة حفظ', hurry: 'أسرع!', secret: 'تم العثور على المخرج السري!', locked: 'مقفل',
               cleared: 'مكتملة', starCoins: 'عملات النجمة', of: 'من', pressOk: 'اضغط OK للعب', loadFail: 'تعذّر تحميل المرحلة',
@@ -37,11 +41,15 @@
     var mode = 'load', modeT = 0;
     var lv = null, levelJson = null, stage = null, player, ents = [], parts;
     var cam = { x: 0, y: 0, look: 0 }, shakeT = 0, shakeAmp = 0, hitstop = 0;
-    var time, timeTick, coins, score, combo, lives, cp = null, starGot = [0, 0, 0], secretFound = false;
+    var time, timeTick, coins, combo, cp = null, starGot = [0, 0, 0], secretFound = false;
     var bossOn = false, leftWall = 0, goalEnt = null, goalFlagY = 0, tally = 0, pipeT = 0, pipeTarget = null;
     var fireballs = [], rocks = [], items = [], pops = [], popups = [];
     var mapW = 0, mapN = 0, banner = '', loadReq = 0;
     var musicNow = null;
+    // players[0] is always P1; players[1] exists in 2-player mode. `player` points at the player being
+    // processed (update, interactions, goal); `target` is who enemies aim at.
+    var players = [], twoP = false, joinWait = 0, p1Dev = null, target = null;
+    var NAMES = ['', 'P1', 'P2'];
 
     /* ------------------------------------------------------------------ save data */
 
@@ -64,8 +72,11 @@
     function popup(x, y, text) {
         for (var i = 0; i < popups.length; i++) if (popups[i].t <= 0) { var p = popups[i]; p.x = x; p.y = y; p.text = text; p.t = 50; return; }
     }
-    function addScore(n, x, y) { score += n; if (x !== undefined) popup(x, y, String(n)); }
-    function oneUp(x, y) { lives++; sfx('oneup'); popup(x, y, '1UP'); }
+    function addScore(n, x, y) { (player || players[0]).score += n; if (x !== undefined) popup(x, y, String(n)); }
+    function oneUp(x, y) { (player || players[0]).lives++; sfx('oneup'); popup(x, y, '1UP'); }
+    function firstAlive() { for (var i = 0; i < players.length; i++) if (!players[i].dead && !players[i].out) return players[i]; return players[0]; }
+    function anyAlive(except) { for (var i = 0; i < players.length; i++) { var q = players[i]; if (q !== except && !q.dead && !q.out) return q; } return null; }
+    function inGame(q) { return !q.out; }
 
     function comboScore(x, y) {
         if (combo >= COMBO.length) oneUp(x, y);
@@ -77,27 +88,33 @@
 
     var W = {
         get lv() { return lv; },
-        get player() { return player; },
+        get player() { return target || player; },
         get frame() { return gk.frame; },
         get water() { return !!(lv && lv.props.water); },
         get area() { return lv.areaAt(player.x); },
         get leftWall() { return leftWall; },
         get bossOn() { return bossOn; },
         sfx: sfx,
+        nearestDist: function (x) {
+            var d = 1e9;
+            for (var i = 0; i < players.length; i++) if (!players[i].dead && !players[i].out) d = Math.min(d, Math.abs(players[i].x - x));
+            return d;
+        },
         shake: function (n) { if (gk.q.shake) { shakeT = Math.max(shakeT, n); shakeAmp = Math.min(3, n / 3); } },
         dust: function (x, y) { if (parts.n < parts.max - 4) parts.add(x, y - 2, (Math.random() - 0.5) * 0.6, -0.4, 16, '#ffffff', 2, 0.02); },
 
-        collectCoin: function (x, y, pop) {
+        collectCoin: function (x, y, pop, p) {
+            if (p) player = p;
             coins++; addScore(200);
             sfx('coin');
             if (coins >= 100) { coins -= 100; oneUp(x, y - 8); }
             if (pop) for (var i = 0; i < pops.length; i++) if (pops[i].t <= 0) { pops[i].x = x - 6; pops[i].y = y; pops[i].vy = -4; pops[i].t = 26; break; }
         },
 
-        hitBlock: function (tx, ty, big, byShell) {
+        hitBlock: function (tx, ty, big, byShell, p) {
             var id = lv.rawTile(tx, ty), cx = tx * T + 8, cy = ty * T;
             if (id === ID.QCOIN || id === ID.HCOIN) { lv.set(tx, ty, ID.USED); lv.bump(tx, ty); W.collectCoin(cx, cy - 4, true); }
-            else if (id === ID.QPOW) { lv.set(tx, ty, ID.USED); lv.bump(tx, ty); spawnItem(player.power === 0 ? 'berry' : 'bloom', tx, ty); }
+            else if (id === ID.QPOW) { lv.set(tx, ty, ID.USED); lv.bump(tx, ty); spawnItem(p && p.power > 0 ? 'bloom' : 'berry', tx, ty); }
             else if (id === ID.QSTAR) { lv.set(tx, ty, ID.USED); lv.bump(tx, ty); spawnItem('gem', tx, ty); }
             else if (id === ID.H1UP) { lv.set(tx, ty, ID.USED); lv.bump(tx, ty); spawnItem('leaf', tx, ty); }
             else if (id === ID.MULTI) {
@@ -181,24 +198,33 @@
             }
         },
 
-        hurt: function () {
-            if (player.dead || player.inv > 0 || player.star > 0 || mode !== 'play') return;
-            if (player.power > 0) {
-                player.setPower(player.power === 2 ? 1 : 0);
-                player.inv = 120;
+        hurt: function (p) {
+            p = p || player;
+            if (p.dead || p.inv > 0 || p.star > 0 || mode !== 'play') return;
+            if (p.power > 0) {
+                p.setPower(p.power === 2 ? 1 : 0);
+                p.inv = 120;
                 sfx('hurt');
-            } else W.die();
+            } else W.die(p);
         },
 
-        die: function () {
-            if (player.dead || mode !== 'play') return;
-            player.dead = true; player.vy = -5; player.vx = 0; player.star = 0;
+        // One life lost. With a partner still standing, the fallen player respawns above them;
+        // when nobody is left, the stage restarts from the checkpoint (or it is game over).
+        die: function (p) {
+            p = p || player;
+            if (p.dead || p.out || mode !== 'play') return;
+            p.dead = true; p.vy = -5; p.vx = 0; p.star = 0; p.deadT = 0; p.gp = 0;
+            p.lives--;
+            sfx('die');
+            if (anyAlive(p)) { p.respawnT = 150; return; }
             mode = 'dying'; modeT = 0;
             music(null);
-            sfx('die');
         },
 
-        starEnded: function () { music(SONGS[bossOn ? 'boss' : stage.music]); }
+        starEnded: function () {
+            for (var i = 0; i < players.length; i++) if (players[i].star > 0) return;
+            music(SONGS[bossOn ? 'boss' : stage.music]);
+        }
     };
 
     function spawnItem(kind, tx, ty) {
@@ -284,11 +310,16 @@
             if (e.type === 'checkpoint' && cp && cp.x === e.x) e.state = 1;
             ents.push(e);
         }
-        player.reset();
-        player.h = player.power ? 22 : 14;
         var sx = cp ? cp.x : start.x, sy = cp ? cp.y + 16 : start.y + 16;
-        player.x = sx + 2; player.y = sy - player.h;
-        player.face = 1;
+        for (i = 0; i < players.length; i++) {
+            var pl = players[i];
+            if (pl.out) continue;
+            pl.reset();
+            pl.h = pl.power ? 22 : 14;
+            pl.x = sx + 2 + i * 18; pl.y = sy - pl.h;
+            pl.face = 1;
+        }
+        player = firstAlive();
         time = lv.props.time || 300; timeTick = 0;
         for (i = 0; i < fireballs.length; i++) fireballs[i].alive = false;
         for (i = 0; i < rocks.length; i++) rocks[i].alive = false;
@@ -320,22 +351,82 @@
         if (secret) { save.secrets[id] = true; save.unlocked['w' + stage.world + '-5'] = true; }
         save.lastStage = next && save.unlocked[next.id] && next.world === stage.world ? next.id : id;
         if (stage.fortress && next) save.lastStage = next.id;
+        for (i = 0; i < players.length; i++) if (players[i].out || players[i].lives < 1) { players[i].out = false; players[i].lives = Math.max(1, players[i].lives); }
+        if (!next) submitScores(false);   // last fortress: the run is complete
+    }
+
+    // Top-10 tables (the launcher asks for initials). reset = after a game over.
+    function submitScores(reset) {
+        for (var i = 0; i < players.length; i++) {
+            var q = players[i];
+            gk.submitScore(q.score, { player: q.slot, players: players.length });
+            if (reset) { q.score = 0; q.lives = 5; q.out = false; }
+        }
+        if (reset) coins = 0;
     }
 
     function toMap(focusId) {
         freeLevel(false);
         levelJson = null;
         loadReq++;
-        save.lives = lives; save.score = score; save.coins = coins;
-        persist();
+        saveP1();
         var st = stageById(focusId || save.lastStage) || stages[0];
         mapW = st.world; mapN = st.n;
         mode = 'map'; modeT = 0;
-        player.reset();
+        for (var i = 0; i < players.length; i++) { players[i].reset(); players[i].out = false; players[i].lives = Math.max(1, players[i].lives); }
+        player = players[0];
         setBanner('');
         music(SONGS.map);
         announceNode(true);
         updateHud(true);
+    }
+
+    function saveP1() {
+        if (!save || !players[0]) return;
+        save.lives = players[0].lives; save.score = players[0].score; save.coins = coins;
+        persist();
+    }
+
+    /* ------------------------------------------------------------------ 2-player co-op */
+
+    // Turned on from the pause menu by P1 (whose device becomes P1's); P2 joins by pressing
+    // OK / A on any other device: TV remote, WASD keys, or another gamepad.
+    function askJoin() {
+        p1Dev = gk.lastDevice();
+        joinWait = 900;
+        setBanner(s.twoP, s.p2Join);
+        gk.announce(s.p2Join);
+    }
+    function checkJoin() {
+        if (!joinWait) return;
+        if (--joinWait <= 0) { setBanner(''); return; }
+        var devs = gk.edgeDevices('jump').concat(gk.edgeDevices('confirm'));
+        for (var i = 0; i < devs.length; i++) if (devs[i] !== p1Dev) return join(devs[i]);
+    }
+    function join(dev) {
+        joinWait = 0;
+        var p2 = new Actors.Player(2);
+        p2.dev = dev; players[0].dev = p1Dev;
+        players[1] = p2; twoP = true;
+        if (lv && (mode === 'play' || mode === 'pipe')) respawn(p2);
+        else p2.dead = false;
+        setBanner('');
+        sfx('oneup');
+        gk.announce(s.p2Joined);
+    }
+    function leave() {
+        players.length = 1; twoP = false; joinWait = 0;
+        players[0].dev = null;
+        player = players[0];
+        gk.announce(s.p2Left);
+    }
+    // a fallen player comes back above the partner
+    function respawn(p) {
+        var mate = anyAlive(p) || players[0];
+        p.reset(); p.power = 0; p.h = 14;
+        p.x = mate.x; p.y = Math.max(cam.y + 8, mate.y - 40); p.vy = 0;
+        p.inv = 150;
+        sfx('sprout');
     }
 
     /* ------------------------------------------------------------------ world map */
@@ -365,6 +456,7 @@
 
     function updateMap() {
         var moved = false;
+        if (joinWait) return;
         if (gk.pressed('right') && mapN < 5 && save.unlocked[nodeId(mapW, mapN + 1)]) { mapN++; moved = true; }
         else if (gk.pressed('left') && mapN > 1) { mapN--; moved = true; }
         else if (gk.pressed('down') && mapW < 3 && worldUnlocked(mapW + 1)) { mapW++; mapN = 1; moved = true; }
@@ -410,18 +502,22 @@
         }
         p = mapNodePos(mapN);
         var f = sprites.f['hs_normal_stand_r'], bob = (gk.frame >> 4) & 1;
-        c.drawImage(sprites.c, f.x, f.y, 16, 16, p.x - 8, p.y - 24 - bob, 16, 16);
+        c.drawImage(sprites.c, f.x, f.y, 16, 16, p.x - (twoP ? 14 : 8), p.y - 24 - bob, 16, 16);
+        if (twoP) { f = sprites.f['hs_normal2_stand_l']; c.drawImage(sprites.c, f.x, f.y, 16, 16, p.x - 2, p.y - 24 - (1 - bob), 16, 16); }
     }
 
     /* ------------------------------------------------------------------ main update */
 
-    function inputs() {
-        var autoRun = save.autoRun;
-        return {
-            left: gk.isDown('left'), right: gk.isDown('right'), down: gk.isDown('down'),
-            run: gk.isDown('run') || autoRun, jump: gk.isDown('jump'), jumpPressed: gk.pressed('jump'),
-            downPressed: gk.pressed('down'), firePressed: gk.pressed('run') || gk.pressed('up')
-        };
+    // 1 player: any device drives the hero. 2 players: each hero reads only its own device.
+    function inputs(p) {
+        var autoRun = save.autoRun, d = twoP ? p.dev : null;
+        var down = d ? function (a) { return gk.isDownBy(d, a); } : gk.isDown;
+        var hit = d ? function (a) { return gk.pressedBy(d, a); } : gk.pressed;
+        var o = p.inp || (p.inp = {});
+        o.left = down('left'); o.right = down('right'); o.down = down('down');
+        o.run = down('run') || autoRun; o.jump = down('jump'); o.jumpPressed = hit('jump');
+        o.downPressed = hit('down'); o.firePressed = hit('run') || hit('up');
+        return o;
     }
 
     function toggleRun() {
@@ -431,7 +527,7 @@
 
     function stomping(p, e) { return p.vy > 0 && p.lastBottom <= e.y + 6; }
 
-    function stompBounce() { player.vy = gk.isDown('jump') ? -5.6 : -3.8; player.jumping = gk.isDown('jump'); hitstop = 3; W.shake(2); }
+    function stompBounce() { var j = player.inp && player.inp.jump; player.vy = j ? -5.6 : -3.8; player.jumping = !!j; hitstop = 3; W.shake(2); }
 
     function interact() {
         var p = player;
@@ -449,11 +545,11 @@
                         else if (e.type === 'flyer') { e.type = 'walker'; e.vx = -0.5; e.vy = 0; }
                         else killFlip(e);
                         for (var k = 0; k < 6; k++) parts.add(e.x + 6, e.y + 4, (k - 2.5) * 0.5, -1 - (k & 1), 18, '#ffffff', 2, 0.1);
-                    } else W.hurt();
+                    } else W.hurt(p);
                     break;
                 case 'spiky': case 'plant': case 'rock':
                     if (e.type === 'plant' && e.state === 0) break;
-                    if (p.star > 0) { killFlip(e); comboScore(e.x, e.y); } else W.hurt();
+                    if (p.star > 0) { killFlip(e); comboScore(e.x, e.y); } else W.hurt(p);
                     break;
                 case 'shell':
                     if (e.vx === 0) {
@@ -462,10 +558,10 @@
                         if (stomping(p, e)) stompBounce();
                     } else if (stomping(p, e)) { e.vx = 0; sfx('stomp'); stompBounce(); }
                     else if (p.star > 0) { killFlip(e); comboScore(e.x, e.y); }
-                    else if (!(e.kickT > 0)) W.hurt();
+                    else if (!(e.kickT > 0)) W.hurt(p);
                     break;
                 case 'crusher':
-                    if (p.lastBottom > e.y + 4 && e.state === 1) W.hurt();
+                    if (p.lastBottom > e.y + 4 && e.state === 1) W.hurt(p);
                     break;
                 case 'boss':
                     if (e.hurtT > 0) break;
@@ -474,7 +570,7 @@
                         player.vy = -6; player.gp = 0;
                         gk.announce(s.bossHit);
                         if (e.hp <= 0) { e.dying = 1; e.vy = -4; music(null); addScore(5000, e.x, e.y); }
-                    } else W.hurt();
+                    } else W.hurt(p);
                     break;
                 case 'starcoin':
                     e.alive = false; starGot[e.idx] = 1;
@@ -489,7 +585,7 @@
                     }
                     break;
                 case 'spring':
-                    if (p.vy > 0 && p.lastBottom <= e.y + 8) { p.y = e.y + 6 - p.h; p.vy = gk.isDown('jump') ? -10 : -7.5; p.jumping = false; e.t = 10; sfx('spring'); }
+                    if (p.vy > 0 && p.lastBottom <= e.y + 8) { p.y = e.y + 6 - p.h; p.vy = p.inp && p.inp.jump ? -10 : -7.5; p.jumping = false; e.t = 10; sfx('spring'); }
                     break;
             }
             if (player.dead) return;
@@ -506,7 +602,7 @@
         }
         for (i = 0; i < rocks.length; i++) {
             var r = rocks[i];
-            if (r.alive && Actors.overlap(p, r)) { if (p.star) r.alive = false; else W.hurt(); }
+            if (r.alive && Actors.overlap(p, r)) { if (p.star) r.alive = false; else W.hurt(p); }
         }
     }
 
@@ -552,25 +648,43 @@
         for (i = 0; i < items.length; i++) if (items[i].alive) Actors.UPDATE.item(items[i], W);
     }
 
+    // Follows the hero (or the middle of both heroes). In 2-player mode nobody can leave the screen:
+    // the camera stays between both, and the screen edges act as walls.
     function updateCamera() {
-        var p = player, area = lv.areaAt(p.x + p.w / 2);
-        var lookTarget = Math.abs(p.vx) > 0.5 ? (p.vx > 0 ? 50 : -30) : cam.look * 0.98;
+        var n = 0, sx = 0, sy = 0, vx = 0, ground = false, lo = 1e9, hi = -1e9, i, p;
+        for (i = 0; i < players.length; i++) {
+            p = players[i];
+            if (p.out || (p.dead && players.length > 1)) continue;
+            n++; sx += p.x + p.w / 2; sy += p.y; vx += p.vx; ground = ground || p.onGround;
+            lo = Math.min(lo, p.x); hi = Math.max(hi, p.x + p.w);
+        }
+        if (!n) return;
+        sx /= n; sy /= n; vx /= n;
+        var area = lv.areaAt(sx);
+        var lookTarget = Math.abs(vx) > 0.5 ? (vx > 0 ? 50 : -30) : cam.look * 0.98;
         cam.look += (lookTarget - cam.look) * 0.03;
-        var tx = p.x + p.w / 2 - 240 + cam.look;
+        var tx = sx - 240 + (n > 1 ? 0 : cam.look);
         cam.x += (tx - cam.x) * 0.12;
+        if (n > 1) { cam.x = Math.max(cam.x, hi - 480 + 24); cam.x = Math.min(cam.x, lo - 24); }
         var minX = area[0] + leftWall, maxX = area[1] - 480;
         if (bossOn) minX = Math.max(minX, area[1] - 480);
         if (cam.x < minX) cam.x = minX;
         if (cam.x > maxX) cam.x = Math.max(minX, maxX);
-        // vertical: stay at the bottom unless the hero climbs high or swims
-        var bottom = lv.pxH - 270, ty = Math.min(bottom, p.y - 90);
-        if (p.onGround || ty < cam.y - 20 || ty > cam.y) cam.y += (ty - cam.y) * 0.08;
+        if (n > 1) for (i = 0; i < players.length; i++) {
+            p = players[i];
+            if (p.out || p.dead) continue;
+            if (p.x < cam.x) { p.x = cam.x; if (p.vx < 0) p.vx = 0; }
+            if (p.x + p.w > cam.x + 480) { p.x = cam.x + 480 - p.w; if (p.vx > 0) p.vx = 0; }
+        }
+        // vertical: stay at the bottom unless the heroes climb high or swim
+        var bottom = lv.pxH - 270, ty = Math.min(bottom, sy - 90);
+        if (ground || ty < cam.y - 20 || ty > cam.y) cam.y += (ty - cam.y) * 0.08;
         if (cam.y < 0) cam.y = 0;
         if (cam.y > bottom) cam.y = bottom;
     }
 
-    function checkGoalAndWarps() {
-        var p = player;
+    function checkGoalAndWarps(p) {
+        player = p;
         for (var i = 0; i < ents.length; i++) {
             var e = ents[i];
             if (!e.alive) continue;
@@ -586,7 +700,7 @@
                 if (e.secret) secretFound = true;
                 return;
             }
-            if (e.type === 'warp' && p.onGround && gk.isDown('down') && p.x >= e.x - 2 && p.x + p.w <= e.x + e.w + 2 && Math.abs(p.y + p.h - (e.y + 2)) < 3) {
+            if (e.type === 'warp' && p.onGround && p.inp && p.inp.down && p.x >= e.x - 2 && p.x + p.w <= e.x + e.w + 2 && Math.abs(p.y + p.h - (e.y + 2)) < 3) {
                 mode = 'pipe'; modeT = 0; pipeTarget = e; sfx('pipe');
                 return;
             }
@@ -601,20 +715,46 @@
     function updatePlay() {
         if (hitstop > 0) { hitstop--; return; }
         if (gk.pressed('runToggle')) toggleRun();
-        player.update(W, inputs());
-        if (mode !== 'play') return;
+        var i, p, grounded = true;
+        for (i = 0; i < players.length; i++) {
+            p = players[i];
+            if (p.out) continue;
+            if (p.dead) { fallen(p); continue; }
+            player = p;
+            p.update(W, inputs(p));
+            if (mode !== 'play') return;
+        }
+        target = firstAlive();
         updateEnts();
         updateFireballs();
-        interact();
+        for (i = 0; i < players.length; i++) {
+            p = players[i];
+            if (p.out || p.dead) continue;
+            player = p;
+            interact();
+            if (mode !== 'play') return;
+            if (!p.onGround || p.gp) grounded = false;
+        }
+        if (grounded) combo = 0;
+        for (i = 0; i < players.length && mode === 'play'; i++) if (!players[i].out && !players[i].dead) checkGoalAndWarps(players[i]);
         if (mode !== 'play') return;
-        if (player.onGround && !player.gp) combo = 0;
-        checkGoalAndWarps();
+        player = firstAlive();
         updateCamera();
         // timer (assist mode: slower)
         if (++timeTick >= (save.assist ? 64 : 40)) {
             timeTick = 0; time--;
             if (time === 100) { sfx('check'); gk.announce(s.hurry); }
-            if (time <= 0) { time = 0; W.die(); }
+            if (time <= 0) { time = 0; for (i = 0; i < players.length; i++) W.die(players[i]); }
+        }
+    }
+
+    // a fallen player in 2-player mode: falls off the screen, then respawns (or sits out)
+    function fallen(p) {
+        p.deadT++;
+        if (p.deadT > 30) { p.vy += 0.25; p.y += p.vy; }
+        if (p.respawnT > 0 && --p.respawnT === 0) {
+            if (p.lives > 0 && anyAlive(p)) { respawn(p); gk.announce(NAMES[p.slot] + ' ' + s.p2Back); }
+            else p.out = true;
         }
     }
 
@@ -650,7 +790,8 @@
             xhr.send();
         },
         start: function (g) {
-            player = new Actors.Player();
+            players = [new Actors.Player(1)];
+            player = target = players[0];
             parts = new GK.Particles(g.q.particles);
             var i;
             for (i = 0; i < 2; i++) { var f = new Actors.Ent('fireball', 0, 0, 8, 8); f.alive = false; fireballs.push(f); }
@@ -658,7 +799,7 @@
             for (i = 0; i < 6; i++) { var it = new Actors.Ent('item', 0, 0, 16, 16); it.alive = false; items.push(it); }
             for (i = 0; i < 8; i++) pops.push({ x: 0, y: 0, vy: 0, t: 0 });
             for (i = 0; i < 8; i++) popups.push({ x: 0, y: 0, text: '', t: 0 });
-            lives = save.lives > 0 ? save.lives : 5; score = save.score || 0; coins = save.coins || 0;
+            players[0].lives = save.lives > 0 ? save.lives : 5; players[0].score = save.score || 0; coins = save.coins || 0;
             hud = GK.hud([['world', ''], ['lives', s.lives], ['coins', s.coins], ['stars', ''], ['score', s.score], ['time', s.time]]);
             mapInfo = document.getElementById('mapinfo');
             document.body.className = 'pixel' + (save.hc ? ' hc' : '');
@@ -667,6 +808,7 @@
         update: function (g) {
             modeT++;
             common();
+            if (joinWait && mode !== 'intro' && mode !== 'load') checkJoin();
             switch (mode) {
                 case 'map': updateMap(); break;
                 case 'intro':
@@ -678,25 +820,39 @@
                     player.y += 0.8;
                     if (modeT === 30) {
                         var tg = pipeTarget;
-                        player.x = tg.tx + 2; player.y = tg.ty + 16 - player.h; player.vx = player.vy = 0;
+                        // everybody goes through the pipe together
+                        for (var q = 0; q < players.length; q++) {
+                            var pq = players[q];
+                            if (pq.out) continue;
+                            if (pq.dead) respawn(pq);
+                            pq.x = tg.tx + 2 + q * 14; pq.y = tg.ty + 16 - pq.h; pq.vx = pq.vy = 0;
+                        }
                         var area = lv.areaAt(player.x);
                         cam.x = Math.max(area[0], Math.min(area[1] - 480, player.x - 200));
                         mode = 'play'; modeT = 0;
                     }
                     break;
                 case 'dying':
-                    if (modeT > 30) { player.vy += 0.25; player.y += player.vy; }
+                    for (var dq = 0; dq < players.length; dq++) {
+                        var dp = players[dq];
+                        if (dp.dead && !dp.out) { dp.deadT++; if (dp.deadT > 30) { dp.vy += 0.25; dp.y += dp.vy; } }
+                    }
                     if (modeT === 150) {
-                        lives--;
-                        if (lives <= 0) {
+                        var left = 0;
+                        for (dq = 0; dq < players.length; dq++) {
+                            players[dq].out = players[dq].lives <= 0;
+                            if (!players[dq].out) { left++; players[dq].power = 0; }
+                        }
+                        if (!left) {
                             mode = 'gameover'; modeT = 0;
                             setBanner(s.gameOver, ''); gk.announce(s.gameOver);
                             music(SONGS.gameover);
-                        } else { player.power = 0; buildLevel(true); }
+                            submitScores(true);
+                        } else buildLevel(true);
                     }
                     break;
                 case 'gameover':
-                    if (modeT > 260 || (modeT > 60 && (g.pressed('confirm') || g.pressed('jump')))) { lives = 5; coins = 0; toMap(stage.id); }
+                    if (modeT > 260 || (modeT > 60 && (g.pressed('confirm') || g.pressed('jump')))) toMap(stage.id);
                     break;
                 case 'goal':
                     if (player.y + player.h < goalEnt.ground) player.y = Math.min(goalEnt.ground - player.h, player.y + 2);
@@ -710,7 +866,7 @@
                     break;
                 case 'clear':
                     if (modeT > 60 && time > 0) { var n = Math.min(time, 3); time -= n; addScore(n * 50); if ((modeT & 3) === 0) sfx('tick'); }
-                    if (modeT > 60 && time <= 0) { if (!tally) tally = modeT; if (modeT - tally > 90) { lives = Math.max(lives, 1); toMap(); } }
+                    if (modeT > 60 && time <= 0) { if (!tally) tally = modeT; if (modeT - tally > 90) toMap(); }
                     break;
             }
             updateHud(false);
@@ -726,17 +882,18 @@
             if (shakeT > 0) { ox = (Math.random() - 0.5) * shakeAmp * 2; oy = (Math.random() - 0.5) * shakeAmp * 2; }
             var cx = Math.round((cam.x + ox) * sc) / sc, cy = Math.round((cam.y + oy) * sc) / sc;
             lv.drawBackground(c, cx, cy, g.q, g.frame);
-            if (mode === 'pipe') drawPlayer(c, cx, cy, g.frame);
+            if (mode === 'pipe') drawPlayers(c, cx, cy, g.frame);
             lv.drawTiles(c, cx, cy);
             lv.drawDynamic(c, cx, cy, g.frame, 0, sprites);
             drawEnts(c, cx, cy, g.frame);
-            if (mode !== 'pipe') drawPlayer(c, cx, cy, g.frame);
+            if (mode !== 'pipe') drawPlayers(c, cx, cy, g.frame);
             drawFx(c, cx, cy);
             lv.drawDynamic(c, cx, cy, g.frame, 1, sprites);
         },
         menuItems: function () {
             var items = [];
             if (mode !== 'map') { items.push({ id: 'restart', label: s.restartStage }); items.push({ id: 'map', label: s.worldMap }); }
+            items.push({ id: '2p', label: s.twoP + ': ' + (twoP ? s.on : s.off) });
             items.push({ id: 'assist', label: s.assist + ': ' + (save.assist ? s.on : s.off) });
             items.push({ id: 'run', label: s.autoRun + ': ' + (save.autoRun ? s.on : s.off) });
             items.push({ id: 'hc', label: s.contrast + ': ' + (save.hc ? s.on : s.off) });
@@ -748,6 +905,11 @@
                 return;
             }
             if (id === 'map') { mapInfo.hidden = true; toMap(stage && stage.id); return; }
+            if (id === '2p') {
+                if (twoP || joinWait) { joinWait = 0; setBanner(''); if (twoP) leave(); return 'stay'; }
+                askJoin();
+                return;    // close the menu so player 2 can press OK / A
+            }
             if (id === 'assist') save.assist = !save.assist;
             if (id === 'run') save.autoRun = !save.autoRun;
             if (id === 'hc') { save.hc = !save.hc; document.body.className = 'pixel' + (save.hc ? ' hc' : ''); }
@@ -757,9 +919,9 @@
         onQuality: function (g, level) {
             if (lv && lv.bg && level >= 1 && lv.bg.layers.length > g.q.parallax) { /* fewer layers drawn from now on */ }
         },
-        pause: function () { if (save) { save.lives = lives; save.score = score; save.coins = coins; persist(); } },
+        pause: function () { saveP1(); },
         destroy: function () {
-            if (save) { save.lives = lives; save.score = score; save.coins = coins; persist(); }
+            saveP1();
             loadReq++;
             freeLevel(false);
             if (sprites) sprites.free();
@@ -774,8 +936,11 @@
         if (f) c.drawImage(sprites.c, f.x, f.y, f.w, f.h, x | 0, y | 0, f.w, f.h);
     }
 
-    function drawPlayer(c, cx, cy, frame) {
-        var p = player;
+    function drawPlayers(c, cx, cy, frame) {
+        for (var i = players.length - 1; i >= 0; i--) if (!players[i].out) drawPlayer(c, cx, cy, frame, players[i]);
+    }
+
+    function drawPlayer(c, cx, cy, frame, p) {
         if (p.dead) { spr(c, 'hero_die', p.x - 2 - cx, p.y - cy); return; }
         if (p.inv > 0 && (frame >> 1) & 1) return;
         var big = p.h > 14 || (p.growT > 0 && p.power > 0 && !p.crouch);
@@ -865,9 +1030,10 @@
     function updateHud(force) {
         var inStage = mode !== 'map' && stage;
         gk.setText(hud.world, inStage ? stageLabel(stage) : s.world + ' ' + mapW);
-        gk.setText(hud.lives, lives);
+        var a = players[0], b = players[1];
+        gk.setText(hud.lives, b ? 'P1 ' + a.lives + '  P2 ' + b.lives : a.lives);
         gk.setText(hud.coins, coins);
-        gk.setText(hud.score, score);
+        gk.setText(hud.score, b ? a.score + ' / ' + b.score : a.score);
         gk.setText(hud.stars, inStage ? (starGot[0] ? '★' : '☆') + (starGot[1] ? '★' : '☆') + (starGot[2] ? '★' : '☆') : '');
         gk.setText(hud.time, inStage ? time : '');
         hud.timeBox.style.visibility = inStage ? 'visible' : 'hidden';
@@ -877,13 +1043,19 @@
 
     // read-only state for automated tests (tests/*.spec.js)
     window.JumperDebug = function () {
-        return { mode: mode, stage: stage && stage.id, x: player && player.x, y: player && player.y, power: player && player.power,
-                 lives: lives, time: time, coins: coins, score: score, ents: ents.length, camX: cam.x, camY: cam.y, h: player && player.h };
+        var a = players[0], b = players[1];
+        return { mode: mode, stage: stage && stage.id, x: a && a.x, y: a && a.y, power: a && a.power,
+                 lives: a && a.lives, time: time, coins: coins, score: a && a.score, ents: ents.length, camX: cam.x, camY: cam.y, h: a && a.h,
+                 twoP: twoP, joinWait: joinWait, p1Dev: a && a.dev,
+                 p2: b ? { x: b.x, y: b.y, lives: b.lives, score: b.score, dead: b.dead, out: b.out, dev: b.dev } : null };
     };
     window.JumperCheat = {
         enter: function (id) { enterStage(id); },
-        power: function (p) { player.setPower(p); },
-        warpTo: function (x, y) { player.x = x; if (y !== undefined) player.y = y; player.vy = 0; },
+        power: function (p) { players[0].setPower(p); },
+        warpTo: function (x, y) { for (var i = 0; i < players.length; i++) { var q = players[i]; q.x = x + i * 14; if (y !== undefined) q.y = y; q.vy = 0; } },
+        kill: function (slot) { W.die(players[(slot || 1) - 1]); },
+        setScore: function (slot, n) { players[slot - 1].score = n; },
+        setLives: function (slot, n) { players[slot - 1].lives = n; },
         goal: function () { for (var i = 0; i < ents.length; i++) if (ents[i].type === 'goal' && !ents[i].secret) return { x: ents[i].x, y: ents[i].y, ground: ents[i].ground }; return null; },
         door: function () { for (var i = 0; i < ents.length; i++) if (ents[i].type === 'bossdoor') return ents[i].x; return null; },
         bossHits: function () { for (var i = 0; i < ents.length; i++) if (ents[i].type === 'boss') { ents[i].hp = 1; return { x: ents[i].x, y: ents[i].y, on: bossOn }; } return null; },

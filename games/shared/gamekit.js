@@ -242,7 +242,7 @@ var GK = (function () {
     function create(def) {
         var host = null, canvas = null, ctx = null;
         var raf = 0, running = false, last = 0, acc = 0, frameN = 0;
-        var edges = [], edgeN = 0;
+        var edges = [], edgeDev = [], edgeN = 0;
         var perf = { level: 0, sum: 0, n: 0, grace: 2000, slowWindows: 0 };
         var started = false, destroyed = false;
         var onKeyDown = null, onKeyUp = null;
@@ -252,6 +252,13 @@ var GK = (function () {
             rng: rng, clamp: clamp, Particles: Particles,
             isDown: function (a) { return host ? host.input.isDown(a) : false; },
             pressed: function (a) { for (var i = 0; i < edgeN; i++) if (edges[i] === a) return true; return false; },
+            // per device ('keys', 'keys2', 'pad0'...): lets a game give each player their own controller
+            pressedBy: function (dev, a) { for (var i = 0; i < edgeN; i++) if (edges[i] === a && edgeDev[i] === dev) return true; return false; },
+            isDownBy: function (dev, a) { return host ? host.input.isDownDev(dev, a) : false; },
+            // devices that pressed something this step (in order)
+            edgeDevices: function (a) { var out = []; for (var i = 0; i < edgeN; i++) if ((!a || edges[i] === a) && out.indexOf(edgeDev[i]) < 0) out.push(edgeDev[i]); return out; },
+            lastDevice: function () { return host && host.input.lastDevice ? host.input.lastDevice() : 'keys'; },
+            submitScore: function (score, opts) { if (host && host.submitScore) host.submitScore(score, opts); },
             announce: function (t) { if (host) host.announce(t); },
             save: function (k, v) { if (host) host.save(k, v); },
             load: function (k, d) { return host ? host.load(k, d) : d; },
@@ -394,10 +401,10 @@ var GK = (function () {
             },
             menuItems: function () { return def.menuItems ? def.menuItems(gk) : []; },
             onMenu: function (id) { return def.onMenu ? def.onMenu(gk, id) : undefined; },
-            onAction: function (a, pressed, repeat) {
-                if (pressed && !repeat && edgeN < 16) edges[edgeN++] = a;
+            onAction: function (a, pressed, repeat, dev) {
+                if (pressed && !repeat && edgeN < 16) { edgeDev[edgeN] = dev || 'keys'; edges[edgeN++] = a; }
                 if (pressed && gk.audio && gk.audio.ctx && gk.audio.ctx.state === 'suspended' && running) gk.audio.resume();
-                if (def.onAction) def.onAction(gk, a, pressed, repeat);
+                if (def.onAction) def.onAction(gk, a, pressed, repeat, dev);
             },
             // test/diagnostic hooks
             _gk: gk,

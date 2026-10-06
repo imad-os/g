@@ -55,7 +55,10 @@ var Actors = (function () {
 
     /* ------------------------------------------------------------------ the hero */
 
-    function Player() {
+    // slot 1 or 2 (2-player co-op); each player has its own input device, lives and score
+    function Player(slot) {
+        this.slot = slot || 1; this.dev = null; this.score = 0; this.lives = 5; this.out = false; this.respawnT = 0;
+        this.inp = null;
         this.x = 0; this.y = 0; this.w = 12; this.h = 14; this.vx = 0; this.vy = 0;
         this.power = 0; this.face = 1; this.onGround = false; this.hitWall = 0;
         this.reset();
@@ -81,7 +84,7 @@ var Actors = (function () {
     Player.prototype.frame = function (frameN) {
         var size = this.power > 0 && !(this.growT > 0 && ((this.growT >> 2) & 1)) ? 'hb' : 'hs';
         if (this.growT > 0 && this.prevPower > 0 && this.power === 0) size = (this.growT >> 2) & 1 ? 'hb' : 'hs';
-        var form = this.power === 2 ? 'fire' : 'normal';
+        var form = (this.power === 2 ? 'fire' : 'normal') + (this.slot === 2 ? '2' : '');
         if (this.star > 0 && ((frameN >> 2) & 1)) form = 'star';
         var pose;
         if (this.crouch || this.gp) pose = 'crouch';
@@ -184,7 +187,7 @@ var Actors = (function () {
             var probe = dir > 0 ? this.x + this.w : this.x - 1;
             if (lv.solid((probe / T) | 0, ((this.y + 2) / T) | 0) && lv.solid((probe / T) | 0, ((this.y + this.h - 2) / T) | 0)) this.wallDir = dir;
         }
-        moveY(this, lv, function (tx, ty) { W.hitBlock(tx, ty, self.power > 0); if (self.jumping) self.jumping = false; });
+        moveY(this, lv, function (tx, ty) { W.hitBlock(tx, ty, self.power > 0, false, self); if (self.jumping) self.jumping = false; });
         W.landOnPlatforms(this);
         if (this.onGround) { this.wallDir = 0; this.jumping = false; }
         if (this.onGround && wasAir && gpFall) {
@@ -196,12 +199,12 @@ var Actors = (function () {
         if (Math.abs(this.vx) > 0.2) this.walkT += Math.abs(this.vx) * 1.5;
 
         // hazards
-        if (lv.spikeAt(this.x + 2, this.y + this.h - 1) || lv.spikeAt(this.x + this.w - 2, this.y + this.h - 1)) W.hurt();
-        if (lv.lavaAt(this.x + this.w / 2, this.y + this.h - 4)) W.die();
-        if (this.y > lv.pxH + 24) W.die();
+        if (lv.spikeAt(this.x + 2, this.y + this.h - 1) || lv.spikeAt(this.x + this.w - 2, this.y + this.h - 1)) W.hurt(this);
+        if (lv.lavaAt(this.x + this.w / 2, this.y + this.h - 4)) W.die(this);
+        if (this.y > lv.pxH + 24) W.die(this);
         // tile coins
         var l = (this.x / T) | 0, r = ((this.x + this.w - 1) / T) | 0, t = (this.y / T) | 0, b = ((this.y + this.h - 1) / T) | 0;
-        for (var ty = t; ty <= b; ty++) for (var tx = l; tx <= r; tx++) if (lv.rawTile(tx, ty) === ID.COIN) { lv.set(tx, ty, lv.waterAt(tx * T + 8, ty * T + 8) || W.water ? 12 : 0); W.collectCoin(tx * T + 8, ty * T + 8, false); }
+        for (var ty = t; ty <= b; ty++) for (var tx = l; tx <= r; tx++) if (lv.rawTile(tx, ty) === ID.COIN) { lv.set(tx, ty, lv.waterAt(tx * T + 8, ty * T + 8) || W.water ? 12 : 0); W.collectCoin(tx * T + 8, ty * T + 8, false, this); }
 
         // fireballs
         if (inp.firePressed && this.power === 2 && !this.crouch) W.fire(this);
@@ -287,7 +290,7 @@ var Actors = (function () {
         },
         plant: function (e, W) {
             // 0 hidden in the pipe, 1 rising, 2 out, 3 lowering (never rises when the hero is right next to it)
-            var near = Math.abs(W.player.x + 6 - (e.x + 6)) < 28, hide = e.top + 2, out = e.top - 22;
+            var near = W.nearestDist(e.x) < 28, hide = e.top + 2, out = e.top - 22;
             e.t--;
             if (e.state === 0) { e.y = hide; if (e.t <= 0) { if (near) e.t = 20; else { e.state = 1; e.t = 24; } } }
             else if (e.state === 1) { e.y = out + (hide - out) * e.t / 24; if (e.t <= 0) { e.state = 2; e.t = 70; } }

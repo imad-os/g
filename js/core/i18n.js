@@ -7,6 +7,7 @@ var I18n = (function () {
 
     var S = {
         en: {
+            scores: 'Top scores', newHigh: 'New high score!', rank: 'Rank', entryHint: 'Up and down: change letter. Left and right: move. OK: save.', save: 'Save', letter: 'Letter', of: 'of', noScores: 'No scores yet', player: 'Player', points: 'points',
             appTitle: 'Arcade', games: 'Games', settings: 'Settings', play: 'Play',
             badgeNew: 'New', badgeUpdated: 'Updated', lastPlayed: 'Last played',
             language: 'Language', musicVol: 'Music volume', sfxVol: 'Sound effects volume',
@@ -27,7 +28,8 @@ var I18n = (function () {
                 'Remote: arrows move, OK jumps or confirms, hold OK to jump higher, Back pauses.',
                 'Red key: run on or off (for remote-only play). Play/Pause key: pause.',
                 'Gamepad: D-pad or left stick to move, A to jump, B or X to run or fire, Start or Select to pause.',
-                'Keyboard: arrows, Space or Z to jump, Shift or X to run, Esc to pause.'
+                'Keyboard: arrows, Space or Z to jump, Shift or X to run, Esc to pause.',
+                'Super Jumper for two: open the pause menu, choose Two players, then player 2 presses OK or A on their own controller (another gamepad, the remote, or W A S D + F on a keyboard).'
             ],
             privacyText: [
                 'Arcade does not collect, store or share any personal data.',
@@ -37,6 +39,7 @@ var I18n = (function () {
             ]
         },
         fr: {
+            scores: 'Meilleurs scores', newHigh: 'Nouveau record !', rank: 'Rang', entryHint: 'Haut et bas : changer la lettre. Gauche et droite : se déplacer. OK : enregistrer.', save: 'Enregistrer', letter: 'Lettre', of: 'sur', noScores: 'Aucun score', player: 'Joueur', points: 'points',
             appTitle: 'Arcade', games: 'Jeux', settings: 'Paramètres', play: 'Jouer',
             badgeNew: 'Nouveau', badgeUpdated: 'Mis à jour', lastPlayed: 'Dernier joué',
             language: 'Langue', musicVol: 'Volume de la musique', sfxVol: 'Volume des effets',
@@ -57,7 +60,8 @@ var I18n = (function () {
                 'Télécommande : flèches pour bouger, OK pour sauter ou valider, maintenir OK pour sauter plus haut, Retour pour la pause.',
                 'Touche rouge : course activée ou non. Touche Lecture/Pause : pause.',
                 'Manette : croix ou stick gauche pour bouger, A pour sauter, B ou X pour courir ou tirer, Start ou Select pour la pause.',
-                'Clavier : flèches, Espace ou Z pour sauter, Maj ou X pour courir, Échap pour la pause.'
+                'Clavier : flèches, Espace ou Z pour sauter, Maj ou X pour courir, Échap pour la pause.',
+                'Super Jumper à deux : ouvrez le menu pause, choisissez Deux joueurs, puis le joueur 2 appuie sur OK ou A sur sa propre manette (une autre manette, la télécommande, ou W A S D + F sur un clavier).'
             ],
             privacyText: [
                 "Arcade ne collecte, ne stocke et ne partage aucune donnée personnelle.",
@@ -67,6 +71,7 @@ var I18n = (function () {
             ]
         },
         es: {
+            scores: 'Mejores puntuaciones', newHigh: '¡Nuevo récord!', rank: 'Puesto', entryHint: 'Arriba y abajo: cambiar letra. Izquierda y derecha: mover. OK: guardar.', save: 'Guardar', letter: 'Letra', of: 'de', noScores: 'Sin puntuaciones', player: 'Jugador', points: 'puntos',
             appTitle: 'Arcade', games: 'Juegos', settings: 'Ajustes', play: 'Jugar',
             badgeNew: 'Nuevo', badgeUpdated: 'Actualizado', lastPlayed: 'Último jugado',
             language: 'Idioma', musicVol: 'Volumen de la música', sfxVol: 'Volumen de efectos',
@@ -87,7 +92,8 @@ var I18n = (function () {
                 'Mando a distancia: flechas para moverse, OK para saltar o confirmar, mantén OK para saltar más, Atrás para pausar.',
                 'Tecla roja: correr sí o no. Tecla Reproducir/Pausa: pausa.',
                 'Mando: cruceta o stick izquierdo para moverse, A para saltar, B o X para correr o disparar, Start o Select para pausar.',
-                'Teclado: flechas, Espacio o Z para saltar, Mayús o X para correr, Esc para pausar.'
+                'Teclado: flechas, Espacio o Z para saltar, Mayús o X para correr, Esc para pausar.',
+                'Super Jumper para dos: abre el menú de pausa, elige Dos jugadores y el jugador 2 pulsa OK o A en su propio mando (otro mando, el mando a distancia, o W A S D + F en un teclado).'
             ],
             privacyText: [
                 'Arcade no recopila, guarda ni comparte datos personales.',
@@ -97,6 +103,7 @@ var I18n = (function () {
             ]
         },
         ar: {
+            scores: 'أفضل النتائج', newHigh: 'نتيجة قياسية جديدة!', rank: 'المرتبة', entryHint: 'أعلى وأسفل: تغيير الحرف. يسار ويمين: تنقل. OK: حفظ.', save: 'حفظ', letter: 'الحرف', of: 'من', noScores: 'لا توجد نتائج بعد', player: 'اللاعب', points: 'نقطة',
             appTitle: 'آركيد', games: 'الألعاب', settings: 'الإعدادات', play: 'العب',
             badgeNew: 'جديد', badgeUpdated: 'محدّث', lastPlayed: 'آخر لعبة',
             language: 'اللغة', musicVol: 'مستوى الموسيقى', sfxVol: 'مستوى المؤثرات',
@@ -117,7 +124,8 @@ var I18n = (function () {
                 'جهاز التحكم: الأسهم للتحرك، OK للقفز أو التأكيد، اضغط مطولاً على OK لقفزة أعلى، رجوع للإيقاف المؤقت.',
                 'الزر الأحمر: تشغيل أو إيقاف الركض. زر تشغيل/إيقاف: إيقاف مؤقت.',
                 'وحدة التحكم: الأسهم أو العصا اليسرى للتحرك، A للقفز، B أو X للركض أو الإطلاق، Start أو Select للإيقاف المؤقت.',
-                'لوحة المفاتيح: الأسهم، المسافة أو Z للقفز، Shift أو X للركض، Esc للإيقاف المؤقت.'
+                'لوحة المفاتيح: الأسهم، المسافة أو Z للقفز، Shift أو X للركض، Esc للإيقاف المؤقت.',
+                'سوبر جمبر للاعبَين: افتح قائمة الإيقاف واختر لاعبان، ثم يضغط اللاعب 2 على OK أو A في وحدة التحكم الخاصة به (وحدة تحكم أخرى، أو جهاز التحكم، أو W A S D و F على لوحة المفاتيح).'
             ],
             privacyText: [
                 'لا يجمع آركيد أي بيانات شخصية ولا يخزنها ولا يشاركها.',

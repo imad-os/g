@@ -54,7 +54,7 @@ var App = (function () {
     }
 
     /* ---------- router ---------- */
-    function route(action, pressed, repeat) {
+    function route(action, pressed, repeat, dev) {
         if (action === 'padConnected') { toast(I18n.t('padOn')); return; }
 
         if (dialogOpen) {
@@ -65,7 +65,7 @@ var App = (function () {
             return;
         }
 
-        if (GameHost.active()) return GameHost.onAction(action, pressed, repeat);
+        if (GameHost.active()) return GameHost.onAction(action, pressed, repeat, dev);
 
         if (action === 'padLost') { toast(I18n.t('padOff').split('.')[0]); return; }
         if (!pressed) return;
@@ -73,6 +73,12 @@ var App = (function () {
 
         if (!$('page').hidden) {
             if (isBack) Menu.closePage();
+            else if (action === 'confirm' && !repeat) Menu.confirmFocused();
+            return;
+        }
+        if (!$('scores').hidden) {
+            if (isBack) Menu.closeScores();
+            else if (action === 'left' || action === 'right' || action === 'up' || action === 'down') Focus.move(action);
             else if (action === 'confirm' && !repeat) Menu.confirmFocused();
             return;
         }

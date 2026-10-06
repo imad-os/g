@@ -5,7 +5,7 @@ remote, a gamepad or a keyboard. It also runs in any desktop browser.
 
 | Game | Type | Notes |
 |---|---|---|
-| **Super Jumper** | 2D side-scrolling platformer | 3 worlds × (4 stages + fortress), world map, power-ups, 7 enemy types, 3 bosses, star coins, secret exits, swim stages |
+| **Super Jumper** | 2D side-scrolling platformer | 3 worlds × (4 stages + fortress), world map, power-ups, 7 enemy types, 3 bosses, star coins, secret exits, swim stages, **2-player co-op** |
 | **Block Drop** | falling-block puzzle | 7-bag, ghost piece, wall kicks, levels |
 | **Sky Hopper** | endless vertical jumper | moving/breaking/vanishing platforms, springs, flying enemy |
 | **Neon Snake** | snake | input queue, speed-up, bonus fruit |
@@ -15,6 +15,24 @@ remote, a gamepad or a keyboard. It also runs in any desktop browser.
 All art is drawn by code at load time and all music and sound effects are synthesized with Web Audio.
 There are no image or audio files to download or decode, and no third-party libraries. Names,
 characters, levels and melodies are original. Nothing uses Nintendo or Tetris names or assets.
+
+**Top scores:** every game keeps a top-10 table on the TV, managed by `js/core/scores.js`. When a game
+ends with a score that makes the table, the launcher asks for 3 initials, arcade style: Up/Down
+changes the letter, Left/Right moves, OK saves. The last initials are remembered. The **Top scores**
+button on the main menu shows all six tables. Voice Guide reads each table. *Reset progress* clears
+them. Games report scores with `host.submitScore(score, { player, players })`.
+
+**Super Jumper 2-player co-op:**
+- **Joining:** open the pause menu and choose *Two players*. Player 2 then presses OK / A on **their
+  own controller**, which can be another gamepad, the TV remote, or W A S D + F (jump) + G (run) on
+  a PC keyboard.
+- **Devices:** `js/core/input.js` tags every action with its device (`keys`, `keys2`, `pad0`…), and
+  each hero reads only its own device.
+- **Lives and scores:** separate per player; coins and star coins are shared.
+- **Falling:** a fallen player respawns above their partner. The stage restarts from the
+  checkpoint only when both are down.
+- **Screen:** the camera keeps both heroes on screen. Pipes, goals and boss doors take both.
+- **Leaving:** choose *Two players: On* in the pause menu again.
 
 ## Run it
 
@@ -27,6 +45,7 @@ npx http-server -p 8080 -c-1 .     # or: npm run serve
 packaged files load normally.
 
 Keyboard: arrows, Enter/Space/Z (jump/OK), Shift/X (run/fire), Esc/Backspace (back/pause), R (run toggle).
+Second player on the same keyboard: W A S D, F (jump), G (run/fire).
 
 ## How it adapts to the TV
 
@@ -172,6 +191,10 @@ The tests run headless Chromium with mocked `tizen` and `webapis` and cover thes
 - 20 launch/exit cycles leave no iframe, close every AudioContext, stop every loop, and do not grow
   the JS heap by more than 10%;
 - Back opens the exit dialog on the menu and the pause menu in a game;
-- every Super Jumper stage loads and can be finished, including the bosses.
+- every Super Jumper stage loads and can be finished, including the bosses;
+- top-10 tables: initials entry, sorting, the 10-entry cap and the Scores screen (Voice Guide label
+  and Back);
+- 2-player co-op with arrows + WASD and with two (mocked) gamepads: joining, each device moving only
+  its own hero, respawn, both players entering initials at game over, and unplug → pause.
 
 `npm run covers` regenerates the menu covers from real gameplay frames.

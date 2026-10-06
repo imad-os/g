@@ -196,6 +196,53 @@ var Menu = (function () {
         return false;
     }
 
+    /* ---------------- top scores ---------------- */
+
+    function renderScores() {
+        var box = $('scores-grid');
+        box.innerHTML = '';
+        box.setAttribute('role', 'list');
+        var first = null;
+        for (var i = 0; i < games.length; i++) {
+            var g = games[i], title = I18n.pick(g.manifest.title), list = Scores.list(g.id);
+            // a focusable div (a <button> would centre the list vertically)
+            var col = el('div', 'score-col');
+            col.setAttribute('data-focus', '');
+            col.setAttribute('tabindex', '0');
+            col.setAttribute('role', 'listitem');
+            col.appendChild(el('h3', '', title));
+            var spoken = [title + ', ' + I18n.t('scores')];
+            if (!list.length) { col.appendChild(el('div', 'score-empty', I18n.t('noScores'))); spoken.push(I18n.t('noScores')); }
+            for (var k = 0; k < list.length; k++) {
+                var row = el('div', 'score-row');
+                row.appendChild(el('span', 'r', (k + 1) + '.'));
+                row.appendChild(el('span', 'n', list[k].n));
+                row.appendChild(el('span', 's', String(list[k].s)));
+                col.appendChild(row);
+                spoken.push((k + 1) + ': ' + list[k].n + ', ' + list[k].s + ' ' + I18n.t('points'));
+            }
+            col.setAttribute('aria-label', spoken.join('. '));
+            box.appendChild(col);
+            if (!first) first = col;
+        }
+        return first;
+    }
+
+    function openScores() {
+        $('menu').hidden = true;
+        $('scores').hidden = false;
+        var first = renderScores();
+        I18n.apply($('scores'));
+        Focus.push($('scores'), first);
+    }
+
+    function closeScores() {
+        $('scores').hidden = true;
+        $('menu').hidden = false;
+        Focus.pop();
+        Focus.set($('menu'), $('btn-scores'));
+    }
+
     /* ---------------- text pages ---------------- */
 
     var pageReturn = null;
@@ -246,13 +293,15 @@ var Menu = (function () {
         grid = $('game-grid');
         render();
         $('btn-settings').onclick = openSettings;
+        $('btn-scores').onclick = openScores;
+        $('scores-close').onclick = closeScores;
         $('page-close').onclick = closePage;
     }
 
     return {
         init: init, show: show, hide: hide, render: render, releaseImages: releaseImages,
         confirmFocused: confirmFocused, openSettings: openSettings, closeSettings: closeSettings,
-        settingsAdjust: settingsAdjust, closePage: closePage, tileFor: tileFor,
+        settingsAdjust: settingsAdjust, closePage: closePage, openScores: openScores, closeScores: closeScores, tileFor: tileFor,
         games: function () { return games; }
     };
 })();

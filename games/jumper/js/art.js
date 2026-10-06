@@ -64,6 +64,8 @@ var Art = (function () {
     var HERO_PAL = {
         normal: { k: '#1a1423', c: '#20b2a0', w: '#ffffff', s: '#ffd0a8', e: '#1a1423', o: '#f28c28', y: '#ffd23f', b: '#6b3a1f' },
         fire:   { k: '#1a1423', c: '#ffffff', w: '#ff5d3a', s: '#ffd0a8', e: '#1a1423', o: '#e8402a', y: '#ffffff', b: '#6b3a1f' },
+        normal2:{ k: '#1a1423', c: '#8e5bd8', w: '#ffffff', s: '#e8b48a', e: '#1a1423', o: '#3fbf6f', y: '#ffffff', b: '#3a2a6b' },
+        fire2:  { k: '#1a1423', c: '#ffffff', w: '#8e5bd8', s: '#e8b48a', e: '#1a1423', o: '#8e5bd8', y: '#ffd23f', b: '#3a2a6b' },
         star:   { k: '#ffffff', c: '#ffd23f', w: '#ffffff', s: '#fff2c0', e: '#1a1423', o: '#ff79c6', y: '#ffffff', b: '#ffd23f' }
     };
 
@@ -168,8 +170,8 @@ var Art = (function () {
     }
 
     function buildSprites() {
-        var A = new Atlas(512, 256), k;
-        var forms = ['normal', 'fire', 'star'];
+        var A = new Atlas(512, 320), k;
+        var forms = ['normal', 'fire', 'star', 'normal2', 'fire2'];
         for (var fi = 0; fi < forms.length; fi++) {
             var pal = HERO_PAL[forms[fi]];
             for (k in LEGS) {

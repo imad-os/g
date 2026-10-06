@@ -11,6 +11,8 @@
 //   5. launch/exit x20: no leaked iframes, JS heap back to baseline +-10%
 //   6. destroy() closes the AudioContext, stops the rAF loop; Back opens pause; Back on menu asks to exit
 //   7. Super Jumper: every stage loads and can be finished
+//   8. top-10 tables: a qualifying score asks for initials and appears on the Scores screen
+//   9. Super Jumper 2-player co-op: arrows + WASD, and two gamepads, each drive only their own hero
 
 import http from 'node:http';
 import fs from 'node:fs';
@@ -221,6 +223,130 @@ async function main() {
         check(Object.keys(save.cleared).length === index.length, 'all stages recorded as cleared');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
+    }
+
+    console.log('8. top-10 score tables');
+    {
+        const page = await newPage(browser, base);
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('[data-game="snake"]');
+        await page.focus('[data-game="snake"]');
+        await page.keyboard.press('Enter');
+        await page.waitForFunction(() => window.GameHost.state() === 'running');
+        const scores = [500, 900, 100];
+        for (const sc of scores) {
+            await page.evaluate((v) => document.querySelector('iframe').contentWindow.GameAPI._gk.submitScore(v), sc);
+            await page.waitForFunction(() => window.GameHost.state() === 'entry');
+            await page.keyboard.press('ArrowUp');                     // A -> B on the first letter
+            await page.focus('#entry-ok'); await page.keyboard.press('Enter');
+            await page.waitForFunction(() => window.GameHost.state() === 'running');
+        }
+        await page.evaluate(() => document.querySelector('iframe').contentWindow.GameAPI._gk.submitScore(0));
+        check(await page.evaluate(() => window.GameHost.state()) === 'running', 'a zero score does not ask for initials');
+        const list = await page.evaluate(() => Scores.list('snake'));
+        check(list.length === 3 && list[0].s === 900 && list[2].s === 100, 'table sorted best first: ' + list.map((e) => e.n + ' ' + e.s).join(', '));
+        check(list[1].n === 'BAA' && list[0].n === 'CAA', 'initials entered with the remote are saved and remembered for next time (' + list[1].n + ', ' + list[0].n + ')');
+        for (let i = 0; i < 12; i++) await page.evaluate((v) => Scores.add('snake', 'ZZZ', v), 1000 + i);
+        check(await page.evaluate(() => Scores.list('snake').length) === 10, 'table keeps only the top 10');
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
+        await page.waitForFunction(() => window.GameHost.state() === 'idle');
+        await page.focus('#btn-scores'); await page.keyboard.press('Enter');
+        check(await page.evaluate(() => !document.getElementById('scores').hidden), 'Top scores screen opens');
+        const label = await page.evaluate(() => [...document.querySelectorAll('.score-col')].map((c) => c.getAttribute('aria-label')).join(' | '));
+        check(/Neon Snake.*1: ZZZ, 1011 points/.test(label), 'Voice Guide label lists the table');
+        await page.keyboard.press('Escape');
+        check(await page.evaluate(() => document.getElementById('scores').hidden && document.activeElement.id === 'btn-scores'), 'Back closes the Scores screen');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('9. Super Jumper 2-player co-op');
+    {
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+        await ctx.addInitScript(TIZEN_MOCK);
+        await ctx.addInitScript(() => {
+            function pad(i) { const b = []; for (let k = 0; k < 17; k++) b.push({ pressed: false, value: 0 }); return { index: i, id: 'Mock ' + i, connected: true, mapping: 'standard', buttons: b, axes: [0, 0, 0, 0] }; }
+            window.__pads = [];
+            navigator.getGamepads = () => (window.top.__pads || []);
+            window.__press = (i, b, on) => { window.__pads[i].buttons[b].pressed = on; window.__pads[i].buttons[b].value = on ? 1 : 0; };
+            window.__plug = () => { window.__pads = [pad(0), pad(1)]; window.dispatchEvent(new Event('gamepadconnected')); };
+        });
+        const page = await ctx.newPage();
+        page.errors = []; page.on('pageerror', (e) => page.errors.push(e.message));
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('[data-game="jumper"]');
+        const G = 'document.querySelector("iframe").contentWindow';
+        const dbg = () => page.evaluate(G + '.JumperDebug()');
+        const openJumper = async () => {
+            await page.focus('[data-game="jumper"]'); await page.keyboard.press('Enter');
+            await page.waitForFunction(() => window.GameHost.state() === 'running');
+            await page.waitForTimeout(300);
+        };
+        // keyboard: arrows = P1, WASD = P2
+        await openJumper();
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
+        await page.keyboard.press('KeyF');
+        await page.waitForTimeout(100);
+        let d = await dbg();
+        check(d.twoP && d.p1Dev === 'keys' && d.p2.dev === 'keys2', 'P2 joins with W A S D + F while P1 keeps the arrows');
+        await page.evaluate(G + '.JumperCheat.enter("w1-1")');
+        await page.waitForFunction(G + '.JumperDebug().mode === "play"');
+        d = await dbg(); let x1 = d.x, x2 = d.p2.x;
+        await page.keyboard.down('KeyD'); await page.waitForTimeout(600); await page.keyboard.up('KeyD');
+        d = await dbg();
+        check(d.p2.x - x2 > 20 && Math.abs(d.x - x1) < 1, 'D moves only player 2');
+        await page.evaluate(G + '.JumperCheat.kill(2)');
+        await page.waitForTimeout(3000);
+        d = await dbg();
+        check(!d.p2.dead && d.p2.lives === 4 && d.mode === 'play', 'a fallen player 2 respawns next to player 1 (stage keeps going)');
+        await page.evaluate(G + '.JumperCheat.setScore(1, 4321)'); await page.evaluate(G + '.JumperCheat.setScore(2, 1234)');
+        await page.evaluate(G + '.JumperCheat.setLives(1, 1)'); await page.evaluate(G + '.JumperCheat.setLives(2, 1)');
+        await page.evaluate(G + '.JumperCheat.kill(2)'); await page.evaluate(G + '.JumperCheat.kill(1)');
+        await page.waitForFunction(() => window.GameHost.state() === 'entry', null, { timeout: 8000 });
+        const t1 = await page.textContent('#entry-title');
+        await page.focus('#entry-ok'); await page.keyboard.press('Enter');
+        await page.waitForFunction(() => window.GameHost.state() === 'entry' && /2/.test(document.getElementById('entry-title').textContent));
+        await page.keyboard.press('Escape');
+        await page.waitForFunction(() => window.GameHost.state() === 'running');
+        const top = await page.evaluate(() => Scores.list('jumper').map((e) => e.n + ' ' + e.s).join(', '));
+        check(/Player 1/.test(t1) && top === 'AAA 4321, PL2 1234', 'game over: both players enter initials (' + top + ')');
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
+        await page.waitForFunction(() => window.GameHost.state() === 'idle');
+
+        // two gamepads: pad0 = P1, pad1 = P2
+        await page.evaluate(() => window.__plug());
+        await page.waitForTimeout(300);
+        const tap = async (i, btn) => { await page.evaluate(([i, b]) => window.__press(i, b, true), [i, btn]); await page.waitForTimeout(120); await page.evaluate(([i, b]) => window.__press(i, b, false), [i, btn]); await page.waitForTimeout(120); };
+        await page.focus('[data-game="jumper"]'); await tap(0, 0);
+        await page.waitForFunction(() => window.GameHost.state() === 'running');
+        await page.waitForTimeout(300);
+        await tap(0, 9);
+        check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'gamepad Start opens the pause menu and it stays open');
+        await tap(0, 13);
+        check(/Two players/.test(await page.evaluate(() => document.activeElement.textContent)), 'gamepad D-pad moves through the pause menu');
+        await tap(0, 0);
+        await tap(1, 0);
+        d = await dbg();
+        check(d.twoP && d.p1Dev === 'pad0' && d.p2.dev === 'pad1', 'second gamepad joins as player 2');
+        await page.evaluate(G + '.JumperCheat.enter("w1-1")');
+        await page.waitForFunction(G + '.JumperDebug().mode === "play"');
+        d = await dbg(); x1 = d.x; x2 = d.p2.x;
+        await page.evaluate(() => window.__press(1, 15, true)); await page.waitForTimeout(600); await page.evaluate(() => window.__press(1, 15, false));
+        d = await dbg();
+        check(d.p2.x - x2 > 20 && Math.abs(d.x - x1) < 1, 'gamepad 2 moves only player 2');
+        await page.evaluate(() => window.__press(0, 15, true)); await page.waitForTimeout(600); await page.evaluate(() => window.__press(0, 15, false));
+        d = await dbg();
+        check(d.x - x1 > 20, 'gamepad 1 moves player 1');
+        await page.evaluate(() => { window.__pads[1].connected = false; window.dispatchEvent(new Event('gamepaddisconnected')); });
+        await page.waitForTimeout(300);
+        check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'unplugging a gamepad pauses the game');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await ctx.close();
     }
 
     await browser.close();

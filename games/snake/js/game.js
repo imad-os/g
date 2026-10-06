@@ -53,6 +53,7 @@
 
     function gameOver() {
         state = 'over';
+        t.gk.submitScore(score);
         var nb = score > best;
         if (nb) { best = score; t.gk.save('best', best); }
         t.gk.audio.music(null);

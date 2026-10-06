@@ -1,12 +1,15 @@
 {
-  "build": 1,
-  "version": "1.0.0",
+  "build": 2,
+  "version": "1.1.0",
   "shell": 1,
-  "css": ["css/launcher.css"],
+  "css": [
+    "css/launcher.css"
+  ],
   "js": [
     "js/core/storage.js",
     "js/core/i18n.js",
     "js/core/a11y.js",
+    "js/core/scores.js",
     "js/core/audio.js",
     "js/core/perf.js",
     "js/core/input.js",
@@ -15,5 +18,12 @@
     "js/launcher/game-host.js",
     "js/launcher/main.js"
   ],
-  "games": ["jumper", "blocks", "hopper", "snake", "breaker", "merge"]
+  "games": [
+    "jumper",
+    "blocks",
+    "hopper",
+    "snake",
+    "breaker",
+    "merge"
+  ]
 }

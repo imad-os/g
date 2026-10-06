@@ -1,6 +1,26 @@
 {
-  "id": "merge", "build": 1, "minShell": 1, "entry": "index.html", "cover": "cover.png", "sizeMB": 0.1,
-  "assets": ["js/game.js", "../shared/gamekit.js", "../shared/strings.js", "../shared/game.css"],
-  "title": { "en": "Tile Merge", "fr": "Fusion de tuiles", "es": "Fusión de fichas", "ar": "دمج المربعات" },
-  "description": { "en": "Slide and merge numbers to reach 2048", "fr": "Glissez et fusionnez jusqu'à 2048", "es": "Desliza y suma hasta 2048", "ar": "حرّك وادمج الأرقام حتى 2048" }
+  "id": "merge",
+  "build": 2,
+  "minShell": 1,
+  "entry": "index.html",
+  "cover": "cover.png",
+  "sizeMB": 0.1,
+  "assets": [
+    "js/game.js",
+    "../shared/gamekit.js",
+    "../shared/strings.js",
+    "../shared/game.css"
+  ],
+  "title": {
+    "en": "Tile Merge",
+    "fr": "Fusion de tuiles",
+    "es": "Fusión de fichas",
+    "ar": "دمج المربعات"
+  },
+  "description": {
+    "en": "Slide and merge numbers to reach 2048",
+    "fr": "Glissez et fusionnez jusqu'à 2048",
+    "es": "Desliza y suma hasta 2048",
+    "ar": "حرّك وادمج الأرقام حتى 2048"
+  }
 }

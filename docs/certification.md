@@ -53,7 +53,11 @@ Office submission.
 |---|---|
 | OK activates a button exactly once (`preventDefault` on keydown; no native click) | ✅ |
 | Remote-only play: hold OK to jump higher; Red key or the pause menu turns on auto-run; Up fires | ✅ |
-| Gamepad (standard mapping): connect and disconnect toasts; unplugging the active pad pauses the game | Code review ✅ / On TV per model year |
+| Gamepad (standard mapping): connect and disconnect toasts; unplugging a pad pauses the game | Automated with mocked pads ✅ / On TV per model year |
+| The gamepad can operate the pause menu (the launcher polls pads while the game loop is stopped) | Automated ✅ |
+| A button or key still held when the pause menu opens never counts as a new press (no open/close flicker) | Automated ✅ |
+| 2-player co-op: each hero reads only its own device (remote/arrows, WASD, pad 1, pad 2) | Automated ✅ / On TV with 2 pads |
+| Top-10 initials entry works with the remote only (Up/Down letter, Left/Right move, OK save, Back saves) | Automated ✅ |
 | Only the keys that are used are registered: MediaPlayPause, MediaPlay, MediaPause, ColorF0Red | ✅ |
 
 ## Performance and memory

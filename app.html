@@ -7,6 +7,7 @@
             <h1 id="menu-title" class="logo" data-i18n="appTitle">Arcade</h1>
             <div class="head-right">
                 <span id="input-indicator" class="chip" role="status"></span>
+                <button id="btn-scores" class="btn" data-focus data-i18n="scores">Top scores</button>
                 <button id="btn-settings" class="btn" data-focus data-i18n="settings">Settings</button>
             </div>
         </header>
@@ -17,6 +18,13 @@
     <section id="settings" class="screen settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
         <h2 id="settings-title" class="screen-title" data-i18n="settings">Settings</h2>
         <div id="settings-list" class="settings-list"></div>
+    </section>
+
+    <!-- Top-10 tables of every game -->
+    <section id="scores" class="screen scores" role="dialog" aria-modal="true" aria-labelledby="scores-title" hidden>
+        <h2 id="scores-title" class="screen-title" data-i18n="scores">Top scores</h2>
+        <div id="scores-grid" class="scores-grid"></div>
+        <button id="scores-close" class="btn btn-primary" data-focus data-i18n="close">Close</button>
     </section>
 
     <!-- Text pages: controller help, privacy policy, about -->
@@ -42,6 +50,17 @@
             <div class="dialog-buttons">
                 <button id="game-error-retry" class="btn btn-primary" data-focus data-i18n="retry">Retry</button>
                 <button id="game-error-back" class="btn" data-focus data-i18n="backToMenu">Back to menu</button>
+            </div>
+        </div>
+
+        <!-- Arcade-style initials entry when a game ends with a top-10 score -->
+        <div id="entry" class="pause" role="dialog" aria-modal="true" aria-labelledby="entry-title" aria-describedby="entry-score" hidden>
+            <div class="pause-box entry-box">
+                <h2 id="entry-title" class="pause-title"></h2>
+                <p id="entry-score" class="entry-score"></p>
+                <div id="entry-letters" class="entry-letters"></div>
+                <p class="entry-hint" data-i18n="entryHint"></p>
+                <button id="entry-ok" class="btn btn-primary" data-focus data-i18n="save">Save</button>
             </div>
         </div>
 
