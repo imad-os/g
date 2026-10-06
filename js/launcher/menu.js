@@ -28,25 +28,32 @@ var Menu = (function () {
         Store.set('seen_builds', seen);
     }
 
+    function coverUrl(g) {
+        var m = g.manifest;
+        return g.remote ? m.cover : g.base + 'games/' + g.id + '/' + (m.cover || 'cover.png');
+    }
+
     function render() {
         grid.innerHTML = '';
         for (var i = 0; i < games.length; i++) {
             var g = games[i], m = g.manifest;
             var title = I18n.pick(m.title), desc = I18n.pick(m.description), badge = badgeFor(g);
+            var exp = (m.tags || []).indexOf('experimental') >= 0;
             var b = el('button', 'tile');
             b.setAttribute('data-focus', '');
             b.setAttribute('data-game', g.id);
             b.setAttribute('role', 'listitem');
             var label = title + '. ' + desc;
+            if (exp) label += '. ' + I18n.t('experimental');
             if (badge) label += '. ' + I18n.t(badge === 'new' ? 'badgeNew' : 'badgeUpdated');
             if (g.id === lastPlayed) label += '. ' + I18n.t('lastPlayed');
             b.setAttribute('aria-label', label);
             var imgBox = el('span', 'tile-img');
             var img = document.createElement('img');
             img.alt = '';
-            img.setAttribute('data-src', g.base + 'games/' + g.id + '/' + (m.cover || 'cover.png'));
-            img.src = img.getAttribute('data-src');
-            // hide a broken cover, but not the "error" of releaseImages() clearing it while a game runs
+            // Covers load lazily: only the visible rows (see loadVisibleCovers)
+            img.setAttribute('data-src', coverUrl(g));
+            // hide a broken cover, but not the "error" of releaseImages() clearing it
             img.onerror = function () { if (this.getAttribute('src')) this.style.visibility = 'hidden'; };
             img.onload = function () { this.style.visibility = ''; };
             imgBox.appendChild(img);
@@ -56,8 +63,21 @@ var Menu = (function () {
             tx.appendChild(el('span', 'tile-desc', desc));
             b.appendChild(tx);
             if (badge) b.appendChild(el('span', 'badge' + (badge === 'upd' ? ' badge-upd' : ''), I18n.t(badge === 'new' ? 'badgeNew' : 'badgeUpdated')));
+            if (exp) b.appendChild(el('span', 'tag-exp', I18n.t('experimental')));
             b.onclick = (function (game) { return function () { play(game); }; })(g);
             grid.appendChild(b);
+        }
+        loadVisibleCovers();
+    }
+
+    // Sets src only on tiles inside the visible part of the grid (plus one row), so a long registry
+    // list does not decode dozens of covers at once.
+    function loadVisibleCovers() {
+        var tiles = grid.querySelectorAll('.tile'), top = grid.scrollTop, bottom = top + grid.clientHeight + 370;
+        for (var i = 0; i < tiles.length; i++) {
+            var t = tiles[i], img = t.firstChild.firstChild;
+            if (img.getAttribute('src') || !img.getAttribute('data-src')) continue;
+            if (t.offsetTop + t.offsetHeight >= top - 370 && t.offsetTop <= bottom) img.src = img.getAttribute('data-src');
         }
     }
 
@@ -91,14 +111,7 @@ var Menu = (function () {
         // removeAttribute, not src = '': an empty src fires "error", which used to hide the cover for good
         for (var i = 0; i < imgs.length; i++) imgs[i].removeAttribute('src');
     }
-    function restoreImages() {
-        var imgs = grid.querySelectorAll('img');
-        for (var i = 0; i < imgs.length; i++) {
-            if (imgs[i].getAttribute('src')) continue;
-            imgs[i].style.visibility = '';
-            imgs[i].src = imgs[i].getAttribute('data-src');
-        }
-    }
+    function restoreImages() { loadVisibleCovers(); }
 
     function confirmFocused() {
         var c = Focus.current();
@@ -127,6 +140,10 @@ var Menu = (function () {
             { id: 'gfx', label: I18n.t('graphics'), value: I18n.t(GFX_KEYS[Perf.setting()]), adjust: function (d) {
                 var i = (GFX.indexOf(Perf.setting()) + d + GFX.length) % GFX.length;
                 Perf.setSetting(GFX[i]);
+            } },
+            { id: 'profile', label: I18n.t('switchProfileItem'), action: function () {
+                Profiles.clearDefault();
+                App.toast(I18n.t('switchDone'));
             } },
             { id: 'controls', label: I18n.t('controls'), action: function () { showPage('controls'); } },
             { id: 'reset', label: I18n.t('resetProgress'), action: function () {
@@ -306,6 +323,7 @@ var Menu = (function () {
         onPlay = playCb;
         grid = $('game-grid');
         render();
+        grid.addEventListener('focusin', function () { setTimeout(loadVisibleCovers, 0); });
         $('btn-settings').onclick = openSettings;
         $('btn-scores').onclick = openScores;
         $('scores-close').onclick = closeScores;

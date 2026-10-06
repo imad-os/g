@@ -5,18 +5,19 @@
  * through host.quality and also adapt at run time: when frames drop they lower their effects and
  * switch to a 30 fps render mode (gameplay keeps running at a fixed 60 Hz).
  *
- *   low  : 480x270 canvas (scaled by the GPU), few particles, 1 parallax layer, 2 music voices
- *   mid  : 960x540 canvas, more particles, 2 parallax layers, 3 voices
- *   high : 1920x1080 canvas (native, no scaling), all effects
+ * The canvas of a game is displayed size x devicePixelRatio, capped by the tier:
+ *   low  : up to 960x540,   few particles, 1 parallax layer, 2 music voices
+ *   mid  : up to 1920x1080, more particles, 2 parallax layers, 3 voices
+ *   high : up to 3840x2160 (only when the benchmark allows it, or when chosen in Settings), all effects
  */
 var Perf = (function () {
     'use strict';
 
     var TIERS = ['low', 'mid', 'high'];
     var PROFILES = {
-        low:  { tier: 'low',  scale: 1, particles: 24,  parallax: 1, clouds: false, shake: true, musicVoices: 2, smoothUI: false },
-        mid:  { tier: 'mid',  scale: 2, particles: 64,  parallax: 2, clouds: true,  shake: true, musicVoices: 3, smoothUI: true },
-        high: { tier: 'high', scale: 4, particles: 160, parallax: 3, clouds: true,  shake: true, musicVoices: 3, smoothUI: true }
+        low:  { tier: 'low',  cap: 960,  scale: 1, particles: 24,  parallax: 1, clouds: false, shake: true, musicVoices: 2, smoothUI: false },
+        mid:  { tier: 'mid',  cap: 1920, scale: 1, particles: 64,  parallax: 2, clouds: true,  shake: true, musicVoices: 3, smoothUI: true },
+        high: { tier: 'high', cap: 3840, scale: 1, particles: 160, parallax: 3, clouds: true,  shake: true, musicVoices: 3, smoothUI: true }
     };
     var BENCH_KEY = 'perf_bench_v1';
 
@@ -73,11 +74,9 @@ var Perf = (function () {
         var p = PROFILES[tier] || PROFILES.mid, out = {};
         for (var k in p) out[k] = p[k];
         out.auto = choice === 'auto';
-        // A PC window smaller than 1080p does not need a 1080p canvas.
-        if (!window.tizen && out.scale === 4) {
-            var h = (window.innerHeight || 1080) * (window.devicePixelRatio || 1);
-            out.scale = h >= 1000 ? 4 : h >= 700 ? 3 : 2;
-        }
+        // Auto never goes beyond 1080p without a benchmark that proves the GPU copes with 4K.
+        var b = detect().bench;
+        if (out.auto && out.tier === 'high' && !(b && b.fps >= 58 && b.ms <= 2)) out.cap = 1920;
         return out;
     }
 
@@ -120,7 +119,7 @@ var Perf = (function () {
 
     function describe() {
         var s = detect(), p = profile();
-        return p.tier + (p.auto ? ' (auto)' : '') + ' · ' + (480 * p.scale) + 'x' + (270 * p.scale) +
+        return p.tier + (p.auto ? ' (auto)' : '') + ' · max ' + p.cap + 'x' + Math.round(p.cap * 9 / 16) +
             (s.tizen ? ' · Tizen ' + s.tizen : '') + (s.cores ? ' · ' + s.cores + ' cores' : '') +
             (s.bench ? ' · bench ' + s.bench.fps + ' fps / ' + s.bench.ms + ' ms' : '');
     }

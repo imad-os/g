@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arcade</title>
+    <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+    <meta name="theme-color" content="#2b2f7a">
+
+    <!-- Tizen WebAPI: static tag in the packaged page ($WEBAPIS is resolved by the TV runtime). -->
+    <script src="$WEBAPIS/webapis/webapis.js"></script>
+
+    <!-- The loading screen is part of this packaged page: it paints on the very first frame, before any
+         game code is fetched. The shell (js/game/*) takes it over once the boot loader has started it. -->
+    <style>
+        html, body { margin: 0; height: 100%; overflow: hidden; background: #0f1226; }
+        body { font-family: "Samsung One", "SamsungOne", Roboto, "Segoe UI", Arial, sans-serif; color: #f2f4ff; }
+        * { box-sizing: border-box; }
+        [hidden] { display: none !important; }
+        .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+        .stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden; background: #0f1226;
+                 -webkit-transform-origin: 0 0; transform-origin: 0 0; }
+        .game-loading { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: #0f1226; text-align: center; z-index: 30; }
+        .loading-cover { display: block; width: 392px; height: 216px; margin: 250px auto 0; border-radius: 22px; overflow: hidden; background: #1c2150; }
+        .loading-cover img { display: block; width: 100%; height: 100%; }
+        .loading-title { margin: 44px 0 40px; font-size: 56px; font-weight: 800; color: #ffd23f; min-height: 68px; }
+        .bar { width: 900px; height: 28px; margin: 0 auto; border-radius: 14px; background: #20244d; overflow: hidden; }
+        .bar-fill { width: 100%; height: 100%; background: #ffd23f; -webkit-transform-origin: 0 50%; transform-origin: 0 50%;
+                    -webkit-transform: scaleX(0); transform: scaleX(0); }
+        .bar-fill.indeterminate { width: 30%; -webkit-transform: none; transform: none;
+                                  -webkit-animation: arc-slide 1.2s linear infinite; animation: arc-slide 1.2s linear infinite; }
+        @-webkit-keyframes arc-slide { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
+        @keyframes arc-slide { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
+        .loading-pct { margin-top: 24px; font-size: 36px; font-weight: 700; color: #b9c0ff; }
+    </style>
+</head>
+<body data-page="game">
+    <div id="stage" class="stage">
+        <div id="game-loading" class="game-loading" role="status">
+            <span id="game-loading-cover" class="loading-cover" aria-hidden="true" hidden><img id="game-loading-img" alt=""></span>
+            <div id="game-loading-title" class="loading-title"></div>
+            <div id="game-loading-bar" class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div id="game-loading-fill" class="bar-fill"></div>
+            </div>
+            <div id="game-loading-pct" class="loading-pct" aria-hidden="true">0%</div>
+        </div>
+        <!-- js/boot/loader.js injects game-app.html here -->
+        <div id="boot-mount"></div>
+    </div>
+    <div id="a11y-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+    <script>
+        // Frame 1: scale the stage, show the game title and its cover (the cover only when the home page
+        // already loaded it, so it comes from the HTTP cache) and start at 0%.
+        (function () {
+            var d = null;
+            try { d = JSON.parse(sessionStorage.getItem('arc_launch')); } catch (e) {}
+            var m = /[?&]id=([a-z0-9-]+)/.exec(location.search);
+            if (d && m && d.id !== m[1]) d = null;
+            var lang = 'en';
+            try { lang = JSON.parse(localStorage.getItem('arc_dev_lang')) || 'en'; } catch (e) {}
+            if (d && d.title) document.getElementById('game-loading-title').textContent = d.title[lang] || d.title.en || '';
+            if (d && d.cover && d.coverReady) {
+                var img = document.getElementById('game-loading-img');
+                img.src = d.cover;
+                document.getElementById('game-loading-cover').hidden = false;
+            }
+            var w = window.innerWidth || 1920, h = window.innerHeight || 1080, s = Math.min(w / 1920, h / 1080);
+            var st = document.getElementById('stage');
+            st.style.webkitTransform = st.style.transform = 'scale(' + s + ')';
+            st.style.left = Math.max(0, (w - 1920 * s) / 2) + 'px';
+            st.style.top = Math.max(0, (h - 1080 * s) / 2) + 'px';
+        })();
+    </script>
+    <script src="js/boot/loader.js"></script>
+</body>
+</html>

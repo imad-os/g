@@ -1,0 +1,107 @@
+/* Shared styles (home and game pages). Plain CSS that works on Chromium 56+ (Tizen 4.0):
+   no nesting, no @layer, no media range syntax, no oklch()/color-mix(), no :has(), no flex gap.
+   Designed for 1920x1080; the stage is scaled to the real window (Net.fit). */
+
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0f1226; }
+body { font-family: "Samsung One", "SamsungOne", Roboto, "Segoe UI", Arial, sans-serif; color: #f2f4ff; }
+* { box-sizing: border-box; }
+button { font: inherit; color: inherit; border: 0; background: none; padding: 0; margin: 0; cursor: pointer; }
+[hidden] { display: none !important; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden;
+         background: #0f1226; -webkit-transform-origin: 0 0; transform-origin: 0 0; }
+.hi .stage { background: -webkit-linear-gradient(top, #1b1f45 0%, #0f1226 60%); background: linear-gradient(to bottom, #1b1f45 0%, #0f1226 60%); }
+
+.screen { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; padding: 64px 96px; }
+
+
+/* ---------- buttons ---------- */
+.btn { display: inline-block; min-width: 200px; padding: 18px 40px; font-size: 32px; font-weight: 600; line-height: 1.2;
+       border-radius: 16px; background: #2a2f63; border: 4px solid transparent; text-align: center; outline: none; }
+.btn-primary { background: #3d46a8; }
+.btn:focus { border-color: #ffd23f; background: #4c56c9; }
+.hi .btn { -webkit-transition: -webkit-transform 0.12s; transition: transform 0.12s; }
+.hi .btn:focus { -webkit-transform: scale(1.05); transform: scale(1.05); }
+
+
+/* ---------- dialogs ---------- */
+.backdrop { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: rgba(5, 6, 18, 0.78); z-index: 50; }
+.dialog { position: absolute; left: 50%; top: 50%; width: 900px; margin-left: -450px; margin-top: -200px; padding: 48px;
+          border-radius: 28px; background: #1f2458; border: 4px solid #3d46a8; text-align: center; z-index: 60; }
+.dialog-title { margin: 0 0 18px; font-size: 48px; color: #ffd23f; }
+.dialog-text { margin: 0 0 36px; font-size: 32px; line-height: 1.4; }
+.dialog-buttons .btn { margin: 0 14px; }
+
+
+/* ---------- toast ---------- */
+.toast { position: absolute; left: 50%; bottom: 64px; width: 1000px; margin-left: -500px; padding: 22px 32px; border-radius: 18px;
+         background: #1f2458; border: 3px solid #ffd23f; font-size: 30px; text-align: center; z-index: 90; }
+
+/* ---------- network popup (shown above games too) ---------- */
+.netpop { position: absolute; left: 50%; top: 48px; width: 1100px; margin-left: -550px; padding: 26px 36px; border-radius: 20px;
+          background: #3a1d2e; border: 4px solid #ff5d73; font-size: 32px; font-weight: 700; text-align: center; z-index: 95; }
+.netpop.ok { background: #16352a; border-color: #4cd97b; }
+.netpop-icon { display: inline-block; width: 22px; height: 22px; border-radius: 11px; background: #ff5d73; margin: 0 18px; vertical-align: middle; }
+.netpop.ok .netpop-icon { background: #4cd97b; }
+
+
+/* ---------- profiles ---------- */
+.btn-profile { min-width: 0; padding: 12px 32px 12px 14px; text-align: left; white-space: nowrap; }
+[dir="rtl"] .btn-profile { padding: 12px 14px 12px 32px; text-align: right; }
+.avatar { display: inline-block; width: 56px; height: 56px; line-height: 56px; border-radius: 28px; margin-right: 16px; vertical-align: middle;
+          text-align: center; font-size: 30px; font-weight: 800; color: #14183a; background: #ffd23f; }
+[dir="rtl"] .avatar { margin-right: 0; margin-left: 16px; }
+#profile-name { vertical-align: middle; display: inline-block; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+.profiles { background: #0f1226; }
+.profiles-hint { margin: -20px 0 40px; font-size: 30px; color: #b9c0ff; }
+.profiles-list { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 0 -16px 32px; height: 640px; overflow: hidden; }
+.pcard { position: relative; width: 400px; height: 280px; margin: 0 16px 32px; border-radius: 24px; background: #1c2150; border: 5px solid transparent;
+         outline: none; text-align: center; padding-top: 36px; }
+.pcard:focus { border-color: #ffd23f; background: #262c66; }
+.hi .pcard { -webkit-transition: -webkit-transform 0.12s; transition: transform 0.12s; }
+.hi .pcard:focus { -webkit-transform: scale(1.04); transform: scale(1.04); }
+.pcard-on { background: #233064; }
+.avatar-big { display: block; width: 120px; height: 120px; line-height: 120px; border-radius: 60px; margin: 0 auto 20px; font-size: 64px; }
+[dir="rtl"] .avatar-big { margin: 0 auto 20px; }
+.pcard-name { display: block; font-size: 36px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 20px; }
+.pcard-tag { position: absolute; top: 14px; right: 14px; padding: 4px 14px; border-radius: 16px; background: #2bb673; font-size: 22px; font-weight: 700; }
+[dir="rtl"] .pcard-tag { right: auto; left: 14px; }
+.profiles-buttons .btn { margin-right: 28px; }
+[dir="rtl"] .profiles-buttons .btn { margin-right: 0; margin-left: 28px; }
+
+.namer { z-index: 55; }
+.namer-box { width: 1240px; margin-left: -620px; margin-top: -360px; }
+.namer-text { min-height: 96px; margin: 0 auto 32px; width: 720px; padding: 14px 24px; border-radius: 16px; background: #10132e; border: 3px solid #3d46a8;
+              font-size: 56px; font-weight: 800; letter-spacing: 2px; color: #ffd23f; }
+.namer-empty { color: #8088cc; }
+.namer-keys { text-align: center; }
+.namer-keys .key { min-width: 0; width: 96px; height: 80px; margin: 0 6px 12px; padding: 0; font-size: 36px; }
+.namer-keys .key-wide { width: 240px; font-size: 28px; }
+
+/* ---------- profile picker (home page and game page) ---------- */
+.avatar-glyph { display: block; width: 62%; height: 62%; margin: 19% auto 0; }
+.avatar-big .avatar-glyph { margin-top: 19%; }
+.avatar-plus { background: #2a2f63; color: #ffd23f; font-size: 72px; }
+.picker { z-index: 70; }
+.picker-box { width: 1560px; margin-left: -780px; margin-top: -330px; }
+.picker-list { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center;
+               max-height: 600px; overflow: hidden; margin-bottom: 24px; }
+.picker-list .pcard { width: 320px; height: 240px; margin: 0 12px 24px; padding-top: 24px; }
+.picker-list .avatar-big { width: 100px; height: 100px; line-height: 100px; border-radius: 50px; margin-bottom: 14px; }
+.picker-list .pcard-name { font-size: 32px; }
+.check { min-width: 0; padding: 14px 36px 14px 20px; }
+.check-box { display: inline-block; width: 44px; height: 44px; line-height: 38px; margin-right: 18px; border-radius: 10px; border: 4px solid #8088cc;
+             vertical-align: middle; color: #14183a; font-size: 34px; font-weight: 800; text-align: center; }
+[dir="rtl"] .check-box { margin-right: 0; margin-left: 18px; }
+.check-on .check-box { background: #ffd23f; border-color: #ffd23f; }
+
+/* ---------- avatar and colour choice (new profile) ---------- */
+.look-row { margin-bottom: 20px; }
+.look-row .opt { display: inline-block; min-width: 0; width: 96px; height: 96px; margin: 0 8px; padding: 0; border-radius: 48px; border: 5px solid transparent; outline: none; }
+.look-row .opt:focus { border-color: #ffd23f; }
+.look-row .opt .avatar { display: block; margin: 0; width: 86px; height: 86px; }
+.look-row .opt-on { border-color: #fff; }
+.look-row .opt-color { display: block; width: 86px; height: 86px; border-radius: 43px; margin: 0 auto; }
+.look-title { margin: 0 0 8px; font-size: 28px; color: #b9c0ff; }

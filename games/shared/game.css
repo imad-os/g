@@ -1,10 +1,14 @@
-/* Shared game page styles. The iframe is 1920x1080 in launcher coordinates. Chromium 56+ safe. */
-html, body { margin: 0; padding: 0; width: 1920px; height: 1080px; overflow: hidden; background: #000; }
-body { font-family: "Samsung One", Roboto, Arial, sans-serif; color: #fff; }
-#game { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+/* Shared game styles. A game is laid out on a 1920x1080 stage (.arc-stage): the hub scales that stage to
+   the real viewport (js/game/shell.js), a standalone page scales <body> (sdk/arcade-sdk.js).
+   Keep important UI inside the 5% safe area (96px left/right, 54px top/bottom). Chromium 56+ safe. */
+html { background: #000; }
+body { margin: 0; padding: 0; background: #000; overflow: hidden; font-family: "Samsung One", Roboto, Arial, sans-serif; color: #fff; }
+.arc-stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #000;
+             -webkit-transform-origin: 0 0; transform-origin: 0 0; }
+.arc-stage #game { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
 .pixel #game { image-rendering: -webkit-optimize-contrast; image-rendering: pixelated; }
 .hud { position: absolute; left: 0; top: 0; width: 1920px; pointer-events: none; font-weight: 800; }
-.hud-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: justify; -webkit-justify-content: space-between; justify-content: space-between; padding: 24px 48px; }
+.hud-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: justify; -webkit-justify-content: space-between; justify-content: space-between; padding: 54px 96px 0; }
 .hud-item { font-size: 40px; text-shadow: 0 3px 0 #000, 3px 0 0 #000, -3px 0 0 #000, 0 -3px 0 #000; white-space: nowrap; }
 .hud-item small { font-size: 28px; opacity: 0.85; margin-right: 10px; }
 [dir="rtl"] .hud-item small { margin-right: 0; margin-left: 10px; }

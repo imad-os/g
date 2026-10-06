@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arcade admin</title>
+<!-- Desktop browser only. This page is published on GitHub Pages and is never part of the .wgt package.
+     It may use the Firebase JS SDK from gstatic because it is not the TV app. -->
+<style>
+  :root { color-scheme: dark; --bg:#0f1226; --card:#1c2150; --line:#3d46a8; --gold:#ffd23f; --muted:#b9c0ff; --bad:#ff5d73; --ok:#4cd97b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.45 system-ui, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg); color: #f2f4ff; }
+  header { display: flex; align-items: center; gap: 16px; padding: 16px 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 22px; color: var(--gold); flex: 1; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  button, input, textarea { font: inherit; color: inherit; }
+  button { padding: 8px 16px; border-radius: 8px; border: 1px solid var(--line); background: #2a2f63; cursor: pointer; }
+  button:hover { background: #3d46a8; }
+  button.primary { background: #3d46a8; }
+  button.danger { border-color: var(--bad); color: var(--bad); }
+  button:disabled { opacity: .45; cursor: default; }
+  input[type=text], input[type=url], input[type=number], textarea { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: #10132e; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .muted { color: var(--muted); }
+  .err { color: var(--bad); white-space: pre-wrap; }
+  .ok { color: var(--ok); }
+  .row { display: grid; grid-template-columns: 28px 56px 1fr auto; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; background: #151a3f; }
+  .row.off { opacity: .55; }
+  .row.drag-over { outline: 2px dashed var(--gold); }
+  .handle { cursor: grab; color: var(--muted); text-align: center; user-select: none; }
+  .row img { width: 56px; height: 36px; object-fit: cover; border-radius: 6px; background: #0b0d1c; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
+  code { background: #10132e; padding: 1px 6px; border-radius: 4px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Arcade admin <span class="muted" style="font-size:14px">game registry</span></h1>
+  <span id="who" class="muted"></span>
+  <button id="signin" class="primary">Sign in with Google</button>
+  <button id="signout" hidden>Sign out</button>
+</header>
+<main>
+  <div id="status" class="card muted">Loading…</div>
+
+  <section id="app" hidden>
+    <div class="card">
+      <h2 style="margin-top:0">Add a game</h2>
+      <p class="muted">Paste the URL of the game's page (for example <code>https://someone.github.io/neon-rush/</code>). Its
+        <code>game-manifest.json</code> is fetched to prefill the form.</p>
+      <div style="display:flex;gap:8px"><input id="add-url" type="url" placeholder="https://…/"><button id="add-fetch" class="primary">Fetch</button></div>
+      <div id="add-form" hidden>
+        <div class="grid2">
+          <div><label>Game id (a-z 0-9 -)</label><input id="f-id" type="text"></div>
+          <div><label>Order (0–999)</label><input id="f-order" type="number" min="0" max="999"></div>
+          <div><label>Title (English)</label><input id="f-title-en" type="text"></div>
+          <div><label>Title (Français)</label><input id="f-title-fr" type="text"></div>
+          <div><label>Title (Español)</label><input id="f-title-es" type="text"></div>
+          <div><label>Title (العربية)</label><input id="f-title-ar" type="text"></div>
+          <div><label>Description (English)</label><input id="f-desc-en" type="text"></div>
+          <div><label>Description (Français)</label><input id="f-desc-fr" type="text"></div>
+          <div><label>Description (Español)</label><input id="f-desc-es" type="text"></div>
+          <div><label>Description (العربية)</label><input id="f-desc-ar" type="text"></div>
+          <div><label>URL</label><input id="f-url" type="url"></div>
+          <div><label>Cover image URL</label><input id="f-cover" type="url"></div>
+          <div><label>SDK version</label><input id="f-sdk" type="number"></div>
+          <div><label>Build</label><input id="f-build" type="number"></div>
+          <div><label>Minimum shell</label><input id="f-minshell" type="number"></div>
+          <div><label>Tags (comma separated, max 5, e.g. experimental)</label><input id="f-tags" type="text"></div>
+        </div>
+        <p id="add-errors" class="err"></p>
+        <button id="add-save" class="primary">Add to the registry</button>
+        <button id="add-preview">Preview the game</button>
+      </div>
+      <p id="add-msg" class="err"></p>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <h2 style="margin:0;flex:1">Games on the TVs</h2>
+        <button id="import">Import bundled games</button>
+        <button id="reload">Refresh</button>
+      </div>
+      <p class="muted">Drag the ⠿ handle or use ▲ ▼ to reorder. Disabled games are hidden on every TV. TVs fall back to their
+        cached list or the bundled games when the registry is unreachable.</p>
+      <div id="list"></div>
+      <p id="list-msg" class="err"></p>
+    </div>
+  </section>
+</main>
+
+<script src="admin-lib.js"></script>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js';
+import { getFirestore, collection, getDocs, doc, getDoc, setDoc, deleteDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js';
+
+// Same project as the TV app (public identifiers; the rules protect the data)
+const firebaseConfig = {
+  apiKey: 'AIzaSyBT0nk8uKUofgF5obP11R96lHtXbEVlKtc', authDomain: 'tvgames-f984d.firebaseapp.com', projectId: 'tvgames-f984d',
+  storageBucket: 'tvgames-f984d.firebasestorage.app', messagingSenderId: '589737438361', appId: '1:589737438361:web:c05775497e4224c428dc08'
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const L = window.AdminLib;
+const $ = (id) => document.getElementById(id);
+
+let games = [];            // [{ id, ...data }] sorted by order
+let isAdmin = false;
+let dragId = null;
+
+// A Firestore failure explained for a person: rule rejections name the likely cause.
+function explain(e) {
+  if (e && e.code === 'permission-denied') return 'Rejected by the Firestore rules. You are not in /admins, or a field is invalid (see the checks above). ' + e.message;
+  return (e && e.message) || String(e);
+}
+
+function setStatus(text, cls) { const s = $('status'); s.textContent = text; s.className = 'card ' + (cls || 'muted'); s.hidden = !text; }
+
+onAuthStateChanged(auth, async (user) => {
+  $('signin').hidden = !!user;
+  $('signout').hidden = !user;
+  $('who').textContent = user ? user.displayName + ' (' + user.email + ')' : '';
+  $('app').hidden = true;
+  isAdmin = false;
+  if (!user) return setStatus('Sign in with Google to manage the games. Only UIDs listed in /admins can write.');
+  try {
+    isAdmin = (await getDoc(doc(db, 'admins', user.uid))).exists();
+  } catch (e) { return setStatus('Could not check your admin status: ' + explain(e), 'err card'); }
+  if (!isAdmin) return setStatus('You are signed in but not an admin. Add this UID as a document in the "admins" collection (Firebase console): ' + user.uid, 'err card');
+  setStatus('');
+  $('app').hidden = false;
+  refresh();
+});
+
+$('signin').onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch((e) => setStatus('Sign-in failed: ' + e.message, 'err card'));
+$('signout').onclick = () => signOut(auth);
+$('reload').onclick = () => refresh();
+
+async function refresh() {
+  $('list-msg').textContent = '';
+  try {
+    const snap = await getDocs(collection(db, 'games'));
+    games = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+    games.sort((a, b) => (a.order - b.order) || (a.id < b.id ? -1 : 1));
+    render();
+  } catch (e) { $('list-msg').textContent = explain(e); }
+}
+
+function title(g) { return (g.title && g.title.en) || g.id; }
+
+function render() {
+  const box = $('list');
+  box.innerHTML = '';
+  if (!games.length) { box.innerHTML = '<p class="muted">No game yet. Use "Import bundled games" to add the first-party games.</p>'; return; }
+  games.forEach((g, i) => {
+    const row = document.createElement('div');
+    row.className = 'row' + (g.enabled ? '' : ' off');
+    row.draggable = true;
+    row.dataset.id = g.id;
+    const cover = g.cover || '';
+    row.innerHTML = '<span class="handle" title="Drag to reorder">⠿</span><img alt="" src="' + escapeAttr(cover.indexOf('http') === 0 ? cover : (g.bundled ? '../' + g.url + 'cover.png' : '')) + '">' +
+      '<div><strong>' + escapeHtml(title(g)) + '</strong> <span class="muted">· ' + escapeHtml(g.id) + ' · order ' + g.order + (g.bundled ? ' · bundled' : '') + (g.tags && g.tags.length ? ' · ' + escapeHtml(g.tags.join(', ')) : '') + '</span><br><span class="muted">' + escapeHtml(g.url) + '</span></div>' +
+      '<div class="actions"></div>';
+    const a = row.querySelector('.actions');
+    const btn = (label, fn, cls, dis) => { const b = document.createElement('button'); b.textContent = label; if (cls) b.className = cls; b.disabled = !!dis; b.onclick = fn; a.appendChild(b); };
+    btn('▲', () => moveTo(i, i - 1), '', i === 0);
+    btn('▼', () => moveTo(i, i + 1), '', i === games.length - 1);
+    btn(g.enabled ? 'Disable' : 'Enable', () => toggle(g));
+    btn('Preview', () => window.open(previewUrl(g), '_blank'));
+    btn('Delete', () => remove(g), 'danger');
+    row.addEventListener('dragstart', () => { dragId = g.id; });
+    row.addEventListener('dragover', (e) => { e.preventDefault(); row.classList.add('drag-over'); });
+    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+    row.addEventListener('drop', (e) => {
+      e.preventDefault(); row.classList.remove('drag-over');
+      const from = games.findIndex((x) => x.id === dragId);
+      if (from >= 0 && dragId !== g.id) moveTo(from, i);
+    });
+    box.appendChild(row);
+  });
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function escapeAttr(s) { return escapeHtml(s); }
+function previewUrl(g) { return g.bundled ? new URL('../' + g.url, location.href).href : g.url; }
+
+async function save(id, data) {
+  const errs = L.validate(id, data);
+  if (errs.length) throw new Error('Not saved:\n- ' + errs.join('\n- '));
+  await setDoc(doc(db, 'games', id), Object.assign({}, data, { updatedAt: serverTimestamp() }));
+}
+function clean(g) { const d = Object.assign({}, g); delete d.id; return d; }
+
+async function toggle(g) {
+  try { await save(g.id, Object.assign(clean(g), { enabled: !g.enabled, updatedAt: undefined })); await refresh(); }
+  catch (e) { $('list-msg').textContent = explain(e); }
+}
+
+async function remove(g) {
+  if (!confirm('Delete "' + title(g) + '" (' + g.id + ') from the registry?\nTVs drop it, and delete its saves and scores, the next time they are online.')) return;
+  try { await deleteDoc(doc(db, 'games', g.id)); await refresh(); } catch (e) { $('list-msg').textContent = explain(e); }
+}
+
+async function moveTo(from, to) {
+  if (to < 0 || to >= games.length) return;
+  const ids = L.move(games.map((g) => g.id), from, to);
+  const batch = writeBatch(db);
+  try {
+    L.renumber(ids).forEach((o) => {
+      const g = games.find((x) => x.id === o.id);
+      const data = Object.assign(clean(g), { order: o.order });
+      const errs = L.validate(o.id, data);
+      if (errs.length) throw new Error(o.id + ': ' + errs.join(' '));
+      batch.set(doc(db, 'games', o.id), Object.assign({}, data, { updatedAt: serverTimestamp() }));
+    });
+    await batch.commit();
+    await refresh();
+  } catch (e) { $('list-msg').textContent = explain(e); }
+}
+
+// ---- add a game ----
+$('add-fetch').onclick = async () => {
+  $('add-msg').textContent = ''; $('add-form').hidden = true;
+  const url = $('add-url').value.trim();
+  if (!/^https:\/\//.test(url)) return ($('add-msg').textContent = 'Enter an https:// URL.');
+  try {
+    const base = url.replace(/[?#].*$/, '').replace(/\/?$/, '/');
+    const r = await fetch(base + 'game-manifest.json', { cache: 'no-store' });
+    if (!r.ok) throw new Error('game-manifest.json answered HTTP ' + r.status);
+    fillForm(L.prefill(base, await r.json()));
+  } catch (e) {
+    $('add-msg').textContent = 'Could not read game-manifest.json (' + e.message + '). Fill the form by hand.';
+    fillForm(L.prefill(url, { title: { en: '' } }));
+  }
+};
+
+function fillForm(p) {
+  const d = p.data;
+  $('f-id').value = p.id; $('f-order').value = games.length ? Math.max.apply(null, games.map((g) => g.order)) + 10 : 0;
+  ['en', 'fr', 'es', 'ar'].forEach((l) => { $('f-title-' + l).value = (d.title && d.title[l]) || ''; $('f-desc-' + l).value = (d.description && d.description[l]) || ''; });
+  $('f-url').value = d.url; $('f-cover').value = d.cover || ''; $('f-sdk').value = d.sdk === undefined ? '' : d.sdk;
+  $('f-build').value = d.build === undefined ? '' : d.build; $('f-minshell').value = d.minShell === undefined ? '' : d.minShell;
+  $('f-tags').value = (d.tags || []).join(', ');
+  $('add-form').hidden = false; $('add-errors').textContent = '';
+}
+
+function readForm() {
+  const texts = (prefix) => { const o = {}; ['en', 'fr', 'es', 'ar'].forEach((l) => { const v = $(prefix + l).value.trim(); if (v) o[l] = v; }); return o; };
+  const num = (id) => { const v = $(id).value.trim(); return v === '' ? undefined : Number(v); };
+  const d = { title: texts('f-title-'), url: $('f-url').value.trim(), enabled: true, order: Number($('f-order').value) };
+  const desc = texts('f-desc-'); if (Object.keys(desc).length) d.description = desc;
+  if ($('f-cover').value.trim()) d.cover = $('f-cover').value.trim();
+  ['sdk', 'build', 'minshell'].forEach((k) => { const v = num('f-' + k); if (v !== undefined) d[k === 'minshell' ? 'minShell' : k] = v; });
+  const tags = $('f-tags').value.split(',').map((t) => t.trim()).filter(Boolean); if (tags.length) d.tags = tags;
+  return { id: $('f-id').value.trim(), data: d };
+}
+
+$('add-preview').onclick = () => { const u = $('f-url').value.trim(); if (u) window.open(u, '_blank'); };
+$('add-save').onclick = async () => {
+  const f = readForm(), errs = L.validate(f.id, f.data);
+  $('add-errors').textContent = errs.length ? '- ' + errs.join('\n- ') : '';
+  if (errs.length) return;
+  if (games.some((g) => g.id === f.id) && !confirm('"' + f.id + '" already exists. Replace it?')) return;
+  try { await save(f.id, f.data); $('add-form').hidden = true; $('add-url').value = ''; await refresh(); }
+  catch (e) { $('add-errors').textContent = explain(e); }
+};
+
+// ---- import the first-party games shipped in the package ----
+$('import').onclick = async () => {
+  $('list-msg').textContent = '';
+  try {
+    const am = await (await fetch('../app-manifest.json', { cache: 'no-store' })).json();
+    let order = games.length ? Math.max.apply(null, games.map((g) => g.order)) + 10 : 0, n = 0;
+    for (const id of am.games) {
+      if (games.some((g) => g.id === id)) continue;
+      const m = await (await fetch('../games/' + id + '/game-manifest.json', { cache: 'no-store' })).json();
+      const data = { title: m.title, description: m.description, url: 'games/' + id + '/', cover: 'games/' + id + '/' + (m.cover || 'cover.png'), enabled: true, order, sdk: m.sdk || 1, minShell: m.minShell || 1, build: m.build || 1, bundled: true };
+      delete data.cover;                           // bundled covers come from the package
+      await save(id, data); order += 10; n++;
+    }
+    $('list-msg').textContent = n ? '' : 'All bundled games are already in the registry.';
+    if (n) $('list-msg').className = 'ok';
+    await refresh();
+  } catch (e) { $('list-msg').className = 'err'; $('list-msg').textContent = explain(e); }
+};
+</script>
+</body>
+</html>

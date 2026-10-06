@@ -48,6 +48,7 @@
     var musicNow = null;
     // players[0] is always P1; players[1] exists in 2-player mode. `player` points at the player being
     // processed (update, interactions, goal); `target` is who enemies aim at.
+    var p2Chosen = false;
     var players = [], twoP = false, joinWait = 0, p1Dev = null, target = null;
     var NAMES = ['', 'P1', 'P2'];
 
@@ -266,16 +267,28 @@
         freeLevel(false);
         levelJson = null;
         var req = ++loadReq;
+        var h = gk.host, shown = !!(h && h.stageLoading);
+        // The stage JSON is loaded on demand behind the hub's loading screen (same progress bar as game start-up).
+        if (shown) h.stageLoading(stageLabel(stage) + '  ' + stage.name);
+        function stageDone() { if (shown) { shown = false; h.stageLoaded(); } }
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', 'assets/levels/' + id + '.json', true);
+        xhr.open('GET', Arcade.url('assets/levels/' + id + '.json'), true);
         xhr.timeout = 10000;
+        xhr.onprogress = function (e) { if (shown && e.lengthComputable && req === loadReq) h.progress(e.loaded / e.total); };
         xhr.onload = function () {
+            stageDone();
             if (req !== loadReq) return;
             try { levelJson = JSON.parse(xhr.responseText); } catch (e) { levelJson = null; }
             if (!levelJson) return loadFailed();
         };
-        xhr.onerror = xhr.ontimeout = function () { if (req === loadReq) loadFailed(); };
+        xhr.onerror = xhr.ontimeout = function () { stageDone(); if (req === loadReq) loadFailed(); };
         xhr.send();
+    }
+
+    // High-contrast HUD: a class on the element holding the game (the hub page or the standalone body)
+    function setContrast(on) {
+        var r = Arcade.root();
+        if (on) r.classList.add('hc'); else r.classList.remove('hc');
     }
 
     function loadFailed() {
@@ -403,8 +416,17 @@
         var devs = gk.edgeDevices('jump').concat(gk.edgeDevices('confirm'));
         for (var i = 0; i < devs.length; i++) if (devs[i] !== p1Dev) return join(devs[i]);
     }
+    // Player 2 chooses a profile first (Guest by default), so their score goes to the right table.
     function join(dev) {
         joinWait = 0;
+        var h = gk.host;
+        if (h && h.pickProfile && !p2Chosen) {
+            p2Chosen = true;
+            return h.pickProfile(2, function () { doJoin(dev); });
+        }
+        doJoin(dev);
+    }
+    function doJoin(dev) {
         var p2 = new Actors.Player(2);
         p2.dev = dev; players[0].dev = p1Dev;
         players[1] = p2; twoP = true;
@@ -415,7 +437,7 @@
         gk.announce(s.p2Joined);
     }
     function leave() {
-        players.length = 1; twoP = false; joinWait = 0;
+        players.length = 1; twoP = false; joinWait = 0; p2Chosen = false;
         players[0].dev = null;
         player = players[0];
         gk.announce(s.p2Left);
@@ -767,17 +789,18 @@
     }
 
     var def = {
+        id: 'jumper',
         pixelArt: true,
         load: function (g, progress, done, fail) {
             gk = g;
             s = STR[g.lang] || STR.en;
-            document.body.className = 'pixel';
             progress(0.1);
+            var index = Arcade.asset('assets/levels/index.json');     // already downloaded by the hub loader
             var xhr = new XMLHttpRequest();
-            xhr.open('GET', 'assets/levels/index.json', true);
+            xhr.open('GET', Arcade.url('assets/levels/index.json'), true);
             xhr.timeout = 10000;
             xhr.onload = function () {
-                try { stages = JSON.parse(xhr.responseText).stages; } catch (e) { return fail('index.json'); }
+                try { stages = (index || JSON.parse(xhr.responseText)).stages; } catch (e) { return fail('index.json'); }
                 progress(0.4);
                 sprites = Art.buildSprites();
                 progress(0.8);
@@ -787,7 +810,7 @@
                 done();
             };
             xhr.onerror = xhr.ontimeout = function () { fail('index.json'); };
-            xhr.send();
+            if (index) xhr.onload(); else xhr.send();
         },
         start: function (g) {
             players = [new Actors.Player(1)];
@@ -802,7 +825,7 @@
             players[0].lives = save.lives > 0 ? save.lives : 5; players[0].score = save.score || 0; coins = save.coins || 0;
             hud = GK.hud([['world', ''], ['lives', s.lives], ['coins', s.coins], ['stars', ''], ['score', s.score], ['time', s.time]]);
             mapInfo = document.getElementById('mapinfo');
-            document.body.className = 'pixel' + (save.hc ? ' hc' : '');
+            setContrast(save.hc);
             toMap();
         },
         update: function (g) {
@@ -912,7 +935,7 @@
             }
             if (id === 'assist') save.assist = !save.assist;
             if (id === 'run') save.autoRun = !save.autoRun;
-            if (id === 'hc') { save.hc = !save.hc; document.body.className = 'pixel' + (save.hc ? ' hc' : ''); }
+            if (id === 'hc') { save.hc = !save.hc; setContrast(save.hc); }
             persist();
             return 'stay';
         },

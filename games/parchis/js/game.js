@@ -348,6 +348,7 @@
     /* ------------------------------------------------------------------ game definition */
 
     var def = {
+        id: 'parchis',
         minScale: 2,
         start: function (g) {
             gk = g;

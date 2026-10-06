@@ -1,7 +1,9 @@
 /* GameKit: shared runtime for every game (runs inside the game iframe).
  *
- * - Builds window.GameAPI (init/start/pause/resume/destroy/menuItems/onMenu/onAction) from a
- *   small game definition, so each game only writes load/start/update/render.
+ * - Optional helper on top of the Arcade SDK (sdk/arcade-sdk.js, which must be loaded first):
+ *   builds the game's entry/exit API (init/start/pause/resume/destroy/resize/menuItems/onMenu/
+ *   onAction) from a small game definition and registers it with Arcade.define(), so each game
+ *   only writes load/start/update/render. Games that do not use GameKit call Arcade.define() themselves.
  * - Fixed 60 Hz update with interpolated rendering; at most 5 catch-up steps per frame.
  * - Adapts to the TV: starts from host.quality (tier picked by the launcher) and, in Auto mode,
  *   lowers effects -> 30 fps rendering -> canvas resolution when frames keep dropping.
@@ -248,7 +250,7 @@ var GK = (function () {
         var onKeyDown = null, onKeyUp = null;
 
         var gk = {
-            W: W, H: H, def: def, frame: 0, renderEvery: 1,
+            W: W, H: H, def: def, frame: 0, renderEvery: 1, res: 1, vp: null,
             rng: rng, clamp: clamp, Particles: Particles,
             isDown: function (a) { return host ? host.input.isDown(a) : false; },
             pressed: function (a) { for (var i = 0; i < edgeN; i++) if (edges[i] === a) return true; return false; },
@@ -268,14 +270,25 @@ var GK = (function () {
             setText: function (el, v) { v = String(v); if (el._v !== v) { el._v = v; el.textContent = v; } }
         };
 
+        // Backing store = displayed CSS size x devicePixelRatio x quality multiplier, capped by the tier
+        // (low 960x540, mid 1920x1080, high 3840x2160). Pixel-art games use whole-number scales.
+        // Only touches the canvas when the size really changes (resizing clears it).
         function setupCanvas() {
-            var q = gk.q;
-            gk.scale = Math.max(def.minScale || 1, Math.min(def.maxScale || 4, q.scale));
-            canvas.width = W * gk.scale;
-            canvas.height = H * gk.scale;
-            ctx.setTransform(gk.scale, 0, 0, gk.scale, 0, 0);
+            var q = gk.q, vp = gk.vp || {}, cap = q.cap || 1920;
+            var want = (vp.cssWidth || 1920) * (vp.dpr || 1) * gk.res;
+            var s = Math.min(want, cap) / W;
+            if (def.pixelArt) s = Math.floor(s);
+            s = Math.max(def.minScale || 1, Math.min(def.maxScale || 8, s));
+            var cw = Math.round(W * s), ch = Math.round(H * s);
+            gk.scale = s;
+            if (canvas.width !== cw || canvas.height !== ch) {
+                canvas.width = cw;
+                canvas.height = ch;
+            }
+            ctx.setTransform(cw / W, 0, 0, ch / H, 0, 0);
             ctx.imageSmoothingEnabled = !def.pixelArt;
             ctx.webkitImageSmoothingEnabled = !def.pixelArt;
+            return true;
         }
 
         // Adaptive quality: measured over 1 s windows (time-based, so a slow TV reacts as fast as a
@@ -304,9 +317,9 @@ var GK = (function () {
             } else if (gk.renderEvery === 1) {
                 perf.level = 2;
                 gk.renderEvery = 2;                         // 30 fps rendering, 60 Hz gameplay
-            } else if (q.auto && gk.scale > (def.minScale || 1)) {
+            } else if (q.auto && gk.scale > (def.minScale || 1) && gk.res > 0.5) {
                 perf.level++;
-                q.scale = Math.max(def.minScale || 1, gk.scale >> 1);
+                gk.res = Math.max(0.5, gk.res * 0.75);      // fewer pixels to fill
                 setupCanvas();
             }
             if (perf.level !== before && def.onQuality) def.onQuality(gk, perf.level);
@@ -354,6 +367,8 @@ var GK = (function () {
                 gk.host = h;
                 gk.lang = h.lang;
                 gk.q = h.quality;
+                gk.vp = h.viewport || null;
+                gk.safe = (gk.vp && gk.vp.safeArea) || { left: 96, top: 54, right: 96, bottom: 54 };
                 canvas = document.getElementById('game');
                 ctx = canvas.getContext('2d', { alpha: false });
                 gk.canvas = canvas; gk.ctx = ctx;
@@ -399,6 +414,15 @@ var GK = (function () {
                 window.GameAPI = null;
                 gk.host = host = null; gk.canvas = gk.ctx = canvas = ctx = null; gk.audio = null;
             },
+            // the window or the TV resolution changed: recompute the canvas and redraw once
+            resize: function (vp) {
+                if (destroyed || !canvas) return;
+                gk.vp = vp;
+                gk.safe = vp.safeArea || gk.safe;
+                setupCanvas();
+                if (started && !running && def.render) { try { def.render(gk, 0); } catch (e) {} }
+                if (def.onResize) def.onResize(gk, vp);
+            },
             menuItems: function () { return def.menuItems ? def.menuItems(gk) : []; },
             onMenu: function (id) { return def.onMenu ? def.onMenu(gk, id) : undefined; },
             onAction: function (a, pressed, repeat, dev) {
@@ -412,15 +436,11 @@ var GK = (function () {
             _hasAudio: function () { return !!(gk.audio && gk.audio.ctx); }
         };
 
-        window.GameAPI = api;
-        // Errors before the game is loaded make the launcher show Retry / Back (or the bundled copy).
+        // Errors before the game is loaded make the hub show Retry / Back (or the bundled copy).
         window.onerror = function (msg) {
             if (host && !started) host.failed(String(msg));
-            else if (!host && parent.ArcadeHost && parent.ArcadeHost.isLoading()) {
-                // not attached yet: the launcher's load timeout will report it
-            }
         };
-        if (parent && parent.ArcadeHost) parent.ArcadeHost.attach(window);
+        Arcade.define(api, { id: def.id });
         return gk;
     }
 

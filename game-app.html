@@ -1,0 +1,44 @@
+<!-- Game shell markup. Injected into #boot-mount of game.html by js/boot/loader.js (bundled package or hosted copy). -->
+<!-- First-party games put their DOM here (scripts loaded straight into the page) -->
+<div id="game-root" class="arc-stage"></div>
+<!-- Remote games run in one sandboxed iframe, created by js/game/remote.js -->
+<div id="game-frame-box" class="game-frame-box"></div>
+
+<div id="game-error" class="dialog" role="dialog" aria-modal="true" aria-labelledby="game-error-text" hidden>
+    <p id="game-error-text" class="dialog-text" data-i18n="loadError">The game could not be loaded.</p>
+    <div class="dialog-buttons">
+        <button id="game-error-retry" class="btn btn-primary" data-focus data-i18n="retry">Retry</button>
+        <button id="game-error-back" class="btn" data-focus data-i18n="backToMenu">Back to menu</button>
+    </div>
+</div>
+
+<!-- Arcade-style initials entry when a guest ends a game with a top-10 score -->
+<div id="entry" class="pause" role="dialog" aria-modal="true" aria-labelledby="entry-title" aria-describedby="entry-score" hidden>
+    <div class="pause-box entry-box">
+        <h2 id="entry-title" class="pause-title"></h2>
+        <p id="entry-score" class="entry-score"></p>
+        <div id="entry-letters" class="entry-letters"></div>
+        <p class="entry-hint" data-i18n="entryHint"></p>
+        <button id="entry-ok" class="btn btn-primary" data-focus data-i18n="save">Save</button>
+    </div>
+</div>
+
+<div id="pause" class="pause" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden>
+    <div class="pause-box">
+        <h2 id="pause-title" class="pause-title" data-i18n="paused">Paused</h2>
+        <div id="pause-items" class="pause-items"></div>
+    </div>
+</div>
+
+<!-- Profile picker (player 2 joining a game) -->
+<div id="picker" class="backdrop picker" hidden>
+    <div class="dialog picker-box" role="dialog" aria-modal="true" aria-labelledby="picker-title">
+        <h2 id="picker-title" class="dialog-title"></h2>
+        <div id="picker-list" class="picker-list" role="list"></div>
+        <button id="picker-default" class="btn check" role="checkbox" aria-checked="false" data-focus hidden><span id="picker-default-box" class="check-box" aria-hidden="true"></span><span data-i18n="makeDefault">Default</span></button>
+    </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+<!-- Network status popup (Samsung checklist: a disconnection must be notified to the user) -->
+<div id="netpop" class="netpop" role="alert" hidden><span class="netpop-icon" aria-hidden="true"></span><span id="netpop-text"></span></div>

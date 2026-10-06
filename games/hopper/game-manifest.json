@@ -1,16 +1,12 @@
 {
   "id": "hopper",
   "build": 2,
-  "minShell": 1,
+  "minShell": 2,
+  "sdk": 1,
   "entry": "index.html",
   "cover": "cover.png",
-  "sizeMB": 0.1,
-  "assets": [
-    "js/game.js",
-    "../shared/gamekit.js",
-    "../shared/strings.js",
-    "../shared/game.css"
-  ],
+  "sizeMB": 0.04,
+  "assets": [],
   "title": {
     "en": "Sky Hopper",
     "fr": "Sky Hopper",
@@ -22,5 +18,21 @@
     "fr": "Rebondissez le plus haut possible",
     "es": "Rebota lo más alto que puedas",
     "ar": "اقفز على المنصات إلى أعلى ارتفاع"
-  }
+  },
+  "scripts": [
+    "../shared/gamekit.js",
+    "../shared/strings.js",
+    "js/game.js"
+  ],
+  "styles": [
+    "../shared/game.css"
+  ],
+  "sizes": {
+    "index.html": 525,
+    "../shared/gamekit.js": 25534,
+    "../shared/strings.js": 1801,
+    "js/game.js": 10424,
+    "../shared/game.css": 1841
+  },
+  "sizeBytes": 40125
 }

@@ -85,20 +85,36 @@ async function newPage(browser, base) {
     return page;
 }
 
-async function playable(page, id = 'blocks') {
+// Picks a game on the home page: the profile picker opens (unless a default profile is set) and the first tile
+// (the active profile) is chosen; game.html then loads and runs the game.
+async function openGame(page, id) {
     await page.waitForSelector(`[data-game="${id}"]`, { timeout: 15000 });
     await page.focus(`[data-game="${id}"]`);
     await page.keyboard.press('Enter');
-    await page.waitForFunction(() => window.GameHost.state() === 'running', null, { timeout: 15000 });
+    await page.waitForFunction(() => document.querySelector('#picker:not([hidden])') || window.GameShell, null, { timeout: 15000 });
+    if (await page.evaluate(() => !!document.querySelector('#picker:not([hidden])'))) await page.keyboard.press('Enter');
+    await page.waitForFunction(() => window.GameShell && GameShell.state() === 'running', null, { timeout: 20000 });
+}
+
+// Pause menu -> "Quit to menu" (the last button): the game document is replaced by the home page.
+async function quitToHome(page) {
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => window.GameShell && GameShell.state() === 'paused');
+    await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
+    await page.waitForSelector('.tile', { timeout: 15000 });
+}
+
+async function playable(page, id = 'blocks') {
+    await openGame(page, id);
     await page.keyboard.press('Enter');          // start
     await page.waitForTimeout(300);
-    const running = await page.evaluate(() => document.querySelector('iframe').contentWindow.GameAPI._isRunning());
+    const running = await page.evaluate(() => window.GameAPI._isRunning());
     await page.keyboard.press('Escape');         // pause
     await page.waitForTimeout(100);
-    const paused = await page.evaluate(() => window.GameHost.state());
+    const paused = await page.evaluate(() => GameShell.state());
     await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
-    await page.waitForTimeout(100);
-    return running && paused === 'paused' && (await page.evaluate(() => window.GameHost.state())) === 'idle';
+    await page.waitForSelector('.tile', { timeout: 15000 });
+    return running && paused === 'paused' && (await page.evaluate(() => !window.GameShell && !!window.Menu));
 }
 
 async function main() {
@@ -151,7 +167,7 @@ async function main() {
     console.log('4. hosted build for another shell is ignored');
     {
         const page = await newPage(browser, base);
-        await routeHosted(page, { manifest: { build: 50, shell: 2 } });
+        await routeHosted(page, { manifest: { build: 50, shell: 3 } });
         await page.goto(base + 'index.html');
         await page.waitForSelector('.tile', { timeout: 15000 });
         check(await page.evaluate(() => AppBoot.source()) === 'local', 'shell mismatch keeps the bundled copy');
@@ -199,10 +215,8 @@ async function main() {
         await routeHosted(page, { offline: true });
         await page.goto(base + 'index.html');
         await page.waitForSelector('[data-game="jumper"]');
-        await page.focus('[data-game="jumper"]');
-        await page.keyboard.press('Enter');
-        await page.waitForFunction(() => window.GameHost.state() === 'running');
-        const G = 'document.querySelector("iframe").contentWindow';
+        await openGame(page, 'jumper');
+        const G = 'window';
         const index = JSON.parse(fs.readFileSync(path.join(ROOT, 'games/jumper/assets/levels/index.json'), 'utf8')).stages;
         for (const st of index) {
             await page.evaluate(G + `.JumperCheat.enter("${st.id}")`);
@@ -238,27 +252,24 @@ async function main() {
         await routeHosted(page, { offline: true });
         await page.goto(base + 'index.html');
         await page.waitForSelector('[data-game="snake"]');
-        await page.focus('[data-game="snake"]');
-        await page.keyboard.press('Enter');
-        await page.waitForFunction(() => window.GameHost.state() === 'running');
+        await page.evaluate(() => Profiles.use('guest'));      // only a guest types arcade initials
+        await openGame(page, 'snake');
         const scores = [500, 900, 100];
         for (const sc of scores) {
-            await page.evaluate((v) => document.querySelector('iframe').contentWindow.GameAPI._gk.submitScore(v), sc);
-            await page.waitForFunction(() => window.GameHost.state() === 'entry');
+            await page.evaluate((v) => window.GameAPI._gk.submitScore(v), sc);
+            await page.waitForFunction(() => window.GameShell && GameShell.state() === 'entry');
             await page.keyboard.press('ArrowUp');                     // A -> B on the first letter
             await page.focus('#entry-ok'); await page.keyboard.press('Enter');
-            await page.waitForFunction(() => window.GameHost.state() === 'running');
+            await page.waitForFunction(() => GameShell.state() === 'running');
         }
-        await page.evaluate(() => document.querySelector('iframe').contentWindow.GameAPI._gk.submitScore(0));
-        check(await page.evaluate(() => window.GameHost.state()) === 'running', 'a zero score does not ask for initials');
+        await page.evaluate(() => window.GameAPI._gk.submitScore(0));
+        check(await page.evaluate(() => GameShell.state()) === 'running', 'a zero score does not ask for initials');
         const list = await page.evaluate(() => Scores.list('snake'));
         check(list.length === 3 && list[0].s === 900 && list[2].s === 100, 'table sorted best first: ' + list.map((e) => e.n + ' ' + e.s).join(', '));
         check(list[1].n === 'BAA' && list[0].n === 'CAA', 'initials entered with the remote are saved and remembered for next time (' + list[1].n + ', ' + list[0].n + ')');
         for (let i = 0; i < 12; i++) await page.evaluate((v) => Scores.add('snake', 'ZZZ', v), 1000 + i);
         check(await page.evaluate(() => Scores.list('snake').length) === 10, 'table keeps only the top 10');
-        await page.keyboard.press('Escape');
-        await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
-        await page.waitForFunction(() => window.GameHost.state() === 'idle');
+        await quitToHome(page);
         await page.focus('#btn-scores'); await page.keyboard.press('Enter');
         check(await page.evaluate(() => !document.getElementById('scores').hidden), 'Top scores screen opens');
         const label = await page.evaluate(() => [...document.querySelectorAll('.score-col')].map((c) => c.getAttribute('aria-label')).join(' | '));
@@ -275,28 +286,35 @@ async function main() {
         await ctx.addInitScript(TIZEN_MOCK);
         await ctx.addInitScript(() => {
             function pad(i) { const b = []; for (let k = 0; k < 17; k++) b.push({ pressed: false, value: 0 }); return { index: i, id: 'Mock ' + i, connected: true, mapping: 'standard', buttons: b, axes: [0, 0, 0, 0] }; }
-            window.__pads = [];
-            navigator.getGamepads = () => (window.top.__pads || []);
+            // the pages change (home -> game.html): the pads stay plugged in for the whole browser session
+            window.__pads = sessionStorage.getItem('__plugged') ? [pad(0), pad(1)] : [];
+            navigator.getGamepads = () => window.__pads;
             window.__press = (i, b, on) => { window.__pads[i].buttons[b].pressed = on; window.__pads[i].buttons[b].value = on ? 1 : 0; };
-            window.__plug = () => { window.__pads = [pad(0), pad(1)]; window.dispatchEvent(new Event('gamepadconnected')); };
+            window.__plug = () => { sessionStorage.setItem('__plugged', '1'); window.__pads = [pad(0), pad(1)]; window.dispatchEvent(new Event('gamepadconnected')); };
+            window.addEventListener('load', () => setTimeout(() => { if (window.__pads.length) window.dispatchEvent(new Event('gamepadconnected')); }, 600));
         });
         const page = await ctx.newPage();
         page.errors = []; page.on('pageerror', (e) => page.errors.push(e.message));
         await routeHosted(page, { offline: true });
         await page.goto(base + 'index.html');
         await page.waitForSelector('[data-game="jumper"]');
-        const G = 'document.querySelector("iframe").contentWindow';
+        const G = 'window';
         const dbg = () => page.evaluate(G + '.JumperDebug()');
         const openJumper = async () => {
-            await page.focus('[data-game="jumper"]'); await page.keyboard.press('Enter');
-            await page.waitForFunction(() => window.GameHost.state() === 'running');
+            await openGame(page, 'jumper');
             await page.waitForTimeout(300);
         };
-        // keyboard: arrows = P1, WASD = P2
+        // keyboard: arrows = P1, WASD = P2 (both players are guests so they type initials)
+        await page.evaluate(() => Profiles.use('guest'));
         await openJumper();
         await page.keyboard.press('Escape');
         await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
         await page.keyboard.press('KeyF');
+        // player 2 chooses a profile first: Guest is preselected
+        await page.waitForFunction(() => GameShell.state() === 'picker');
+        check(await page.evaluate(() => !!document.querySelector('#picker [data-profile="guest"]') && document.activeElement.getAttribute('data-profile') === 'guest'), 'player 2 gets a profile picker with Guest preselected');
+        await page.keyboard.press('Enter');
+        await page.waitForFunction(() => GameShell.state() === 'running');
         await page.waitForTimeout(100);
         let d = await dbg();
         check(d.twoP && d.p1Dev === 'keys' && d.p2.dev === 'keys2', 'P2 joins with W A S D + F while P1 keeps the arrows');
@@ -313,31 +331,34 @@ async function main() {
         await page.evaluate(G + '.JumperCheat.setScore(1, 4321)'); await page.evaluate(G + '.JumperCheat.setScore(2, 1234)');
         await page.evaluate(G + '.JumperCheat.setLives(1, 1)'); await page.evaluate(G + '.JumperCheat.setLives(2, 1)');
         await page.evaluate(G + '.JumperCheat.kill(2)'); await page.evaluate(G + '.JumperCheat.kill(1)');
-        await page.waitForFunction(() => window.GameHost.state() === 'entry', null, { timeout: 8000 });
+        await page.waitForFunction(() => GameShell.state() === 'entry', null, { timeout: 8000 });
         const t1 = await page.textContent('#entry-title');
         await page.focus('#entry-ok'); await page.keyboard.press('Enter');
-        await page.waitForFunction(() => window.GameHost.state() === 'entry' && /2/.test(document.getElementById('entry-title').textContent));
+        await page.waitForFunction(() => GameShell.state() === 'entry' && /2/.test(document.getElementById('entry-title').textContent));
         await page.keyboard.press('Escape');
-        await page.waitForFunction(() => window.GameHost.state() === 'running');
+        await page.waitForFunction(() => GameShell.state() === 'running');
         const top = await page.evaluate(() => Scores.list('jumper').map((e) => e.n + ' ' + e.s).join(', '));
         check(/Player 1/.test(t1) && top === 'AAA 4321, PL2 1234', 'game over: both players enter initials (' + top + ')');
-        await page.keyboard.press('Escape');
-        await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
-        await page.waitForFunction(() => window.GameHost.state() === 'idle');
+        await quitToHome(page);
 
         // two gamepads: pad0 = P1, pad1 = P2
         await page.evaluate(() => window.__plug());
         await page.waitForTimeout(300);
         const tap = async (i, btn) => { await page.evaluate(([i, b]) => window.__press(i, b, true), [i, btn]); await page.waitForTimeout(120); await page.evaluate(([i, b]) => window.__press(i, b, false), [i, btn]); await page.waitForTimeout(120); };
-        await page.focus('[data-game="jumper"]'); await tap(0, 0);
-        await page.waitForFunction(() => window.GameHost.state() === 'running');
+        await page.focus('[data-game="jumper"]'); await tap(0, 0);       // A opens the picker, A picks the profile
+        await page.waitForSelector('#picker:not([hidden])');
+        await tap(0, 0);
+        await page.waitForFunction(() => window.GameShell && GameShell.state() === 'running', null, { timeout: 20000 });
         await page.waitForTimeout(300);
         await tap(0, 9);
-        check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'gamepad Start opens the pause menu and it stays open');
+        check(await page.evaluate(() => GameShell.state()) === 'paused', 'gamepad Start opens the pause menu and it stays open');
         await tap(0, 13);
         check(/Two players/.test(await page.evaluate(() => document.activeElement.textContent)), 'gamepad D-pad moves through the pause menu');
         await tap(0, 0);
         await tap(1, 0);
+        await page.waitForFunction(() => GameShell.state() === 'picker');
+        await tap(1, 0);                                   // player 2 confirms Guest with their own pad
+        await page.waitForFunction(() => GameShell.state() === 'running');
         d = await dbg();
         check(d.twoP && d.p1Dev === 'pad0' && d.p2.dev === 'pad1', 'second gamepad joins as player 2');
         await page.evaluate(G + '.JumperCheat.enter("w1-1")');
@@ -351,7 +372,7 @@ async function main() {
         check(d.x - x1 > 20, 'gamepad 1 moves player 1');
         await page.evaluate(() => { window.__pads[1].connected = false; window.dispatchEvent(new Event('gamepaddisconnected')); });
         await page.waitForTimeout(300);
-        check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'unplugging a gamepad pauses the game');
+        check(await page.evaluate(() => GameShell.state()) === 'paused', 'unplugging a gamepad pauses the game');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await ctx.close();
     }
@@ -365,13 +386,12 @@ async function main() {
         await page.goto(base + 'index.html');
         await page.waitForSelector('.tile');
         check(await page.evaluate(() => document.getElementById('netpop').hidden), 'no network popup while online');
-        await page.focus('[data-game="snake"]'); await page.keyboard.press('Enter');
-        await page.waitForFunction(() => window.GameHost.state() === 'running');
+        await openGame(page, 'snake');
         await page.context().setOffline(true);
         await page.waitForTimeout(200);
         const off = await page.evaluate(() => { const e = document.getElementById('netpop'); return !e.hidden && e.getAttribute('role') === 'alert' && e.textContent; });
         check(!!off && /No network/.test(off), 'network loss during a game shows a popup: "' + off + '"');
-        check(await page.evaluate(() => window.GameHost.state()) === 'running', 'the game keeps running offline');
+        check(await page.evaluate(() => GameShell.state()) === 'running', 'the game keeps running offline');
         await page.context().setOffline(false);
         await page.waitForTimeout(200);
         check(/Network connected/.test(await page.textContent('#netpop')), 'reconnecting shows "Network connected"');
@@ -393,10 +413,9 @@ async function main() {
         await routeHosted(page, { offline: true });
         await page.goto(base + 'index.html');
         await page.waitForSelector('[data-game="jumper"]');
-        await page.focus('[data-game="jumper"]'); await page.keyboard.press('Enter');
-        await page.waitForFunction(() => window.GameHost.state() === 'running');
+        await openGame(page, 'jumper');
         await page.waitForTimeout(300);
-        const G = 'document.querySelector("iframe").contentWindow';
+        const G = 'window';
         const dbg = () => page.evaluate(G + '.JumperDebug()');
         await page.evaluate(G + '.JumperCheat.enter("w1-1")');
         await page.waitForFunction(G + '.JumperDebug().mode === "play"');
@@ -425,22 +444,32 @@ async function main() {
         await page.context().close();
     }
 
-    console.log('12. covers come back after a game');
+    console.log('12. two pages: home and game are never both in memory');
     {
         const page = await newPage(browser, base);
         await routeHosted(page, { offline: true });
         await page.goto(base + 'index.html');
         await page.waitForSelector('[data-game="snake"]');
-        await page.waitForFunction(() => [...document.querySelectorAll('.tile img')].every((i) => i.complete));
-        await page.focus('[data-game="snake"]'); await page.keyboard.press('Enter');
-        await page.waitForFunction(() => window.GameHost.state() === 'running');
-        check(await page.evaluate(() => [...document.querySelectorAll('.tile img')].every((i) => !i.getAttribute('src'))), 'covers are released while a game runs');
-        await page.keyboard.press('Escape');
-        await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
-        await page.waitForFunction(() => window.GameHost.state() === 'idle');
-        await page.waitForFunction(() => [...document.querySelectorAll('.tile img')].every((i) => i.complete), null, { timeout: 5000 }).catch(() => {});
+        await page.waitForFunction(() => [...document.querySelectorAll('.tile img')].every((i) => i.complete && i.naturalWidth > 0));
+        await openGame(page, 'snake');
+        const g = await page.evaluate(() => ({
+            url: location.pathname + location.search, home: typeof Menu + typeof ProfilesUI + typeof Registry,
+            tiles: document.querySelectorAll('.tile, #game-grid').length, imgs: document.querySelectorAll('img').length,
+            iframes: document.querySelectorAll('iframe').length, history: history.length
+        }));
+        check(/game\.html\?id=snake&profile=p1$/.test(g.url), 'launching navigates to game.html?id=&profile= (' + g.url + ')');
+        check(g.home === 'undefinedundefinedundefined' && g.tiles === 0, 'the game page loads no home code and no game list');
+        check(g.iframes === 0, 'a first-party game runs in game.html itself (no iframe)');
+        const hist = g.history;
+        await quitToHome(page);
+        check(await page.evaluate(() => /index\.html\?from=snake$/.test(location.pathname + location.search) && typeof GameShell === 'undefined'), 'Quit to menu navigates back to index.html?from= and the game document is gone');
+        check(await page.evaluate((h) => history.length === h, hist), 'page switches do not grow the history');
+        check(await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('data-game') === 'snake'), 'home refocuses the tile of the game just played');
+        await page.waitForFunction(() => [...document.querySelectorAll('.tile img')].every((i) => i.complete && i.naturalWidth > 0));
         const vis = await page.evaluate(() => [...document.querySelectorAll('.tile img')].map((i) => i.style.visibility !== 'hidden' && i.naturalWidth > 0));
         check(vis.length === 7 && vis.every(Boolean), 'all 7 covers visible again on the home screen');
+        // the boot decision is cached for the whole app start: switching pages does not ask the network again
+        check(await page.evaluate(() => !!sessionStorage.getItem('boot_choice')), 'the hosted/bundled decision is cached in sessionStorage');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }
@@ -463,7 +492,13 @@ async function main() {
         await page.keyboard.type('na');
         check(await page.textContent('#namer-text') === 'Ana', 'on-screen keyboard and PC keys type a name');
         await page.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
-        check(await page.evaluate(() => Store.profile() === 'p2' && Profiles.current().name === 'Ana'), 'a new profile is created and becomes active');
+        // step 2: avatar and colour from fixed sets (Voice Guide labels, real focus)
+        check(await page.evaluate(() => !document.getElementById('styler').hidden && document.querySelectorAll('#styler-avatars .opt').length === 8 && document.querySelectorAll('#styler-colors .opt').length === 8
+            && document.activeElement.getAttribute('aria-label').indexOf('Avatar') === 0), 'avatar and colour choice with 8 + 8 options and Voice Guide labels');
+        await page.keyboard.press('ArrowRight'); await page.keyboard.press('Enter');          // another avatar
+        await page.focus('#styler-colors .opt:nth-child(3)'); await page.keyboard.press('Enter');
+        await page.focus('#styler-ok'); await page.keyboard.press('Enter');
+        check(await page.evaluate(() => Store.profile() === 'p2' && Profiles.current().name === 'Ana' && Profiles.current().color === Profiles.COLORS[2] && Profiles.current().avatar !== undefined), 'a new profile is created and becomes active, with its avatar and colour');
         check(await page.evaluate(() => Scores.list('snake').length === 0 && Store.get('vol_music') === 3), 'the new profile has its own scores; settings are shared');
         check(await page.evaluate(() => Scores.lastName(1)) === 'ANA', 'initials start from the profile name');
         await page.keyboard.press('Escape');
@@ -491,10 +526,9 @@ async function main() {
         await page.goto(base + 'index.html');
         await page.waitForSelector('[data-game="parchis"]');
         await page.evaluate(() => Store.set('game_parchis_setup', { n: 4, cpu: [true, true, true, true] }));
-        await page.focus('[data-game="parchis"]'); await page.keyboard.press('Enter');
-        await page.waitForFunction(() => window.GameHost.state() === 'running');
+        await openGame(page, 'parchis');
         await page.waitForTimeout(200);
-        const G = 'document.querySelector("iframe").contentWindow';
+        const G = 'window';
         const C = G + '.ParchisCheat';
         const rule = (js) => page.evaluate(C + js);
         check(await rule('.tryMove(0, 0, 4)') === null && (await rule('.tryMove(0, 0, 5)')).to === 0, 'a piece leaves the nest only with a 5');
@@ -530,9 +564,7 @@ async function main() {
         await page.keyboard.press('Enter');
         await page.waitForFunction(G + '.ParchisDebug().pieces[0].indexOf(0) >= 0', null, { timeout: 5000 }).catch(() => {});
         check((await page.evaluate(G + '.ParchisDebug()')).pieces[0].indexOf(0) >= 0, 'OK rolls; a 5 brings a piece out');
-        await page.keyboard.press('Escape');
-        await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
-        await page.waitForFunction(() => window.GameHost.state() === 'idle');
+        await quitToHome(page);
         await page.focus('#btn-scores'); await page.keyboard.press('Enter');
         check(await page.evaluate(() => document.querySelectorAll('.score-col').length) === 6, 'Parchís (no points) has no top-10 column');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
@@ -547,25 +579,17 @@ async function main() {
 
 // Launch a game, start it, play briefly, quit to menu. Returns the state of the destroyed game.
 async function cycle(page, id, warm) {
-    await page.focus(`[data-game="${id}"]`);
-    await page.keyboard.press('Enter');
-    await page.waitForFunction(() => window.GameHost.state() === 'running', null, { timeout: 15000 });
-    await page.evaluate(() => {
-        const w = document.querySelector('iframe').contentWindow;
-        window.__probe = { api: w.GameAPI, gk: w.GameAPI._gk };
-        window.__probe.audio = window.__probe.gk.audio && window.__probe.gk.audio.ctx;
-    });
+    await openGame(page, id);
     await page.keyboard.press('Enter');
     await page.keyboard.press('ArrowRight');
     await page.waitForTimeout(warm ? 400 : 150);
-    await page.keyboard.press('Escape');
-    await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
-    await page.waitForFunction(() => window.GameHost.state() === 'idle');
+    // destroy() must close the AudioContext and stop the loop (checked before the page is discarded)
     const r = await page.evaluate(() => {
-        const p = window.__probe, out = { audio: p.audio ? p.audio.state : 'closed', running: p.api._isRunning() };
-        window.__probe = null;
-        return out;
+        const api = window.GameAPI, ctx = api._gk.audio && api._gk.audio.ctx;
+        api.destroy();
+        return new Promise((res) => setTimeout(() => res({ audio: ctx ? ctx.state : 'closed', running: api._isRunning() }), 80));
     });
+    await quitToHome(page);
     return r;
 }
 

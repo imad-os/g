@@ -1,0 +1,9 @@
+{
+  "id": "orb-catcher",
+  "build": 1,
+  "sdk": 1,
+  "entry": "index.html",
+  "cover": "cover.png",
+  "title": { "en": "Orb Catcher", "fr": "Chasseur d'orbes", "es": "Cazador de orbes", "ar": "صائد الكرات" },
+  "description": { "en": "SDK example: catch the orbs in 30 seconds", "fr": "Exemple SDK : attrapez les orbes en 30 secondes", "es": "Ejemplo del SDK: atrapa los orbes en 30 segundos", "ar": "مثال SDK: التقط الكرات خلال 30 ثانية" }
+}

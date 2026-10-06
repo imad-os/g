@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SDK Example: Orb Catcher</title>
+<style>
+  html, body { margin: 0; background: #000; overflow: hidden; }
+  body { font-family: Arial, sans-serif; color: #fff; }
+  .arc-stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #0b0d1c; }
+  #game { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  #score { position: absolute; left: 96px; top: 54px; font: 800 48px Arial, sans-serif; }
+</style>
+</head>
+<body class="arc-stage">
+<canvas id="game" aria-hidden="true"></canvas>
+<div id="score" aria-hidden="true"></div>
+<!-- the SDK: in the hub repo it lives at sdk/arcade-sdk.js; copy it next to your game when you publish -->
+<script src="../arcade-sdk.js"></script>
+<script>
+/* Orb Catcher: the smallest complete game for the hub. Move with the arrows and catch the orbs.
+ * It shows every part of the SDK contract: init/loaded, start, pause/resume, destroy, resize,
+ * input, save/load, submitScore, pause-menu items and screen-reader announcements. */
+(function () {
+    'use strict';
+    var host, canvas, ctx, raf = 0, running = false, W = 960, H = 540;
+    var x = 480, y = 270, vx = 0, vy = 0, orb = { x: 100, y: 100 }, score = 0, best = 0, time = 30, last = 0, over = false;
+    var sound = true, scoreEl;
+
+    function newOrb() { orb.x = 40 + Math.random() * (W - 80); orb.y = 40 + Math.random() * (H - 80); }
+
+    function size(vp) {   // canvas = displayed size x devicePixelRatio, never more than 1920 wide
+        var w = Math.min(1920, Math.round((vp ? vp.cssWidth * vp.dpr : 960)));
+        canvas.width = Math.max(320, w);
+        canvas.height = Math.round(canvas.width * 9 / 16);
+        ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+    }
+
+    function frame(ts) {
+        raf = requestAnimationFrame(frame);
+        var dt = Math.min(0.05, (ts - (last || ts)) / 1000);
+        last = ts;
+        if (!over) {
+            time -= dt;
+            x = Math.max(20, Math.min(W - 20, x + vx * 300 * dt));
+            y = Math.max(20, Math.min(H - 20, y + vy * 300 * dt));
+            if (Math.abs(x - orb.x) < 30 && Math.abs(y - orb.y) < 30) { score++; newOrb(); host.announce(String(score)); }
+            if (time <= 0) { over = true; if (score > best) { best = score; host.save('best', best); } host.submitScore(score, {}); host.announce('Game over. ' + score); }
+        }
+        ctx.fillStyle = '#0b0d1c'; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(orb.x, orb.y, 14, 0, 6.3); ctx.fill();
+        ctx.fillStyle = '#4fb9e8'; ctx.fillRect(x - 18, y - 18, 36, 36);
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 28px Arial'; ctx.textAlign = 'center';
+        if (over) ctx.fillText('Game over. Press OK to play again', W / 2, H / 2);
+        var t = 'Score ' + score + '   Best ' + best + '   Time ' + Math.ceil(Math.max(0, time));
+        if (scoreEl._v !== t) { scoreEl._v = t; scoreEl.textContent = t; }
+    }
+
+    function stop() { running = false; if (raf) cancelAnimationFrame(raf); raf = 0; }
+
+    Arcade.define({
+        // 1. the hub calls init once; load what you need, report progress, then call loaded()
+        init: function (h) {
+            host = h;
+            canvas = document.getElementById('game');
+            ctx = canvas.getContext('2d');
+            scoreEl = document.getElementById('score');
+            best = host.load('best', 0);                 // saved per profile and per game
+            size(host.viewport);
+            host.progress(0.5);
+            newOrb();
+            host.progress(1);
+            host.loaded();
+        },
+        start: function () { running = true; last = 0; raf = requestAnimationFrame(frame); },
+        pause: stop,                                      // the hub opens its pause menu (Back / Pause key)
+        resume: function () { if (!running) { running = true; last = 0; raf = requestAnimationFrame(frame); } },
+        // 2. destroy: stop rAF and timers, close audio / GL contexts. The hub then removes the page.
+        destroy: function () { stop(); canvas.width = canvas.height = 0; host = null; },
+        resize: function (vp) { size(vp); },
+        // 3. extra pause-menu entries; return 'stay' from onMenu to keep the menu open
+        menuItems: function () { return [{ id: 'sound', label: 'Sound: ' + (sound ? 'on' : 'off') }]; },
+        onMenu: function (id) { if (id === 'sound') { sound = !sound; return 'stay'; } },
+        // 4. input from the hub (remote, gamepad, keyboard): actions, never raw key codes
+        onAction: function (a, pressed) {
+            if (a === 'left') vx = pressed ? -1 : (vx < 0 ? 0 : vx);
+            if (a === 'right') vx = pressed ? 1 : (vx > 0 ? 0 : vx);
+            if (a === 'up') vy = pressed ? -1 : (vy < 0 ? 0 : vy);
+            if (a === 'down') vy = pressed ? 1 : (vy > 0 ? 0 : vy);
+            if (a === 'confirm' && pressed && over) { over = false; score = 0; time = 30; newOrb(); }
+        }
+    }, { id: 'orb-catcher' });
+})();
+</script>
+</body>
+</html>

@@ -10,7 +10,8 @@ OUT=build/wgt
 rm -rf build
 mkdir -p "$OUT"
 node tools/validate-levels.mjs
-cp -R config.xml index.html app.html app-manifest.json icon.png .nojekyll css js games "$OUT"/
+cp -R config.xml index.html game.html app.html game-app.html app-manifest.json icon.png favicon.ico .nojekyll css js sdk games "$OUT"/
+mkdir -p "$OUT/firebase" && cp firebase/firebase-config.js "$OUT/firebase/"   # admin/ and the rest of firebase/ never go in the .wgt
 find "$OUT" -name '*.md' -delete
 tizen package -t wgt -s "${TIZEN_PROFILE:-arcade}" -- "$OUT"
 ls -la "$OUT"/*.wgt

@@ -2,20 +2,9 @@
 var App = (function () {
     'use strict';
 
-    var dialogOpen = false, dialogYes = null, toastTimer = 0, benchCancel = null;
+    var dialogOpen = false, dialogYes = null, benchCancel = null, games = [];
 
     function $(id) { return document.getElementById(id); }
-
-    /* ---------- screen fit: the UI is laid out at 1920x1080 and scaled to the window ---------- */
-    function fit() {
-        var w = window.innerWidth || 1920, h = window.innerHeight || 1080;
-        var s = Math.min(w / 1920, h / 1080), st = $('stage');
-        var tr = Math.abs(s - 1) < 0.01 ? '' : 'scale(' + s + ')';
-        st.style.webkitTransform = tr;
-        st.style.transform = tr;
-        st.style.left = Math.max(0, (w - 1920 * s) / 2) + 'px';
-        st.style.top = Math.max(0, (h - 1080 * s) / 2) + 'px';
-    }
 
     /* ---------- dialogs & toasts ---------- */
     function confirm(title, text, onYes) {
@@ -34,45 +23,7 @@ var App = (function () {
         Focus.pop();
     }
 
-    function toast(text) {
-        var t = $('toast');
-        t.textContent = text;
-        t.hidden = false;
-        A11y.announce(text);
-        clearTimeout(toastTimer);
-        toastTimer = setTimeout(function () { t.hidden = true; }, 2600);
-    }
-
-    /* ---------- network status popup ----------
-     * Uses the browser online/offline events and, on the TV, webapis.network (privilege
-     * network.public). The app keeps working offline; this only informs the user. */
-    var netDown = false, netTimer = 0;
-    function showNet(ok) {
-        var el = $('netpop');
-        $('netpop-text').textContent = I18n.t(ok ? 'netOn' : 'netOff');
-        el.className = 'netpop' + (ok ? ' ok' : '');
-        el.hidden = false;
-        A11y.announce(I18n.t(ok ? 'netOn' : 'netOff'));
-        clearTimeout(netTimer);
-        netTimer = setTimeout(function () { el.hidden = true; }, ok ? 3000 : 7000);
-    }
-    function netChange(online) {
-        if (online === !netDown) return;
-        netDown = !online;
-        showNet(online);
-    }
-    function watchNetwork() {
-        window.addEventListener('offline', function () { netChange(false); });
-        window.addEventListener('online', function () { netChange(true); });
-        try {
-            var NS = webapis.network.NetworkState;
-            webapis.network.addNetworkStateChangeListener(function (v) {
-                if (v === NS.GATEWAY_DISCONNECTED || v === NS.LAN_CABLE_DETACHED || v === NS.WIFI_MODULE_STATE_DETACHED) netChange(false);
-                else if (v === NS.GATEWAY_CONNECTED) netChange(true);
-            });
-        } catch (e) {}
-        if (navigator.onLine === false) netChange(false);
-    }
+    function toast(text) { Net.toast(text); }
 
     function exitApp() {
         try { tizen.application.getCurrentApplication().exit(); return; } catch (e) {}
@@ -96,12 +47,12 @@ var App = (function () {
             return;
         }
 
-        if (GameHost.active()) return GameHost.onAction(action, pressed, repeat, dev);
-
         if (action === 'padLost') { toast(I18n.t('padOff').split('.')[0]); return; }
         if (!pressed) return;
         var isBack = (action === 'back' || action === 'cancel') && !repeat;
 
+        if (Picker.isOpen()) return Picker.action(action, repeat);
+        if (ProfilesUI.stylerOpen()) return ProfilesUI.stylerAction(action, repeat);
         if (ProfilesUI.namerOpen()) return ProfilesUI.namerAction(action, repeat);
         if (ProfilesUI.screenOpen()) return ProfilesUI.screenAction(action, repeat);
         if (!$('page').hidden) {
@@ -128,13 +79,11 @@ var App = (function () {
         else if (action === 'confirm' && !repeat) Menu.confirmFocused();
     }
 
-    /* ---------- game list from the active app manifest ---------- */
+    /* ---------- game list: the registry (Firestore) -> cache -> bundled games ---------- */
     function loadGames(done) {
         var active = AppBoot.manifest(), local = AppBoot.localManifest();
         var base = AppBoot.base(), localBase = AppBoot.localBase();
         var remote = AppBoot.source() === 'remote';
-        var ids = active.games, out = [], pending = ids.length;
-        if (!pending) return done(out);
 
         function inLocal(id) { for (var i = 0; i < local.games.length; i++) if (local.games[i] === id) return true; return false; }
         function fetchManifest(b, id, cb) {
@@ -144,49 +93,85 @@ var App = (function () {
                 cb(err || !m || m.id !== id ? null : m);
             });
         }
-        function finish() {
-            if (--pending) return;
-            // keep the manifest order
-            var sorted = [];
-            for (var i = 0; i < ids.length; i++) for (var j = 0; j < out.length; j++) if (out[j].id === ids[i]) sorted.push(out[j]);
-            done(sorted);
-        }
-        ids.forEach(function (id) {
-            var hasLocal = inLocal(id);
-            fetchManifest(base, id, function (m) {
-                var entry = { id: id, manifest: m, base: base, bundledBase: hasLocal ? (remote ? localBase : '') : null };
-                if (m && m.minShell && m.minShell > AppBoot.SHELL) m = null;
-                if (!remote || !hasLocal) {
-                    if (m) out.push(entry);
+
+        // ids shown: bundled games must be in the package (or in the hosted manifest)
+        var bundledIds = active.games.slice();
+        for (var k = 0; k < local.games.length; k++) if (bundledIds.indexOf(local.games[k]) < 0) bundledIds.push(local.games[k]);
+
+        Registry.load(bundledIds, AppBoot.SHELL, function (entries) {
+            var out = [], pending = entries.length;
+            if (!pending) return done(out);
+            function finish() {
+                if (--pending) return;
+                var sorted = [];
+                for (var i = 0; i < entries.length; i++) for (var j = 0; j < out.length; j++) if (out[j].id === entries[i].id) sorted.push(out[j]);
+                done(sorted);
+            }
+            entries.forEach(function (en) {
+                var id = en.id;
+                if (!en.bundled) {
+                    var d = en.doc, cover = d.cover ? new URL(d.cover, d.url).href : '';
+                    out.push({ id: id, remote: true, url: d.url, base: null, bundledBase: null,
+                               manifest: { id: id, build: d.build || 0, cover: cover, title: d.title, description: d.description || {}, tags: d.tags || [] } });
                     return finish();
                 }
-                // Keep the bundled manifest so a broken hosted game can fall back to it.
-                fetchManifest(localBase, id, function (lm) {
-                    entry.bundledManifest = lm;
-                    if (!m && lm) { entry.manifest = lm; entry.base = localBase; }
-                    if (entry.manifest) out.push(entry);
-                    finish();
+                var hasLocal = inLocal(id);
+                fetchManifest(base, id, function (m) {
+                    var entry = { id: id, manifest: m, base: base, bundledBase: hasLocal ? (remote ? localBase : '') : null };
+                    if (m && m.minShell && m.minShell > AppBoot.SHELL) m = null;
+                    if (!remote || !hasLocal) {
+                        if (m) out.push(entry);
+                        return finish();
+                    }
+                    // Keep the bundled manifest so a broken hosted game can fall back to it.
+                    fetchManifest(localBase, id, function (lm) {
+                        entry.bundledManifest = lm;
+                        if (!m && lm) { entry.manifest = lm; entry.base = localBase; }
+                        if (entry.manifest) out.push(entry);
+                        finish();
+                    });
                 });
             });
         });
     }
 
-    function onGameExit(id) {
-        Menu.show();
-        var tile = Menu.tileFor(id);
-        if (tile) Focus.focus(tile);
+    /* ---------- launching: the home document is replaced by game.html ---------- */
+
+    function launch(g, profileId) {
+        if (benchCancel) { benchCancel(); benchCancel = null; }
+        Profiles.use(profileId);
+        var tile = Menu.tileFor(g.id), img = tile && tile.querySelector('img');
+        var m = g.manifest;
+        var desc = {
+            id: g.id, remote: !!g.remote, url: g.url || '', base: g.base, bundledBase: g.bundledBase,
+            title: m.title, build: m.build || 0,
+            cover: img ? img.src : '', coverReady: !!(img && img.complete && img.naturalWidth > 0)
+        };
+        try { sessionStorage.setItem('arc_launch', JSON.stringify(desc)); } catch (e) {}
+        location.replace(AppBoot.localBase() + 'game.html?id=' + encodeURIComponent(g.id) + '&profile=' + encodeURIComponent(profileId));
     }
 
+    // Choosing a game: the profile picker, unless a default profile is set.
     function play(g) {
-        if (benchCancel) { benchCancel(); benchCancel = null; }
-        Menu.hide();
-        Menu.releaseImages();
-        GameHost.launch(g, onGameExit);
+        var def = Profiles.defaultId();
+        if (def) return launch(g, def);
+        openPicker(g, null);
+    }
+
+    function openPicker(g, preselect) {
+        Picker.show({
+            title: I18n.t('whoPlays'), showDefault: true, preselect: preselect,
+            onPick: function (id) { launch(g, id); },
+            onCancel: function () { var t = Menu.tileFor(g.id); if (t) Focus.focus(t); },
+            onNew: function () {
+                ProfilesUI.create(function (p) { openPicker(g, p ? p.id : null); });
+            }
+        });
     }
 
     function start() {
-        fit();
-        window.addEventListener('resize', fit);
+        Net.fit($('stage'));
+        window.addEventListener('resize', function () { Net.fit($('stage')); });
         I18n.apply();
         A11y.init();
         if (Perf.profile().tier !== 'low') document.documentElement.className += ' hi';
@@ -195,29 +180,27 @@ var App = (function () {
         Input.onDevice(updateIndicator);
         updateIndicator();
         showVersion();
-        GameHost.init();
-        watchNetwork();
+        Net.watch();
+        Picker.init();
         $('dialog-yes').onclick = function () { var cb = dialogYes; closeDialog(); if (cb) cb(); };
         $('dialog-no').onclick = closeDialog;
 
-        // Multitasking: pause the game (and its audio) when the app goes to the background.
-        document.addEventListener('visibilitychange', function () {
-            if (document.hidden) {
-                Input.releaseAll();
-                if (GameHost.state() === 'running') GameHost.openPause();
-            }
-        });
+        document.addEventListener('visibilitychange', function () { if (document.hidden) Input.releaseAll(); });
 
-        loadGames(function (games) {
+        loadGames(function (list) {
+            games = list;
+            var from = (/[?&]from=([a-z0-9-]+)/.exec(location.search) || [])[1];
+            if (from) Store.set('last_game', from);
             Menu.init(games, play);
             ProfilesUI.init(Menu.profileChanged);
             Menu.show();
             I18n.apply();
             AppBoot.ready();
+            var g = null;
+            if (from && /[?&]pick=1/.test(location.search)) for (var i = 0; i < games.length; i++) if (games[i].id === from) g = games[i];
+            if (g) play(g);
             // One-time device benchmark while the menu is idle.
-            setTimeout(function () {
-                if (!GameHost.active()) benchCancel = Perf.benchmark(function () { benchCancel = null; });
-            }, 1500);
+            setTimeout(function () { if (!Picker.isOpen()) benchCancel = Perf.benchmark(function () { benchCancel = null; }); }, 1500);
         });
     }
 

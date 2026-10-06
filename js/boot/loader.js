@@ -14,12 +14,17 @@
  * A hosted build that fails to load a file, throws during start-up or does not call
  * AppBoot.ready() within READY_TIMEOUT_MS is blacklisted and the bundled copy restarts.
  *
+ * Two packaged pages use it (data-page on <body>): index.html = home (game list) and game.html =
+ * one running game. The hosted-or-bundled decision is made once per app start and cached in
+ * sessionStorage, so switching pages never re-checks the network and both pages always run the
+ * same copy.
+ *
  * ES5 only: this file runs on every supported engine before anything else.
  */
 (function () {
     'use strict';
 
-    var SHELL = 1;                                    // bump only together with a new .wgt
+    var SHELL = 2;                                    // bump only together with a new .wgt
     var DEFAULT_REMOTE_BASE = 'https://imad-os.github.io/g/';
     var MANIFEST_TIMEOUT_MS = 2500;
     var FILE_TIMEOUT_MS = 10000;
@@ -28,6 +33,10 @@
     var LS_BAD_BUILD = 'boot_bad_build';
     var LS_REMOTE_BASE = 'boot_remote_base';          // optional override (staging, tests)
     var SS_FORCE_LOCAL = 'boot_force_local';
+    var SS_CHOICE = 'boot_choice';                    // { base, build, t }: the decision of this app start
+    var SS_MANIFEST = 'boot_manifest';                // the chosen hosted manifest (so page switches need no network)
+    var CHOICE_TTL_MS = 12 * 3600 * 1000;
+    var PAGE = (document.body && document.body.getAttribute('data-page') === 'game') ? 'game' : 'home';
 
     var state = {
         source: 'local', base: '', build: 0, version: '', ready: false, aborting: false,
@@ -78,8 +87,20 @@
 
     function isValid(m) {
         return !!(m && typeof m.build === 'number' && m.css && m.css.length !== undefined &&
-                  m.js && m.js.length && m.games && m.games.length !== undefined);
+                  m.js && m.js.length && m.games && m.games.length !== undefined &&
+                  m.game && m.game.html && m.game.js && m.game.js.length && m.game.css && m.game.css.length !== undefined);
     }
+
+    // Remember the decision for the other page of this app start.
+    function remember(manifest, base) {
+        ssSet(SS_CHOICE, JSON.stringify({ base: base, build: manifest.build, t: Date.now() }));
+        if (base) ssSet(SS_MANIFEST, JSON.stringify(manifest)); else ssDel(SS_MANIFEST);
+    }
+    function forget() { ssDel(SS_CHOICE); ssDel(SS_MANIFEST); }
+
+    function pageCss(m) { return PAGE === 'game' ? m.game.css : m.css; }
+    function pageJs(m) { return PAGE === 'game' ? m.game.js : m.js; }
+    function pageHtml(m) { return PAGE === 'game' ? m.game.html : 'app.html'; }
 
     // Hosted build failed: remember it and restart with the bundled copy.
     function fallbackToLocal(reason) {
@@ -87,6 +108,7 @@
         state.aborting = true;
         log('hosted build ' + state.build + ' rejected (' + reason + '), restarting with bundled copy');
         lsSet(LS_BAD_BUILD, String(state.build));
+        forget();
         ssSet(SS_FORCE_LOCAL, '1');
         location.reload();
     }
@@ -141,10 +163,10 @@
         state.manifest = manifest;
         log('starting ' + state.source + ' build ' + state.build + ' (' + state.version + ')');
 
-        get(url('app.html'), base ? FILE_TIMEOUT_MS : 0, function (err, html) {
+        get(url(pageHtml(manifest)), base ? FILE_TIMEOUT_MS : 0, function (err, html) {
             if (err || !html) {
-                if (base) return fallbackToLocal('app.html ' + err);
-                log('bundled app.html missing: ' + err);
+                if (base) return fallbackToLocal(pageHtml(manifest) + ' ' + err);
+                log('bundled ' + pageHtml(manifest) + ' missing: ' + err);
                 return;
             }
             if (base) {
@@ -155,12 +177,13 @@
                 window.addEventListener('error', onStartupError);
             }
 
-            loadCss(manifest.css);
-            var splash = document.getElementById('boot-splash');
-            if (splash) splash.insertAdjacentHTML('beforebegin', html);
+            loadCss(pageCss(manifest));
+            var splash = document.getElementById('boot-splash'), mount = document.getElementById('boot-mount');
+            if (mount) mount.insertAdjacentHTML('beforeend', html);        // game.html: inside its stage
+            else if (splash) splash.insertAdjacentHTML('beforebegin', html);
             else document.body.insertAdjacentHTML('afterbegin', html);
 
-            loadJs(manifest.js, function () {
+            loadJs(pageJs(manifest), function () {
                 readyTimer = setTimeout(function () {
                     if (state.ready) return;
                     if (state.source === 'remote') fallbackToLocal('not ready after ' + READY_TIMEOUT_MS + 'ms');
@@ -179,11 +202,20 @@
 
             if (ssGet(SS_FORCE_LOCAL)) {
                 ssDel(SS_FORCE_LOCAL);
+                remember(local, '');
                 return boot(local, '');
             }
 
+            // Second page of this app start: reuse the decision, no network check.
+            var choice = parse(ssGet(SS_CHOICE));
+            if (choice && typeof choice.t === 'number' && Date.now() - choice.t < CHOICE_TTL_MS) {
+                if (!choice.base) return boot(local, '');
+                var cached = parse(ssGet(SS_MANIFEST));
+                if (isValid(cached) && cached.build === choice.build && cached.shell === SHELL) return boot(cached, choice.base);
+            }
+
             var base = remoteBase();
-            if (base === state.localBase) return boot(local, '');   // PC browser on the hosted site itself
+            if (base === state.localBase) { remember(local, ''); return boot(local, ''); }   // PC browser on the hosted site itself
 
             get(base + 'app-manifest.json?t=' + Date.now(), MANIFEST_TIMEOUT_MS, function (rErr, rText) {
                 var remote = parse(rText);
@@ -197,8 +229,10 @@
                 } else if (bad === String(remote.build)) {
                     log('hosted build ' + remote.build + ' previously failed, skipping');
                 } else {
+                    remember(remote, base);
                     return boot(remote, base);
                 }
+                remember(local, '');
                 boot(local, '');
             });
         });
@@ -216,6 +250,7 @@
             log('ready (' + state.source + ' build ' + state.build + ')');
         },
         get: get,
+        page: function () { return PAGE; },
         source: function () { return state.source; },
         build: function () { return state.build; },
         version: function () { return state.version; },

@@ -1,8 +1,9 @@
 {
-  "build": 4,
-  "version": "1.3.0",
-  "shell": 1,
+  "build": 5,
+  "version": "1.4.0",
+  "shell": 2,
   "css": [
+    "css/base.css",
     "css/launcher.css"
   ],
   "js": [
@@ -14,11 +15,40 @@
     "js/core/perf.js",
     "js/core/input.js",
     "js/core/focus.js",
+    "js/core/net.js",
+    "js/core/avatars.js",
+    "js/core/picker.js",
+    "firebase/firebase-config.js",
+    "js/launcher/registry.js",
     "js/launcher/menu.js",
     "js/launcher/profiles-ui.js",
-    "js/launcher/game-host.js",
     "js/launcher/main.js"
   ],
+  "game": {
+    "html": "game-app.html",
+    "css": [
+      "css/base.css",
+      "css/game.css"
+    ],
+    "js": [
+      "js/core/storage.js",
+      "js/core/i18n.js",
+      "js/core/a11y.js",
+      "js/core/scores.js",
+      "js/core/gamedata.js",
+      "js/core/audio.js",
+      "js/core/perf.js",
+      "js/core/input.js",
+      "js/core/focus.js",
+      "js/core/net.js",
+      "js/core/avatars.js",
+      "js/core/picker.js",
+      "sdk/arcade-sdk.js",
+      "js/game/loading.js",
+      "js/game/remote.js",
+      "js/game/shell.js"
+    ]
+  },
   "games": [
     "jumper",
     "blocks",

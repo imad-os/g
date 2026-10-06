@@ -1,28 +1,4 @@
-/* Launcher styles. Plain CSS that works on Chromium 56+ (Tizen 4.0):
-   no nesting, no @layer, no media range syntax, no oklch()/color-mix(), no :has(), no flex gap.
-   Designed for 1920x1080; js/launcher/main.js scales #stage to fit any other window size. */
-
-html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0f1226; }
-body { font-family: "Samsung One", "SamsungOne", Roboto, "Segoe UI", Arial, sans-serif; color: #f2f4ff; }
-* { box-sizing: border-box; }
-button { font: inherit; color: inherit; border: 0; background: none; padding: 0; margin: 0; cursor: pointer; }
-[hidden] { display: none !important; }
-
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-
-.stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden;
-         background: #0f1226; -webkit-transform-origin: 0 0; transform-origin: 0 0; }
-.hi .stage { background: -webkit-linear-gradient(top, #1b1f45 0%, #0f1226 60%); background: linear-gradient(to bottom, #1b1f45 0%, #0f1226 60%); }
-
-.screen { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; padding: 64px 96px; }
-
-/* ---------- buttons ---------- */
-.btn { display: inline-block; min-width: 200px; padding: 18px 40px; font-size: 32px; font-weight: 600; line-height: 1.2;
-       border-radius: 16px; background: #2a2f63; border: 4px solid transparent; text-align: center; outline: none; }
-.btn-primary { background: #3d46a8; }
-.btn:focus { border-color: #ffd23f; background: #4c56c9; }
-.hi .btn { -webkit-transition: -webkit-transform 0.12s; transition: transform 0.12s; }
-.hi .btn:focus { -webkit-transform: scale(1.05); transform: scale(1.05); }
+/* Home page styles (on top of base.css). */
 
 /* ---------- main menu ---------- */
 .menu-head { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: center; -webkit-align-items: center; align-items: center;
@@ -52,6 +28,7 @@ button { font: inherit; color: inherit; border: 0; background: none; padding: 0;
 .badge-upd { background: #2bb673; }
 [dir="rtl"] .badge { right: auto; left: 16px; }
 
+
 /* ---------- settings ---------- */
 .screen-title { margin: 0 0 40px; font-size: 56px; font-weight: 800; color: #ffd23f; }
 .settings { background: #0f1226; }
@@ -67,36 +44,13 @@ button { font: inherit; color: inherit; border: 0; background: none; padding: 0;
 .vol { display: inline-block; width: 300px; height: 18px; border-radius: 9px; background: #10132e; vertical-align: middle; margin: 0 16px; overflow: hidden; }
 .vol-fill { height: 100%; background: #ffd23f; }
 
+
 /* ---------- text pages ---------- */
 .page { background: #0f1226; }
 .page-body { width: 1500px; font-size: 32px; line-height: 1.5; color: #dfe3ff; margin-bottom: 48px; }
 .page-body p { margin: 0 0 22px; }
 .page-body .kv { color: #ffd23f; }
 
-/* ---------- dialogs ---------- */
-.backdrop { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: rgba(5, 6, 18, 0.78); z-index: 50; }
-.dialog { position: absolute; left: 50%; top: 50%; width: 900px; margin-left: -450px; margin-top: -200px; padding: 48px;
-          border-radius: 28px; background: #1f2458; border: 4px solid #3d46a8; text-align: center; z-index: 60; }
-.dialog-title { margin: 0 0 18px; font-size: 48px; color: #ffd23f; }
-.dialog-text { margin: 0 0 36px; font-size: 32px; line-height: 1.4; }
-.dialog-buttons .btn { margin: 0 14px; }
-
-/* ---------- game layer ---------- */
-.game-layer { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: #000; outline: none; z-index: 20; }
-.game-frame-box, .game-frame-box iframe { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; border: 0; }
-.game-loading { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: #0f1226; padding-top: 420px; text-align: center; }
-.loading-title { font-size: 56px; font-weight: 800; color: #ffd23f; margin-bottom: 48px; }
-.bar { width: 900px; height: 28px; margin: 0 auto; border-radius: 14px; background: #20244d; overflow: hidden; }
-.bar-fill { width: 0; height: 100%; background: #ffd23f; }
-
-.pause { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: rgba(5, 6, 18, 0.72); z-index: 40; }
-.pause-box { position: absolute; left: 50%; top: 50%; width: 760px; margin-left: -380px; -webkit-transform: translateY(-50%); transform: translateY(-50%);
-             padding: 48px 56px; border-radius: 28px; background: #1f2458; border: 4px solid #3d46a8; text-align: center; }
-.pause-title { margin: 0 0 32px; font-size: 56px; color: #ffd23f; }
-.pause-items .btn { display: block; width: 100%; margin: 0 0 18px; }
-
-.toast { position: absolute; left: 50%; bottom: 64px; width: 1000px; margin-left: -500px; padding: 22px 32px; border-radius: 18px;
-         background: #1f2458; border: 3px solid #ffd23f; font-size: 30px; text-align: center; z-index: 90; }
 
 /* ---------- top scores ---------- */
 .scores { background: #0f1226; }
@@ -108,54 +62,14 @@ button { font: inherit; color: inherit; border: 0; background: none; padding: 0;
 .score-col h3 { margin: 0 0 16px; font-size: 30px; color: #ffd23f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .score-row { display: -webkit-box; display: -webkit-flex; display: flex; font-size: 28px; line-height: 56px; }
 .score-row .r { width: 44px; color: #8088cc; }
-.score-row .n { width: 84px; font-weight: 700; letter-spacing: 2px; }
+.score-row .n { width: 120px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .score-row .s { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; text-align: right; }
 [dir="rtl"] .score-row .s { text-align: left; }
 .score-empty { font-size: 26px; color: #8088cc; }
 
-/* ---------- initials entry ---------- */
-.entry-box { width: 860px; margin-left: -430px; }
-.entry-score { font-size: 40px; margin: 0 0 28px; }
-.entry-letters { margin-bottom: 20px; }
-.entry-letters .btn { min-width: 0; width: 120px; height: 140px; margin: 0 12px; font-size: 80px; padding: 0; }
-.entry-hint { font-size: 26px; color: #b9c0ff; margin: 0 0 28px; }
 
-/* ---------- network popup (shown above games too) ---------- */
-.netpop { position: absolute; left: 50%; top: 48px; width: 1100px; margin-left: -550px; padding: 26px 36px; border-radius: 20px;
-          background: #3a1d2e; border: 4px solid #ff5d73; font-size: 32px; font-weight: 700; text-align: center; z-index: 95; }
-.netpop.ok { background: #16352a; border-color: #4cd97b; }
-.netpop-icon { display: inline-block; width: 22px; height: 22px; border-radius: 11px; background: #ff5d73; margin: 0 18px; vertical-align: middle; }
-.netpop.ok .netpop-icon { background: #4cd97b; }
-
-/* ---------- profiles ---------- */
-.btn-profile { min-width: 0; padding: 12px 32px 12px 14px; text-align: left; white-space: nowrap; }
-[dir="rtl"] .btn-profile { padding: 12px 14px 12px 32px; text-align: right; }
-.avatar { display: inline-block; width: 56px; height: 56px; line-height: 56px; border-radius: 28px; margin-right: 16px; vertical-align: middle;
-          text-align: center; font-size: 30px; font-weight: 800; color: #14183a; background: #ffd23f; }
-[dir="rtl"] .avatar { margin-right: 0; margin-left: 16px; }
-#profile-name { vertical-align: middle; display: inline-block; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
-.profiles { background: #0f1226; }
-.profiles-hint { margin: -20px 0 40px; font-size: 30px; color: #b9c0ff; }
-.profiles-list { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 0 -16px 32px; height: 640px; overflow: hidden; }
-.pcard { position: relative; width: 400px; height: 280px; margin: 0 16px 32px; border-radius: 24px; background: #1c2150; border: 5px solid transparent;
-         outline: none; text-align: center; padding-top: 36px; }
-.pcard:focus { border-color: #ffd23f; background: #262c66; }
-.hi .pcard { -webkit-transition: -webkit-transform 0.12s; transition: transform 0.12s; }
-.hi .pcard:focus { -webkit-transform: scale(1.04); transform: scale(1.04); }
-.pcard-on { background: #233064; }
-.avatar-big { display: block; width: 120px; height: 120px; line-height: 120px; border-radius: 60px; margin: 0 auto 20px; font-size: 64px; }
-[dir="rtl"] .avatar-big { margin: 0 auto 20px; }
-.pcard-name { display: block; font-size: 36px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 20px; }
-.pcard-tag { position: absolute; top: 14px; right: 14px; padding: 4px 14px; border-radius: 16px; background: #2bb673; font-size: 22px; font-weight: 700; }
-[dir="rtl"] .pcard-tag { right: auto; left: 14px; }
-.profiles-buttons .btn { margin-right: 28px; }
-[dir="rtl"] .profiles-buttons .btn { margin-right: 0; margin-left: 28px; }
-
-.namer { z-index: 55; }
-.namer-box { width: 1240px; margin-left: -620px; margin-top: -360px; }
-.namer-text { min-height: 96px; margin: 0 auto 32px; width: 720px; padding: 14px 24px; border-radius: 16px; background: #10132e; border: 3px solid #3d46a8;
-              font-size: 56px; font-weight: 800; letter-spacing: 2px; color: #ffd23f; }
-.namer-empty { color: #8088cc; }
-.namer-keys { text-align: center; }
-.namer-keys .key { min-width: 0; width: 96px; height: 80px; margin: 0 6px 12px; padding: 0; font-size: 36px; }
-.namer-keys .key-wide { width: 240px; font-size: 28px; }
+/* ---------- game grid (scrolls when the registry lists more games than fit) ---------- */
+.grid { height: 820px; overflow: hidden; }
+.tile-img img { background: #0b0d1c; }
+.tag-exp { position: absolute; top: 16px; left: 16px; padding: 6px 18px; border-radius: 20px; font-size: 22px; font-weight: 700; background: #8a4fff; color: #fff; }
+[dir="rtl"] .tag-exp { left: auto; right: 16px; }

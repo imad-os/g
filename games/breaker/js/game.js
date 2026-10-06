@@ -127,6 +127,7 @@
     }
 
     var def = {
+        id: 'breaker',
         minScale: 2,
         start: function (gk) {
             t = { gk: gk, s: GK.tr(MINI_STRINGS, gk.lang) };
