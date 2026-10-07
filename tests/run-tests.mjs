@@ -276,8 +276,12 @@ async function main() {
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
         await page.focus('[data-app="scores"]'); await page.keyboard.press('Enter');
         check(await page.evaluate(() => Win.current() === 'scores' && !document.getElementById('window').hidden), 'Leaderboards app opens full screen');
-        const label = await page.evaluate(() => [...document.querySelectorAll('.score-col')].map((c) => c.getAttribute('aria-label')).join(' | '));
+        const label = await page.evaluate(() => [...document.querySelectorAll('.lb-tab')].map((c) => c.getAttribute('aria-label')).join(' | '));
         check(/Neon Snake.*1: ZZZ, 1011 points/.test(label), 'Voice Guide label lists the table');
+        await page.focus('.lb-tab'); await page.waitForTimeout(100);
+        check(await page.evaluate(() => /ZZZ/.test(document.querySelector('.lb-pane').textContent) && !!document.querySelector('.lb-podium .lb-crown') && document.querySelectorAll('.lb-hall').length === 1), 'Hall of Fame: overall champion on the podium');
+        await page.keyboard.press('ArrowDown');
+        check(await page.evaluate(() => document.querySelector('.lb-pane h2').textContent !== 'Hall of Fame' && document.activeElement.classList.contains('lb-tab')), 'Down moves to a game and the right side follows');
         await page.keyboard.press('Escape');
         check(await page.evaluate(() => document.getElementById('window').hidden && document.activeElement.getAttribute('data-app') === 'scores'), 'Back closes the app and refocuses its icon');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
@@ -612,7 +616,7 @@ async function main() {
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
         await page.focus('[data-app="scores"]'); await page.keyboard.press('Enter');
-        check(await page.evaluate(() => document.querySelectorAll('.score-col').length) === 6, 'Parchís (no points) has no top-10 column');
+        check(await page.evaluate(() => document.querySelectorAll('.lb-tab').length) === 7, 'Hall of Fame + one list per game; Parchís (no points) has none');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }

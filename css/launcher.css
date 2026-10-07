@@ -18,8 +18,7 @@ svg { display: block; width: 100%; height: 100%; }
 /* the focus ring: thick and white, readable from the sofa */
 .dicon:focus, .tb-btn:focus, .tray-clock:focus, .stile:focus, .srec:focus, .start-user:focus, .start-power:focus,
 .set-nav-btn:focus, .set-row:focus, .set-wp:focus, .fx-nav:focus, .fx-item:focus, .icon-btn:focus, .pill-btn:focus,
-.br-addr:focus, .br-search:focus, .br-link:focus, .calc-key:focus, .cal-day:focus, .cal-note:focus, .btn:focus, .pcard:focus,
-.score-col:focus { box-shadow: 0 0 0 4px #fff; }
+.br-addr:focus, .br-search:focus, .br-link:focus, .calc-key:focus, .cal-day:focus, .cal-note:focus, .btn:focus, .pcard:focus { box-shadow: 0 0 0 4px #fff; }
 
 /* ---------- buttons (dialogs, pause menu, profiles) ---------- */
 .btn { display: inline-block; min-width: 200px; padding: 16px 40px; font-size: 28px; font-weight: 600; line-height: 1.2;
@@ -274,17 +273,48 @@ svg { display: block; width: 100%; height: 100%; }
 .cal-add { margin-top: 16px; }
 
 /* ---------- Leaderboards ---------- */
-.scores-grid { display: -webkit-box; display: -webkit-flex; display: flex; padding: 48px; }
-.score-col { display: block; width: 280px; height: 860px; margin-right: 24px; padding: 20px 18px; border-radius: 12px; background: #2b2b2b;
-             text-align: left; outline: none; overflow: hidden; }
-[dir="rtl"] .score-col { text-align: right; margin-right: 0; margin-left: 24px; }
-.score-col h3 { margin: 0 0 16px; font-size: 28px; color: #4cc2ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.score-row { display: -webkit-box; display: -webkit-flex; display: flex; font-size: 27px; line-height: 60px; }
-.score-row .r { width: 44px; color: #9a9a9a; }
-.score-row .n { width: 84px; font-weight: 700; letter-spacing: 2px; }
-.score-row .s { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; text-align: right; }
-[dir="rtl"] .score-row .s { text-align: left; }
-.score-empty { font-size: 24px; color: #9a9a9a; }
+.lb-side { position: absolute; left: 0; top: 0; width: 520px; height: 991px; padding: 32px 24px; background: #202020; overflow: hidden; }
+.lb-tab { display: flex; align-items: center; height: 96px; margin-bottom: 8px; padding: 0 20px; border-radius: 14px; background: #2b2b2b; outline: none; font-size: 28px; }
+.lb-tab.on { background: #34425c; }
+.lb-hall { height: 120px; margin-bottom: 18px; background: linear-gradient(135deg, #5b4310, #2f2a1c); font-size: 32px; font-weight: 700; }
+.lb-hall.on { background: linear-gradient(135deg, #8a6514, #4a3a14); }
+.lb-ic { flex: none; width: 56px; height: 56px; margin-right: 18px; border-radius: 14px; background: #3a3a3a; text-align: center; line-height: 56px; font-weight: 700; color: #4cc2ff; }
+.lb-hall .lb-ic { width: 64px; height: 64px; padding: 8px; box-sizing: border-box; background: none; }
+[dir="rtl"] .lb-ic { margin-right: 0; margin-left: 18px; }
+.lb-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-top { flex: none; color: #ffc83d; font-weight: 700; }
+.lb-tab:focus { box-shadow: 0 0 0 4px #fff; }
+.lb-pane { position: absolute; left: 520px; top: 0; right: 0; height: 991px; padding: 40px 80px; box-sizing: border-box; }
+[dir="rtl"] .lb-side { left: auto; right: 0; }
+[dir="rtl"] .lb-pane { left: 0; right: 520px; }
+.lb-head { display: flex; align-items: baseline; margin-bottom: 8px; }
+.lb-head h2 { margin: 0; font-size: 48px; }
+.lb-sub { margin-left: 24px; font-size: 26px; color: #9a9a9a; }
+[dir="rtl"] .lb-sub { margin-left: 0; margin-right: 24px; }
+.lb-empty { margin-top: 120px; font-size: 32px; color: #9a9a9a; text-align: center; }
+.lb-podium { display: flex; align-items: flex-end; justify-content: center; height: 400px; margin-bottom: 28px; }
+.lb-pod { width: 250px; margin: 0 14px; text-align: center; }
+.lb-pod-name { font-size: 40px; font-weight: 700; letter-spacing: 3px; }
+.lb-pod-score { margin-bottom: 10px; font-size: 30px; color: #cfcfcf; }
+.lb-block { height: 120px; border-radius: 14px 14px 0 0; font-size: 64px; font-weight: 700; line-height: 120px; color: rgba(0, 0, 0, 0.45);
+            transform-origin: bottom; animation: lb-rise .5s ease-out; }
+.lb-gold .lb-block { height: 190px; background: linear-gradient(#ffd75e, #d99a00); }
+.lb-silver .lb-block { height: 150px; background: linear-gradient(#e4e8ee, #97a0ad); }
+.lb-bronze .lb-block { height: 110px; background: linear-gradient(#e9a468, #a8641f); }
+.lb-gold .lb-pod-name { color: #ffd75e; }
+.lb-crown { width: 60px; height: 50px; margin: 0 auto 4px; }
+.lb-none .lb-block { opacity: 0.25; }
+@keyframes lb-rise { from { transform: scaleY(0.1); } to { transform: scaleY(1); } }
+.lb-rows { }
+.lb-row { display: flex; align-items: center; height: 62px; font-size: 28px; }
+.lb-row.lb-none { opacity: 0.3; }
+.lb-r { width: 56px; color: #9a9a9a; }
+.lb-n { width: 130px; font-weight: 700; letter-spacing: 2px; }
+.lb-bar { flex: 1; height: 14px; margin: 0 24px; border-radius: 7px; background: #2b2b2b; overflow: hidden; }
+.lb-fill { display: block; height: 100%; border-radius: 7px; background: linear-gradient(90deg, #2f6bff, #5fd0ff); }
+.lb-s { width: 150px; text-align: right; font-weight: 700; }
+.lb-meta { width: 150px; text-align: right; font-size: 22px; color: #ffc83d; }
+[dir="rtl"] .lb-s, [dir="rtl"] .lb-meta { text-align: left; }
 
 /* ---------- dialogs and toasts ---------- */
 .backdrop { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: rgba(0, 0, 0, 0.6); z-index: 50; }

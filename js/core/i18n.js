@@ -8,7 +8,7 @@ var I18n = (function () {
     var S = {
         en: {
             netOff: 'No network connection. Your games keep working offline.', netOn: 'Network connected',
-            scores: 'Top scores', newHigh: 'New high score!', rank: 'Rank', entryHint: 'Up and down: change letter. Left and right: move. OK: save.', save: 'Save', letter: 'Letter', of: 'of', noScores: 'No scores yet', player: 'Player', points: 'points',
+            scores: 'Top scores', newHigh: 'New high score!', rank: 'Rank', entryHint: 'Up and down: change letter. Left and right: move. OK: save.', save: 'Save', letter: 'Letter', of: 'of', noScores: 'No scores yet', hallOfFame: 'Hall of Fame', hallSub: 'Top players across all games', crowns: 'Wins', gamesCount: 'Games', totalPts: 'Total points', champion: 'Champion', player: 'Player', points: 'points',
             appTitle: 'My PC', games: 'Games', settings: 'Settings', play: 'Play',
             badgeNew: 'New', badgeUpdated: 'Updated', lastPlayed: 'Last played',
             language: 'Language', musicVol: 'Music volume', sfxVol: 'Sound effects volume',
@@ -89,7 +89,7 @@ var I18n = (function () {
         },
         fr: {
             netOff: 'Pas de connexion réseau. Vos jeux fonctionnent hors ligne.', netOn: 'Réseau connecté',
-            scores: 'Meilleurs scores', newHigh: 'Nouveau record !', rank: 'Rang', entryHint: 'Haut et bas : changer la lettre. Gauche et droite : se déplacer. OK : enregistrer.', save: 'Enregistrer', letter: 'Lettre', of: 'sur', noScores: 'Aucun score', player: 'Joueur', points: 'points',
+            scores: 'Meilleurs scores', newHigh: 'Nouveau record !', rank: 'Rang', entryHint: 'Haut et bas : changer la lettre. Gauche et droite : se déplacer. OK : enregistrer.', save: 'Enregistrer', letter: 'Lettre', of: 'sur', noScores: 'Aucun score', hallOfFame: 'Temple de la gloire', hallSub: 'Meilleurs joueurs de tous les jeux', crowns: 'Victoires', gamesCount: 'Jeux', totalPts: 'Points totaux', champion: 'Champion', player: 'Joueur', points: 'points',
             appTitle: 'My PC', games: 'Jeux', settings: 'Paramètres', play: 'Jouer',
             badgeNew: 'Nouveau', badgeUpdated: 'Mis à jour', lastPlayed: 'Dernier joué',
             language: 'Langue', musicVol: 'Volume de la musique', sfxVol: 'Volume des effets',
@@ -170,7 +170,7 @@ var I18n = (function () {
         },
         es: {
             netOff: 'Sin conexión de red. Tus juegos siguen funcionando sin conexión.', netOn: 'Red conectada',
-            scores: 'Mejores puntuaciones', newHigh: '¡Nuevo récord!', rank: 'Puesto', entryHint: 'Arriba y abajo: cambiar letra. Izquierda y derecha: mover. OK: guardar.', save: 'Guardar', letter: 'Letra', of: 'de', noScores: 'Sin puntuaciones', player: 'Jugador', points: 'puntos',
+            scores: 'Mejores puntuaciones', newHigh: '¡Nuevo récord!', rank: 'Puesto', entryHint: 'Arriba y abajo: cambiar letra. Izquierda y derecha: mover. OK: guardar.', save: 'Guardar', letter: 'Letra', of: 'de', noScores: 'Sin puntuaciones', hallOfFame: 'Salón de la fama', hallSub: 'Mejores jugadores de todos los juegos', crowns: 'Victorias', gamesCount: 'Juegos', totalPts: 'Puntos totales', champion: 'Campeón', player: 'Jugador', points: 'puntos',
             appTitle: 'My PC', games: 'Juegos', settings: 'Ajustes', play: 'Jugar',
             badgeNew: 'Nuevo', badgeUpdated: 'Actualizado', lastPlayed: 'Último jugado',
             language: 'Idioma', musicVol: 'Volumen de la música', sfxVol: 'Volumen de efectos',
@@ -251,7 +251,7 @@ var I18n = (function () {
         },
         ar: {
             netOff: 'لا يوجد اتصال بالشبكة. ألعابك تعمل دون اتصال.', netOn: 'تم الاتصال بالشبكة',
-            scores: 'أفضل النتائج', newHigh: 'نتيجة قياسية جديدة!', rank: 'المرتبة', entryHint: 'أعلى وأسفل: تغيير الحرف. يسار ويمين: تنقل. OK: حفظ.', save: 'حفظ', letter: 'الحرف', of: 'من', noScores: 'لا توجد نتائج بعد', player: 'اللاعب', points: 'نقطة',
+            scores: 'أفضل النتائج', newHigh: 'نتيجة قياسية جديدة!', rank: 'المرتبة', entryHint: 'أعلى وأسفل: تغيير الحرف. يسار ويمين: تنقل. OK: حفظ.', save: 'حفظ', letter: 'الحرف', of: 'من', noScores: 'لا توجد نتائج بعد', hallOfFame: 'قاعة المشاهير', hallSub: 'أفضل اللاعبين في كل الألعاب', crowns: 'انتصارات', gamesCount: 'ألعاب', totalPts: 'مجموع النقاط', champion: 'البطل', player: 'اللاعب', points: 'نقطة',
             appTitle: 'My PC', games: 'الألعاب', settings: 'الإعدادات', play: 'العب',
             badgeNew: 'جديد', badgeUpdated: 'محدّث', lastPlayed: 'آخر لعبة',
             language: 'اللغة', musicVol: 'مستوى الموسيقى', sfxVol: 'مستوى المؤثرات',
