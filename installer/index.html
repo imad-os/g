@@ -40,6 +40,9 @@
   code { background: #1c1c1c; padding: 1px 6px; border-radius: 4px; }
   .small { font-size: 13px; }
   [hidden] { display: none !important; }
+  input[type=checkbox] { width: 18px; height: 18px; accent-color: #4cc2ff; flex: none; }
+  .tag.new { background: #1d4f73; } .tag.update { background: #6b5214; } .tag.installed { background: #1f5a37; }
+  .cat .app { cursor: default; }
   a { color: #4cc2ff; }
 </style>
 </head>
@@ -82,7 +85,23 @@
 
   <!-- admin -->
   <section id="admin" hidden>
-    <h2>Install an app</h2>
+    <h2>Apps from <span id="owner"></span></h2>
+    <div class="card cat">
+      <div class="row">
+        <span class="muted grow small">GitHub repositories of <b id="owner2"></b> whose name starts with <code id="prefix"></code>
+          and that have GitHub Pages turned on. Installed ones are marked; new versions can be updated.</span>
+        <button id="btn-scan">Refresh</button>
+      </div>
+      <p id="scan-msg" class="small"></p>
+      <div id="catalog"></div>
+      <div id="catalog-actions" class="row" hidden>
+        <label class="row small" style="margin:0"><input type="checkbox" id="sel-all"> Select all</label>
+        <span class="grow"></span>
+        <button id="btn-install-sel" class="primary" disabled>Install selected</button>
+      </div>
+    </div>
+
+    <h2>Install from another address</h2>
     <div class="card">
       <label for="url">App address (the folder that contains <code>mypc-app.json</code>)</label>
       <div class="row">
@@ -130,7 +149,10 @@
   const auth = getAuth(app), db = getFirestore(app);
   const $ = (id) => document.getElementById(id);
   const show = (id) => ['signin', 'notadmin', 'admin'].forEach((s) => { $(s).hidden = s !== id; });
-  let user = null, apps = [], pending = null;
+  let user = null, apps = [], pending = null, found = [];
+  const OWNER = 'imad-os', PREFIX = 'g_';         // catalog: OWNER's repositories named PREFIX...
+  $('owner').textContent = $('owner2').textContent = OWNER;
+  $('prefix').textContent = PREFIX + '…';
 
   const AUTH_MSG = {
     'auth/invalid-credential': 'Wrong e-mail or password.', 'auth/wrong-password': 'Wrong e-mail or password.',
@@ -164,13 +186,126 @@
     try { admin = (await getDoc(doc(db, 'admins', u.uid))).exists(); } catch (e) { admin = false; }
     if (!admin) { $('uid').textContent = u.uid; return show('notadmin'); }
     show('admin');
-    load();
+    await load();
+    scan();
   });
 
   async function load() {
     const snap = await getDocs(collection(db, 'apps'));
     apps = snap.docs.map((d) => d.data()).sort((a, b) => (a.order || 0) - (b.order || 0));
     render();
+    renderCatalog();
+  }
+
+  /* ---------- catalog: the owner's g_ repositories on GitHub Pages ---------- */
+
+  async function githubRepos() {
+    let all = [];
+    for (let page = 1; page <= 5; page++) {
+      const r = await fetch('https://api.github.com/users/' + OWNER + '/repos?per_page=100&type=owner&page=' + page, { headers: { Accept: 'application/vnd.github+json' } });
+      if (r.status === 403 || r.status === 429) throw new Error('GitHub says: too many requests from this network. Try again in a few minutes.');
+      if (!r.ok) throw new Error('GitHub answered ' + r.status + '.');
+      const list = await r.json();
+      all = all.concat(list);
+      if (list.length < 100) break;
+    }
+    return all;
+  }
+
+  async function scan() {
+    found = [];
+    $('catalog').innerHTML = '';
+    $('catalog-actions').hidden = true;
+    say('scan-msg', 'Looking for ' + PREFIX + '… repositories of ' + OWNER + ' …');
+    let list;
+    try { list = InstallerLib.catalog(await githubRepos(), OWNER, PREFIX); } catch (e) { return say('scan-msg', e.message, 'err'); }
+    if (!list.length) return say('scan-msg', 'No repository named ' + PREFIX + '… with GitHub Pages yet.', 'muted');
+    const results = await Promise.all(list.map(async (c) => {
+      try {
+        const r = await fetch(c.manifest, { cache: 'no-store' });
+        if (!r.ok) throw new Error(r.status === 404 ? 'no ' + InstallerLib.MANIFEST : 'site answered ' + r.status);
+        return { c, app: InstallerLib.toApp(await r.json(), c.base, 0) };
+      } catch (e) { return { c, error: e.message }; }
+    }));
+    found = results;
+    const ok = results.filter((x) => x.app).length;
+    say('scan-msg', ok + ' app' + (ok === 1 ? '' : 's') + ' found in ' + list.length + ' repositor' + (list.length === 1 ? 'y' : 'ies') + '.', 'ok');
+    renderCatalog();
+  }
+
+  function renderCatalog() {
+    const box = $('catalog');
+    if (!found.length) return;
+    box.innerHTML = '';
+    let selectable = 0;
+    found.forEach((f) => {
+      const row = document.createElement('div');
+      row.className = 'app';
+      if (!f.app) {
+        row.innerHTML = '<div class="grow"><span class="name"></span> <span class="muted small err"></span></div>';
+        row.querySelector('.name').textContent = f.c.repo;
+        row.querySelector('.err').textContent = '– not installable: ' + f.error;
+        return box.appendChild(row);
+      }
+      const st = InstallerLib.status(apps, f.app);
+      row.innerHTML = '<input type="checkbox"><img alt=""><div class="grow"><div><span class="name"></span><span class="tag type"></span><span class="tag st"></span>' +
+        ' <span class="muted small ver"></span></div><div class="muted desc"></div><div class="muted small url"></div></div><button class="act"></button>';
+      const cb = row.querySelector('input');
+      cb.disabled = st === 'installed';
+      cb.checked = !!f.selected && !cb.disabled;
+      cb.onchange = () => { f.selected = cb.checked; updateSel(); };
+      if (!cb.disabled) selectable++;
+      row.querySelector('img').src = f.app.icon || '../icon-32.png';
+      row.querySelector('.name').textContent = f.app.name;
+      row.querySelector('.type').textContent = f.app.type;
+      row.querySelector('.st').textContent = st === 'new' ? 'Not installed' : st === 'update' ? 'Update available' : 'Installed';
+      row.querySelector('.st').className = 'tag st ' + st;
+      row.querySelector('.ver').textContent = 'v' + f.app.version;
+      row.querySelector('.desc').textContent = f.app.description;
+      row.querySelector('.url').textContent = f.c.repo + ' · ' + f.app.url;
+      const act = row.querySelector('.act');
+      act.textContent = st === 'new' ? 'Install' : st === 'update' ? 'Update' : 'Installed';
+      act.disabled = st === 'installed';
+      act.className = 'act' + (st === 'installed' ? '' : ' primary');
+      act.onclick = async () => { act.disabled = true; await installMany([f.app]); };
+      box.appendChild(row);
+    });
+    $('catalog-actions').hidden = !selectable;
+    updateSel();
+  }
+
+  function updateSel() {
+    const sel = found.filter((f) => f.selected && f.app && InstallerLib.status(apps, f.app) !== 'installed');
+    $('btn-install-sel').disabled = !sel.length;
+    $('btn-install-sel').textContent = sel.length ? 'Install selected (' + sel.length + ')' : 'Install selected';
+    const avail = found.filter((f) => f.app && InstallerLib.status(apps, f.app) !== 'installed');
+    $('sel-all').checked = !!avail.length && avail.every((f) => f.selected);
+  }
+
+  $('sel-all').onchange = () => {
+    found.forEach((f) => { if (f.app && InstallerLib.status(apps, f.app) !== 'installed') f.selected = $('sel-all').checked; });
+    renderCatalog();
+  };
+  $('btn-install-sel').onclick = async () => {
+    const list = found.filter((f) => f.selected && f.app && InstallerLib.status(apps, f.app) !== 'installed').map((f) => f.app);
+    $('btn-install-sel').disabled = true;
+    await installMany(list);
+  };
+  $('btn-scan').onclick = scan;
+
+  // installs or updates apps (an update keeps its desktop position and visibility)
+  async function installMany(list) {
+    let done = 0, failed = [];
+    for (const a of list) {
+      const old = apps.find((x) => x.id === a.id);
+      const data = Object.assign({}, a, { installedAt: serverTimestamp(), installedBy: user.uid });
+      data.order = old ? old.order : apps.length + done;
+      if (old) data.enabled = old.enabled !== false;
+      try { await setDoc(doc(db, 'apps', a.id), data); done++; } catch (e) { failed.push(a.name + ': ' + e.message); }
+    }
+    found.forEach((f) => { f.selected = false; });
+    say('scan-msg', failed.length ? 'Not installed: ' + failed.join('; ') : done + ' app' + (done === 1 ? '' : 's') + ' installed. TVs show them the next time My PC starts.', failed.length ? 'err' : 'ok');
+    await load();
   }
 
   function render() {
@@ -247,7 +382,8 @@
     if (!pending) return;
     const old = apps.find((a) => a.id === pending.id);
     const data = Object.assign({}, pending, { installedAt: serverTimestamp(), installedBy: user.uid });
-    if (old) { data.order = old.order; data.enabled = old.enabled !== false; }
+    data.order = old ? old.order : apps.length;
+    if (old) data.enabled = old.enabled !== false;
     $('btn-install').disabled = true;
     try {
       await setDoc(doc(db, 'apps', pending.id), data);

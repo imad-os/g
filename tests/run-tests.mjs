@@ -22,6 +22,7 @@
 //      explorer, browser) that free everything when they close
 //  16. installed apps: list from Firebase (mocked), My PC SDK in a sandboxed cross-origin iframe
 //  17. installer: mypc-app.json parsing
+//  18. installer page: catalog of imad-os's g_ repositories (GitHub API and Firebase mocked)
 //
 //  CHROMIUM_PATH=/path/to/chrome uses an existing Chromium instead of Playwright's download.
 
@@ -767,8 +768,71 @@ async function main() {
         const a = lib.toApp(ex, 'https://imad-os.github.io/g/sdk/example/', 3);
         check(a.id === 'star-catcher' && a.entry === 'https://imad-os.github.io/g/sdk/example/index.html' && a.icon === 'https://imad-os.github.io/g/sdk/example/icon.svg' && a.order === 3 && a.enabled && a.scores,
             'the example manifest becomes a valid app document');
+        const cat = lib.catalog([{ name: 'g_a', has_pages: true }, { name: 'G_B' }, { name: 'x', has_pages: true }, { name: 'g_c', has_pages: false }], 'Imad-OS', 'g_');
+        check(cat.length === 2 && cat[0].base === 'https://imad-os.github.io/g_a/' && cat[1].manifest === 'https://imad-os.github.io/G_B/mypc-app.json', 'catalog: g_ repos with Pages -> their app addresses');
+        check(lib.status([{ id: 'a', url: 'u', version: '1', entry: 'e', name: 'n', icon: '' }], { id: 'a', url: 'u', version: '2', entry: 'e', name: 'n', icon: '' }) === 'update' &&
+              lib.status([], { id: 'a' }) === 'new', 'status: new / update');
         const bad = [{}, { mypc: 1, id: 'X!', name: 'a' }, { mypc: 1, id: 'ok-id' }, { mypc: 1, id: 'ok-id', name: 'n', type: 'video' }];
         check(bad.every((m) => { try { lib.toApp(m, 'https://a.b/'); return false; } catch (e) { return !!e.message; } }), 'invalid manifests are refused with a message');
+    }
+
+    console.log('18. installer page: catalog of the owner\'s g_ repositories');
+    {
+        const page = await newPage(browser, base);
+        const GS = 'https://www.gstatic.com/firebasejs/12.0.0/';
+        // stand-ins for the Firebase modules (signed in as an admin, in-memory Firestore)
+        const FAKE = {
+            'firebase-app.js': 'export function initializeApp() { return {}; }',
+            'firebase-auth.js': `export function getAuth() { return {}; }
+                export function onAuthStateChanged(a, cb) { setTimeout(() => cb({ uid: 'U1', email: 'owner@example.com' }), 0); }
+                export class GoogleAuthProvider {}
+                export function signInWithPopup() {} export function signInWithEmailAndPassword() {} export function createUserWithEmailAndPassword() {}
+                export function signOut() {} export function sendPasswordResetEmail() {}`,
+            'firebase-firestore.js': `const db = window.__db;
+                export function getFirestore() { return {}; }
+                export function collection(d, name) { return { name }; }
+                export function doc(d, col, id) { return { col, id }; }
+                export async function getDoc(r) { return { exists: () => !!(db[r.col] && db[r.col][r.id]) }; }
+                export async function getDocs(c) { return { docs: Object.values(db[c.name] || {}).map((x) => ({ data: () => x })) }; }
+                export async function setDoc(r, data) { (db[r.col] = db[r.col] || {})[r.id] = data; }
+                export async function updateDoc(r, f) { Object.assign(db[r.col][r.id], f); }
+                export async function deleteDoc(r) { delete db[r.col][r.id]; }
+                export function serverTimestamp() { return 'now'; }`
+        };
+        await page.addInitScript(() => {
+            window.__db = { admins: { U1: { name: 'owner' } }, apps: {
+                'old-game': { id: 'old-game', name: 'Old Game', url: 'https://imad-os.github.io/g_oldgame/', entry: 'https://imad-os.github.io/g_oldgame/index.html', icon: '', type: 'game', version: '1.0.0', enabled: true, order: 0 } } };
+        });
+        await page.route(GS + '**', (r) => { const f = r.request().url().slice(GS.length); r.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: FAKE[f] || '' }); });
+        await page.route('https://api.github.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify([
+            { name: 'g_star', has_pages: true }, { name: 'g_oldgame', has_pages: true }, { name: 'g_broken', has_pages: true },
+            { name: 'g_nopages', has_pages: false }, { name: 'speedy', has_pages: true }, { name: 'g_archived', has_pages: true, archived: true }]) }));
+        const ex = JSON.parse(fs.readFileSync(path.join(ROOT, 'sdk/example/mypc-app.json'), 'utf8'));
+        await page.route('https://imad-os.github.io/**', (r) => {
+            const u = r.request().url();
+            const send = (o) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(o) });
+            if (u.indexOf('/g_star/mypc-app.json') > 0) return send(ex);
+            if (u.indexOf('/g_oldgame/mypc-app.json') > 0) return send({ mypc: 1, id: 'old-game', name: 'Old Game', type: 'game', version: '1.0.0' });
+            r.fulfill({ status: 404, body: '' });
+        });
+        await page.goto(base + 'installer/index.html');
+        await page.waitForSelector('#catalog .app', { timeout: 8000 });
+        const rows = await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].map((r) => r.textContent));
+        check(rows.length === 3 && !rows.some((t) => /speedy|nopages|archived/.test(t)), 'only g_ repositories with GitHub Pages are listed (' + rows.length + ')');
+        check(rows.some((t) => /Star Catcher.*Not installed/.test(t)) && rows.some((t) => /Old Game.*Installed/.test(t)) && rows.some((t) => /g_broken.*not installable/.test(t)),
+            'each app shows its status: new, installed, or not a My PC app');
+        check(await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].find((r) => /Old Game/.test(r.textContent)).querySelector('input').disabled), 'installed apps cannot be selected again');
+        await page.check('#sel-all');
+        await page.click('#btn-install-sel');
+        await page.waitForFunction(() => window.__db.apps['star-catcher'], null, { timeout: 5000 }).catch(() => {});
+        const db = await page.evaluate(() => window.__db.apps);
+        check(db['star-catcher'] && db['star-catcher'].order === 1 && db['star-catcher'].url === 'https://imad-os.github.io/g_star/' && db['star-catcher'].installedBy === 'U1' && Object.keys(db).length === 2,
+            '"Install selected" installs the new app only, after the installed ones');
+        await page.waitForFunction(() => /Star Catcher.*Installed/.test(document.getElementById('catalog').textContent) && !/Not installed/.test(document.getElementById('catalog').textContent));
+        check(true, 'after installing, the catalog marks it installed');
+        check(await page.evaluate(() => !!document.getElementById('url') && !!document.getElementById('btn-fetch')), 'the manual address section is still there for apps outside imad-os');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
     }
 
     await browser.close();

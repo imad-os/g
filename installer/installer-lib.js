@@ -45,7 +45,31 @@
         return app;
     }
 
-    var api = { MANIFEST: MANIFEST, locate: locate, toApp: toApp };
+    // GitHub repositories of the owner -> the ones that can be My PC apps: name starts with the prefix,
+    // GitHub Pages turned on, not archived. -> [{ repo, base, manifest }]
+    function catalog(repos, owner, prefix) {
+        var out = [], p = String(prefix || '').toLowerCase();
+        (repos || []).forEach(function (r) {
+            if (!r || typeof r.name !== 'string') return;
+            if (p && r.name.toLowerCase().indexOf(p) !== 0) return;
+            if (r.archived || r.has_pages === false) return;
+            var base = 'https://' + owner.toLowerCase() + '.github.io/' + r.name + '/';
+            out.push({ repo: r.name, base: base, manifest: base + MANIFEST, pushed: r.pushed_at || '' });
+        });
+        out.sort(function (a, b) { return a.repo.localeCompare(b.repo); });
+        return out;
+    }
+
+    // installed list + a catalog app -> 'new' | 'installed' | 'update' (same id, other version or address)
+    function status(installed, app) {
+        for (var i = 0; i < (installed || []).length; i++) {
+            var a = installed[i];
+            if (a.id === app.id || a.url === app.url) return a.version === app.version && a.entry === app.entry && a.name === app.name && a.icon === app.icon ? 'installed' : 'update';
+        }
+        return 'new';
+    }
+
+    var api = { MANIFEST: MANIFEST, locate: locate, toApp: toApp, catalog: catalog, status: status };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.InstallerLib = api;
 })(this);

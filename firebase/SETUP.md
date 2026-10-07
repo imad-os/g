@@ -9,8 +9,11 @@ Quick start (once):
 2. Authentication: enable **Google** and **Email/Password**, add `imad-os.github.io` to the
    authorized domains (step 2).
 3. Open the installer, sign in, copy the user ID it shows, and add it to `admins` (step 2.5).
-4. Reload the installer: paste an app address (try `https://imad-os.github.io/g/sdk/example/`),
-   press **Check**, then **Install**. TVs show it at their next start.
+4. Reload the installer. **Apps from imad-os** lists every repository of `imad-os` named `g_…`
+   that has GitHub Pages and a `mypc-app.json`: tick them and press **Install selected** (installed
+   ones are marked; changed ones show **Update**). For apps elsewhere, paste the address under
+   **Install from another address** (try `https://imad-os.github.io/g/sdk/example/`). TVs show
+   them at their next start.
 
 ## 1. Firestore database
 1. Go to Firebase console → **Build → Firestore Database** → *Create database*. Production mode,
