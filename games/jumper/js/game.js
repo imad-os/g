@@ -216,7 +216,12 @@
             p.dead = true; p.vy = -5; p.vx = 0; p.star = 0; p.deadT = 0; p.gp = 0;
             p.lives--;
             sfx('die');
-            if (anyAlive(p)) { p.respawnT = 150; return; }
+            if (anyAlive(p)) {
+                // the partner plays on; this player comes back above them, or sits out with no lives left
+                p.respawnT = 150;
+                if (p.lives <= 0) { gk.announce(NAMES[p.slot] + ': ' + s.gameOver); popup(p.x, Math.min(p.y, cam.y + 120), NAMES[p.slot] + ' ' + s.gameOver); }
+                return;
+            }
             mode = 'dying'; modeT = 0;
             music(null);
         },
@@ -292,6 +297,7 @@
             art = { tiles: Art.buildTiles(theme), bg: Art.buildBackground(theme, Math.max(1, gk.q.parallax), gk.q.clouds) };
         }
         lv = new Level(levelJson, art.tiles, art.bg);
+        lv.addPowerUps();
         ents = []; bossOn = false; leftWall = 0; goalEnt = null; combo = 0;
         var start = null;
         for (var i = 0; i < lv.objects.length; i++) {
@@ -315,6 +321,7 @@
             var pl = players[i];
             if (pl.out) continue;
             pl.reset();
+            pl.safeX = undefined;
             pl.h = pl.power ? 22 : 14;
             pl.x = sx + 2 + i * 18; pl.y = sy - pl.h;
             pl.face = 1;
@@ -381,6 +388,16 @@
         updateHud(true);
     }
 
+    // Classic "World 1-1 / hero x 3" card shown after losing a life
+    function showLivesCard() {
+        mode = 'retry'; modeT = 0;
+        setBanner(stageLabel(stage), stage.name);
+        var t = [];
+        for (var i = 0; i < players.length; i++) if (!players[i].out) t.push((players.length > 1 ? NAMES[players[i].slot] + ' ' : '') + s.lives + ' ' + players[i].lives);
+        gk.announce(stageLabel(stage) + '. ' + t.join(', '));
+        updateHud(true);
+    }
+
     function saveP1() {
         if (!save || !players[0]) return;
         save.lives = players[0].lives; save.score = players[0].score; save.coins = coins;
@@ -416,15 +433,27 @@
     }
     function leave() {
         players.length = 1; twoP = false; joinWait = 0;
-        players[0].dev = null;
-        player = players[0];
+        var p1 = players[0];
+        p1.dev = null;
+        player = p1;
         gk.announce(s.p2Left);
+        // player 1 was waiting to respawn above player 2 (or had no lives left): with nobody left
+        // to respawn on, the stage restarts from the checkpoint, or it is game over
+        if (lv && mode === 'play' && (p1.dead || p1.out)) {
+            p1.out = false; p1.dead = true; p1.respawnT = 0;
+            mode = 'dying'; modeT = 0; music(null);
+        }
     }
-    // a fallen player comes back above the partner
+    // A fallen player comes back next to the partner: on the partner's own spot (always free of
+    // walls) or, when the partner is in the air, on the last ground the partner stood on if it is
+    // on screen. Small, blinking and with a little hop.
     function respawn(p) {
         var mate = anyAlive(p) || players[0];
         p.reset(); p.power = 0; p.h = 14;
-        p.x = mate.x; p.y = Math.max(cam.y + 8, mate.y - 40); p.vy = 0;
+        var fx = mate.x, feet = mate.y + mate.h;
+        if (!mate.onGround && mate.safeX !== undefined && mate.safeX >= cam.x && mate.safeX + p.w <= cam.x + 480) { fx = mate.safeX; feet = mate.safeY; }
+        p.x = fx; p.y = feet - p.h; p.vx = 0; p.vy = -3;
+        p.face = mate.face;
         p.inv = 150;
         sfx('sprout');
     }
@@ -723,6 +752,13 @@
             player = p;
             p.update(W, inputs(p));
             if (mode !== 'play') return;
+            if (p.onGround && !p.ride && !p.dead) { p.safeX = p.x; p.safeY = p.y + p.h; }
+        }
+        // safety net: everybody down but nobody restarted the stage -> restart / game over
+        if (!anyAlive(null)) {
+            for (i = 0; i < players.length; i++) if (players[i].out && players[i].lives > 0) { players[i].out = false; players[i].dead = true; }
+            mode = 'dying'; modeT = 0; music(null);
+            return;
         }
         target = firstAlive();
         updateEnts();
@@ -754,7 +790,7 @@
         if (p.deadT > 30) { p.vy += 0.25; p.y += p.vy; }
         if (p.respawnT > 0 && --p.respawnT === 0) {
             if (p.lives > 0 && anyAlive(p)) { respawn(p); gk.announce(NAMES[p.slot] + ' ' + s.p2Back); }
-            else p.out = true;
+            else if (p.lives <= 0) p.out = true;
         }
     }
 
@@ -800,7 +836,9 @@
             for (i = 0; i < 8; i++) pops.push({ x: 0, y: 0, vy: 0, t: 0 });
             for (i = 0; i < 8; i++) popups.push({ x: 0, y: 0, text: '', t: 0 });
             players[0].lives = save.lives > 0 ? save.lives : 5; players[0].score = save.score || 0; coins = save.coins || 0;
-            hud = GK.hud([['world', ''], ['lives', s.lives], ['coins', s.coins], ['stars', ''], ['score', s.score], ['time', s.time]]);
+            hud = GK.hud([['world', ''], ['lives', ''], ['lives2', ''], ['coins', s.coins], ['stars', ''], ['score', s.score], ['time', s.time]]);
+            hud.livesBox.insertBefore(lifeIcon('hs_normal_stand_r'), hud.lives);
+            hud.lives2Box.insertBefore(lifeIcon('hs_normal2_stand_r'), hud.lives2);
             mapInfo = document.getElementById('mapinfo');
             document.body.className = 'pixel' + (save.hc ? ' hc' : '');
             toMap();
@@ -848,8 +886,11 @@
                             setBanner(s.gameOver, ''); gk.announce(s.gameOver);
                             music(SONGS.gameover);
                             submitScores(true);
-                        } else buildLevel(true);
+                        } else showLivesCard();
                     }
+                    break;
+                case 'retry':
+                    if (modeT >= 120) buildLevel(true);
                     break;
                 case 'gameover':
                     if (modeT > 260 || (modeT > 60 && (g.pressed('confirm') || g.pressed('jump')))) toMap(stage.id);
@@ -873,6 +914,7 @@
         },
         render: function (g) {
             var c = g.ctx;
+            if (mode === 'intro' || mode === 'retry') { drawLivesCard(c); return; }
             if (mode === 'map' || !lv) {
                 drawMap(c);
                 if (mode !== 'map') { c.fillStyle = 'rgba(10,10,30,0.85)'; c.fillRect(0, 0, 480, 270); }
@@ -1025,18 +1067,46 @@
         }
     }
 
+    // hero x lives for each player, under the stage name banner (like the classic intro card)
+    function drawLivesCard(c) {
+        c.fillStyle = '#000'; c.fillRect(0, 0, 480, 270);
+        var n = players.length, gap = 150, x0 = 240 - (n - 1) * gap / 2;
+        for (var i = 0; i < n; i++) {
+            var p = players[i], x = x0 + i * gap, f = sprites.f[p.slot === 2 ? 'hs_normal2_stand_r' : 'hs_normal_stand_r'];
+            if (n > 1) GK.text(c, NAMES[p.slot], x, 150, 10, '#b9c0ff', 'center');
+            c.drawImage(sprites.c, f.x, f.y, 16, 16, x - 42, 160, 32, 32);
+            GK.text(c, '\u00D7 ' + (p.out ? 0 : p.lives), x - 2, 177, 18, p.out || p.lives <= 0 ? '#ff5d73' : '#ffffff', 'left');
+        }
+    }
+
     /* ------------------------------------------------------------------ HUD */
+
+    // small hero picture for the HUD lives counters (made once from the sprite sheet)
+    function lifeIcon(name) {
+        var cv = document.createElement('canvas'), f = sprites.f[name];
+        cv.width = cv.height = 16;
+        cv.getContext('2d').drawImage(sprites.c, f.x, f.y, 16, 16, 0, 0, 16, 16);
+        var img = document.createElement('img');
+        img.className = 'life-icon'; img.alt = '';
+        try { img.src = cv.toDataURL(); } catch (e) {}
+        return img;
+    }
 
     function updateHud(force) {
         var inStage = mode !== 'map' && stage;
         gk.setText(hud.world, inStage ? stageLabel(stage) : s.world + ' ' + mapW);
         var a = players[0], b = players[1];
-        gk.setText(hud.lives, b ? 'P1 ' + a.lives + '  P2 ' + b.lives : a.lives);
+        // one counter per hero, with the hero's picture: "x 4"
+        gk.setText(hud.lives, '\u00D7 ' + Math.max(0, a.lives));
+        hud.livesBox.className = 'hud-item' + (a.out ? ' life-out' : '');
+        hud.lives2Box.style.display = b ? '' : 'none';
+        if (b) { gk.setText(hud.lives2, '\u00D7 ' + Math.max(0, b.lives)); hud.lives2Box.className = 'hud-item' + (b.out ? ' life-out' : ''); }
         gk.setText(hud.coins, coins);
         gk.setText(hud.score, b ? a.score + ' / ' + b.score : a.score);
         gk.setText(hud.stars, inStage ? (starGot[0] ? '★' : '☆') + (starGot[1] ? '★' : '☆') + (starGot[2] ? '★' : '☆') : '');
-        gk.setText(hud.time, inStage ? time : '');
-        hud.timeBox.style.visibility = inStage ? 'visible' : 'hidden';
+        var timed = inStage && mode !== 'intro' && mode !== 'retry';   // no clock on the stage card
+        gk.setText(hud.time, timed ? time : '');
+        hud.timeBox.style.visibility = timed ? 'visible' : 'hidden';
         hud.starsBox.style.visibility = inStage ? 'visible' : 'hidden';
         hud.timeBox.style.color = inStage && time <= 100 ? '#ff5d73' : '';
     }
@@ -1046,7 +1116,8 @@
         var a = players[0], b = players[1];
         return { mode: mode, stage: stage && stage.id, x: a && a.x, y: a && a.y, vx: a && a.vx, vy: a && a.vy, onGround: a && a.onGround, crouch: a && a.crouch, gp: a && a.gp, frameName: a && a.frame(0), power: a && a.power,
                  lives: a && a.lives, time: time, coins: coins, score: a && a.score, ents: ents.length, camX: cam.x, camY: cam.y, h: a && a.h,
-                 twoP: twoP, joinWait: joinWait, p1Dev: a && a.dev,
+                 twoP: twoP, joinWait: joinWait, p1Dev: a && a.dev, dead: a && a.dead, out: a && a.out,
+                 hudLives: hud && hud.lives.textContent, hudLives2: hud && hud.lives2Box.style.display !== 'none' ? hud.lives2.textContent : null,
                  p2: b ? { x: b.x, y: b.y, lives: b.lives, score: b.score, dead: b.dead, out: b.out, dev: b.dev } : null };
     };
     window.JumperCheat = {
@@ -1059,7 +1130,9 @@
         goal: function () { for (var i = 0; i < ents.length; i++) if (ents[i].type === 'goal' && !ents[i].secret) return { x: ents[i].x, y: ents[i].y, ground: ents[i].ground }; return null; },
         door: function () { for (var i = 0; i < ents.length; i++) if (ents[i].type === 'bossdoor') return ents[i].x; return null; },
         bossHits: function () { for (var i = 0; i < ents.length; i++) if (ents[i].type === 'boss') { ents[i].hp = 1; return { x: ents[i].x, y: ents[i].y, on: bossOn }; } return null; },
-        save: function () { return save; }
+        save: function () { return save; },
+        leave: function () { leave(); },
+        tiles: function (id) { var n = 0; for (var i = 0; i < lv.data.length; i++) if (lv.data[i] === id) n++; return n; }
     };
 
     GK.create(def);

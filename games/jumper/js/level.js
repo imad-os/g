@@ -45,6 +45,19 @@ var Level = (function () {
 
     Level.prototype.prop = prop;
 
+    // The stages were built with one power-up block each, which players rarely found. Like the
+    // classic first stage, the first "?" block of a stage and every third one after it hold a
+    // power-up (grow berry, or the fire bloom when the hero is already big) instead of a coin.
+    Level.prototype.addPowerUps = function () {
+        var n = 0;
+        for (var tx = 0; tx < this.W; tx++) for (var ty = 0; ty < this.H; ty++) {
+            var i = ty * this.W + tx;
+            if (this.data[i] !== QCOIN) continue;
+            if (n % 3 === 0) this.data[i] = QPOW;
+            n++;
+        }
+    };
+
     Level.prototype.tile = function (tx, ty) {
         if (tx < 0 || tx >= this.W || ty >= this.H) return HARD;   // walls left/right and floor of the map edges
         if (ty < 0) return 0;
