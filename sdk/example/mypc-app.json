@@ -1,0 +1,11 @@
+{
+  "mypc": 1,
+  "id": "star-catcher",
+  "name": "Star Catcher",
+  "description": "Catch the falling stars, dodge the rocks",
+  "type": "game",
+  "entry": "index.html",
+  "icon": "icon.svg",
+  "version": "1.0.0",
+  "scores": true
+}

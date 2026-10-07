@@ -85,9 +85,10 @@
             for (i = 0; i < games.length; i++) out.push(item('game', I18n.pick(games[i].manifest.title), t('game'), playGame(games[i]), Desktop.coverUrl(games[i])));
             out.push(item('scores', t('leaderboards'), '', openApp('scores')));
         } else if (id === 'games') {
-            for (i = 0; i < games.length; i++) out.push(item('game', I18n.pick(games[i].manifest.title), I18n.pick(games[i].manifest.description), playGame(games[i]), Desktop.coverUrl(games[i])));
+            for (i = 0; i < games.length; i++) if (games[i].kind !== 'app') out.push(item('game', I18n.pick(games[i].manifest.title), games[i].installed ? t('installedFrom') + ' ' + games[i].url : I18n.pick(games[i].manifest.description), playGame(games[i]), Desktop.coverUrl(games[i])));
         } else if (id === 'apps') {
             for (i = 0; i < apps.length; i++) out.push(item(apps[i].icon, t(apps[i].label), t('app'), openApp(apps[i].id)));
+            for (i = 0; i < games.length; i++) if (games[i].kind === 'app') out.push(item('folder', I18n.pick(games[i].manifest.title), t('installedFrom') + ' ' + games[i].url, playGame(games[i]), Desktop.coverUrl(games[i])));
         } else if (id === 'pictures') {
             var curWp = Desktop.wallpaper();
             for (i = 0; i < Desktop.WALLPAPERS.length; i++) {

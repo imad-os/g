@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My PC – Install apps</title>
+<link rel="icon" type="image/png" sizes="32x32" href="../icon-32.png">
+<!-- Desktop browser page (not part of the TV package): installs apps on every My PC.
+     It signs in with Firebase Authentication and writes the "apps" collection that the TVs read. -->
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #202020; color: #fff; font: 15px/1.45 "Segoe UI Variable", "Segoe UI", Roboto, Arial, sans-serif; }
+  header { display: flex; align-items: center; gap: 14px; padding: 14px 28px; background: #1c1c1c; border-bottom: 1px solid #2d2d2d; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; flex: 1; }
+  header .who { color: #c5c5c5; }
+  main { max-width: 1000px; margin: 0 auto; padding: 28px; }
+  h2 { font-size: 22px; font-weight: 600; margin: 28px 0 12px; }
+  .card { background: #2b2b2b; border-radius: 10px; padding: 20px 24px; margin-bottom: 8px; }
+  .muted { color: #c5c5c5; }
+  .err { color: #ff99a4; }
+  .ok { color: #6ee7a0; }
+  input { width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid #555; background: #1c1c1c; color: #fff; font: inherit; }
+  input:focus { outline: 2px solid #4cc2ff; border-color: transparent; }
+  label { display: block; margin: 10px 0 4px; color: #c5c5c5; }
+  button { font: inherit; padding: 9px 18px; border-radius: 6px; border: 1px solid #444; background: #3a3a3a; color: #fff; cursor: pointer; }
+  button:hover { background: #454545; }
+  button.primary { background: #4cc2ff; border-color: #4cc2ff; color: #000; font-weight: 600; }
+  button.primary:hover { background: #7dd3ff; }
+  button.danger { color: #ff99a4; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .grow { flex: 1; }
+  .app { display: flex; align-items: center; gap: 16px; background: #2b2b2b; border-radius: 10px; padding: 14px 18px; margin-bottom: 6px; }
+  .app img, .preview img { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; background: #1c1c1c; flex: none; }
+  .app .name { font-weight: 600; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; background: #3a3a3a; font-size: 12px; margin-left: 6px; }
+  .tag.off { background: #5a2a30; }
+  .preview { display: flex; gap: 18px; align-items: center; margin-top: 16px; padding-top: 16px; border-top: 1px solid #3a3a3a; }
+  code { background: #1c1c1c; padding: 1px 6px; border-radius: 4px; }
+  .small { font-size: 13px; }
+  [hidden] { display: none !important; }
+  a { color: #4cc2ff; }
+</style>
+</head>
+<body>
+<header>
+  <img src="../icon-32.png" alt="" width="28" height="28">
+  <h1>My PC – Install apps</h1>
+  <span id="who" class="who"></span>
+  <button id="btn-out" hidden>Sign out</button>
+</header>
+<main>
+  <!-- signed out -->
+  <section id="signin" hidden>
+    <h2>Sign in</h2>
+    <div class="card" style="max-width:460px">
+      <button id="btn-google" class="primary" style="width:100%">Sign in with Google</button>
+      <p class="muted small" style="text-align:center;margin:14px 0 4px">or with e-mail</p>
+      <label for="email">E-mail</label><input id="email" type="email" autocomplete="username">
+      <label for="pass">Password</label><input id="pass" type="password" autocomplete="current-password">
+      <div class="row" style="margin-top:14px">
+        <button id="btn-in" class="primary">Sign in</button>
+        <button id="btn-up">Create account</button>
+        <span class="grow"></span>
+        <button id="btn-reset" class="small">Forgot password</button>
+      </div>
+      <p id="signin-msg" class="small"></p>
+    </div>
+  </section>
+
+  <!-- signed in but not an admin -->
+  <section id="notadmin" hidden>
+    <h2>Almost there</h2>
+    <div class="card">
+      <p>This account can't install apps yet. In the Firebase console, open <b>Firestore → Data</b>, collection
+         <code>admins</code>, and add a document whose ID is your user ID:</p>
+      <p><code id="uid"></code> <button id="btn-copy" class="small">Copy</button></p>
+      <p class="muted small">Then reload this page. See <code>firebase/SETUP.md</code> in the repository.</p>
+    </div>
+  </section>
+
+  <!-- admin -->
+  <section id="admin" hidden>
+    <h2>Install an app</h2>
+    <div class="card">
+      <label for="url">App address (the folder that contains <code>mypc-app.json</code>)</label>
+      <div class="row">
+        <input id="url" class="grow" placeholder="https://someone.github.io/my-game/">
+        <button id="btn-fetch" class="primary">Check</button>
+      </div>
+      <p id="fetch-msg" class="small"></p>
+      <div id="preview" class="preview" hidden>
+        <img id="pv-icon" alt="">
+        <div class="grow">
+          <div><b id="pv-name"></b><span id="pv-type" class="tag"></span> <span id="pv-version" class="muted small"></span></div>
+          <div id="pv-desc" class="muted"></div>
+          <div class="muted small">Opens <span id="pv-entry"></span></div>
+        </div>
+        <button id="btn-install" class="primary">Install</button>
+      </div>
+    </div>
+    <p class="muted small">Building a new app? Give the SDK guide to Claude:
+      <a href="../sdk/GUIDE.md" target="_blank" rel="noopener">sdk/GUIDE.md</a>.</p>
+
+    <h2>Installed apps <span id="count" class="muted small"></span></h2>
+    <div id="list"></div>
+    <p class="muted small">TVs pick up changes the next time My PC starts.</p>
+  </section>
+
+  <p id="boot" class="muted">Loading…</p>
+</main>
+
+<script src="installer-lib.js"></script>
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js';
+  import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider,
+           signInWithPopup, signOut, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js';
+  import { getFirestore, collection, getDocs, doc, getDoc, setDoc, deleteDoc, updateDoc, serverTimestamp }
+           from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js';
+
+  const app = initializeApp({
+    apiKey: 'AIzaSyBT0nk8uKUofgF5obP11R96lHtXbEVlKtc',
+    authDomain: 'tvgames-f984d.firebaseapp.com',
+    projectId: 'tvgames-f984d',
+    storageBucket: 'tvgames-f984d.firebasestorage.app',
+    messagingSenderId: '589737438361',
+    appId: '1:589737438361:web:c05775497e4224c428dc08'
+  });
+  const auth = getAuth(app), db = getFirestore(app);
+  const $ = (id) => document.getElementById(id);
+  const show = (id) => ['signin', 'notadmin', 'admin'].forEach((s) => { $(s).hidden = s !== id; });
+  let user = null, apps = [], pending = null;
+
+  const AUTH_MSG = {
+    'auth/invalid-credential': 'Wrong e-mail or password.', 'auth/wrong-password': 'Wrong e-mail or password.',
+    'auth/user-not-found': 'Wrong e-mail or password.', 'auth/email-already-in-use': 'An account already uses this e-mail.',
+    'auth/weak-password': 'The password needs at least 6 characters.', 'auth/invalid-email': 'This e-mail address is not valid.',
+    'auth/operation-not-allowed': 'This sign-in method is not enabled in Firebase (see firebase/SETUP.md).',
+    'auth/popup-blocked': 'The browser blocked the Google window. Allow pop-ups for this site.',
+    'auth/unauthorized-domain': 'Add this domain in Firebase → Authentication → Settings → Authorized domains.'
+  };
+  const say = (el, text, cls) => { $(el).textContent = text || ''; $(el).className = 'small ' + (cls || ''); };
+  const authErr = (e) => AUTH_MSG[e.code] || e.message;
+
+  $('btn-google').onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch((e) => say('signin-msg', authErr(e), 'err'));
+  $('btn-in').onclick = () => signInWithEmailAndPassword(auth, $('email').value.trim(), $('pass').value).catch((e) => say('signin-msg', authErr(e), 'err'));
+  $('btn-up').onclick = () => createUserWithEmailAndPassword(auth, $('email').value.trim(), $('pass').value).catch((e) => say('signin-msg', authErr(e), 'err'));
+  $('btn-reset').onclick = () => {
+    const em = $('email').value.trim();
+    if (!em) return say('signin-msg', 'Type your e-mail first.', 'err');
+    sendPasswordResetEmail(auth, em).then(() => say('signin-msg', 'Check your e-mail to choose a new password.', 'ok'), (e) => say('signin-msg', authErr(e), 'err'));
+  };
+  $('btn-out').onclick = () => signOut(auth);
+  $('btn-copy').onclick = () => navigator.clipboard && navigator.clipboard.writeText(user.uid);
+
+  onAuthStateChanged(auth, async (u) => {
+    user = u;
+    $('boot').hidden = true;
+    $('btn-out').hidden = !u;
+    $('who').textContent = u ? (u.email || u.displayName || '') : '';
+    if (!u) return show('signin');
+    let admin = false;
+    try { admin = (await getDoc(doc(db, 'admins', u.uid))).exists(); } catch (e) { admin = false; }
+    if (!admin) { $('uid').textContent = u.uid; return show('notadmin'); }
+    show('admin');
+    load();
+  });
+
+  async function load() {
+    const snap = await getDocs(collection(db, 'apps'));
+    apps = snap.docs.map((d) => d.data()).sort((a, b) => (a.order || 0) - (b.order || 0));
+    render();
+  }
+
+  function render() {
+    const box = $('list');
+    box.innerHTML = '';
+    $('count').textContent = apps.length ? '(' + apps.length + ')' : '';
+    if (!apps.length) { box.innerHTML = '<p class="muted">No apps installed yet.</p>'; return; }
+    apps.forEach((a, i) => {
+      const row = document.createElement('div');
+      row.className = 'app';
+      row.innerHTML = '<img alt=""><div class="grow"><div><span class="name"></span><span class="tag type"></span><span class="tag off" hidden>Hidden on TVs</span></div>' +
+        '<div class="muted small url"></div></div>' +
+        '<button class="up" title="Move up">▲</button><button class="down" title="Move down">▼</button>' +
+        '<button class="toggle"></button><a class="open" target="_blank" rel="noopener"><button>Open</button></a><button class="danger del">Uninstall</button>';
+      row.querySelector('img').src = a.icon || '../icon-32.png';
+      row.querySelector('.name').textContent = a.name;
+      row.querySelector('.type').textContent = a.type;
+      row.querySelector('.off').hidden = a.enabled !== false;
+      row.querySelector('.url').textContent = a.url;
+      row.querySelector('.open').href = a.entry;
+      row.querySelector('.toggle').textContent = a.enabled === false ? 'Show on TVs' : 'Hide on TVs';
+      row.querySelector('.up').disabled = i === 0;
+      row.querySelector('.down').disabled = i === apps.length - 1;
+      row.querySelector('.toggle').onclick = () => update(a, { enabled: a.enabled === false });
+      row.querySelector('.up').onclick = () => move(i, -1);
+      row.querySelector('.down').onclick = () => move(i, 1);
+      row.querySelector('.del').onclick = async () => {
+        if (!confirm('Uninstall "' + a.name + '" from every My PC?')) return;
+        await deleteDoc(doc(db, 'apps', a.id));
+        load();
+      };
+      box.appendChild(row);
+    });
+  }
+
+  async function update(a, fields) { await updateDoc(doc(db, 'apps', a.id), fields); load(); }
+
+  async function move(i, d) {
+    const j = i + d;
+    [apps[i], apps[j]] = [apps[j], apps[i]];
+    await Promise.all(apps.map((a, k) => (a.order === k ? null : updateDoc(doc(db, 'apps', a.id), { order: k }))));
+    load();
+  }
+
+  // 1. read mypc-app.json, 2. show what will be installed
+  $('btn-fetch').onclick = async () => {
+    $('preview').hidden = true; pending = null;
+    let where;
+    try { where = InstallerLib.locate($('url').value); } catch (e) { return say('fetch-msg', e.message, 'err'); }
+    say('fetch-msg', 'Reading ' + where.manifest + ' …');
+    let manifest;
+    try {
+      const r = await fetch(where.manifest, { cache: 'no-store' });
+      if (!r.ok) throw new Error(r.status === 404 ? 'No ' + InstallerLib.MANIFEST + ' at this address. Is it a My PC app?' : 'The site answered ' + r.status + '.');
+      manifest = await r.json();
+    } catch (e) {
+      return say('fetch-msg', e.message.indexOf('Failed to fetch') >= 0 ? 'Could not reach the site (offline, or it blocks other sites from reading it).' : e.message, 'err');
+    }
+    try { pending = InstallerLib.toApp(manifest, where.base, apps.length); } catch (e) { return say('fetch-msg', e.message, 'err'); }
+    const exists = apps.some((a) => a.id === pending.id);
+    $('pv-icon').src = pending.icon || '../icon-32.png';
+    $('pv-name').textContent = pending.name;
+    $('pv-type').textContent = pending.type;
+    $('pv-version').textContent = 'v' + pending.version;
+    $('pv-desc').textContent = pending.description;
+    $('pv-entry').textContent = pending.entry;
+    $('btn-install').textContent = exists ? 'Update' : 'Install';
+    $('preview').hidden = false;
+    say('fetch-msg', exists ? 'Already installed: this updates it.' : 'Ready to install.', 'ok');
+  };
+
+  // 3. write it: every TV gets it at its next start
+  $('btn-install').onclick = async () => {
+    if (!pending) return;
+    const old = apps.find((a) => a.id === pending.id);
+    const data = Object.assign({}, pending, { installedAt: serverTimestamp(), installedBy: user.uid });
+    if (old) { data.order = old.order; data.enabled = old.enabled !== false; }
+    $('btn-install').disabled = true;
+    try {
+      await setDoc(doc(db, 'apps', pending.id), data);
+      say('fetch-msg', '"' + pending.name + '" is installed. TVs show it the next time My PC starts.', 'ok');
+      $('preview').hidden = true; $('url').value = ''; pending = null;
+      load();
+    } catch (e) {
+      say('fetch-msg', 'Firebase refused it: ' + e.message, 'err');
+    } finally { $('btn-install').disabled = false; }
+  };
+  $('url').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-fetch').click(); });
+</script>
+</body>
+</html>

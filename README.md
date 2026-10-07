@@ -1,7 +1,12 @@
-# Arcade: Samsung TV games app
+# My PC: a Windows-style desktop for Samsung TVs
 
-A Samsung Smart TV (Tizen) web app: a game launcher with seven games, playable with the TV
-remote, a gamepad or a keyboard. It also runs in any desktop browser.
+A Samsung Smart TV (Tizen) web app (formerly "Arcade"): a dark Windows 11 style desktop with apps,
+seven built-in games and installable apps/games, playable with the TV remote, a gamepad or a
+keyboard. It also runs in any desktop browser.
+
+**Make a new app or game:** give `https://imad-os.github.io/g/sdk/GUIDE.md` and a description of
+the game to Claude Code in a new repository. **Install it:** open
+`https://imad-os.github.io/g/installer/` on a computer (setup: `firebase/SETUP.md`).
 
 | Game | Type | Notes |
 |---|---|---|
@@ -39,6 +44,19 @@ them. Games report scores with `host.submitScore(score, { player, players })`.
   the Windows key opens Start.
 - **Browser:** pages load in one sandboxed iframe; Up/Down scroll it. Some websites refuse to be
   shown inside another app (X-Frame-Options) and stay blank.
+
+**Installed apps (My PC SDK):**
+- Each app is a static website with `mypc-app.json` and the SDK (`sdk/mypc-sdk.js`); see
+  `sdk/GUIDE.md` and the example in `sdk/example/`.
+- `installer/` (desktop browser, Firebase sign-in, admins only) reads the manifest and writes the
+  Firestore `apps` collection.
+- The TV reads that list at start-up with the Firestore REST API (`js/core/cloud.js`, no sign-in),
+  keeps the last good list for offline use, and shows the apps on the desktop, in Start, File
+  Explorer and Settings > Apps.
+- An app runs full screen in a sandboxed iframe on its own origin. `game-host.js` talks to it with
+  `postMessage` (`{ mypc: 1, type, data }`): My PC sends the input actions, pause/resume/destroy and
+  its saved data; the app reports progress, ready, saves, scores and announcements. Back is always
+  My PC's (pause menu). Quitting removes the iframe.
 
 **Profiles:** the profile button in the Start menu (or Settings > Accounts) opens the Profiles screen. There you
 can switch profile, create one (name typed with an on-screen keyboard; a PC keyboard can type too),

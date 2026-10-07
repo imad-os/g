@@ -20,6 +20,8 @@
 //  14. Parchís: Moroccan rules, a full CPU game, a person's turn
 //  15. desktop shell: taskbar clock, Start menu, full-screen apps (calculator, calendar, settings,
 //      explorer, browser) that free everything when they close
+//  16. installed apps: list from Firebase (mocked), My PC SDK in a sandboxed cross-origin iframe
+//  17. installer: mypc-app.json parsing
 //
 //  CHROMIUM_PATH=/path/to/chrome uses an existing Chromium instead of Playwright's download.
 
@@ -634,7 +636,7 @@ async function main() {
         await page.evaluate(() => Win.open('settings'));
         await key('ArrowDown', 'ArrowRight', 'ArrowRight', 'Enter');
         check(await page.evaluate(() => Store.get('wallpaper') === 'aurora' && document.getElementById('wallpaper').className.indexOf('wp-aurora') >= 0), 'Settings > Personalization changes the background');
-        await key('Escape', 'ArrowDown', 'ArrowDown', 'ArrowRight', 'ArrowLeft');
+        await key('Escape', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowRight', 'ArrowLeft');   // Personalization > Apps > Accounts > Sound
         check(await page.evaluate(() => AudioPrefs.music()) === 6, 'Settings > Sound: left lowers the music volume');
         await key('Escape', 'Escape');
         // explorer: Games folder starts a game; quitting comes back to the desktop
@@ -658,6 +660,104 @@ async function main() {
         check(await page.evaluate(() => document.getElementById('win-body').childNodes.length === 0 && document.querySelectorAll('iframe').length === 0 && !document.getElementById('desktop').hidden), 'apps opened and closed 30 times leave nothing behind');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
+    }
+
+    console.log('16. installed apps: Firebase list, My PC SDK, sandboxed iframe');
+    {
+        const APP = 'https://apps.example.test/star/';
+        const page = await newPage(browser, base);
+        await routeHosted(page, { offline: true });
+        // the SDK and the example app, served from "other websites"
+        await page.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+        await page.context().route(APP + '**', (r) => {
+            const rel = r.request().url().slice(APP.length).split('?')[0] || 'index.html';
+            const p = path.join(ROOT, 'sdk/example', rel);
+            if (!fs.existsSync(p)) return r.fulfill({ status: 404, body: '' });
+            r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || (p.endsWith('.svg') ? 'image/svg+xml' : 'text/plain'), headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(p) });
+        });
+        let firestoreUp = true;
+        const doc = { fields: { id: { stringValue: 'star-catcher' }, name: { stringValue: 'Star Catcher' }, description: { stringValue: 'Catch stars' },
+            url: { stringValue: APP }, entry: { stringValue: APP + 'index.html' }, icon: { stringValue: APP + 'icon.svg' }, type: { stringValue: 'game' },
+            version: { stringValue: '1.0.0' }, scores: { booleanValue: true }, enabled: { booleanValue: true }, order: { integerValue: '0' } } };
+        const hidden = { fields: Object.assign({}, doc.fields, { id: { stringValue: 'hidden-one' }, enabled: { booleanValue: false } }) };
+        await page.context().route('https://firestore.googleapis.com/**', (r) => firestoreUp
+            ? r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ documents: [doc, hidden] }) })
+            : r.abort('internetdisconnected'));
+        await page.goto(base + 'index.html');
+        const icon = '#desk-icons [data-game="app-star-catcher"]';
+        const shown = await page.waitForSelector(icon, { timeout: 8000 }).then(() => true, () => false);
+        check(shown && await page.evaluate(() => !document.querySelector('[data-game="app-hidden-one"]')), 'the installed app from Firebase appears on the desktop (hidden ones do not)');
+        await page.focus(icon); await page.keyboard.press('Enter');
+        const ran = await page.waitForFunction(() => window.GameHost.state() === 'running', null, { timeout: 10000 }).then(() => true, () => false);
+        const fr = await page.evaluate(() => { const f = document.querySelector('iframe'); return f && { src: f.src, sandbox: f.getAttribute('sandbox') }; });
+        check(ran && fr && fr.src.indexOf(APP) === 0 && fr.sandbox === 'allow-scripts allow-same-origin allow-pointer-lock', 'it opens full screen in a sandboxed iframe on its own origin, and reports ready through the SDK');
+        const frame = page.frames().find((f) => f.url().indexOf(APP) === 0);
+        check(!!frame && await frame.evaluate(() => MyPC.isHosted() && MyPC.info().lang === 'en' && !MyPC.info().standalone), 'the app gets the init data from My PC (hosted, language)');
+        await page.keyboard.press('Enter');                          // OK on the remote -> "confirm" action -> the game starts
+        await page.waitForTimeout(300);
+        check(await frame.evaluate(() => document.getElementById('msg').textContent === ''), 'remote input reaches the app as actions');
+        await page.keyboard.down('ArrowRight'); await page.waitForTimeout(150);
+        check(await frame.evaluate(() => MyPC.isDown('right')), 'held keys are held actions (MyPC.isDown)');
+        await page.keyboard.up('ArrowRight');
+        await frame.evaluate(() => MyPC.save('best', 7));
+        await page.waitForTimeout(100);
+        check(await page.evaluate(() => Store.get('game_app-star-catcher_data', {}).best === 7), 'MyPC.save stores data in the active profile');
+        await page.keyboard.press('Escape');
+        const items = await page.evaluate(() => [...document.querySelectorAll('#pause-items button')].map((b) => b.textContent));
+        check(await page.evaluate(() => window.GameHost.state()) === 'paused' && items.indexOf('Restart') > 0, 'Back opens My PC\'s pause menu with the app\'s own items (' + items.join(', ') + ')');
+        await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[0].click(); });
+        await frame.evaluate(() => MyPC.submitScore(321));
+        const entry = await page.waitForFunction(() => window.GameHost.state() === 'entry', null, { timeout: 4000 }).then(() => true, () => false);
+        check(entry, 'MyPC.submitScore asks for initials (top 10)');
+        await page.focus('#entry-ok'); await page.keyboard.press('Enter');
+        check(await page.evaluate(() => Scores.list('app-star-catcher')[0].s === 321), 'the score is saved in its own top-10 table');
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
+        await page.waitForFunction(() => window.GameHost.state() === 'idle');
+        check(await page.evaluate(() => document.querySelectorAll('iframe').length === 0 && document.activeElement.getAttribute('data-game') === 'app-star-catcher'), 'quitting removes the iframe and returns to its desktop icon');
+        // a running app cannot exit to anything else than the desktop, and MyPC.exit() works
+        await page.focus(icon); await page.keyboard.press('Enter');
+        await page.waitForFunction(() => window.GameHost.state() === 'running', null, { timeout: 10000 });
+        const f2 = page.frames().find((f) => f.url().indexOf(APP) === 0);
+        await f2.evaluate(() => MyPC.exit());
+        check(await page.waitForFunction(() => window.GameHost.state() === 'idle', null, { timeout: 4000 }).then(() => true, () => false), 'MyPC.exit() closes the app');
+        // listed in File Explorer and Settings > Apps
+        await page.evaluate(() => Win.open('explorer', 'games'));
+        check(await page.evaluate(() => [...document.querySelectorAll('.fx-name')].some((n) => n.textContent === 'Star Catcher')), 'File Explorer > Games lists the installed game');
+        await page.evaluate(() => Win.open('settings', 'apps'));
+        check(await page.evaluate(() => [...document.querySelectorAll('.set-row-name')].some((n) => n.textContent === 'Star Catcher')), 'Settings > Apps lists it');
+        await page.evaluate(() => Win.close());
+        // offline: the saved list is used
+        firestoreUp = false;
+        await page.reload();
+        check(await page.waitForSelector(icon, { timeout: 8000 }).then(() => true, () => false), 'offline, the last list from Firebase is still shown');
+        // standalone: the example opened directly in a browser
+        const sp = await page.context().newPage();
+        await sp.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+        await sp.goto(APP + 'index.html');
+        await sp.waitForFunction(() => window.MyPC && MyPC.info() && MyPC.info().standalone);
+        await sp.keyboard.press('Enter'); await sp.waitForTimeout(200);
+        check(await sp.evaluate(() => document.getElementById('msg').textContent === ''), 'standalone (no My PC): the SDK reads the keyboard itself');
+        await sp.close();
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('17. installer: reading mypc-app.json');
+    {
+        const lib = require(path.join(ROOT, 'installer/installer-lib.js'));
+        const l1 = lib.locate('someone.github.io/neon');
+        check(l1.base === 'https://someone.github.io/neon/' && l1.manifest === 'https://someone.github.io/neon/mypc-app.json', 'an address without https or a slash is completed');
+        check(lib.locate('https://a.github.io/x/index.html?y=1#z').base === 'https://a.github.io/x/', 'a page address points to its folder');
+        let err = '';
+        try { lib.locate('http://evil.example/'); } catch (e) { err = e.message; }
+        check(/https/.test(err), 'plain http is refused');
+        const ex = JSON.parse(fs.readFileSync(path.join(ROOT, 'sdk/example/mypc-app.json'), 'utf8'));
+        const a = lib.toApp(ex, 'https://imad-os.github.io/g/sdk/example/', 3);
+        check(a.id === 'star-catcher' && a.entry === 'https://imad-os.github.io/g/sdk/example/index.html' && a.icon === 'https://imad-os.github.io/g/sdk/example/icon.svg' && a.order === 3 && a.enabled && a.scores,
+            'the example manifest becomes a valid app document');
+        const bad = [{}, { mypc: 1, id: 'X!', name: 'a' }, { mypc: 1, id: 'ok-id' }, { mypc: 1, id: 'ok-id', name: 'n', type: 'video' }];
+        check(bad.every((m) => { try { lib.toApp(m, 'https://a.b/'); return false; } catch (e) { return !!e.message; } }), 'invalid manifests are refused with a message');
     }
 
     await browser.close();

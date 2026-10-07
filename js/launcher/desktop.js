@@ -4,7 +4,8 @@
 var Desktop = (function () {
     'use strict';
 
-    var games = [];             // [{ id, manifest, base, bundledBase }]
+    var games = [];             // built-in games: [{ id, manifest, base, bundledBase }]
+    var installed = [];         // installed from the computer (Firebase), same shape + remote
     var onPlay = null;
     var lastPlayed = null, clockTimer = 0, startReturn = null;
 
@@ -28,7 +29,22 @@ var Desktop = (function () {
         return e;
     }
     function appById(id) { for (var i = 0; i < APPS.length; i++) if (APPS[i].id === id) return APPS[i]; return null; }
-    function gameById(id) { for (var i = 0; i < games.length; i++) if (games[i].id === id) return games[i]; return null; }
+    function all() { return games.concat(installed); }
+    function gameById(id) { var l = all(); for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
+
+    // a Firebase app document -> a launcher entry (installed apps run from their own https site)
+    function fromCloud(a) {
+        return {
+            id: 'app-' + a.id, installed: true, kind: a.type === 'app' ? 'app' : 'game',
+            manifest: { title: a.name, description: a.description || '', build: a.version || '1', scores: a.type !== 'app' && a.scores !== false },
+            iconUrl: a.icon || '', url: a.url || '', remote: { entry: a.entry }
+        };
+    }
+    function setInstalled(list) {
+        installed = [];
+        for (var i = 0; i < list.length; i++) installed.push(fromCloud(list[i]));
+        if (onPlay) render();
+    }
 
     function badgeFor(g) {
         var seen = Store.get('seen_builds', {});
@@ -42,7 +58,7 @@ var Desktop = (function () {
         Store.set('seen_builds', seen);
     }
 
-    function coverUrl(g) { return g.base + 'games/' + g.id + '/' + (g.manifest.cover || 'cover.png'); }
+    function coverUrl(g) { return g.installed ? g.iconUrl : g.base + 'games/' + g.id + '/' + (g.manifest.cover || 'cover.png'); }
 
     // icon picture: an SVG for apps, the game's cover (cropped square) for games
     function picture(kind, item) {
@@ -51,6 +67,7 @@ var Desktop = (function () {
         var img = document.createElement('img');
         img.alt = '';
         img.setAttribute('data-src', coverUrl(item));
+        if (item.installed) box.className = 'ic ic-installed';
         img.src = img.getAttribute('data-src');
         // hide a broken cover, but not the "error" of releaseImages() clearing it while a game runs
         img.onerror = function () { if (this.getAttribute('src')) this.style.visibility = 'hidden'; };
@@ -91,6 +108,7 @@ var Desktop = (function () {
         box.appendChild(button('dicon', 'app', appById('explorer'), true));
         box.appendChild(button('dicon', 'app', appById('browser'), true));
         for (i = 0; i < games.length; i++) box.appendChild(button('dicon', 'game', games[i], true));
+        for (i = 0; i < installed.length; i++) box.appendChild(button('dicon', 'game', installed[i], true));
         box.appendChild(button('dicon', 'app', appById('scores'), true));
     }
 
@@ -155,6 +173,7 @@ var Desktop = (function () {
         pin.innerHTML = '';
         for (i = 0; i < APPS.length; i++) pin.appendChild(button('stile', 'app', APPS[i], true));
         for (i = 0; i < games.length; i++) pin.appendChild(button('stile', 'game', games[i], true));
+        for (i = 0; i < installed.length; i++) pin.appendChild(button('stile', 'game', installed[i], true));
         rec.innerHTML = '';
         var g = gameById(lastPlayed) || games[0];
         if (g) {
@@ -269,6 +288,7 @@ var Desktop = (function () {
 
     function init(list, playCb) {
         games = list;
+        setInstalled(Cloud.apps());          // last good list (works offline); main.js refreshes it
         onPlay = playCb;
         lastPlayed = Store.get('last_game', null);
         render();
@@ -287,6 +307,8 @@ var Desktop = (function () {
         startOpen: startOpen, openStart: openStart, closeStart: closeStart, profileChanged: profileChanged,
         updateTray: updateTray, tick: tick, wallpaper: wallpaper, setWallpaper: setWallpaper, WALLPAPERS: WALLPAPERS,
         APPS: APPS, appById: appById, coverUrl: coverUrl, dateText: dateText, timeText: timeText, locale: locale,
-        games: function () { return games; }, lastPlayed: function () { return lastPlayed; }
+        setInstalled: setInstalled,
+        games: all, builtIn: function () { return games; }, installed: function () { return installed; },
+        lastPlayed: function () { return lastPlayed; }
     };
 })();

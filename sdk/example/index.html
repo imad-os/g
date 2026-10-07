@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Star Catcher</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0a0f2c; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #hud { position: absolute; left: 0; top: 0; right: 0; padding: 2vh 3vw; display: flex; justify-content: space-between;
+         font: 700 4vh Arial, sans-serif; color: #fff; text-shadow: 0 0.4vh 0 #000; pointer-events: none; }
+  #msg { position: absolute; left: 0; right: 0; top: 40%; text-align: center; font: 800 7vh Arial, sans-serif; color: #ffd23f; text-shadow: 0 0.6vh 0 #000; }
+  #msg small { display: block; font-size: 3.5vh; color: #fff; margin-top: 2vh; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"><span id="score">0</span><span id="best"></span></div>
+<div id="msg"></div>
+<script src="https://imad-os.github.io/g/sdk/mypc-sdk.js"></script>
+<script>
+/* Example My PC game: catch stars (+1), avoid rocks (game over). Shows every part of the SDK:
+ * init/ready/progress, start/pause/resume/destroy, input actions, save/load, scores, menu, texts. */
+(function () {
+    'use strict';
+    var W = 480, H = 270;                               // logical size, scaled to the screen
+    var TEXT = {
+        en: { start: 'Press OK to start', over: 'Game over', again: 'Press OK to play again', best: 'Best', restart: 'Restart' },
+        fr: { start: 'Appuyez sur OK pour commencer', over: 'Partie terminée', again: 'Appuyez sur OK pour rejouer', best: 'Record', restart: 'Recommencer' },
+        es: { start: 'Pulsa OK para empezar', over: 'Fin del juego', again: 'Pulsa OK para jugar otra vez', best: 'Récord', restart: 'Reiniciar' },
+        ar: { start: 'اضغط OK للبدء', over: 'انتهت اللعبة', again: 'اضغط OK للعب مجدداً', best: 'الأفضل', restart: 'إعادة البدء' }
+    };
+    var t, canvas, ctx, raf = 0, last = 0, acc = 0, state = 'ready', score = 0, best = 0;
+    var x = W / 2, items = [], spawn = 0, seed = 1;
+    for (var i = 0; i < 24; i++) items.push({ on: false, x: 0, y: 0, v: 0, rock: false });   // fixed pool: no allocation per frame
+
+    function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+    function $(id) { return document.getElementById(id); }
+    function msg(a, b) { $('msg').innerHTML = ''; if (!a) return; $('msg').appendChild(document.createTextNode(a)); if (b) { var s = document.createElement('small'); s.textContent = b; $('msg').appendChild(s); } }
+
+    function resize() {
+        var s = Math.min(window.innerWidth / W, window.innerHeight / H) * (window.devicePixelRatio || 1);
+        canvas.width = Math.round(W * s); canvas.height = Math.round(H * s);
+        ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+    }
+
+    function reset() {
+        score = 0; x = W / 2; spawn = 0; seed = Date.now() % 100000 + 1;
+        for (var i = 0; i < items.length; i++) items[i].on = false;
+        state = 'play'; msg('');
+        $('score').textContent = '0';
+    }
+
+    function gameOver() {
+        state = 'over';
+        if (score > best) { best = score; MyPC.save('best', best); $('best').textContent = t.best + ' ' + best; }
+        MyPC.submitScore(score);                         // My PC asks for initials if it makes the top 10
+        msg(t.over, t.again);
+        MyPC.announce(t.over + '. ' + score + '. ' + t.again);
+    }
+
+    function step() {                                    // fixed 60 Hz
+        if (state !== 'play') return;
+        var dir = (MyPC.isDown('right') ? 1 : 0) - (MyPC.isDown('left') ? 1 : 0);
+        x = Math.max(24, Math.min(W - 24, x + dir * (MyPC.isDown('run') ? 6 : 4)));
+        if (--spawn <= 0) {
+            spawn = Math.max(14, 40 - score);
+            for (var i = 0; i < items.length; i++) if (!items[i].on) { var it = items[i]; it.on = true; it.x = 16 + rnd() * (W - 32); it.y = -10; it.v = 1.2 + rnd() * 1.5 + score * 0.02; it.rock = rnd() < 0.3; break; }
+        }
+        for (var j = 0; j < items.length; j++) {
+            var o = items[j];
+            if (!o.on) continue;
+            o.y += o.v;
+            if (o.y > H - 26 && o.y < H - 10 && Math.abs(o.x - x) < 30) {
+                o.on = false;
+                if (o.rock) return gameOver();
+                score++; $('score').textContent = String(score);
+            } else if (o.y > H + 10) o.on = false;
+        }
+    }
+
+    function draw() {
+        ctx.fillStyle = '#0a0f2c'; ctx.fillRect(0, 0, W, H);
+        for (var i = 0; i < items.length; i++) {
+            var o = items[i];
+            if (!o.on) continue;
+            ctx.fillStyle = o.rock ? '#8a8fa8' : '#ffd23f';
+            ctx.beginPath(); ctx.arc(o.x, o.y, o.rock ? 9 : 7, 0, 6.283); ctx.fill();
+        }
+        ctx.fillStyle = '#4cc2ff'; ctx.fillRect(x - 28, H - 18, 56, 8);
+    }
+
+    function frame(ts) {
+        raf = requestAnimationFrame(frame);
+        if (!last) last = ts;
+        acc += Math.min(250, ts - last); last = ts;
+        while (acc >= 1000 / 60) { step(); acc -= 1000 / 60; }
+        draw();
+    }
+    function startLoop() { if (!raf) { last = 0; acc = 0; raf = requestAnimationFrame(frame); } }
+    function stopLoop() { if (raf) cancelAnimationFrame(raf); raf = 0; }
+
+    MyPC.init({
+        onInit: function (info) {
+            t = TEXT[info.lang] || TEXT.en;
+            canvas = $('c'); ctx = canvas.getContext('2d');
+            resize(); window.addEventListener('resize', resize);
+            best = MyPC.load('best', 0);
+            if (best) $('best').textContent = t.best + ' ' + best;
+            MyPC.setMenu([{ id: 'restart', label: t.restart }]);
+            MyPC.progress(1);
+            MyPC.ready();                                 // My PC hides its loading screen and calls onStart
+        },
+        onStart: function () { msg('Star Catcher', t.start); MyPC.announce('Star Catcher. ' + t.start); startLoop(); },
+        onPause: stopLoop,
+        onResume: startLoop,
+        onDestroy: function () { stopLoop(); window.removeEventListener('resize', resize); },
+        onInput: function (action, pressed) {
+            if (pressed && (action === 'confirm' || action === 'jump') && state !== 'play') reset();
+        },
+        onMenu: function (id) { if (id === 'restart') reset(); }
+    });
+})();
+</script>
+</body>
+</html>

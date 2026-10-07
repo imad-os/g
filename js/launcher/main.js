@@ -190,6 +190,13 @@ var App = (function () {
             Desktop.init(games, play);
             ProfilesUI.init(profileChanged);
             Desktop.show();
+            // apps installed from the computer: shown from the cache now, updated when Firebase answers
+            Cloud.refresh(function (err, list, changed) {
+                if (err || !changed) return;
+                var keep = Focus.current();
+                Desktop.setInstalled(list);
+                if (!document.getElementById('desktop').hidden) Focus.focus(keep && document.body.contains(keep) ? keep : document.querySelector('#desk-icons [data-focus]'));
+            });
             I18n.apply();
             AppBoot.ready();
             // One-time device benchmark while the menu is idle.

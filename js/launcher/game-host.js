@@ -86,6 +86,87 @@ var GameHost = (function () {
         $('pause').hidden = true;
     }
 
+    /* ---------- installed apps (My PC SDK, sandboxed iframe on their own origin) ---------- */
+
+    var SAVE_QUOTA = 64 * 1024;     // saved data per installed app
+
+    function originOf(u) { var a = document.createElement('a'); a.href = u; return a.protocol + '//' + a.host; }
+
+    // GameAPI-shaped proxy that talks to the app's My PC SDK with postMessage
+    function remoteApi() {
+        var id = game.id, origin = originOf(game.remote.entry), items = [], win = null;
+        function send(type, d) { if (win) { try { win.postMessage({ mypc: 1, type: type, data: d === undefined ? null : d }, origin); } catch (e) {} } }
+        function onMsg(e) {
+            if (!iframe || e.source !== iframe.contentWindow) return;     // only our app's frame
+            var m = e.data, d;
+            if (!m || m.mypc !== 1 || typeof m.type !== 'string') return;
+            d = m.data || {};
+            switch (m.type) {
+                case 'hello':
+                    win = e.source;
+                    send('init', {
+                        lang: I18n.lang(), rtl: I18n.rtl(), quality: { tier: Perf.profile().tier },
+                        volume: { music: AudioPrefs.music() / 10, sfx: AudioPrefs.sfx() / 10 },
+                        profile: { id: Profiles.current().id, name: Profiles.name(null, I18n.t('player')) },
+                        data: Store.get('game_' + id + '_data', {}), app: { id: id }
+                    });
+                    break;
+                case 'progress': if (state === 'loading') $('game-loading-fill').style.width = Math.round(Math.max(0, Math.min(1, +d.p || 0)) * 100) + '%'; break;
+                case 'ready': onLoaded(); break;
+                case 'failed': fail('app: ' + d.reason); break;
+                case 'menu':
+                    items = [];
+                    for (var i = 0; d.items && i < d.items.length && i < 6; i++) {
+                        var it = d.items[i];
+                        if (it && /^[a-z0-9_-]{1,24}$/i.test(it.id) && typeof it.label === 'string') items.push({ id: 'app:' + it.id, label: it.label.slice(0, 40) });
+                    }
+                    break;
+                case 'save': {
+                    var all = Store.get('game_' + id + '_data', {});
+                    all[String(d.key)] = d.value;
+                    if (JSON.stringify(all).length <= SAVE_QUOTA) Store.set('game_' + id + '_data', all);
+                    break;
+                }
+                case 'score': if (state === 'running' || state === 'paused') submitScore(id, d.score, { player: d.player, players: d.players }); break;
+                case 'announce': A11y.announce(String(d.text || '').slice(0, 200)); break;
+                case 'pause': if (state === 'running') openPause(); break;
+                case 'exit': setTimeout(exit, 0); break;
+                // keys pressed while the frame has focus (mouse click on a PC): routed like our own
+                case 'key': Input.onKey({ keyCode: +d.keyCode, repeat: !!d.repeat, preventDefault: function () {} }, !!d.down); break;
+            }
+        }
+        window.addEventListener('message', onMsg);
+        var volume = function (m, s2) { send('volume', { music: m, sfx: s2 }); };
+        AudioPrefs.onChange(volume);
+        return {
+            init: function () {},
+            start: function () { send('start'); },
+            pause: function () { send('pause'); },
+            resume: function () { send('resume'); },
+            destroy: function () { send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
+            menuItems: function () { return items; },
+            onMenu: function (mid) { send('menu', { id: String(mid).slice(4) }); },
+            onAction: function (a, pressed, repeat, dev) { send('input', { action: a, pressed: pressed, repeat: repeat, dev: dev }); }
+        };
+    }
+
+    function loadRemote() {
+        removeFrame();
+        iframe = document.createElement('iframe');
+        iframe.setAttribute('tabindex', '-1');
+        iframe.setAttribute('title', title());
+        iframe.setAttribute('aria-hidden', 'true');
+        iframe.setAttribute('scrolling', 'no');
+        // its own origin: it cannot touch My PC's page, storage or navigation
+        iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-pointer-lock');
+        iframe.setAttribute('allow', 'autoplay; gamepad; fullscreen');
+        iframe.setAttribute('referrerpolicy', 'no-referrer');
+        api = remoteApi();
+        iframe.src = game.remote.entry;
+        $('game-frame-box').appendChild(iframe);
+        $('game-layer').focus();
+    }
+
     function load() {
         state = 'loading';
         showLoading();
@@ -95,6 +176,7 @@ var GameHost = (function () {
         var build = game.manifest.build || 0;
         clearTimeout(loadTimer);
         loadTimer = setTimeout(function () { fail('timeout'); }, LOAD_TIMEOUT_MS);
+        if (game.remote) return loadRemote();
 
         var token = ++loadSeq;
         AppBoot.get(dir + entry + '?b=' + build, FILE_TIMEOUT_MS, function (err, html) {
@@ -125,7 +207,7 @@ var GameHost = (function () {
         clearTimeout(loadTimer);
         $('game-loading').hidden = true;
         state = 'running';
-        Input.setExternalPoll(true);
+        Input.setExternalPoll(!game.remote);    // an installed app cannot poll: the launcher reads the pads
         screenSaver(false);     // the game polls gamepads at the start of each frame
         screenSaver(false);
         $('game-layer').setAttribute('aria-label', title());
@@ -194,7 +276,7 @@ var GameHost = (function () {
         Focus.pop();
         Focus.reset();
         state = 'running';
-        Input.setExternalPoll(true);
+        Input.setExternalPoll(!game.remote);
         screenSaver(false);
         $('game-layer').focus();
         try { api.resume(); } catch (e) {}
@@ -251,7 +333,7 @@ var GameHost = (function () {
 
     function launch(g, onExit) {
         if (state !== 'idle') return;
-        game = { id: g.id, manifest: g.manifest, bundledBase: g.bundledBase, bundledManifest: g.bundledManifest };
+        game = { id: g.id, manifest: g.manifest, bundledBase: g.bundledBase, bundledManifest: g.bundledManifest, remote: g.remote || null };
         base = g.base;
         triedBundled = base === g.bundledBase;
         onExitCb = onExit;

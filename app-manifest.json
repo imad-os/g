@@ -1,12 +1,13 @@
 {
-  "build": 5,
-  "version": "2.0.0",
+  "build": 6,
+  "version": "2.1.0",
   "shell": 1,
   "css": [
     "css/launcher.css"
   ],
   "js": [
     "js/core/storage.js",
+    "js/core/cloud.js",
     "js/core/i18n.js",
     "js/core/a11y.js",
     "js/core/scores.js",

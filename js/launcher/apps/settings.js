@@ -9,6 +9,7 @@
     var PAGES = [
         { id: 'system', icon: 'system', label: 'sysSystem' },
         { id: 'personal', icon: 'brush', label: 'sysPersonal' },
+        { id: 'apps', icon: 'folder', label: 'sysApps' },
         { id: 'accounts', icon: 'accounts', label: 'sysAccounts' },
         { id: 'sound', icon: 'sound', label: 'sysSound' },
         { id: 'time', icon: 'clock', label: 'sysTime' },
@@ -37,6 +38,22 @@
             out.push({ kind: 'info', label: t('storage'), value: storageText() });
         } else if (id === 'personal') {
             out.push({ kind: 'wallpapers', label: t('background') });
+        } else if (id === 'apps') {
+            var inst = Desktop.installed();
+            out.push({ kind: 'text', value: t('installHint') });
+            out.push({ kind: 'action', label: t('refreshApps'), run: function () {
+                Cloud.refresh(function (err, list) {
+                    if (!err) Desktop.setInstalled(list);
+                    App.toast(t(err ? 'appsOffline' : 'appsRefreshed'));
+                    if (Win.current() === 'settings') { var f = renderMain(1); if (f) Focus.focus(f); }
+                });
+            } });
+            if (!inst.length) out.push({ kind: 'info', label: t('installedApps'), value: t('noApps') });
+            for (i = 0; i < inst.length; i++) {
+                (function (g) {
+                    out.push({ kind: 'action', label: I18n.pick(g.manifest.title), desc: g.url, run: function () { Desktop.play(g); } });
+                })(inst[i]);
+            }
         } else if (id === 'accounts') {
             out.push({ kind: 'profile' });
             out.push({ kind: 'action', label: t('manageProfiles'), desc: t('profilesHint'), run: function () { ProfilesUI.open(); } });
