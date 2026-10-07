@@ -1,6 +1,7 @@
 /* Single input module: TV remote, keyboard and W3C gamepads -> actions.
  *
  * Actions: left right up down jump run pause back confirm cancel runToggle
+ *   pageUp pageDown guide tab tabBack   (desktop and apps only: games never receive these)
  * Every action carries the device that produced it, so games can tell players apart:
  *   'keys'  TV remote, or arrows + Enter/Space/Z/X/Shift on a keyboard
  *   'keys2' second keyboard player: W A S D + F (jump) + G (run)
@@ -22,17 +23,23 @@ var Input = (function () {
         16: ['run'], 88: ['run'],                  // Shift, X
         415: ['pause'], 19: ['pause'], 10252: ['pause'], 80: ['pause'], // Play, Pause, PlayPause, P
         403: ['runToggle'], 82: ['runToggle'],     // Red key, R
+        427: ['pageUp'], 428: ['pageDown'],        // TV remote Channel Up / Down: scroll a page
+        33: ['pageUp'], 34: ['pageDown'],          // PageUp / PageDown on a keyboard
+        458: ['guide'], 117: ['guide'],            // TV remote Guide, F6 on a keyboard: to the toolbar / Start
+        9: ['tab'],                                // Tab (Shift+Tab is tabBack)
         // second keyboard player
         87: ['up'], 65: ['left'], 83: ['down'], 68: ['right'], 70: ['jump', 'confirm'], 71: ['run']
     };
     var KEYS2 = { 87: 1, 65: 1, 83: 1, 68: 1, 70: 1, 71: 1 };
     var DIRS = { left: 1, right: 1, up: 1, down: 1 };
+    var REPEAT = { left: 1, right: 1, up: 1, down: 1, pageUp: 1, pageDown: 1, tab: 1, tabBack: 1 };    // held keys that repeat
     // Only what is used. Arrows, Enter and Back need no registration.
-    var TV_KEYS = ['MediaPlayPause', 'MediaPlay', 'MediaPause', 'ColorF0Red'];
+    var TV_KEYS = ['MediaPlayPause', 'MediaPlay', 'MediaPause', 'ColorF0Red', 'ChannelUp', 'ChannelDown', 'Guide'];
 
     // W3C "standard" gamepad mapping.
     var PAD_BUTTONS = [
         [0, ['jump', 'confirm']], [1, ['run', 'cancel']], [2, ['run']], [3, ['run']],
+        [4, ['pageUp']], [5, ['pageDown']], [16, ['guide']],        // LB / RB scroll, the Guide / Home button
         [8, ['pause']], [9, ['pause']],
         [12, ['up']], [13, ['down']], [14, ['left']], [15, ['right']]
     ];
@@ -45,7 +52,8 @@ var Input = (function () {
     var padRepeatAt = {};           // 'padN' -> { action -> time }
     var pads = 0, activePad = -1, lastDev = 'keys';
     var device = window.tizen ? 'remote' : 'keyboard';
-    var deviceListeners = [];
+    var deviceListeners = [], padListeners = [];
+    var seen = { keyboard: false, mouse: false };        // devices that have been used (Settings > Devices lists them)
     var externalPoll = false, rafId = 0;
     var supportsPads = !!(navigator.getGamepads || navigator.webkitGetGamepads);
 
@@ -65,19 +73,31 @@ var Input = (function () {
         c[a] = Math.max(0, (c[a] || 0) + n);
     }
 
+    // keys only a keyboard has (the TV remote sends 10009 for Back and 4xx for its special keys)
+    function isKeyboardKey(code) { return (code >= 65 && code <= 90) || code === 9 || code === 8 || code === 27 || code === 32 || code === 33 || code === 34 || code === 117; }
+
+    function used(what) {
+        if (seen[what]) return;
+        seen[what] = true;
+        for (var i = 0; i < padListeners.length; i++) padListeners[i]();
+    }
+
     function onKey(e, down) {
         var code = e.keyCode, acts = KEYMAP[code], i, dev = KEYS2[code] ? 'keys2' : 'keys';
+        if (down && isKeyboardKey(code)) { used('keyboard'); setDevice('keyboard'); }
         if (!acts) return;
+        if (code === 9 && e.shiftKey) acts = ['tabBack'];
         if (e.preventDefault) e.preventDefault();   // also stops the native click on Enter
         if (code >= 400 || code === 19) setDevice('remote');
         else if (!window.tizen) setDevice('keyboard');
+        else if (device === 'mouse' || device === 'pad') setDevice(seen.keyboard ? 'keyboard' : 'remote');     // arrows and OK: remote or keyboard
 
         if (down) {
             // a key suppressed by releaseAll() whose keyup was lost (window blur): a real new press
             if (keyHeld[code] === 'sup' && e.repeat === false) keyHeld[code] = false;
             if (keyHeld[code]) {
                 // Auto-repeat: only menus care, and only for directions.
-                for (i = 0; i < acts.length; i++) if (DIRS[acts[i]]) emit(acts[i], true, true, dev);
+                for (i = 0; i < acts.length; i++) if (REPEAT[acts[i]]) emit(acts[i], true, true, dev);
                 return;
             }
             keyHeld[code] = true;
@@ -149,7 +169,7 @@ var Input = (function () {
             for (a in now) {
                 if (sup[a]) continue;                      // still held since releaseAll()
                 if (!prev[a]) { prev[a] = true; emit(a, true, false, dev); rep[a] = t + REPEAT_DELAY; }
-                else if (DIRS[a] && t >= rep[a]) { emit(a, true, true, dev); rep[a] = t + REPEAT_RATE; }
+                else if (REPEAT[a] && t >= rep[a]) { emit(a, true, true, dev); rep[a] = t + REPEAT_RATE; }
             }
             for (a in prev) if (prev[a] && !now[a]) {
                 prev[a] = false;
@@ -185,8 +205,24 @@ var Input = (function () {
             emit('padLost', true, false, d);
         }
         if (pads > before) { setDevice('pad'); emit('padConnected', true, false, 'pad'); }
-        if (!pads) setDevice(window.tizen ? 'remote' : 'keyboard');
+        if (!pads && device === 'pad') setDevice(window.tizen ? 'remote' : 'keyboard');
         ensureLoop();
+        for (var i = 0; i < padListeners.length; i++) padListeners[i]();
+    }
+
+    // "Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)" -> "Xbox Wireless Controller"
+    function padName(id) {
+        var n = String(id || '').replace(/^[0-9a-f]{4}-[0-9a-f]{4}-/i, '').replace(/\s*\([^()]*(?:vendor|product|standard gamepad|xinput)[^()]*\)\s*/ig, ' ').replace(/\s+/g, ' ').trim();
+        return n || 'Gamepad';
+    }
+    // connected controllers, for Settings > Devices
+    function padList() {
+        var list = getPads(), out = [];
+        for (var i = 0; i < list.length; i++) {
+            var p = list[i];
+            if (p && p.connected) out.push({ index: p.index, name: padName(p.id), id: p.id, standard: p.mapping === 'standard', buttons: p.buttons ? p.buttons.length : 0, axes: p.axes ? p.axes.length : 0 });
+        }
+        return out;
     }
 
     function registerTvKeys() {
@@ -206,6 +242,19 @@ var Input = (function () {
         document.addEventListener('keydown', function (e) { onKey(e, true); });
         document.addEventListener('keyup', function (e) { onKey(e, false); });
         window.addEventListener('blur', releaseAll);
+        // mouse / Magic Remote pointer: a real movement or click counts as "mouse used"
+        document.addEventListener('mousemove', function (e) { if (e.movementX || e.movementY) { used('mouse'); setDevice('mouse'); } });
+        document.addEventListener('mousedown', function () { used('mouse'); setDevice('mouse'); });
+        // wheel: up / down in menus and lists (not while a game runs: it does not use the wheel)
+        var wheelAt = 0;
+        document.addEventListener('wheel', function (e) {
+            if (externalPoll || !e.deltaY) return;
+            var now = Date.now();
+            if (now - wheelAt < 90) return;
+            wheelAt = now;
+            used('mouse'); setDevice('mouse');
+            emit(e.deltaY > 0 ? 'down' : 'up', true, true, 'mouse');
+        }, { passive: true });
         if (supportsPads) {
             window.addEventListener('gamepadconnected', refreshPads);
             window.addEventListener('gamepaddisconnected', refreshPads);
@@ -237,6 +286,10 @@ var Input = (function () {
         releaseAll: releaseAll,
         device: function () { return device; },
         padCount: function () { return pads; },
-        onDevice: function (fn) { deviceListeners.push(fn); }
+        pads: padList,
+        seen: function () { return { remote: !!window.tizen, keyboard: seen.keyboard, mouse: seen.mouse }; },
+        onDevice: function (fn) { deviceListeners.push(fn); },
+        onDevices: function (fn) { padListeners.push(fn); },        // a controller came or went, or a keyboard / mouse was used
+        offDevices: function (fn) { var i = padListeners.indexOf(fn); if (i >= 0) padListeners.splice(i, 1); }
     };
 })();

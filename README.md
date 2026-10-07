@@ -87,6 +87,14 @@ picks a piece when there is a choice).
 - **Joining:** open the pause menu and choose *Two players*. Player 2 then presses OK / A on **their
   own controller**, which can be another gamepad, the TV remote, or W A S D + F (jump) + G (run) on
   a PC keyboard.
+- **Controls:** remote, gamepad, keyboard and mouse all work (`js/core/input.js`). Channel Up / Down,
+  PageUp / PageDown and LB / RB scroll a page (browser) or change month (calendar); Guide (TV remote
+  Guide key, F6, the gamepad Guide / Home button) opens Start, goes to the browser toolbar from a page,
+  and opens a game's pause menu; Tab / Shift+Tab step through the buttons; the mouse wheel moves through
+  lists. Games never receive these keys. Settings > Devices lists the remote, keyboard, mouse and
+  controllers and has a live controller test.
+- **Browser:** remote mode (default, scrolled from outside, a click can not trap the keyboard, a script
+  that grabs the keyboard loses it) or mouse mode (a normal frame; default once a mouse was used).
 - **Devices:** `js/core/input.js` tags every action with its device (`keys`, `keys2`, `pad0`…), and
   each hero reads only its own device.
 - **Lives and scores:** separate per player; coins and star coins are shared.

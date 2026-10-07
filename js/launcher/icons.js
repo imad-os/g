@@ -47,6 +47,7 @@ var Icons = (function () {
         volume: '<path d="M6 18h8l11-9v30l-11-9H6z" fill="#fff"/><path d="M31 17a9 9 0 0 1 0 14M36 12a16 16 0 0 1 0 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>',
         mute: '<path d="M6 18h8l11-9v30l-11-9H6z" fill="#fff"/><path d="M32 18l10 12M42 18L32 30" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>',
         remote: '<rect x="15" y="3" width="18" height="42" rx="8" fill="#fff"/><circle cx="24" cy="15" r="5" fill="#202020"/><circle cx="24" cy="29" r="2" fill="#202020"/><circle cx="24" cy="36" r="2" fill="#202020"/>',
+        mouse: '<rect x="13" y="4" width="22" height="40" rx="11" fill="#fff"/><path d="M24 4v16M13 20h22" stroke="#202020" stroke-width="2.5" fill="none"/><rect x="21.5" y="9" width="5" height="8" rx="2.5" fill="#202020"/>',
         keyboard: '<rect x="3" y="12" width="42" height="24" rx="4" fill="#fff"/><g fill="#202020"><rect x="8" y="17" width="5" height="4"/><rect x="16" y="17" width="5" height="4"/><rect x="24" y="17" width="5" height="4"/><rect x="32" y="17" width="5" height="4"/><rect x="12" y="27" width="24" height="4"/></g>',
         gamepad: '<path d="M14 15h20a10 10 0 0 1 9.6 12.8l-2.2 7.5a5 5 0 0 1-8.6 1.7L29 32H19l-3.8 5a5 5 0 0 1-8.6-1.7l-2.2-7.5A10 10 0 0 1 14 15z" fill="#fff"/>',
         system: '<rect x="4" y="7" width="40" height="27" rx="3" fill="#4cc2ff"/><rect x="20" y="34" width="8" height="5" fill="#9aa3b0"/><rect x="13" y="39" width="22" height="3" rx="1.5" fill="#c3cad4"/>',

@@ -461,6 +461,9 @@ var GameHost = (function () {
 
     function onAction(action, pressed, repeat, dev) {
         if (state === 'running') {
+            // Guide = the Start key of this PC: opens the pause menu. Page keys and Tab belong to the desktop, not to games.
+            if (action === 'guide') { if (pressed && !repeat) openPause(); return; }
+            if (action === 'pageUp' || action === 'pageDown' || action === 'tab' || action === 'tabBack') return;
             if (pressed && !repeat && (action === 'back' || action === 'pause')) return openPause();
             if (action === 'padLost') { openPause(); A11y.announce(I18n.t('padOff')); return; }
             if (api && api.onAction) { try { api.onAction(action, pressed, repeat, dev); } catch (e) {} }

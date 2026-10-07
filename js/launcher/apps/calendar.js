@@ -142,6 +142,13 @@
             body.appendChild(left); body.appendChild(side);
             return render(true);
         },
+        // Channel Up / Down, PageUp / PageDown, LB / RB: the previous / next month
+        action: function (a, repeat) {
+            if (a !== 'pageUp' && a !== 'pageDown') return false;
+            go(a === 'pageDown' ? 1 : -1);
+            Focus.focus(dayBtn(sel));
+            return true;
+        },
         close: function () { body = grid = side = title = null; }
     });
 })();

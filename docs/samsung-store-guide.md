@@ -89,9 +89,13 @@ works fully without a network.
 - Return: pause in a game, back in menus, exit confirmation on the main menu.
 - Play/Pause: pause.
 - Red: run on/off in Super Jumper.
+- Channel Up / Down: scroll a page (browser), previous / next month (calendar).
+- Guide: Start menu on the desktop; in the browser, the toolbar on top (and back to the page); pause menu in a game.
 - In Super Jumper, Up fires (when the hero has the fire power-up).
 
-**Gamepad (optional):** D-pad/stick to move, A jump, B/X run or fire, Start/Select pause.
+**Gamepad (optional):** D-pad/stick to move, A jump, B/X run or fire, Start/Select pause, LB/RB scroll a page, Guide/Home as the Guide key.
+
+**Keyboard and mouse (optional):** arrows, Enter, Esc; Tab / Shift+Tab move between buttons; PageUp / PageDown scroll; F6 or the Windows key = Guide; mouse click, hover and wheel work everywhere. Settings > Devices lists what is connected and tests the controller buttons.
 
 **Test scenarios:**
 1. Launch → main menu (focus on the first tile) → OK → game loads with a progress bar → OK to start.

@@ -174,6 +174,8 @@ MyPC.app_config.speed      // e.g. 2
 Actions: `left right up down` (directions), `jump` and `confirm` (OK / Enter / Space / gamepad A),
 `run` (gamepad B/X, Shift, X: also "fire"), `cancel`, `pause`.
 
+- My PC keeps some keys for itself and **never sends them to apps**: Channel Up / Down and PageUp /
+  PageDown (`pageUp`, `pageDown`), Guide / F6 (`guide`, which opens the pause menu), Tab.
 - On the TV remote, **OK** sends `confirm` **and** `jump`. Use `confirm` in menus, `jump` in play.
 - `repeat` is `true` for auto-repeat of a held direction: use it for menus, ignore it in play.
 - `dev` is the device: `'keys'` (remote or arrows), `'keys2'` (second keyboard player: W A S D, F, G)

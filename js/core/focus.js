@@ -58,6 +58,17 @@ var Focus = (function () {
         return false;
     }
 
+    // Tab / Shift+Tab: next or previous focusable item of the scope, wrapping around
+    function step(dir) {
+        var list = items();
+        if (!list.length) return false;
+        var cur = current(), i = -1;
+        for (var k = 0; k < list.length; k++) if (list[k] === cur) { i = k; break; }
+        var n = i < 0 ? (dir > 0 ? 0 : list.length - 1) : (i + dir + list.length) % list.length;
+        focus(list[n]);
+        return true;
+    }
+
     // Opens a new scope and remembers the previous one (dialogs, pause menu).
     function push(el, first) {
         stack.push({ scope: scope, focused: document.activeElement });
@@ -77,7 +88,7 @@ var Focus = (function () {
     }
 
     return {
-        set: set, push: push, pop: pop, move: move, focus: focus, current: current, items: items,
+        set: set, push: push, pop: pop, move: move, step: step, focus: focus, current: current, items: items,
         scope: function () { return scope; },
         reset: function () { stack.length = 0; }
     };

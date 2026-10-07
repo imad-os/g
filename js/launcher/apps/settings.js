@@ -12,6 +12,7 @@
         { id: 'apps', icon: 'folder', label: 'sysApps' },
         { id: 'accounts', icon: 'accounts', label: 'sysAccounts' },
         { id: 'sound', icon: 'sound', label: 'sysSound' },
+        { id: 'devices', icon: 'gamepad', label: 'sysDevices' },
         { id: 'time', icon: 'clock', label: 'sysTime' },
         { id: 'gaming', icon: 'controller', label: 'sysGaming' },
         { id: 'privacy', icon: 'shield', label: 'sysPrivacy' },
@@ -78,6 +79,8 @@
         } else if (id === 'privacy') {
             lines = t('privacyText');
             for (i = 0; i < lines.length; i++) out.push({ kind: 'text', value: lines[i] });
+        } else if (id === 'devices') {
+            devicesRows(out);
         } else if (id === 'update') {
             updateRows(out);
         } else if (id === 'about') {
@@ -147,9 +150,63 @@
         if (!inf.smart) out.push({ kind: 'text', value: t('updOldPackage') });
     }
 
-    // the Updater changed (progress, result): redraw the page and keep the focus on the same row
-    function onUpdater() {
-        if (!main || page !== 'update') return;
+    /* ---------- Devices: what is connected, and a live test of the controller buttons ---------- */
+
+    var PAD_BUTTONS = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', '\u29C9', '\u2630', 'L3', 'R3', '\u25B2', '\u25BC', '\u25C0', '\u25B6', '\u24D6'];
+    var padRaf = 0, padCard = null, padIdx = 0, padMask = '';
+
+    function devicesRows(out) {
+        var seen = Input.seen(), pads = Input.pads(), i;
+        if (seen.remote) out.push({ kind: 'info', label: t('devRemote'), value: t('devDetected') });
+        out.push({ kind: 'info', label: t('devKeyboard'), value: seen.keyboard ? t('devDetected') : t('devPressKey') });
+        out.push({ kind: 'info', label: t('devMouse'), value: seen.mouse ? t('devDetected') : t('devMoveMouse') });
+        if (!pads.length) out.push({ kind: 'info', label: t('devControllers'), value: t('devNoPad') });
+        for (i = 0; i < pads.length; i++) out.push({ kind: 'info', label: t('devController') + ' ' + (i + 1), value: pads[i].name + (pads[i].standard ? '' : ' \u00B7 ' + t('devGeneric')) });
+        if (pads.length) out.push({ kind: 'padtest', pad: pads[0].index });
+        out.push({ kind: 'text', value: t('devMapHelp') });
+    }
+
+    function stopPadTest() { if (padRaf) cancelAnimationFrame(padRaf); padRaf = 0; padCard = null; }
+
+    function padTestCard(r) {
+        var card = el('div', 'set-padtest'), grid = el('div', 'pt-grid'), i;
+        card.setAttribute('aria-label', t('devTest'));
+        card.appendChild(el('div', 'set-row-desc', t('devTest')));
+        for (i = 0; i < PAD_BUTTONS.length; i++) grid.appendChild(el('span', 'pt-b', PAD_BUTTONS[i]));
+        card.appendChild(grid);
+        var sticks = el('div', 'pt-sticks');
+        for (i = 0; i < 2; i++) { var box = el('span', 'pt-stick'); box.appendChild(el('span', 'pt-dot')); sticks.appendChild(box); }
+        card.appendChild(sticks);
+        padCard = card; padIdx = r.pad; padMask = '';
+        if (!padRaf) padRaf = requestAnimationFrame(tickPad);
+        return card;
+    }
+
+    function tickPad() {
+        padRaf = requestAnimationFrame(tickPad);
+        if (!padCard || !navigator.getGamepads) return;
+        var list = navigator.getGamepads() || [], p = list[padIdx], i, mask = '';
+        if (!p) return;
+        for (i = 0; i < PAD_BUTTONS.length; i++) mask += p.buttons[i] && (p.buttons[i].pressed || p.buttons[i].value > 0.5) ? '1' : '0';
+        for (i = 0; i < 4; i++) mask += '|' + Math.round((p.axes[i] || 0) * 10);
+        if (mask === padMask) return;               // nothing changed: touch nothing
+        padMask = mask;
+        var bs = padCard.querySelectorAll('.pt-b'), dots = padCard.querySelectorAll('.pt-dot');
+        for (i = 0; i < bs.length; i++) bs[i].className = 'pt-b' + (mask.charAt(i) === '1' ? ' on' : '');
+        for (i = 0; i < 2; i++) {
+            dots[i].style.left = (50 + (p.axes[i * 2] || 0) * 40) + '%';
+            dots[i].style.top = (50 + (p.axes[i * 2 + 1] || 0) * 40) + '%';
+        }
+    }
+
+    // a controller came or went, or a keyboard / mouse was used: redraw the Devices page
+    function onDevices() { if (main && page === 'devices') rerender(); }
+
+    // the Updater changed (progress, result): redraw the page
+    function onUpdater() { if (main && page === 'update') rerender(); }
+
+    // redraw the page and keep the focus on the same row
+    function rerender() {
         var c = Focus.current(), inRows = !!c && inMain(c) && c.getAttribute('data-row') !== null;
         var idx = inRows ? +c.getAttribute('data-row') : -1, oldKind = rows[idx] && rows[idx].kind;
         var target = renderMain(idx >= 0 ? idx : undefined);
@@ -161,6 +218,7 @@
 
     function showPage(id) {
         page = id;
+        stopPadTest();
         if (id === 'update') Updater.autoCheck();
         var btns = nav.querySelectorAll('.set-nav-btn');
         for (var i = 0; i < btns.length; i++) btns[i].className = 'set-nav-btn' + (btns[i].getAttribute('data-page') === id ? ' on' : '');
@@ -184,6 +242,7 @@
             if (r.kind === 'wallpapers') { b = wallpaperRow(r); main.appendChild(b); if (i === focusIdx) target = b.querySelector('.on') || b.querySelector('button'); continue; }
             if (r.kind === 'profile') { main.appendChild(profileCard()); continue; }
             if (r.kind === 'status') { main.appendChild(statusCard(r)); continue; }
+            if (r.kind === 'padtest') { main.appendChild(padTestCard(r)); continue; }
             b = el('button', 'set-row' + (r.kind === 'text' ? ' set-text' : '') + (r.danger ? ' set-danger' : '') + (r.primary ? ' set-primary' : ''));
             b.setAttribute('data-focus', '');
             b.setAttribute('data-row', i);
@@ -313,7 +372,10 @@
         if (n) Focus.focus(n);
     }
 
-    function action(a, repeat) {
+    function action(a, repeat, dev) {
+        // while the controller test shows, the buttons of a controller only test (B must not close Settings);
+        // its D-pad and stick still move through the page, so it can always be left
+        if (padCard && dev && dev.indexOf('pad') === 0 && a !== 'up' && a !== 'down' && a !== 'left' && a !== 'right') return true;
         var c = Focus.current();
         if (a === 'up' || a === 'down') { if (inNav(c) || inMain(c)) { column(a); return true; } return false; }
         if (a === 'left' || a === 'right') {
@@ -351,12 +413,13 @@
             main = el('div', 'set-main');
             body.appendChild(nav); body.appendChild(main);
             Updater.onChange(onUpdater);
+            Input.onDevices(onDevices);
             if (page === 'update') Updater.autoCheck();
             renderNav();
             renderMain();
             return navBtn();
         },
-        close: function () { Updater.offChange(onUpdater); Updater.cancel(); body = nav = main = null; rows = []; },
+        close: function () { Updater.offChange(onUpdater); Input.offDevices(onDevices); Updater.cancel(); stopPadTest(); body = nav = main = null; rows = []; },
         refresh: function () { if (nav) { renderNav(); renderMain(); } },
         action: action,
         back: back

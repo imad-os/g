@@ -1,7 +1,14 @@
 /* Browser app: address bar (on-screen keyboard), back / forward / reload / home, quick links.
- * Pages load in one sandboxed iframe that is destroyed when the app closes. The remote never
- * gives focus to the page (it would keep the Back key): up/down scroll it from the outside by
- * moving a tall iframe inside a clipped viewport. Some websites refuse to be shown in a frame. */
+ * Pages load in one sandboxed iframe that is destroyed when the app closes. Some websites refuse
+ * to be shown in a frame.
+ *
+ * A web page in a frame that has the keyboard focus keeps every key, Back included, and My PC can
+ * not take them back (cross-origin). So there are two modes:
+ *  - remote mode (default): the frame ignores the pointer (it can not get focus by a click) and a page
+ *    script that grabs focus loses it again. Up/Down, Channel Up/Down (PageUp/PageDown) scroll the page
+ *    from the outside by moving a tall iframe inside a clipped viewport; Guide (F6) goes to the toolbar.
+ *  - mouse mode (default when a mouse was used): the page is a normal frame: click, mouse wheel, keys
+ *    after a click. The toolbar stays reachable with the mouse, or Guide on a gamepad. */
 (function () {
     'use strict';
 
@@ -14,7 +21,7 @@
     ];
     var PAGE_H = 4000, STEP = 300;
 
-    var body, addr, view, frame, start, back, fwd, hist = [], pos = -1, scrollY = 0;
+    var body, bar, addr, view, frame, start, back, fwd, modeBtn, hist = [], pos = -1, scrollY = 0, native = false, pointerIn = false;
 
     function el(tag, cls, text) {
         var e = document.createElement(tag);
@@ -42,6 +49,36 @@
         return b;
     }
 
+    // mouse mode: the setting, or (not set) whether a mouse / pointer has been used on this TV
+    function wantNative() { var v = Store.get('br_native', null); return v === null ? !!Input.seen().mouse : !!v; }
+
+    function applyMode() {
+        if (modeBtn) {
+            Icons.put(modeBtn, native ? 'mouse' : 'remote');
+            modeBtn.setAttribute('aria-label', t(native ? 'brSwitchRemote' : 'brSwitchMouse'));
+        }
+        if (!frame) return;
+        scrollY = 0;
+        if (native) {
+            frame.style.height = view.offsetHeight + 'px';           // the page scrolls itself (mouse wheel, touch)
+            frame.style.pointerEvents = '';
+            frame.setAttribute('tabindex', '0');
+        } else {
+            frame.style.height = PAGE_H + 'px';                      // scrolled from the outside
+            frame.style.pointerEvents = 'none';                      // a click can not give the page the keyboard
+            frame.setAttribute('tabindex', '-1');
+        }
+        frame.style.webkitTransform = frame.style.transform = 'translateY(0)';
+    }
+
+    function toggleMode() {
+        native = !native;
+        Store.set('br_native', native);
+        applyMode();
+        App.toast(t(native ? 'brModeMouse' : 'brModeRemote'));
+        if (!native && frame && document.activeElement === frame) Focus.focus(view);
+    }
+
     function updateButtons() {
         back.disabled = pos < 0;
         fwd.disabled = pos >= hist.length - 1;
@@ -54,16 +91,17 @@
         start.hidden = true;
         view.hidden = false;
         scrollY = 0;
+        pointerIn = false;                    // a stale pointer position must not count as "the user clicked"
         if (!frame) {
             frame = document.createElement('iframe');
             frame.className = 'br-frame';
-            frame.setAttribute('tabindex', '-1');
             frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
             frame.setAttribute('referrerpolicy', 'no-referrer');
+            frame.addEventListener('mouseenter', function () { pointerIn = true; });
+            frame.addEventListener('mouseleave', function () { pointerIn = false; });
             view.insertBefore(frame, view.firstChild);
         }
-        frame.style.height = PAGE_H + 'px';
-        frame.style.webkitTransform = frame.style.transform = 'translateY(0)';
+        applyMode();
         frame.src = url;
         updateButtons();
         A11y.announce(t('loading') + ' ' + url);
@@ -77,9 +115,10 @@
         updateButtons();
     }
 
-    function scroll(d) {
+    function scroll(d, page) {
+        if (native || !frame) return false;
         var max = PAGE_H - view.offsetHeight;
-        var y = Math.max(0, Math.min(max, scrollY + d * STEP));
+        var y = Math.max(0, Math.min(max, scrollY + d * (page ? Math.round(view.offsetHeight * 0.85) : STEP)));
         if (y === scrollY) return false;
         scrollY = y;
         frame.style.webkitTransform = frame.style.transform = 'translateY(' + (-y) + 'px)';
@@ -116,11 +155,43 @@
 
     function inView() { var c = Focus.current(); return c && c.className.indexOf('br-view') >= 0; }
 
-    function action(a, repeat) {
+    // the buttons on top: the first one that can be used
+    function toolbarTarget() {
+        var list = bar.querySelectorAll('[data-focus]');
+        for (var i = 0; i < list.length; i++) if (!list[i].disabled) return list[i];
+        return null;
+    }
+    function inToolbar() { var c = Focus.current(); return !!c && bar.contains(c); }
+
+    // a page script took the keyboard from My PC (autofocus, focus()): take it back, unless the user clicked the page
+    function onWindowBlur() {
+        setTimeout(function () {
+            if (!frame || native || pointerIn || document.activeElement !== frame) return;
+            Focus.focus(view);
+        }, 0);
+    }
+
+    function action(a, repeat, dev) {
+        var shown = !!frame && !view.hidden;
+        // Guide / F6: to the buttons on top, and back to the page from there
+        if (a === 'guide') {
+            if (!repeat) {
+                if (inToolbar() && shown) Focus.focus(view);
+                else if (inToolbar()) Focus.focus(start.querySelector('[data-focus]'));
+                else Focus.focus(toolbarTarget());
+            }
+            return true;
+        }
+        // Channel Up / Down, PageUp / PageDown, LB / RB: a page at a time
+        if (a === 'pageUp' || a === 'pageDown') { if (shown) scroll(a === 'pageDown' ? 1 : -1, true); return true; }
+        // mouse wheel: scrolls the page wherever the focus is
+        if (dev === 'mouse' && shown && !native && (a === 'up' || a === 'down')) { scroll(a === 'down' ? 1 : -1); return true; }
         if (inView() && (a === 'up' || a === 'down')) {
             if (scroll(a === 'down' ? 1 : -1)) return true;
             return a === 'down';      // at the top, Up goes to the toolbar
         }
+        // mouse mode: OK on the page gives the page the keyboard (arrows, PageDown... scroll it natively)
+        if (inView() && native && a === 'confirm' && !repeat) { frame.focus(); App.toast(t('brPageFocus')); return true; }
         return false;
     }
 
@@ -134,13 +205,15 @@
         icon: 'browser',
         title: function () { return t('browser'); },
         open: function (b) {
-            body = b; hist = []; pos = -1;
-            var bar = el('div', 'br-bar');
+            body = b; hist = []; pos = -1; native = wantNative();
+            bar = el('div', 'br-bar');
             back = iconBtn('back', t('back'), function () { backKey(); });
             fwd = iconBtn('forward', t('forward'), function () { if (pos < hist.length - 1) { pos++; load(hist[pos], false); } });
             bar.appendChild(back); bar.appendChild(fwd);
             bar.appendChild(iconBtn('reload', t('reload'), function () { if (pos >= 0) load(hist[pos], false); }));
             bar.appendChild(iconBtn('home', t('home'), function () { showStart(); }));
+            modeBtn = iconBtn('remote', '', toggleMode);
+            bar.appendChild(modeBtn);
             addr = el('button', 'br-addr');
             addr.setAttribute('data-focus', '');
             addr.onclick = typeAddress;
@@ -153,13 +226,16 @@
             view.hidden = true;
             body.appendChild(view);
             body.appendChild(buildStart());
+            applyMode();
             updateButtons();
+            window.addEventListener('blur', onWindowBlur);
             return start.querySelector('[data-focus]');
         },
         close: function () {
+            window.removeEventListener('blur', onWindowBlur);
             // free the page completely
             if (frame) { try { frame.src = 'about:blank'; } catch (e) {} if (frame.parentNode) frame.parentNode.removeChild(frame); }
-            frame = null; body = addr = view = start = back = fwd = null; hist = []; pos = -1;
+            frame = null; body = bar = addr = view = start = back = fwd = modeBtn = null; hist = []; pos = -1; pointerIn = false;
         },
         action: action,
         back: backKey

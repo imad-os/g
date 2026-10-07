@@ -57,9 +57,9 @@ var Win = (function () {
     function setTitle(t) { $('win-title').textContent = t; }
 
     // router (main.js)
-    function action(a, repeat) {
+    function action(a, repeat, dev) {
         if (!cur) return;
-        if (cur.action && cur.action(a, repeat)) return;
+        if (cur.action && cur.action(a, repeat, dev)) return;
         if (a === 'back' || a === 'cancel') {
             if (repeat) return;
             if (cur.back && cur.back()) return;

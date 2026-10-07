@@ -377,6 +377,24 @@ svg { display: block; width: 100%; height: 100%; }
 @-webkit-keyframes rise { from { -webkit-transform: translateY(24px); opacity: 0; } to { -webkit-transform: none; opacity: 1; } }
 @keyframes rise { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 
+/* mouse: hover looks like the focus background (the white ring stays for the remote / keyboard) */
+.dicon:hover, .tb-btn:hover, .tray-clock:hover, .icon-btn:hover, .fx-nav:hover { background: rgba(255, 255, 255, 0.12); }
+.stile:hover, .srec:hover, .start-user:hover, .start-power:hover, .br-link:hover { background: rgba(255, 255, 255, 0.1); }
+.set-nav-btn:hover { background: rgba(255, 255, 255, 0.06); }
+.set-row:hover, .fx-item:hover, .cal-day:hover, .pcard:hover { background: #353535; }
+.pill-btn:hover, .btn:hover, .calc-key:hover, .cal-note:hover { background: #454545; }
+.btn-primary:hover, .set-primary:hover, .calc-eq:hover { background: #7dd3ff; }
+.win-close:hover { background: #c42b1c; }
+
+/* Settings > Devices: live controller test */
+.set-padtest { padding: 22px 28px; margin: 6px 0; background: #2b2b2b; border-radius: 10px; }
+.pt-grid { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 14px -4px 8px; }
+.pt-b { display: block; min-width: 64px; height: 52px; margin: 4px; padding: 0 12px; line-height: 52px; text-align: center; border-radius: 10px; background: #3a3a3a; font-size: 24px; color: #c5c5c5; }
+.pt-b.on { background: #4cc2ff; color: #000; font-weight: 700; }
+.pt-sticks { display: -webkit-box; display: -webkit-flex; display: flex; margin-top: 10px; }
+.pt-stick { position: relative; display: block; width: 96px; height: 96px; margin-right: 24px; border-radius: 48px; background: #1c1c1c; border: 2px solid #4a4a4a; }
+.pt-dot { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #4cc2ff; }
+
 /* right-to-left (Arabic) mirroring */
 [dir="rtl"] .dicon { margin: 0 0 8px 8px; }
 [dir="rtl"] .win-bar { padding-left: 0; padding-right: 32px; }

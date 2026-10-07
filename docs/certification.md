@@ -67,7 +67,7 @@ Office submission.
 | A button or key still held when the pause menu opens never counts as a new press (no open/close flicker) | Automated ✅ |
 | 2-player co-op: each hero reads only its own device (remote/arrows, WASD, pad 1, pad 2) | Automated ✅ / On TV with 2 pads |
 | Top-10 initials entry works with the remote only (Up/Down letter, Left/Right move, OK save, Back saves) | Automated ✅ |
-| Only the keys that are used are registered: MediaPlayPause, MediaPlay, MediaPause, ColorF0Red | ✅ |
+| Only the keys that are used are registered: MediaPlayPause, MediaPlay, MediaPause, ColorF0Red, ChannelUp / ChannelDown (scroll a page in the browser and calendar), Guide (Start menu / browser toolbar) | ✅ |
 
 ## Performance and memory
 

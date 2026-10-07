@@ -93,6 +93,12 @@ var App = (function () {
             return;
         }
 
+        // Tab / Shift+Tab walk through the buttons of the current screen (a game that runs does not get them)
+        if ((action === 'tab' || action === 'tabBack') && !(GameHost.active() && GameHost.state() === 'running')) {
+            if (pressed) Focus.step(action === 'tab' ? 1 : -1);
+            return;
+        }
+
         if (GameHost.active()) return GameHost.onAction(action, pressed, repeat, dev);
 
         if (action === 'padLost') { toast(I18n.t('padOff').split('.')[0]); return; }
@@ -101,7 +107,7 @@ var App = (function () {
         // top to bottom: keyboard over everything, profiles overlay, the open app, the desktop
         if (Keyboard.isOpen()) return Keyboard.action(action, repeat);
         if (ProfilesUI.screenOpen()) return ProfilesUI.screenAction(action, repeat);
-        if (Win.isOpen()) return Win.action(action, repeat);
+        if (Win.isOpen()) return Win.action(action, repeat, dev);
         Desktop.action(action, repeat);
     }
 

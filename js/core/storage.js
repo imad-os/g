@@ -6,7 +6,7 @@
 var Store = (function () {
     'use strict';
     var PREFIX = 'arc_';
-    var DEVICE = { lang: 1, vol_music: 1, vol_sfx: 1, gfx: 1, perf_bench_v1: 1, wallpaper: 1, clock24: 1, update_checked: 1 };
+    var DEVICE = { lang: 1, vol_music: 1, vol_sfx: 1, gfx: 1, perf_bench_v1: 1, wallpaper: 1, clock24: 1, update_checked: 1, br_native: 1 };
 
     function raw(k) { try { var v = localStorage.getItem(k); return v === null ? undefined : JSON.parse(v); } catch (e) { return undefined; } }
     function rawSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }

@@ -135,8 +135,8 @@ var Desktop = (function () {
 
     function updateTray() {
         var d = Input.device();
-        Icons.put($('input-indicator'), d === 'pad' ? 'gamepad' : d === 'keyboard' ? 'keyboard' : 'remote');
-        $('input-indicator').setAttribute('aria-label', I18n.t(d === 'pad' ? 'inputPad' : d === 'keyboard' ? 'inputKeys' : 'inputRemote'));
+        Icons.put($('input-indicator'), d === 'pad' ? 'gamepad' : d === 'keyboard' ? 'keyboard' : d === 'mouse' ? 'mouse' : 'remote');
+        $('input-indicator').setAttribute('aria-label', I18n.t(d === 'pad' ? 'inputPad' : d === 'keyboard' ? 'inputKeys' : d === 'mouse' ? 'inputMouse' : 'inputRemote'));
         Icons.put($('tray-net'), navigator.onLine === false ? 'wifiOff' : 'wifi');
         Icons.put($('tray-vol'), AudioPrefs.music() + AudioPrefs.sfx() ? 'volume' : 'mute');
     }
@@ -280,6 +280,7 @@ var Desktop = (function () {
     function action(a, repeat) {
         if (a === 'left' || a === 'right' || a === 'up' || a === 'down') Focus.move(a);
         else if (a === 'confirm' && !repeat) { var c = Focus.current(); if (c) c.click(); }
+        else if (a === 'guide' && !repeat) toggleStart();                 // the Guide key = the Windows key
         else if ((a === 'back' || a === 'cancel') && !repeat) {
             if (startOpen()) closeStart();
             else App.confirm(I18n.t('exitTitle'), I18n.t('exitText'), App.exitApp);

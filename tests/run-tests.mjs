@@ -25,6 +25,8 @@
 //  18. installer page: catalog of imad-os's g_ repositories (GitHub API and Firebase mocked)
 //  19. smart startup: slow server -> last known online build; failures are not blamed
 //  20. Settings > Update: check, download with progress, restart; error cases
+//  21. Browser: focus theft, Guide, Channel / Page keys, wheel, remote and mouse modes
+//  22. Tab, wheel, Guide, device detection, Settings > Devices with a simulated controller
 //
 //  CHROMIUM_PATH=/path/to/chrome uses an existing Chromium instead of Playwright's download.
 
@@ -1000,6 +1002,155 @@ async function main() {
         await page.evaluate(() => Win.open('settings', 'update'));
         await page.waitForFunction(() => /Samsung store/.test((document.querySelector('.set-status .set-card-name') || {}).textContent || ''), null, { timeout: 8000 });
         check(true, 'a build that needs a new package says so');
+        await page.context().close();
+    }
+
+    console.log('21. Browser: never stuck, remote / keyboard / mouse / gamepad');
+    {
+        const SITE = 'https://web.example.test/';
+        const page = await newPage(browser, base);
+        await page.addInitScript(() => {
+            window.__keys = [];
+            window.tizen.tvinputdevice.registerKeyBatch = (k) => window.__keys.push(...k);
+            const mk = (i) => { const b = []; for (let k = 0; k < 17; k++) b.push({ pressed: false, value: 0 }); return { index: i, id: 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)', connected: true, mapping: 'standard', buttons: b, axes: [0, 0, 0, 0] }; };
+            window.__pads = [];
+            navigator.getGamepads = () => window.__pads;
+            window.__plug = () => { window.__pads = [mk(0)]; window.dispatchEvent(new Event('gamepadconnected')); };
+            window.__pad = (b, on) => { window.__pads[0].buttons[b].pressed = on; window.__pads[0].buttons[b].value = on ? 1 : 0; };
+        });
+        await routeHosted(page, { offline: true });
+        // a web app that keeps grabbing the keyboard and is much taller than the screen
+        await page.route(SITE + '**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body:
+            '<!doctype html><title>Fake web app</title><body style="margin:0"><input id="i" autofocus><div style="height:6000px;background:linear-gradient(#fff,#08f)">tall page</div>' +
+            '<script>setInterval(function(){document.getElementById("i").focus();},300)<\/script>' }));
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('.dicon', { timeout: 15000 });
+        check(await page.evaluate(() => ['ChannelUp', 'ChannelDown', 'Guide'].every((k) => window.__keys.indexOf(k) >= 0)), 'the TV keys Channel Up, Channel Down and Guide are registered');
+        const key = async (...ks) => { for (const k of ks) { await page.keyboard.press(k); await page.waitForTimeout(60); } };
+        const remoteKey = (code) => page.evaluate((c) => { for (const type of ['keydown', 'keyup']) { const e = new KeyboardEvent(type, { bubbles: true }); Object.defineProperty(e, 'keyCode', { get: () => c }); document.dispatchEvent(e); } }, code);
+        const scrollY = () => page.evaluate(() => { const m = /translateY\((-?[\d.]+)px\)/.exec(document.querySelector('.br-frame').style.transform || ''); return m ? -parseFloat(m[1]) : 0; });
+        const pad = async (b) => { await page.evaluate((x) => window.__pad(x, true), b); await page.waitForTimeout(120); await page.evaluate((x) => window.__pad(x, false), b); await page.waitForTimeout(120); };
+        const where = () => page.evaluate(() => { const a = document.activeElement; return a === document.body ? 'body' : a.tagName === 'IFRAME' ? 'page' : a.closest('.br-bar') ? 'toolbar' : a.classList.contains('br-view') ? 'view' : 'other'; });
+        await page.evaluate(() => Win.open('browser'));
+        await key('Enter');
+        await page.keyboard.type('web.example.test');
+        await page.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
+        await page.waitForTimeout(900);                                      // the page runs its focus grabbing
+        check(await page.evaluate(() => Store.get('br_native', null) === null && document.querySelector('.br-frame').style.pointerEvents === 'none'), 'remote mode by default: the page ignores the pointer, so a click can not trap the keyboard');
+        // a page script (or anything) that takes the keyboard away from My PC loses it again
+        await page.evaluate(() => document.querySelector('.br-frame').focus());
+        await page.waitForTimeout(150);
+        check(await where() === 'view', 'a page that grabs the keyboard does not keep it (My PC takes it back)');
+        // scrolling from the outside: arrows, Channel Up / Down, PageUp / PageDown, gamepad LB / RB, the mouse wheel
+        await key('ArrowDown');
+        check(await scrollY() === 300, 'Down scrolls the page');
+        await remoteKey(428);
+        const afterCh = await scrollY();
+        check(afterCh > 800, 'Channel Down scrolls a page (' + afterCh + ' px)');
+        await remoteKey(427);
+        check(await scrollY() === 300, 'Channel Up scrolls a page back');
+        await key('PageDown');
+        check(await scrollY() > 800, 'PageDown on a keyboard scrolls a page');
+        await key('PageUp');
+        await page.evaluate(() => window.__plug());
+        await page.waitForTimeout(300);
+        await pad(5);
+        check(await scrollY() > 800, 'RB on a gamepad scrolls a page');
+        await pad(4);
+        await page.mouse.move(640, 400);
+        await page.mouse.move(650, 410);
+        await page.mouse.wheel(0, 200);
+        await page.waitForTimeout(200);
+        check(await scrollY() === 600, 'the mouse wheel scrolls the page (' + await scrollY() + ' px)');
+        // from far down the page, Guide reaches the buttons on top (no need to scroll back up)
+        await key('F6');
+        check(await where() === 'toolbar', 'F6 (the Guide key) moves to the browser buttons from deep inside a page');
+        await key('F6');
+        check(await where() === 'view', 'Guide again goes back to the page');
+        await remoteKey(458);
+        check(await where() === 'toolbar', 'the TV remote Guide key (458) does the same');
+        await key('ArrowRight');
+        check(await where() === 'toolbar', 'the arrows move along the buttons');
+        await page.evaluate(() => Win.close());
+        // mouse mode: the page is a normal frame; a click may keep the keyboard; Guide on a gamepad still gets out
+        await page.evaluate(() => Store.set('br_native', true));
+        await page.evaluate(() => Win.open('browser'));
+        await key('Enter');
+        await page.keyboard.type('web.example.test');
+        await page.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
+        await page.waitForTimeout(700);
+        check(await page.evaluate(() => { const f = document.querySelector('.br-frame'), v = document.querySelector('.br-view'); return f.style.pointerEvents === '' && f.offsetHeight === v.offsetHeight && /Switch to remote mode/.test(document.querySelector('.br-bar [aria-label^="Switch"]').getAttribute('aria-label')); }),
+            'mouse mode: the page is as tall as the window and takes the pointer; the toolbar offers remote mode');
+        await page.mouse.click(640, 400);
+        await page.waitForTimeout(250);
+        check(await where() === 'page', 'a click gives the page the keyboard (and My PC does not take it away)');
+        await pad(16);                                                       // Guide button on a gamepad
+        check(await where() === 'toolbar', 'Guide on a gamepad gets out of the page');
+        await page.evaluate(() => document.querySelector('.br-bar [aria-label^="Switch"]').click());
+        check(await page.evaluate(() => Store.get('br_native') === false && document.querySelector('.br-frame').style.pointerEvents === 'none'), 'the toolbar button switches back to remote mode');
+        await page.evaluate(() => Win.close());
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('22. keyboard, mouse and controllers: Tab, wheel, Guide, Settings > Devices');
+    {
+        const page = await newPage(browser, base);
+        await page.addInitScript(() => {
+            const mk = (i, id) => { const b = []; for (let k = 0; k < 17; k++) b.push({ pressed: false, value: 0 }); return { index: i, id, connected: true, mapping: 'standard', buttons: b, axes: [0, 0, 0, 0] }; };
+            window.__pads = [];
+            navigator.getGamepads = () => window.__pads;
+            window.__plug = () => { window.__pads = [mk(0, 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)')]; window.dispatchEvent(new Event('gamepadconnected')); };
+            window.__pad = (b, on) => { window.__pads[0].buttons[b].pressed = on; window.__pads[0].buttons[b].value = on ? 1 : 0; };
+        });
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('.dicon', { timeout: 15000 });
+        const key = async (...ks) => { for (const k of ks) { await page.keyboard.press(k); await page.waitForTimeout(60); } };
+        const focused = () => page.evaluate(() => (document.activeElement.getAttribute('data-app') || document.activeElement.getAttribute('data-game') || document.activeElement.id || document.activeElement.tagName));
+        const first = await focused();
+        await key('Tab');
+        const second = await focused();
+        await key('Tab');
+        const third = await focused();
+        await key('Shift+Tab');
+        check(first !== second && second !== third && await focused() === second, 'Tab moves to the next button, Shift+Tab to the previous (' + first + ' > ' + second + ' > ' + third + ')');
+        await page.mouse.move(300, 300); await page.mouse.move(320, 320);
+        check(await page.evaluate(() => document.getElementById('input-indicator').getAttribute('aria-label')) === 'Mouse', 'moving the mouse shows the mouse in the taskbar');
+        const before = await focused();
+        await page.mouse.wheel(0, 200);
+        await page.waitForTimeout(200);
+        check(await focused() !== before, 'the mouse wheel moves through the desktop');
+        await key('ArrowRight');
+        check(await page.evaluate(() => document.getElementById('input-indicator').getAttribute('aria-label')) !== 'Mouse', 'pressing a key switches the indicator away from the mouse');
+        await page.click('#tb-start');
+        check(await page.evaluate(() => Desktop.startOpen()), 'a mouse click opens Start');
+        await key('Escape');
+        await key('F6');
+        check(await page.evaluate(() => Desktop.startOpen()), 'Guide (F6) opens Start, like the Windows key');
+        await key('Escape');
+        // Settings > Devices
+        await page.evaluate(() => Win.open('settings', 'devices'));
+        const text = () => page.evaluate(() => document.querySelector('.set-main').textContent);
+        check(/Keyboard.*Detected/.test(await text()) && /Mouse \/ pointer.*Detected/.test(await text()) && /None connected/.test(await text()), 'Devices lists the keyboard and mouse that were used, and no controller yet');
+        await page.evaluate(() => window.__plug());
+        await page.waitForFunction(() => /Controller 1.*Xbox Wireless Controller/.test(document.querySelector('.set-main').textContent) && !!document.querySelector('.set-padtest'), null, { timeout: 4000 });
+        check(!/STANDARD|Vendor/.test(await text()), 'a controller that is plugged in shows up at once, with a clean name');
+        await page.evaluate(() => window.__pad(1, true));       // B
+        await page.waitForFunction(() => document.querySelectorAll('.pt-b.on').length === 1 && document.querySelector('.pt-b.on').textContent === 'B', null, { timeout: 3000 });
+        check(true, 'the live test lights up the button that is pressed');
+        await page.evaluate(() => window.__pad(1, false));
+        await page.evaluate(() => Win.close());
+        check(await page.evaluate(() => document.querySelectorAll('.set-padtest').length === 0), 'closing Settings stops the test');
+        // games never get the desktop keys; Guide opens their pause menu
+        await page.focus('[data-game="snake"]');
+        await Promise.all([page.waitForURL(/play=snake/), page.keyboard.press('Enter')]);
+        await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 15000 });
+        await key('Tab', 'PageDown');
+        check(await page.evaluate(() => window.GameHost.state()) === 'running', 'Tab and PageDown do nothing in a game');
+        await key('F6');
+        check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'Guide opens the pause menu of a game');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }
 
