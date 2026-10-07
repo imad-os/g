@@ -5,6 +5,21 @@
 
     var MANIFEST = 'mypc-app.json';
     var ID_RE = /^[a-z0-9-]{2,32}$/;
+    var MAX_CONFIG = 8000;               // characters of JSON per app: it is loaded by every TV before the app opens
+
+    function isObject(o) { return !!o && typeof o === 'object' && !Array.isArray(o); }
+
+    // text typed in the installer -> the config object (empty text = {}); throws a readable Error
+    function parseConfig(text) {
+        var t = String(text == null ? '' : text).trim();
+        if (!t) return {};
+        var v;
+        try { v = JSON.parse(t); } catch (e) { throw new Error('Not valid JSON: ' + e.message); }
+        if (!isObject(v)) throw new Error('The config must be a JSON object, like { "speed": 2 }.');
+        var n = JSON.stringify(v).length;
+        if (n > MAX_CONFIG) throw new Error('The config is too big (' + n + ' characters, the limit is ' + MAX_CONFIG + ').');
+        return v;
+    }
 
     // "someone.github.io/game" -> { base: "https://someone.github.io/game/", manifest: ".../mypc-app.json" }
     function locate(input) {
@@ -42,6 +57,8 @@
             type: type, version: String(m.version || '1.0.0').slice(0, 20), sdk: 1, scores: type === 'game' && m.scores !== false,
             enabled: true, order: order || 0
         };
+        // optional default settings shipped by the app (the owner can change them in the installer)
+        if (m.config !== undefined) app.config = parseConfig(JSON.stringify(m.config));
         return app;
     }
 
@@ -69,7 +86,7 @@
         return 'new';
     }
 
-    var api = { MANIFEST: MANIFEST, locate: locate, toApp: toApp, catalog: catalog, status: status };
+    var api = { MANIFEST: MANIFEST, MAX_CONFIG: MAX_CONFIG, locate: locate, toApp: toApp, parseConfig: parseConfig, catalog: catalog, status: status };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.InstallerLib = api;
 })(this);

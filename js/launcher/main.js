@@ -182,7 +182,18 @@ var App = (function () {
             // an installed app: from the saved Firebase list (no network needed)
             var list = Cloud.apps(), a = null;
             for (var i = 0; i < list.length; i++) if ('app-' + list[i].id === id) a = list[i];
-            return go(a ? Desktop.fromCloud(a) : null);
+            if (!a) return go(null);
+            var g = Desktop.fromCloud(a);
+            // Before the app opens (behind its loading screen): read its document again so the config
+            // is current. Offline or slow (2.5 s), the saved copy is used. Uninstalled: back to the desktop.
+            g.remote.prepare = function (done) {
+                Cloud.fetchApp(a.id, function (err, fresh) {
+                    if (err === 'notfound') return done(false);
+                    if (!err && fresh) { g.remote.entry = fresh.entry; g.remote.config = fresh.config; }
+                    done(true);
+                });
+            };
+            return go(g);
         }
         loadGames(function (games) { go(games[0] || null); }, id);
     }

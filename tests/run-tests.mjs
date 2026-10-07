@@ -687,14 +687,24 @@ async function main() {
             if (!fs.existsSync(p)) return r.fulfill({ status: 404, body: '' });
             r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || (p.endsWith('.svg') ? 'image/svg+xml' : 'text/plain'), headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(p) });
         });
-        let firestoreUp = true;
+        let firestoreUp = true, liveSpeed = 1, removed = false;
+        // the app's config as Firestore stores it: nested map, list, null
+        const cfgValue = (speed) => ({ mapValue: { fields: { speed: { integerValue: String(speed) },
+            levels: { arrayValue: { values: [{ integerValue: '1' }, { stringValue: 'a' }] } },
+            nested: { mapValue: { fields: { on: { booleanValue: true }, none: { nullValue: null } } } } } } });
         const doc = { fields: { id: { stringValue: 'star-catcher' }, name: { stringValue: 'Star Catcher' }, description: { stringValue: 'Catch stars' },
             url: { stringValue: APP }, entry: { stringValue: APP + 'index.html' }, icon: { stringValue: APP + 'icon.svg' }, type: { stringValue: 'game' },
-            version: { stringValue: '1.0.0' }, scores: { booleanValue: true }, enabled: { booleanValue: true }, order: { integerValue: '0' } } };
+            version: { stringValue: '1.0.0' }, scores: { booleanValue: true }, enabled: { booleanValue: true }, order: { integerValue: '0' },
+            config: cfgValue(1) } };
         const hidden = { fields: Object.assign({}, doc.fields, { id: { stringValue: 'hidden-one' }, enabled: { booleanValue: false } }) };
-        await page.context().route('https://firestore.googleapis.com/**', (r) => firestoreUp
-            ? r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ documents: [doc, hidden] }) })
-            : r.abort('internetdisconnected'));
+        // the list always answers with config speed 1 (what the TV has saved); the single-app request, made right
+        // before an app opens, answers with the live value: that tells "read again before opening" from "from the list"
+        await page.context().route('https://firestore.googleapis.com/**', (r) => {
+            if (!firestoreUp) return r.abort('internetdisconnected');
+            const json = (status, o) => r.fulfill({ status, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(o) });
+            if (r.request().url().indexOf('/documents/apps/star-catcher') > 0) return removed ? json(404, { error: { code: 404, status: 'NOT_FOUND' } }) : json(200, { fields: Object.assign({}, doc.fields, { config: cfgValue(liveSpeed) }) });
+            json(200, { documents: [doc, hidden] });
+        });
         await page.goto(base + 'index.html');
         const icon = '#desk-icons [data-game="app-star-catcher"]';
         const shown = await page.waitForSelector(icon, { timeout: 8000 }).then(() => true, () => false);
@@ -705,6 +715,8 @@ async function main() {
         check(ran && fr && fr.src.indexOf(APP) === 0 && fr.sandbox === 'allow-scripts allow-same-origin allow-pointer-lock', 'it opens full screen in a sandboxed iframe on its own origin, and reports ready through the SDK');
         const frame = page.frames().find((f) => f.url().indexOf(APP) === 0);
         check(!!frame && await frame.evaluate(() => MyPC.isHosted() && MyPC.info().lang === 'en' && !MyPC.info().standalone), 'the app gets the init data from My PC (hosted, language)');
+        check(JSON.stringify(await frame.evaluate(() => MyPC.app_config)) === JSON.stringify({ speed: 1, levels: [1, 'a'], nested: { on: true, none: null } }),
+            'MyPC.app_config is the config object saved in Firebase (nested values and lists included)');
         await page.keyboard.press('Enter');                          // OK on the remote -> "confirm" action -> the game starts
         await page.waitForTimeout(300);
         check(await frame.evaluate(() => document.getElementById('msg').textContent === ''), 'remote input reaches the app as actions');
@@ -727,12 +739,21 @@ async function main() {
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
         check(await page.evaluate(() => document.querySelectorAll('iframe').length === 0 && document.activeElement.getAttribute('data-game') === 'app-star-catcher'), 'quitting removes the iframe and returns to its desktop icon');
-        // a running app cannot exit to anything else than the desktop, and MyPC.exit() works
+        // the owner changes the config in the installer: the next launch gets it (the saved list still has the old one)
+        liveSpeed = 3;
         await page.focus(icon); await page.keyboard.press('Enter');
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 10000 });
         const f2 = page.frames().find((f) => f.url().indexOf(APP) === 0);
+        check(await f2.evaluate(() => MyPC.app_config.speed) === 3, 'the config is read again from Firebase before the app opens (the saved copy was older)');
         await f2.evaluate(() => MyPC.exit());
         check(await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body, null, { timeout: 4000 }).then(() => true, () => false), 'MyPC.exit() closes the app');
+        // uninstalled meanwhile: opening it sends you straight back to the desktop
+        removed = true;
+        await page.focus(icon);
+        await Promise.all([page.waitForURL(/play=app-star-catcher/), page.keyboard.press('Enter')]);
+        await page.waitForURL(/from=app-star-catcher/, { timeout: 8000 });
+        check(await page.waitForSelector(icon, { timeout: 8000 }).then(() => true, () => false) && await page.evaluate(() => document.querySelectorAll('iframe').length === 0), 'an app uninstalled meanwhile does not open: back to the desktop');
+        removed = false;
         // listed in File Explorer and Settings > Apps
         await page.evaluate(() => Win.open('explorer', 'games'));
         check(await page.evaluate(() => [...document.querySelectorAll('.fx-name')].some((n) => n.textContent === 'Star Catcher')), 'File Explorer > Games lists the installed game');
@@ -743,11 +764,18 @@ async function main() {
         firestoreUp = false;
         await page.reload();
         check(await page.waitForSelector(icon, { timeout: 8000 }).then(() => true, () => false), 'offline, the last list from Firebase is still shown');
+        await page.focus(icon); await page.keyboard.press('Enter');
+        await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 10000 });
+        const f3 = page.frames().find((f) => f.url().indexOf(APP) === 0);
+        check(await f3.evaluate(() => MyPC.app_config.speed) === 1, 'offline, the app opens with the last saved config');
+        await f3.evaluate(() => MyPC.exit());
+        await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body, null, { timeout: 6000 });
         // standalone: the example opened directly in a browser
         const sp = await page.context().newPage();
         await sp.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
-        await sp.goto(APP + 'index.html');
+        await sp.goto(APP + 'index.html?app_config=' + encodeURIComponent('{"speed":5}'));
         await sp.waitForFunction(() => window.MyPC && MyPC.info() && MyPC.info().standalone);
+        check(await sp.evaluate(() => MyPC.app_config.speed) === 5, 'standalone: MyPC.app_config comes from ?app_config= for testing');
         await sp.keyboard.press('Enter'); await sp.waitForTimeout(200);
         check(await sp.evaluate(() => document.getElementById('msg').textContent === ''), 'standalone (no My PC): the SDK reads the keyboard itself');
         await sp.close();
@@ -772,7 +800,11 @@ async function main() {
         check(cat.length === 2 && cat[0].base === 'https://imad-os.github.io/g_a/' && cat[1].manifest === 'https://imad-os.github.io/G_B/mypc-app.json', 'catalog: g_ repos with Pages -> their app addresses');
         check(lib.status([{ id: 'a', url: 'u', version: '1', entry: 'e', name: 'n', icon: '' }], { id: 'a', url: 'u', version: '2', entry: 'e', name: 'n', icon: '' }) === 'update' &&
               lib.status([], { id: 'a' }) === 'new', 'status: new / update');
-        const bad = [{}, { mypc: 1, id: 'X!', name: 'a' }, { mypc: 1, id: 'ok-id' }, { mypc: 1, id: 'ok-id', name: 'n', type: 'video' }];
+        check(JSON.stringify(a.config) === '{"speed":1}', 'the manifest\'s "config" becomes the app\'s default config');
+        let cErr = [];
+        for (const t of ['[1,2]', 'nope', '"text"', 'null', '{"big":"' + 'x'.repeat(9000) + '"}']) { try { lib.parseConfig(t); cErr.push('accepted ' + t.slice(0, 10)); } catch (e) { /* refused */ } }
+        check(!cErr.length && JSON.stringify(lib.parseConfig('')) === '{}' && JSON.stringify(lib.parseConfig('{"a":[1,{"b":null}]}')) === '{"a":[1,{"b":null}]}', 'config text must be a JSON object under the size limit (empty = {}) ' + cErr.join(','));
+        const bad = [{}, { mypc: 1, id: 'X!', name: 'a' }, { mypc: 1, id: 'ok-id', name: 'n', config: [1] }, { mypc: 1, id: 'ok-id' }, { mypc: 1, id: 'ok-id', name: 'n', type: 'video' }];
         check(bad.every((m) => { try { lib.toApp(m, 'https://a.b/'); return false; } catch (e) { return !!e.message; } }), 'invalid manifests are refused with a message');
     }
 
@@ -808,10 +840,11 @@ async function main() {
             { name: 'g_star', has_pages: true }, { name: 'g_oldgame', has_pages: true }, { name: 'g_broken', has_pages: true },
             { name: 'g_nopages', has_pages: false }, { name: 'speedy', has_pages: true }, { name: 'g_archived', has_pages: true, archived: true }]) }));
         const ex = JSON.parse(fs.readFileSync(path.join(ROOT, 'sdk/example/mypc-app.json'), 'utf8'));
+        let starVersion = ex.version;
         await page.route('https://imad-os.github.io/**', (r) => {
             const u = r.request().url();
             const send = (o) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(o) });
-            if (u.indexOf('/g_star/mypc-app.json') > 0) return send(ex);
+            if (u.indexOf('/g_star/mypc-app.json') > 0) return send(Object.assign({}, ex, { version: starVersion }));
             if (u.indexOf('/g_oldgame/mypc-app.json') > 0) return send({ mypc: 1, id: 'old-game', name: 'Old Game', type: 'game', version: '1.0.0' });
             r.fulfill({ status: 404, body: '' });
         });
@@ -830,6 +863,36 @@ async function main() {
             '"Install selected" installs the new app only, after the installed ones');
         await page.waitForFunction(() => /Star Catcher.*Installed/.test(document.getElementById('catalog').textContent) && !/Not installed/.test(document.getElementById('catalog').textContent));
         check(true, 'after installing, the catalog marks it installed');
+        check(JSON.stringify(db['star-catcher'].config) === '{"speed":1}', 'a new app starts with the default config from its manifest');
+        // the config editor
+        const row = (name) => '#list .app:has-text("' + name + '")';
+        await page.click(row('Old Game') + ' button.cfg');
+        check(await page.evaluate(() => !document.getElementById('cfg-modal').hidden) && /Old Game/.test(await page.textContent('#cfg-title')), 'the Config button opens the editor for that app');
+        await page.fill('#cfg-text', '{ "speed": 2, ');
+        await page.click('#cfg-save');
+        check(/Not valid JSON/.test(await page.textContent('#cfg-msg')) && await page.evaluate(() => window.__db.apps['old-game'].config === undefined && !document.getElementById('cfg-modal').hidden), 'invalid JSON is refused with a message and nothing is saved');
+        await page.fill('#cfg-text', '[1, 2]');
+        await page.click('#cfg-save');
+        check(/JSON object/.test(await page.textContent('#cfg-msg')), 'a config that is not an object is refused');
+        await page.fill('#cfg-text', '{ "speed": 2, "levels": [1, 2], "nested": { "on": true } }');
+        await page.click('#cfg-save');
+        await page.waitForFunction(() => document.getElementById('cfg-modal').hidden);
+        check(await page.evaluate(() => JSON.stringify(window.__db.apps['old-game'].config)) === '{"speed":2,"levels":[1,2],"nested":{"on":true}}', 'Save writes the config object into the app\'s document');
+        check(/3 settings/.test(await page.textContent(row('Old Game'))), 'the app row shows how many settings it has');
+        await page.click(row('Old Game') + ' button.cfg');
+        check(JSON.parse(await page.inputValue('#cfg-text')).nested.on === true, 'the editor shows the saved config again');
+        await page.keyboard.press('Escape');
+        // an update keeps the config the owner set (the app's default does not overwrite it)
+        await page.click(row('Star Catcher') + ' button.cfg');
+        await page.fill('#cfg-text', '{ "speed": 9 }'); await page.click('#cfg-save');
+        await page.waitForFunction(() => window.__db.apps['star-catcher'].config.speed === 9);
+        starVersion = '1.0.1';
+        await page.click('#btn-scan');
+        await page.waitForFunction(() => /Update available/.test(document.getElementById('catalog').textContent));
+        await page.click('#catalog .app:has-text("Star Catcher") button.act');
+        await page.waitForFunction(() => window.__db.apps['star-catcher'].version === '1.0.1');
+        const upd = await page.evaluate(() => window.__db.apps['star-catcher']);
+        check(upd.config.speed === 9 && upd.order === 1, 'updating an app keeps its config and its position');
         check(await page.evaluate(() => !!document.getElementById('url') && !!document.getElementById('btn-fetch')), 'the manual address section is still there for apps outside imad-os');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();

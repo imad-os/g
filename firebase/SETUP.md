@@ -51,6 +51,7 @@ enforce the format:
 | `enabled` | boolean | `false` hides it on every TV |
 | `order` | integer 0–999 | position on the desktop |
 | `installedAt`, `installedBy` | timestamp, string (optional) | set by the installer |
+| `config` | map (optional) | `{ "speed": 2, "levels": [1, 2] }`: edited per app in the installer (**Config**), read by the app as `MyPC.app_config` |
 
 TVs read the list with a plain request (no SDK, no sign-in):
 `GET https://firestore.googleapis.com/v1/projects/tvgames-f984d/databases/(default)/documents/apps?key=<apiKey>`

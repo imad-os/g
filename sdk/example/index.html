@@ -31,7 +31,7 @@
         ar: { start: 'اضغط OK للبدء', over: 'انتهت اللعبة', again: 'اضغط OK للعب مجدداً', best: 'الأفضل', restart: 'إعادة البدء' }
     };
     var t, canvas, ctx, raf = 0, last = 0, acc = 0, state = 'ready', score = 0, best = 0;
-    var x = W / 2, items = [], spawn = 0, seed = 1;
+    var x = W / 2, items = [], spawn = 0, seed = 1, speedMul = 1;
     for (var i = 0; i < 24; i++) items.push({ on: false, x: 0, y: 0, v: 0, rock: false });   // fixed pool: no allocation per frame
 
     function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
@@ -65,7 +65,7 @@
         x = Math.max(24, Math.min(W - 24, x + dir * (MyPC.isDown('run') ? 6 : 4)));
         if (--spawn <= 0) {
             spawn = Math.max(14, 40 - score);
-            for (var i = 0; i < items.length; i++) if (!items[i].on) { var it = items[i]; it.on = true; it.x = 16 + rnd() * (W - 32); it.y = -10; it.v = 1.2 + rnd() * 1.5 + score * 0.02; it.rock = rnd() < 0.3; break; }
+            for (var i = 0; i < items.length; i++) if (!items[i].on) { var it = items[i]; it.on = true; it.x = 16 + rnd() * (W - 32); it.y = -10; it.v = (1.2 + rnd() * 1.5 + score * 0.02) * speedMul; it.rock = rnd() < 0.3; break; }
         }
         for (var j = 0; j < items.length; j++) {
             var o = items[j];
@@ -106,6 +106,8 @@
             canvas = $('c'); ctx = canvas.getContext('2d');
             resize(); window.addEventListener('resize', resize);
             best = MyPC.load('best', 0);
+            // settings from the installer (Config button), always an object: { "speed": 2 } makes things fall twice as fast
+            speedMul = +MyPC.app_config.speed > 0 ? +MyPC.app_config.speed : 1;
             if (best) $('best').textContent = t.best + ' ' + best;
             MyPC.setMenu([{ id: 'restart', label: t.restart }]);
             MyPC.progress(1);

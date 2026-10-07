@@ -26,6 +26,9 @@
 - `js/core/`: storage (per-profile keys `arc_<profile>_*`, TV-wide `arc_dev_*`), i18n (en, fr,
   es, ar + RTL), input, focus, perf, scores, `cloud.js` (installed apps from Firestore REST).
 - `games/`: built-in games on `games/shared/gamekit.js`.
+- **App config:** each installed app has a `config` object (Firestore `apps/<id>`, edited with the
+  installer's Config button). The TV re-reads the app's document before it opens
+  (`Cloud.fetchApp`, 2.5 s, falls back to the saved list) and the app gets it as `MyPC.app_config`.
 - `sdk/`: `mypc-sdk.js` (protocol `{ mypc: 1, type, data }`), `GUIDE.md` (for building new apps
   in other repos), `example/`.
 - `installer/`: desktop-browser page (Firebase JS SDK from gstatic is OK there, never in the TV app).

@@ -10,7 +10,8 @@ var Cloud = (function () {
 
     var CFG = { apiKey: 'AIzaSyBT0nk8uKUofgF5obP11R96lHtXbEVlKtc', projectId: 'tvgames-f984d' };
     var URL = 'https://firestore.googleapis.com/v1/projects/' + CFG.projectId + '/databases/(default)/documents/apps?pageSize=100&key=' + CFG.apiKey;
-    var TIMEOUT = 5000, CACHE = 'cloud_apps';
+    var ONE = 'https://firestore.googleapis.com/v1/projects/' + CFG.projectId + '/databases/(default)/documents/apps/';
+    var TIMEOUT = 5000, ONE_TIMEOUT = 2500, CACHE = 'cloud_apps';
 
     function fromValue(v) {
         if ('stringValue' in v) return v.stringValue;
@@ -19,7 +20,8 @@ var Cloud = (function () {
         if ('booleanValue' in v) return v.booleanValue;
         if ('timestampValue' in v) return v.timestampValue;
         if ('mapValue' in v) return fromFields(v.mapValue.fields || {});
-        return null;
+        if ('arrayValue' in v) { var out = [], vals = v.arrayValue.values || []; for (var i = 0; i < vals.length; i++) out.push(fromValue(vals[i])); return out; }
+        return null;       // nullValue
     }
     function fromFields(f) { var o = {}; for (var k in f) o[k] = fromValue(f[k]); return o; }
 
@@ -30,6 +32,8 @@ var Cloud = (function () {
             var a = list[i];
             if (!a || a.enabled === false || !/^[a-z0-9-]{2,32}$/.test(a.id || '') || !/^https:\/\//.test(a.entry || '')) continue;
             if (!a.name || (typeof a.name !== 'string' && !a.name.en)) continue;
+            // config: the app's settings object, edited in the installer (always a plain object)
+            if (!a.config || typeof a.config !== 'object' || a.config.length !== undefined) a.config = {};
             out.push(a);
         }
         out.sort(function (x, y) { return (x.order || 0) - (y.order || 0); });
@@ -63,5 +67,25 @@ var Cloud = (function () {
         try { x.send(); } catch (e) { end('network'); }
     }
 
-    return { apps: apps, refresh: refresh, url: URL, clean: clean };
+    // One app, fresh from Firebase (used right before it opens, so its config is current).
+    // cb(err, app): err 'notfound' when it was uninstalled or hidden, 'network' / 'http n' otherwise.
+    function fetchApp(id, cb) {
+        var x = new XMLHttpRequest(), done = false;
+        function end(err, app) { if (done) return; done = true; cb(err, app); }
+        try { x.open('GET', ONE + encodeURIComponent(id) + '?key=' + CFG.apiKey, true); } catch (e) { return end('network'); }
+        x.timeout = ONE_TIMEOUT;
+        x.onload = function () {
+            if (x.status === 404) return end('notfound');
+            if (x.status !== 200) return end('http ' + x.status);
+            var r = null;
+            try { r = JSON.parse(x.responseText); } catch (e) {}
+            if (!r || !r.fields) return end('json');
+            var list = clean([fromFields(r.fields)]);
+            end(list.length ? null : 'notfound', list[0]);       // hidden or malformed counts as gone
+        };
+        x.onerror = x.ontimeout = function () { end('network'); };
+        try { x.send(); } catch (e) { end('network'); }
+    }
+
+    return { apps: apps, refresh: refresh, fetchApp: fetchApp, url: URL, clean: clean };
 })();

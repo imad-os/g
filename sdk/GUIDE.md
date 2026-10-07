@@ -88,6 +88,7 @@ The site **MUST** be served over **https** and must allow other sites to read `m
 | `icon` | relative path to the icon |
 | `version` | your version string, e.g. `"1.2.0"`; bump it when you publish |
 | `scores` | games only: `false` if the game has no points (no top-10 table) |
+| `config` | optional default settings, a JSON object (see "App config" below); 8000 characters at most |
 
 ## 4. The SDK API
 
@@ -131,6 +132,26 @@ After `onPause` the game **MUST NOT** move or make sound until `onResume`.
   app: { id: 'app-star-catcher' }
 }
 ```
+
+### App config: `MyPC.app_config`
+
+Settings that the **owner changes without touching the code**: difficulty, a server address, a
+list of levels, feature switches. In the installer, each installed app has a **Config** button
+that edits a JSON object stored with the app in Firebase. My PC reads it again from Firebase
+**before the app opens** (offline, the last saved copy is used) and gives it to the app:
+
+```js
+MyPC.app_config            // always an object: {} when nothing is set; read it from onInit on
+MyPC.app_config.speed      // e.g. 2
+```
+
+- Treat it as **read-only input**. Use your own defaults for missing keys
+  (`var speed = +MyPC.app_config.speed || 1;`) and ignore keys you don't know.
+- It is **not secret**: every TV downloads it, and the app's site can see it. No passwords or keys.
+- Put sensible defaults in `mypc-app.json` as `"config": { ... }`; the installer uses them on the
+  first install, and updates never overwrite what the owner has set.
+- Standalone (opened directly in a browser) it is `{}` unless you add `?app_config={"speed":2}`
+  to the address, which lets you test different configs.
 
 ### Calls
 
@@ -288,6 +309,7 @@ the installer if the name, icon or entry changed. Code changes go live without r
 - [ ] fills the window at any 16:9 size, readable text, obvious focus
 - [ ] runs on Chromium 108 (Tizen 8, 2024 TVs): no CSS nesting, nothing newer than Chrome 108; no allocation in the game loop
 - [ ] saves through `MyPC.save/load`; scores through `MyPC.submitScore` (games with points)
+- [ ] any owner-changeable setting comes from `MyPC.app_config` (with defaults in code), not hard-coded
 - [ ] texts in `en` (and `fr`, `es`, `ar` if possible), using `info.lang`
 - [ ] works standalone: open `index.html` in Chrome, play with the arrows + Enter, Esc pauses
 - [ ] served over https with CORS (GitHub Pages)

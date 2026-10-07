@@ -65,6 +65,7 @@ var MyPC = (function () {
                 clearTimeout(helloTimer);
                 hosted = true; hostWin = e.source; hostOrigin = e.origin && e.origin !== 'null' ? e.origin : '*';
                 data = d.data || {};
+                pub.app_config = plainObject(d.config) ? d.config : {};
                 info = { standalone: false, lang: d.lang || 'en', rtl: !!d.rtl, volume: d.volume || { music: 0.7, sfx: 0.8 },
                          profile: d.profile || { id: 'p1', name: '' }, quality: d.quality || { tier: 'mid' }, app: d.app || {} };
                 if (info.rtl) document.documentElement.setAttribute('dir', 'rtl');
@@ -114,6 +115,7 @@ var MyPC = (function () {
         var lang = (navigator.language || 'en').slice(0, 2);
         info = { standalone: true, lang: lang, rtl: lang === 'ar', volume: { music: 0.7, sfx: 0.8 }, profile: { id: 'local', name: '' }, quality: { tier: 'high' }, app: {} };
         try { data = JSON.parse(localStorage.getItem('mypc_' + location.pathname) || '{}') || {}; } catch (e) { data = {}; }
+        try { var m = /[?&]app_config=([^&#]*)/.exec(location.search); var c = m && JSON.parse(decodeURIComponent(m[1])); pub.app_config = plainObject(c) ? c : {}; } catch (e) { pub.app_config = {}; }
         document.addEventListener('keydown', function (e) { standaloneKey(e, true); });
         document.addEventListener('keyup', function (e) { standaloneKey(e, false); });
         window.addEventListener('blur', function () { held = {}; releaseAll(); });
@@ -156,8 +158,11 @@ var MyPC = (function () {
         else try { localStorage.setItem('mypc_' + location.pathname, JSON.stringify(data)); } catch (e) {}
     }
 
-    return {
+    var pub = {
         version: VERSION,
+        // The app's settings object, set in the installer and read before the app opens. Read it in
+        // onInit (or later). Always an object ({} when none). Standalone, test it with ?app_config={"a":1}.
+        app_config: {},
         init: init,
         ready: ready,
         progress: function (p) { if (hosted) post('progress', { p: Math.max(0, Math.min(1, +p || 0)) }); },
@@ -174,4 +179,8 @@ var MyPC = (function () {
         exit: function () { if (hosted) post('exit'); else { call('onDestroy'); destroyed = true; } },
         isHosted: function () { return hosted && !!info && !info.standalone; }
     };
+
+    function plainObject(o) { return !!o && typeof o === 'object' && !(o instanceof Array); }
+
+    return pub;
 })();

@@ -43,6 +43,13 @@
   input[type=checkbox] { width: 18px; height: 18px; accent-color: #4cc2ff; flex: none; }
   .tag.new { background: #1d4f73; } .tag.update { background: #6b5214; } .tag.installed { background: #1f5a37; }
   .cat .app { cursor: default; }
+  .tag.cfg { background: #3b2f6b; }
+  textarea { width: 100%; min-height: 260px; padding: 10px 12px; border-radius: 6px; border: 1px solid #555; background: #1c1c1c; color: #fff;
+             font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; resize: vertical; tab-size: 2; }
+  textarea:focus { outline: 2px solid #4cc2ff; border-color: transparent; }
+  .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 10; }
+  .modal .box { background: #2b2b2b; border-radius: 12px; padding: 22px 26px; width: min(640px, 100%); max-height: 100%; overflow: auto; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6); }
+  .modal h3 { margin: 0 0 4px; font-size: 20px; }
   a { color: #4cc2ff; }
 </style>
 </head>
@@ -130,6 +137,23 @@
   <p id="boot" class="muted">Loading…</p>
 </main>
 
+<!-- App config editor -->
+<div id="cfg-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="cfg-title">
+  <div class="box">
+    <h3 id="cfg-title">Config</h3>
+    <p class="muted small" style="margin:0 0 12px">A JSON object saved with the app in Firebase. Every My PC loads it before the app opens and
+      the app reads it as <code>MyPC.app_config</code>. Leave it empty for <code>{}</code>.</p>
+    <textarea id="cfg-text" spellcheck="false" aria-label="Config JSON"></textarea>
+    <p id="cfg-msg" class="small"></p>
+    <div class="row">
+      <button id="cfg-format" class="small">Format</button>
+      <span class="grow"></span>
+      <button id="cfg-cancel">Cancel</button>
+      <button id="cfg-save" class="primary">Save</button>
+    </div>
+  </div>
+</div>
+
 <script src="installer-lib.js"></script>
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js';
@@ -164,6 +188,10 @@
   };
   const say = (el, text, cls) => { $(el).textContent = text || ''; $(el).className = 'small ' + (cls || ''); };
   const authErr = (e) => AUTH_MSG[e.code] || e.message;
+  // Firestore refusals: after an installer update the published rules may be older than the page
+  const fbErr = (e) => e.code === 'permission-denied'
+    ? 'Firebase refused it. If the rules were not republished since the last update, publish firebase/firestore.rules again (the apps rules now allow "config").'
+    : 'Firebase refused it: ' + e.message;
 
   $('btn-google').onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch((e) => say('signin-msg', authErr(e), 'err'));
   $('btn-in').onclick = () => signInWithEmailAndPassword(auth, $('email').value.trim(), $('pass').value).catch((e) => say('signin-msg', authErr(e), 'err'));
@@ -293,7 +321,41 @@
   };
   $('btn-scan').onclick = scan;
 
-  // installs or updates apps (an update keeps its desktop position and visibility)
+  /* ---------- app config: a JSON object stored with the app, read by the app as MyPC.app_config ---------- */
+
+  let cfgApp = null;
+  function editConfig(a) {
+    cfgApp = a;
+    $('cfg-title').textContent = 'Config – ' + a.name;
+    $('cfg-text').value = a.config && Object.keys(a.config).length ? JSON.stringify(a.config, null, 2) : '{\n  \n}';
+    say('cfg-msg', '');
+    $('cfg-modal').hidden = false;
+    $('cfg-text').focus();
+  }
+  function closeConfig() { $('cfg-modal').hidden = true; cfgApp = null; }
+  function readConfig() {
+    try { return InstallerLib.parseConfig($('cfg-text').value); } catch (e) { say('cfg-msg', e.message, 'err'); return null; }
+  }
+  $('cfg-format').onclick = () => { const c = readConfig(); if (c) { $('cfg-text').value = JSON.stringify(c, null, 2); say('cfg-msg', 'Valid JSON.', 'ok'); } };
+  $('cfg-cancel').onclick = closeConfig;
+  $('cfg-save').onclick = async () => {
+    const c = readConfig();
+    if (!c || !cfgApp) return;
+    $('cfg-save').disabled = true;
+    try {
+      await updateDoc(doc(db, 'apps', cfgApp.id), { config: c });
+      closeConfig();
+      await load();
+    } catch (e) { say('cfg-msg', fbErr(e), 'err'); }
+    finally { $('cfg-save').disabled = false; }
+  };
+  $('cfg-modal').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeConfig();
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) $('cfg-save').click();
+  });
+  $('cfg-modal').addEventListener('mousedown', (e) => { if (e.target === $('cfg-modal')) closeConfig(); });
+
+  // installs or updates apps (an update keeps its desktop position, visibility and config)
   async function installMany(list) {
     let done = 0, failed = [];
     for (const a of list) {
@@ -301,7 +363,8 @@
       const data = Object.assign({}, a, { installedAt: serverTimestamp(), installedBy: user.uid });
       data.order = old ? old.order : apps.length + done;
       if (old) data.enabled = old.enabled !== false;
-      try { await setDoc(doc(db, 'apps', a.id), data); done++; } catch (e) { failed.push(a.name + ': ' + e.message); }
+      data.config = (old && old.config) || a.config || {};       // keep what the owner set; else the app's default
+      try { await setDoc(doc(db, 'apps', a.id), data); done++; } catch (e) { failed.push(a.name + ': ' + fbErr(e)); }
     }
     found.forEach((f) => { f.selected = false; });
     say('scan-msg', failed.length ? 'Not installed: ' + failed.join('; ') : done + ' app' + (done === 1 ? '' : 's') + ' installed. TVs show them the next time My PC starts.', failed.length ? 'err' : 'ok');
@@ -316,14 +379,19 @@
     apps.forEach((a, i) => {
       const row = document.createElement('div');
       row.className = 'app';
-      row.innerHTML = '<img alt=""><div class="grow"><div><span class="name"></span><span class="tag type"></span><span class="tag off" hidden>Hidden on TVs</span></div>' +
+      row.innerHTML = '<img alt=""><div class="grow"><div><span class="name"></span><span class="tag type"></span><span class="tag cfg" hidden>config</span><span class="tag off" hidden>Hidden on TVs</span></div>' +
         '<div class="muted small url"></div></div>' +
         '<button class="up" title="Move up">▲</button><button class="down" title="Move down">▼</button>' +
+        '<button class="cfg">Config</button>' +
         '<button class="toggle"></button><a class="open" target="_blank" rel="noopener"><button>Open</button></a><button class="danger del">Uninstall</button>';
       row.querySelector('img').src = a.icon || '../icon-32.png';
       row.querySelector('.name').textContent = a.name;
       row.querySelector('.type').textContent = a.type;
       row.querySelector('.off').hidden = a.enabled !== false;
+      const keys = a.config ? Object.keys(a.config).length : 0;
+      row.querySelector('.cfg.tag').hidden = !keys;
+      row.querySelector('.cfg.tag').textContent = keys + ' setting' + (keys === 1 ? '' : 's');
+      row.querySelector('button.cfg').onclick = () => editConfig(a);
       row.querySelector('.url').textContent = a.url;
       row.querySelector('.open').href = a.entry;
       row.querySelector('.toggle').textContent = a.enabled === false ? 'Show on TVs' : 'Hide on TVs';
@@ -384,6 +452,7 @@
     const data = Object.assign({}, pending, { installedAt: serverTimestamp(), installedBy: user.uid });
     data.order = old ? old.order : apps.length;
     if (old) data.enabled = old.enabled !== false;
+    data.config = (old && old.config) || pending.config || {};
     $('btn-install').disabled = true;
     try {
       await setDoc(doc(db, 'apps', pending.id), data);
@@ -391,7 +460,7 @@
       $('preview').hidden = true; $('url').value = ''; pending = null;
       load();
     } catch (e) {
-      say('fetch-msg', 'Firebase refused it: ' + e.message, 'err');
+      say('fetch-msg', fbErr(e), 'err');
     } finally { $('btn-install').disabled = false; }
   };
   $('url').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-fetch').click(); });

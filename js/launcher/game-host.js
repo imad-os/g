@@ -108,7 +108,8 @@ var GameHost = (function () {
                         lang: I18n.lang(), rtl: I18n.rtl(), quality: { tier: Perf.profile().tier },
                         volume: { music: AudioPrefs.music() / 10, sfx: AudioPrefs.sfx() / 10 },
                         profile: { id: Profiles.current().id, name: Profiles.name(null, I18n.t('player')) },
-                        data: Store.get('game_' + id + '_data', {}), app: { id: id }
+                        data: Store.get('game_' + id + '_data', {}), app: { id: id },
+                        config: game.remote.config || {}
                     });
                     break;
                 case 'progress': if (state === 'loading') $('game-loading-fill').style.width = Math.round(Math.max(0, Math.min(1, +d.p || 0)) * 100) + '%'; break;
@@ -150,7 +151,19 @@ var GameHost = (function () {
         };
     }
 
-    function loadRemote() {
+    function loadRemote(token) {
+        // optional: the launcher refreshes the app's document first (its config) behind the loading screen
+        if (game.remote.prepare) {
+            return game.remote.prepare(function (ok) {
+                if (state !== 'loading' || token !== loadSeq) return;       // cancelled or superseded
+                if (ok === false) return exit();                            // uninstalled meanwhile
+                openRemote();
+            });
+        }
+        openRemote();
+    }
+
+    function openRemote() {
         removeFrame();
         iframe = document.createElement('iframe');
         iframe.setAttribute('tabindex', '-1');
@@ -176,9 +189,9 @@ var GameHost = (function () {
         var build = game.manifest.build || 0;
         clearTimeout(loadTimer);
         loadTimer = setTimeout(function () { fail('timeout'); }, LOAD_TIMEOUT_MS);
-        if (game.remote) return loadRemote();
-
         var token = ++loadSeq;
+        if (game.remote) return loadRemote(token);
+
         AppBoot.get(dir + entry + '?b=' + build, FILE_TIMEOUT_MS, function (err, html) {
             if (state !== 'loading' || token !== loadSeq) return;   // cancelled or superseded
             if (err || !html) return fail(entry + ' ' + err);

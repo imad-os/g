@@ -1,6 +1,6 @@
 {
-  "build": 7,
-  "version": "2.2.0",
+  "build": 8,
+  "version": "2.3.0",
   "shell": 1,
   "css": [
     "css/launcher.css"

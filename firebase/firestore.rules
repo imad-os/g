@@ -52,7 +52,7 @@ service cloud.firestore {
     function validApp(id, d) {
       return d.keys().hasAll(['id', 'name', 'url', 'entry', 'type', 'enabled', 'order'])
           && d.keys().hasOnly(['id', 'name', 'description', 'url', 'entry', 'icon', 'type', 'version', 'sdk',
-                               'scores', 'enabled', 'order', 'installedAt', 'installedBy'])
+                               'scores', 'enabled', 'order', 'installedAt', 'installedBy', 'config'])
           && d.id == id
           && d.name is string && d.name.size() > 0 && d.name.size() <= 40
           && (!('description' in d) || (d.description is string && d.description.size() <= 120))
@@ -65,7 +65,8 @@ service cloud.firestore {
           && d.enabled is bool
           && d.order is int && d.order >= 0 && d.order < 1000
           && (!('installedAt' in d) || d.installedAt is timestamp)
-          && (!('installedBy' in d) || d.installedBy is string);
+          && (!('installedBy' in d) || d.installedBy is string)
+          && (!('config' in d) || d.config is map);
     }
 
     // Read by every TV (REST: .../documents/apps), written only by admins from the installer page.
