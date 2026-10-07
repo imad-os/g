@@ -11,8 +11,10 @@
 //          F falling platform   j spring   * star coin candidate   W warp pipe to the bonus room
 //          (on the pipe's top-left)   C checkpoint   G goal pole   @ start   K boss   D boss door
 //
-// Physics budget (see games/jumper/js/player.js): a standing jump clears 4 tiles up and 4 across,
-// a running jump 5 up and 7 across. Ground is rows 10-11 of a chunk; blocks to bump sit on row 6.
+// Physics budget (see games/jumper/js/actors.js): a standing jump clears 5 tiles up and 5 across,
+// a running jump 6 up and 8 across. Ground is rows 10-11 of a chunk; blocks to bump sit on row 6.
+
+import { EXTRA } from './level-chunks-extra.mjs';
 
 export const CHUNKS = {
     // ---------------- shared starts / ends ----------------
@@ -484,6 +486,8 @@ export const CHUNKS = {
         'XXXXXXXXXXXXXXXXXXXXXXXX',
         'XXXXXXXXXXXXXXXXXXXXXXXX'] }
 };
+
+Object.assign(CHUNKS, EXTRA);
 
 // Stage list: 3 worlds x (4 stages + 1 fortress).
 // pools pick chunk tags; `water` turns the stage into a swim stage; `secret` adds a warp to a

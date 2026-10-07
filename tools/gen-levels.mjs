@@ -93,16 +93,33 @@ function buildStage(st) {
         }
     }
 
+    // Variety: most land chunks are mirrored at random and lifted 0-2 rows (hills; a step is never
+    // more than 2 tiles, a standing jump clears 5). Start, checkpoint, goal, warp, tunnels and
+    // swim / fortress stages stay flat.
+    const MIRROR = { '[': ']', ']': '[', '{': '}', '}': '{' };
+    const flip = (rows) => rows.map((row) => row.split('').reverse().map((ch) => MIRROR[ch] || ch).join(''));
+    const canVary = (c) => !/^(start|checkpoint|goal|boss|star|m_warp)$/.test(c.name) && !c.rows.some((row) => /[pWGZCKD@]/.test(row)) && c.rows[0][0] !== 'X';
+    const canLift = (c) => canVary(c) && !st.water && !st.fortress && !c.rows.some((row) => /[L~]/.test(row));
+    let lift = 0;
+    const lifts = chunks.map((c) => {
+        if (canVary(c) && r() < 0.5) c.rows = flip(c.rows);
+        if (!canLift(c)) { lift = 0; return 0; }
+        const d = r();
+        lift = Math.max(0, Math.min(2, lift + (d < 0.35 ? -1 : d < 0.7 ? 1 : 0)));
+        return lift;
+    });
+
     // stitch the main area
     let cols = [];
     const colChunk = [];
     chunks.forEach((c, ci) => {
-        const w = c.rows[0].length;
+        const w = c.rows[0].length, up = lifts[ci];
         for (let x = 0; x < w; x++) {
             const col = new Array(H).fill('.');
             const ceiling = c.rows[0][x] === 'X';
             for (let y = 0; y < TOP; y++) col[y] = ceiling ? 'X' : '.';
-            for (let y = 0; y < 12; y++) col[TOP + y] = c.rows[y][x] || '.';
+            for (let y = 0; y < 12; y++) col[TOP - up + y] = c.rows[y][x] || '.';
+            for (let y = TOP - up + 12; y < H; y++) col[y] = c.rows[11][x] || '.';   // the hill's body
             cols.push(col);
             colChunk.push(ci);
         }
@@ -193,7 +210,7 @@ function buildStage(st) {
     for (const f of [0.25, 0.75]) {
         let x = Math.floor(mainEnd * f);
         for (let k = 0; k < 40 && x < mainEnd - 1; k++, x++) {
-            const gy = groundBelow(x, TOP);
+            const gy = groundBelow(x, 0);
             if (gy < H && cols[x][gy] === '#' && cols[x][gy - 1] !== '^') {
                 add('checkpoint', x * 16, (gy - 1) * 16, 16, 16, [prop('assist', true)]);
                 break;

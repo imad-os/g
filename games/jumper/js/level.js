@@ -149,6 +149,7 @@ var Level = (function () {
         c.fillStyle = q.tier === 'low' ? bg.sky[0] : bg.grad;
         c.fillRect(0, 0, 480, 270);
         var yOff = Math.max(0, (this.pxH - 270 - camY) * 0.3);
+        if (bg.fixed && q.tier !== 'low') c.drawImage(bg.fixed, 0, 0);          // sun / moon / stars / aurora
         if (bg.clouds && q.clouds) {
             var cx = -((camX * 0.08 + frame * 0.1) % 512);
             c.drawImage(bg.clouds, cx, 10 + yOff * 0.5); c.drawImage(bg.clouds, cx + 512, 10 + yOff * 0.5);
@@ -206,6 +207,7 @@ var Level = (function () {
         if (this.bg) {
             for (var i = 0; i < this.bg.layers.length; i++) this.bg.layers[i].canvas.width = 0;
             if (this.bg.clouds) this.bg.clouds.width = 0;
+            if (this.bg.fixed) this.bg.fixed.width = 0;
         }
         this.data = null; this.objects = null; this.tiles = null; this.bg = null;
     };

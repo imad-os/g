@@ -27,6 +27,7 @@
 //  20. Settings > Update: check, download with progress, restart; error cases
 //  21. Browser: focus theft, Guide, Channel / Page keys, wheel, remote and mouse modes
 //  22. Tab, wheel, Guide, device detection, Settings > Devices with a simulated controller
+//  24. Super Jumper stages: different layouts and hills
 //  23. Boot screen: black, inline logo, orbit dots, fades out; no logo when opening a game
 //
 //  CHROMIUM_PATH=/path/to/chrome uses an existing Chromium instead of Playwright's download.
@@ -446,6 +447,14 @@ async function main() {
         d = await dbg();
         check(d.x - airX > 6, 'the jump keeps its momentum after the arrow is released (remote friendly)');
         await page.keyboard.up('Space');
+        await page.waitForTimeout(900);
+        d = await dbg();
+        for (let i = 0; i < 40 && !d.onGround; i++) { await page.waitForTimeout(50); d = await dbg(); }
+        const y0 = d.y; let top = y0;
+        await page.keyboard.down('Space');
+        for (let i = 0; i < 45; i++) { await page.waitForTimeout(16); const q = await dbg(); if (q.y < top) top = q.y; }
+        await page.keyboard.up('Space');
+        check(y0 - top >= 72, 'a standing jump rises at least 4.5 tiles, enough for the high bricks (' + Math.round(y0 - top) + ' px)');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }
@@ -1157,6 +1166,26 @@ async function main() {
         check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'Guide opens the pause menu of a game');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
+    }
+
+    console.log('24. Super Jumper stages differ from each other');
+    {
+        const dir = path.join(ROOT, 'games/jumper/assets/levels');
+        const sig = new Map();
+        let flat = [], land = 0;
+        for (const f of fs.readdirSync(dir).filter((n) => /^w\d-\d\.json$/.test(n))) {
+            const m = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')), t = m.layers.find((l) => l.name === 'tiles').data, W = m.width;
+            const heights = new Set(), cols = [];
+            for (let x = 0; x < W; x++) { let g = -1; for (let y = 0; y < m.height; y++) if (t[y * W + x] === 1) { g = y; break; } heights.add(g); cols.push(g); }
+            const water = m.properties.some((p) => p.name === 'water' && p.value), fort = m.properties.some((p) => p.name === 'fortress' && p.value);
+            if (water || fort) continue;
+            land++;
+            const key = cols.slice(16, 200).join(',');
+            sig.set(key, (sig.get(key) || 0) + 1);
+            if (heights.size < 3) flat.push(f);
+        }
+        check(sig.size === land, 'every land stage has its own ground profile (' + sig.size + ' of ' + land + ')');
+        check(flat.length === 0, 'land stages have hills, not one flat floor' + (flat.length ? ' (flat: ' + flat.join(', ') + ')' : ''));
     }
 
     console.log('23. boot screen (Windows style, light)');

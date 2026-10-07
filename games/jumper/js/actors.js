@@ -152,12 +152,12 @@ var Actors = (function () {
         if (this.swim) {
             if (inp.jumpPressed) { this.vy = -2.4; W.sfx('jump', 0.6); this.jumpBuf = 0; }
         } else if (this.jumpBuf > 0 && this.coyote > 0 && !this.gp) {
-            this.vy = -(4.5 + Math.abs(this.vx) * 0.3);
+            this.vy = -(5.3 + Math.abs(this.vx) * 0.3);   // standing: 5 tiles high, running: 6+
             this.coyote = 0; this.jumpBuf = 0; this.jumping = true; this.onGround = false;
             if (this.crouch && this.power > 0) { this.y -= 8; this.h = 22; this.crouch = false; }
             W.sfx(this.power ? 'bigjump' : 'jump');
         } else if (this.jumpBuf > 0 && this.wallDir && !this.onGround && !this.gp) {
-            this.vy = -4.4; this.vx = -this.wallDir * 2.3; this.face = -this.wallDir;
+            this.vy = -5.0; this.vx = -this.wallDir * 2.3; this.face = -this.wallDir;
             this.wallLock = 10; this.jumpBuf = 0; this.wallDir = 0;
             W.sfx('jump', 1.2);
             W.dust(this.x + (this.face < 0 ? this.w : 0), this.y + this.h / 2);
