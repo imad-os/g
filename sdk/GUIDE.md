@@ -9,6 +9,14 @@ static website (for example on GitHub Pages) that includes the My PC SDK.
 > its own repository, ready for GitHub Pages. Start from the template in section 9, keep the
 > checklist in section 11, and finish with the instructions to publish and install it (section 10).
 
+> **Always use the latest version of this guide.** Fetch it again at the start of every task:
+> `https://raw.githubusercontent.com/imad-os/g/main/sdk/GUIDE.md` (freshest), or
+> `https://imad-os.github.io/g/sdk/GUIDE.md`. Don't work from a saved copy or from memory.
+
+**Starting a new app?** Put the template's `CLAUDE.md` and `.nojekyll` at the root of the new
+repository (`https://github.com/imad-os/g/tree/main/sdk/template`): it makes Claude Code fetch
+this guide and the SDK fresh before every task.
+
 - SDK: `https://imad-os.github.io/g/sdk/mypc-sdk.js`
 - This guide: `https://imad-os.github.io/g/sdk/GUIDE.md`
 - Complete example: `https://imad-os.github.io/g/sdk/example/` (source: `sdk/example/` in
