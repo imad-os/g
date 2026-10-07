@@ -106,11 +106,12 @@ var App = (function () {
     }
 
     /* ---------- game list from the active app manifest ---------- */
-    function loadGames(done) {
+    // only: load just this game's manifest (game page)
+    function loadGames(done, only) {
         var active = AppBoot.manifest(), local = AppBoot.localManifest();
         var base = AppBoot.base(), localBase = AppBoot.localBase();
         var remote = AppBoot.source() === 'remote';
-        var ids = active.games, out = [], pending = ids.length;
+        var ids = only ? active.games.filter(function (g) { return g === only; }) : active.games, out = [], pending = ids.length;
         if (!pending) return done(out);
 
         function inLocal(id) { for (var i = 0; i < local.games.length; i++) if (local.games[i] === id) return true; return false; }
@@ -148,15 +149,42 @@ var App = (function () {
         });
     }
 
-    function onGameExit(id) {
-        Desktop.show(Desktop.tileFor(id));
+    /* ---------- two pages: the desktop and the game are never in memory together ----------
+     * Opening a game loads index.html?play=<id>: the browser throws the whole desktop page away
+     * (DOM, images, timers, JS heap) and this page starts only that game. Quitting loads
+     * index.html?from=<id>: a fresh desktop, focused on the game's icon. Same packaged index.html
+     * and boot loader, so it needs no new TV package. */
+    function param(name) {
+        var m = new RegExp('[?&]' + name + '=([^&#]*)').exec(location.search);
+        return m ? decodeURIComponent(m[1]) : null;
     }
+    // absolute URL of this page (relative URLs would follow the hosted copy's <base href>)
+    function page(query) { return location.href.split(/[?#]/)[0] + query; }
+    function goHome(id) { location.replace(page(id ? '?from=' + encodeURIComponent(id) : '')); }
 
     function play(g) {
         if (benchCancel) { benchCancel(); benchCancel = null; }
         Desktop.hide();
         Desktop.releaseImages();
-        GameHost.launch(g, onGameExit);
+        location.replace(page('?play=' + encodeURIComponent(g.id)));
+    }
+
+    // game page: no desktop at all, only the game layer
+    function startGame(id) {
+        $('desktop').hidden = true;
+        var go = function (g) {
+            AppBoot.ready();
+            if (!g) return goHome(id);                 // uninstalled or unknown: back to the desktop
+            Store.set('last_game', g.id);
+            GameHost.launch(g, goHome);
+        };
+        if (id.indexOf('app-') === 0) {
+            // an installed app: from the saved Firebase list (no network needed)
+            var list = Cloud.apps(), a = null;
+            for (var i = 0; i < list.length; i++) if ('app-' + list[i].id === id) a = list[i];
+            return go(a ? Desktop.fromCloud(a) : null);
+        }
+        loadGames(function (games) { go(games[0] || null); }, id);
     }
 
     function profileChanged() { Desktop.profileChanged(); Win.refresh(); }
@@ -185,6 +213,9 @@ var App = (function () {
                 if (GameHost.state() === 'running') GameHost.openPause();
             }
         });
+
+        var playId = param('play');
+        if (playId) return startGame(playId);
 
         loadGames(function (games) {
             Desktop.init(games, play);

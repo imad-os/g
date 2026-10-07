@@ -36,6 +36,10 @@ them. Games report scores with `host.submitScore(score, { player, players })`.
 - **Apps** (`js/launcher/apps/`): File Explorer (Home, This PC, Desktop, Games, Apps, Pictures,
   Documents), Browser, Calculator, Calendar (notes per day), Settings (System, Personalization,
   Accounts, Sound, Time & language, Gaming, Privacy & security, About) and Leaderboards.
+- **Games on their own page:** opening a game loads `index.html?play=<id>`, so the browser throws the
+  whole desktop away (DOM, images, timers, JS heap) and that page builds only the game. Quitting
+  loads `index.html?from=<id>`: a fresh desktop focused on the game. It reuses the packaged
+  `index.html` and boot loader, so no new TV package is needed.
 - **Full screen, one at a time:** `js/launcher/window.js` hides the desktop (releasing the game
   covers and stopping the clock) and destroys the app's content, timers and iframe when it closes.
   Games still run in their own iframe and are freed on exit.

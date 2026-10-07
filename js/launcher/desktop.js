@@ -307,7 +307,7 @@ var Desktop = (function () {
         startOpen: startOpen, openStart: openStart, closeStart: closeStart, profileChanged: profileChanged,
         updateTray: updateTray, tick: tick, wallpaper: wallpaper, setWallpaper: setWallpaper, WALLPAPERS: WALLPAPERS,
         APPS: APPS, appById: appById, coverUrl: coverUrl, dateText: dateText, timeText: timeText, locale: locale,
-        setInstalled: setInstalled,
+        setInstalled: setInstalled, fromCloud: fromCloud,
         games: all, builtIn: function () { return games; }, installed: function () { return installed; },
         lastPlayed: function () { return lastPlayed; }
     };

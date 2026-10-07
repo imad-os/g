@@ -17,6 +17,8 @@
   the hosted copy at the next start: **bump `build` in `app-manifest.json`** (and a game's
   `game-manifest.json` `build` when it changes). Don't change `shell` unless `config.xml`/loader
   changes need a new package.
+- **Two pages:** opening a game or installed app loads `index.html?play=<id>` (no desktop is built
+  there); quitting loads `index.html?from=<id>` (fresh desktop). Same packaged index.html/loader.
 - `js/launcher/`: desktop shell (`desktop.js`), full-screen app window (`window.js`), apps
   (`apps/*.js`: settings, explorer, browser, calculator, calendar, scores), on-screen keyboard,
   profiles, `game-host.js` (bundled games in a same-origin iframe; installed apps in a sandboxed
