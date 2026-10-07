@@ -1,8 +1,9 @@
-// Generates the app icon, browser favicons and the Samsung Seller Office images from the game's
-// own pixel art (games/jumper/js/art.js), so everything matches the shipped look.
+// Generates the My PC app icon, browser favicons and the Samsung Seller Office images.
+// The icon is an original drawing (a modern monitor with a bloom wallpaper, two windows and a
+// taskbar); the screenshots are real captures of the app.
 //
 //   npx http-server -p 8080 -c-1 .     (in another terminal)
-//   NODE_PATH=$(npm root -g) node tools/make-store-assets.mjs http://localhost:8080/
+//   CHROMIUM_PATH=/path/to/chrome node tools/make-store-assets.mjs http://localhost:8080/
 //
 // Output (sizes from Samsung's "App Icons and Screenshots" guide):
 //   icon.png                       512x423  24-bit PNG  < 300 KB   (config.xml <icon>, Seller Office 512x423 icon)
@@ -23,147 +24,125 @@ const BASE = process.argv[2] || 'http://localhost:8080/';
 const OUT = path.join(ROOT, 'store');
 fs.mkdirSync(OUT, { recursive: true });
 
-const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
+/* ---------------- the artwork ---------------- */
+
+const DEFS = `
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0a1230"/><stop offset="1" stop-color="#0f3f94"/></linearGradient>
+  <radialGradient id="glow" cx="0.5" cy="0.45" r="0.6"><stop offset="0" stop-color="#4cc2ff" stop-opacity="0.45"/><stop offset="1" stop-color="#4cc2ff" stop-opacity="0"/></radialGradient>
+  <radialGradient id="bloom" cx="0.62" cy="0.55" r="0.75"><stop offset="0" stop-color="#b4f1ff"/><stop offset="0.3" stop-color="#3fa0ff"/><stop offset="0.68" stop-color="#1f55d6"/><stop offset="1" stop-color="#0a1f5c"/></radialGradient>
+  <radialGradient id="lobe" cx="0.3" cy="0.75" r="0.45"><stop offset="0" stop-color="#8a6cff" stop-opacity="0.65"/><stop offset="1" stop-color="#8a6cff" stop-opacity="0"/></radialGradient>
+  <linearGradient id="base" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c5d2e6"/><stop offset="1" stop-color="#7f90aa"/></linearGradient>
+  <linearGradient id="neck" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8d9db7"/><stop offset="0.5" stop-color="#cdd8ea"/><stop offset="1" stop-color="#8d9db7"/></linearGradient>
+  <clipPath id="scr"><rect x="12" y="12" width="296" height="176" rx="12"/></clipPath>
+</defs>`;
+
+// the monitor, drawn in a 320 x 246 box
+const PC = `
+<g>
+  <ellipse cx="160" cy="246" rx="92" ry="8" fill="#000" opacity="0.3"/>
+  <rect x="140" y="196" width="40" height="42" fill="url(#neck)"/>
+  <rect x="92" y="230" width="136" height="14" rx="7" fill="url(#base)"/>
+  <rect x="0" y="0" width="320" height="212" rx="24" fill="#0b0f19"/>
+  <rect x="1.5" y="1.5" width="317" height="209" rx="22.5" fill="none" stroke="#6f80a0" stroke-opacity="0.6" stroke-width="3"/>
+  <rect x="12" y="12" width="296" height="176" rx="12" fill="url(#bloom)"/>
+  <g clip-path="url(#scr)">
+    <rect x="12" y="12" width="296" height="176" fill="url(#lobe)"/>
+    <path d="M12 12H150L62 188H12Z" fill="#fff" opacity="0.07"/>
+    <rect x="44" y="38" width="128" height="92" rx="10" fill="#f4f8ff" opacity="0.96"/>
+    <path d="M54 38H162a10 10 0 0 1 10 10v12H44V48a10 10 0 0 1 10-10Z" fill="#d8e4f6"/>
+    <circle cx="57" cy="49" r="3.2" fill="#ff6b6b"/><circle cx="68" cy="49" r="3.2" fill="#ffd23f"/><circle cx="79" cy="49" r="3.2" fill="#4cd97b"/>
+    <rect x="58" y="74" width="72" height="7" rx="3.5" fill="#b4c6e3"/><rect x="58" y="89" width="98" height="7" rx="3.5" fill="#b4c6e3"/><rect x="58" y="104" width="54" height="7" rx="3.5" fill="#b4c6e3"/>
+    <rect x="126" y="82" width="152" height="86" rx="10" fill="#131a2d" opacity="0.94"/>
+    <rect x="126.5" y="82.5" width="151" height="85" rx="9.5" fill="none" stroke="#fff" stroke-opacity="0.2"/>
+    <path d="M136 82H268a10 10 0 0 1 10 10v10H126V92a10 10 0 0 1 10-10Z" fill="#1f2a47"/>
+    <circle cx="150" cy="130" r="17" fill="#4cc2ff"/>
+    <rect x="176" y="118" width="84" height="8" rx="4" fill="#7189b8"/><rect x="176" y="133" width="58" height="8" rx="4" fill="#7189b8"/>
+    <rect x="176" y="148" width="46" height="13" rx="6.5" fill="#4cc2ff"/>
+    <rect x="24" y="162" width="272" height="20" rx="10" fill="#0a0f1f" opacity="0.86"/>
+    <rect x="119" y="169" width="6" height="6" rx="1.6" fill="#4cc2ff"/><rect x="127" y="169" width="6" height="6" rx="1.6" fill="#4cc2ff"/>
+    <rect x="119" y="177" width="6" height="0" rx="1.6" fill="#4cc2ff"/>
+    <circle cx="146" cy="172" r="4.6" fill="#7cd992"/><circle cx="162" cy="172" r="4.6" fill="#ffd23f"/><circle cx="178" cy="172" r="4.6" fill="#ff8a65"/><circle cx="194" cy="172" r="4.6" fill="#fff" opacity="0.9"/>
+  </g>
+</g>`;
+
+// transform that centres the monitor in a w x h canvas, using `fill` of the canvas width
+const place = (w, h, fill) => { const s = (w * fill) / 320; return `translate(${(w - 320 * s) / 2} ${(h - 246 * s) / 2 + 2}) scale(${s})`; };
+
+const svgIcon = (w, h, { round = 0, fill = 0.74 } = {}) => `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${DEFS}
+  <rect width="${w}" height="${h}" rx="${round}" fill="url(#bg)"/><rect width="${w}" height="${h}" rx="${round}" fill="url(#glow)"/>
+  <g transform="${place(w, h, fill)}">${PC}</g></svg>`;
+
+const svgLogo = () => `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">${DEFS}
+  <g transform="translate(${(1920 - 320 * 1.55) / 2} 250) scale(1.55)">${PC}</g>
+  <text x="960" y="840" text-anchor="middle" font-family="'Segoe UI Variable','Segoe UI',Inter,Roboto,Arial,sans-serif" font-weight="700" font-size="170" fill="#ffffff">My PC</text></svg>`;
+
+// a wallpaper like the desktop's "Bloom" (css/launcher.css .wp-bloom)
+const bgHtml = `<html><body style="margin:0;width:1920px;height:1080px;background-color:#07122a;
+  background-image:radial-gradient(30% 45% at 60% 55%, rgba(125,215,255,.95) 0%, rgba(0,120,212,.65) 40%, rgba(7,18,42,0) 100%),radial-gradient(35% 40% at 45% 68%, rgba(120,90,255,.6) 0%, rgba(7,18,42,0) 100%),radial-gradient(25% 30% at 72% 40%, rgba(0,200,255,.45) 0%, rgba(7,18,42,0) 100%),linear-gradient(160deg,#050c1c 0%,#0c2147 55%,#081430 100%)"></body></html>`;
+
+/* ---------------- render ---------------- */
+
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--autoplay-policy=no-user-gesture-required'] });
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
 await page.route('**/imad-os.github.io/**', (r) => r.abort());
 
-// ---------- artwork drawn in the page with the game's sprites ----------
-await page.goto(BASE + 'games/jumper/index.html');
-await page.waitForFunction(() => window.Art);
-const art = await page.evaluate(() => {
-    const A = Art.buildSprites();
-    function spr(ctx, name, x, y, scale) {
-        const f = A.f[name];
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(A.c, f.x, f.y, f.w, f.h, x, y, f.w * scale, f.h * scale);
-    }
-    function sky(ctx, w, h) {
-        const g = ctx.createLinearGradient(0, 0, 0, h);
-        g.addColorStop(0, '#2b2f7a'); g.addColorStop(0.55, '#5a3fa0'); g.addColorStop(1, '#f2786a');
-        ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-        // pixel stars
-        let s = 7;
-        const r = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
-        ctx.fillStyle = 'rgba(255,255,255,0.8)';
-        for (let i = 0; i < 60; i++) { const z = r() < 0.2 ? 3 : 2; ctx.fillRect((r() * w) | 0, (r() * h * 0.6) | 0, z * w / 512, z * w / 512); }
-    }
-    // the logo: falling blocks + question block + coin + Pip jumping, with the title
-    function logo(ctx, cx, cy, u) {   // u = pixel unit (sprite scale)
-        const blocks = [['#3ad6e8', -7, 1], ['#3ad6e8', -6, 1], ['#3ad6e8', -5, 1], ['#3ad6e8', -4, 1],
-                        ['#f2c94c', 4, 1], ['#f2c94c', 5, 1], ['#f2c94c', 4, 0], ['#f2c94c', 5, 0],
-                        ['#b06cf0', -6, 0], ['#4cd97b', 6, 1], ['#f25c5c', -3, 1]];
-        const b = u * 8;
-        for (const [col, gx, gy] of blocks) {
-            const x = cx + gx * b - b / 2, y = cy + gy * b;
-            ctx.fillStyle = '#1a1423'; ctx.fillRect(x, y, b, b);
-            ctx.fillStyle = col; ctx.fillRect(x + u, y + u, b - 2 * u, b - 2 * u);
-            ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(x + u, y + u, b - 2 * u, u * 1.5);
-        }
-        // ground row
-        ctx.fillStyle = '#1a1423'; ctx.fillRect(cx - 8 * b, cy + 2 * b, 16 * b, u * 2);
-        // big hero mid-jump + coin
-        spr(ctx, 'hb_normal_jump_r', cx - 8 * u * 2, cy - 30 * u * 2 + b, u * 2);
-        spr(ctx, 'coin0', cx + 12 * u * 2, cy - 30 * u * 2, u * 2);
-        spr(ctx, 'blorp1_l', cx + 2.2 * b, cy - b * 0.1 - 16 * u * 0.9, u * 1.4);
-    }
-    function title(ctx, cx, y, size) {
-        ctx.font = '900 ' + size + 'px "Arial Black", Arial, sans-serif';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-        ctx.lineJoin = 'round'; ctx.lineWidth = size * 0.16; ctx.strokeStyle = '#1a1423';
-        ctx.strokeText('ARCADE', cx, y);
-        ctx.fillStyle = '#ffd23f'; ctx.fillText('ARCADE', cx, y);
-    }
-    const out = {};
-    function canvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
-
-    // 512x423 icon (opaque)
-    let c = canvas(512, 423), x = c.getContext('2d');
-    sky(x, 512, 423);
-    logo(x, 256, 222, 3);
-    title(x, 256, 385, 76);
-    out.icon = c.toDataURL('image/png');
-
-    // square master for favicons (no text: unreadable at 32 px)
-    c = canvas(512, 512); x = c.getContext('2d');
-    x.fillStyle = '#2b2f7a'; x.fillRect(0, 0, 512, 512);
-    x.fillStyle = '#5a3fa0'; x.fillRect(0, 300, 512, 212);
-    spr(x, 'hb_normal_jump_r', 128, 64, 16);
-    out.square = c.toDataURL('image/png');
-
-    // Seller Office: 1920x1080 transparent logo (kept inside the centre 1:1 safe area) + background
-    c = canvas(1920, 1080); x = c.getContext('2d');
-    logo(x, 960, 520, 7);
-    title(x, 960, 840, 150);
-    out.logo = c.toDataURL('image/png');
-    c = canvas(1920, 1080); x = c.getContext('2d');
-    sky(x, 1920, 1080);
-    out.bg = c.toDataURL('image/jpeg', 0.86);
-    return out;
-});
-const save = (file, dataUrl) => fs.writeFileSync(file, Buffer.from(dataUrl.split(',')[1], 'base64'));
-save(path.join(ROOT, 'icon.png'), art.icon);
-save(path.join(OUT, 'logo_1920x1080.png'), art.logo);
-save(path.join(OUT, 'background_1920x1080.jpg'), art.bg);
-
-// favicon sizes from the square master
-for (const [name, size] of [['icon-32.png', 32], ['icon-192.png', 192], ['apple-touch-icon.png', 180], ['_ico16.png', 16], ['_ico48.png', 48]]) {
-    const url = await page.evaluate(async ([src, s]) => {
-        const img = new Image(); img.src = src; await img.decode();
-        const c = document.createElement('canvas'); c.width = c.height = s;
-        const x = c.getContext('2d'); x.imageSmoothingEnabled = s >= 64; x.drawImage(img, 0, 0, s, s);
-        return c.toDataURL('image/png');
-    }, [art.square, size]);
-    save(path.join(ROOT, name), url);
+async function render(html, w, h, opts = {}) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.setContent('<html><body style="margin:0;background:transparent">' + html + '</body></html>');
+    return page.screenshot({ type: opts.jpeg ? 'jpeg' : 'png', quality: opts.jpeg ? 88 : undefined, omitBackground: !!opts.transparent });
 }
-// favicon.ico = PNG-compressed ICO with 16, 32 and 48 px images
-{
-    const imgs = ['_ico16.png', 'icon-32.png', '_ico48.png'].map((f) => fs.readFileSync(path.join(ROOT, f)));
-    const sizes = [16, 32, 48];
-    const head = Buffer.alloc(6 + 16 * imgs.length);
-    head.writeUInt16LE(0, 0); head.writeUInt16LE(1, 2); head.writeUInt16LE(imgs.length, 4);
+
+fs.writeFileSync(path.join(ROOT, 'icon.png'), await render(svgIcon(512, 423, { fill: 0.7 }), 512, 423));
+fs.writeFileSync(path.join(OUT, 'logo_1920x1080.png'), await render(svgLogo(), 1920, 1080, { transparent: true }));
+await page.setViewportSize({ width: 1920, height: 1080 });
+await page.setContent(bgHtml);
+fs.writeFileSync(path.join(OUT, 'background_1920x1080.jpg'), await page.screenshot({ type: 'jpeg', quality: 86 }));
+
+// favicons: the monitor on a rounded square (apple-touch-icon is full bleed: iOS rounds it)
+const sq = (size, round) => render(svgIcon(size, size, { round, fill: 0.84 }), size, size, { transparent: true });
+fs.writeFileSync(path.join(ROOT, 'icon-32.png'), await sq(32, 7));
+fs.writeFileSync(path.join(ROOT, 'icon-192.png'), await sq(192, 42));
+fs.writeFileSync(path.join(ROOT, 'apple-touch-icon.png'), await render(svgIcon(180, 180, { round: 0, fill: 0.84 }), 180, 180));
+const ico = [[16, await sq(16, 4)], [32, fs.readFileSync(path.join(ROOT, 'icon-32.png'))], [48, await sq(48, 11)]];
+{   // favicon.ico = PNG-compressed ICO with 16, 32 and 48 px images
+    const head = Buffer.alloc(6 + 16 * ico.length);
+    head.writeUInt16LE(0, 0); head.writeUInt16LE(1, 2); head.writeUInt16LE(ico.length, 4);
     let off = head.length;
-    imgs.forEach((b, i) => {
+    ico.forEach(([size, b], i) => {
         const e = 6 + i * 16;
-        head.writeUInt8(sizes[i], e); head.writeUInt8(sizes[i], e + 1); head.writeUInt8(0, e + 2); head.writeUInt8(0, e + 3);
+        head.writeUInt8(size, e); head.writeUInt8(size, e + 1); head.writeUInt8(0, e + 2); head.writeUInt8(0, e + 3);
         head.writeUInt16LE(1, e + 4); head.writeUInt16LE(32, e + 6); head.writeUInt32LE(b.length, e + 8); head.writeUInt32LE(off, e + 12);
         off += b.length;
     });
-    fs.writeFileSync(path.join(ROOT, 'favicon.ico'), Buffer.concat([head, ...imgs]));
-    fs.unlinkSync(path.join(ROOT, '_ico16.png')); fs.unlinkSync(path.join(ROOT, '_ico48.png'));
+    fs.writeFileSync(path.join(ROOT, 'favicon.ico'), Buffer.concat([head, ...ico.map((x) => x[1])]));
 }
 
-// ---------- 4 screenshots of the real app ----------
+/* ---------------- 4 screenshots of the real app ---------------- */
+
+await page.setViewportSize({ width: 1920, height: 1080 });
 await page.goto(BASE + 'index.html');
-await page.waitForSelector('.tile');
-await page.waitForTimeout(800);
-const shot = async (n) => {
-    const buf = await page.screenshot({ type: 'jpeg', quality: 82 });
-    fs.writeFileSync(path.join(OUT, 'screenshot_' + n + '.jpg'), buf);
-};
-await shot(1);                                                   // launcher
+await page.waitForSelector('.dicon');
+await page.waitForTimeout(900);
+const shot = async (n) => fs.writeFileSync(path.join(OUT, 'screenshot_' + n + '.jpg'), await page.screenshot({ type: 'jpeg', quality: 82 }));
+await page.mouse.move(1800, 40);
+await shot(1);                                                                      // the desktop
+await page.focus('#tb-start'); await page.keyboard.press('Enter'); await page.waitForTimeout(400);
+await shot(2);                                                                      // Start menu
+await page.keyboard.press('Escape');
+await page.evaluate(() => Win.open('settings', 'personal'));
+await page.keyboard.press('ArrowRight'); await page.waitForTimeout(300);
+await shot(3);                                                                      // Settings
+await page.evaluate(() => Win.close());
+await page.goto(BASE + 'index.html?play=jumper');                                   // a game, on its own page
+await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 15000 });
 const G = 'document.querySelector("iframe").contentWindow';
-await page.focus('[data-game="jumper"]'); await page.keyboard.press('Enter');
-await page.waitForFunction(() => window.GameHost.state() === 'running');
 await page.evaluate(G + '.JumperCheat.enter("w1-2")');
 await page.waitForFunction(G + '.JumperDebug().mode === "play"');
 await page.evaluate(G + '.JumperCheat.warpTo(1500, 200)');
 await page.keyboard.down('ArrowRight'); await page.waitForTimeout(700);
 await page.keyboard.down('Space'); await page.waitForTimeout(250); await page.keyboard.up('ArrowRight'); await page.keyboard.up('Space');
-await shot(2);                                                   // Super Jumper gameplay
-await page.evaluate(G + '.JumperCheat.enter("w3-1")');
-await page.waitForFunction(G + '.JumperDebug().mode === "play"');
-await page.evaluate(G + '.JumperCheat.warpTo(900, 200)');
-await page.keyboard.down('ArrowRight'); await page.waitForTimeout(900); await page.keyboard.up('ArrowRight');
-await shot(3);                                                   // ice world
-await page.keyboard.press('Escape');
-await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
-await page.waitForFunction(() => window.GameHost.state() === 'idle');
-await page.focus('[data-game="blocks"]'); await page.keyboard.press('Enter');
-await page.waitForFunction(() => window.GameHost.state() === 'running');
-await page.keyboard.press('Enter');
-for (let i = 0; i < 16; i++) { await page.keyboard.press(['ArrowLeft', 'ArrowRight', 'Space', 'ArrowUp'][i % 4]); await page.waitForTimeout(90); }
-await page.waitForTimeout(700);
-await shot(4);                                                   // Block Drop
+await shot(4);                                                                      // Super Jumper
 await browser.close();
 
 for (const f of ['icon.png', 'store/logo_1920x1080.png', 'store/background_1920x1080.jpg', 'store/screenshot_1.jpg', 'store/screenshot_2.jpg', 'store/screenshot_3.jpg', 'store/screenshot_4.jpg', 'favicon.ico', 'icon-192.png']) {

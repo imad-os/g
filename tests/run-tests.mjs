@@ -27,6 +27,7 @@
 //  20. Settings > Update: check, download with progress, restart; error cases
 //  21. Browser: focus theft, Guide, Channel / Page keys, wheel, remote and mouse modes
 //  22. Tab, wheel, Guide, device detection, Settings > Devices with a simulated controller
+//  23. Boot screen: black, inline logo, orbit dots, fades out; no logo when opening a game
 //
 //  CHROMIUM_PATH=/path/to/chrome uses an existing Chromium instead of Playwright's download.
 
@@ -1151,6 +1152,23 @@ async function main() {
         await key('F6');
         check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'Guide opens the pause menu of a game');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('23. boot screen (Windows style, light)');
+    {
+        const page = await newPage(browser, base);
+        await page.goto(base + 'index.html', { waitUntil: 'commit' });
+        const first = await page.evaluate(() => {
+            const s = document.getElementById('boot-splash');
+            return s ? { svg: !!s.querySelector('svg'), dots: s.querySelectorAll('.bs-spin i').length, img: s.querySelectorAll('img').length,
+                         bg: getComputedStyle(s).backgroundColor } : null;
+        });
+        check(first && first.svg && first.dots === 5 && first.img === 0 && first.bg === 'rgb(0, 0, 0)', 'black splash with inline logo, 5 orbit dots and no image to decode');
+        await page.waitForFunction(() => !document.getElementById('boot-splash'), null, { timeout: 20000 });
+        check(true, 'splash removed after the desktop is ready');
+        await page.goto(base + 'index.html?play=jumper', { waitUntil: 'commit' });
+        check(await page.evaluate(() => document.documentElement.classList.contains('warm')), 'opening a game uses the plain black screen (warm)');
         await page.context().close();
     }
 

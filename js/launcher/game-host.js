@@ -489,7 +489,7 @@ var GameHost = (function () {
     }
 
     function init() {
-        Icons.put($('game-loading-logo'), 'start');
+        Icons.put($('game-loading-logo'), 'mypc');
         $('game-error-retry').onclick = retry;
         $('game-error-back').onclick = function () { Focus.pop(); exit(); };
         $('entry-ok').onclick = saveEntry;

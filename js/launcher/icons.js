@@ -8,6 +8,11 @@ var Icons = (function () {
         start: '<defs><linearGradient id="gS" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7fd3ff"/><stop offset="1" stop-color="#1f7ae0"/></linearGradient></defs>' +
                '<rect x="6" y="6" width="17" height="17" rx="4" fill="url(#gS)"/><rect x="25" y="6" width="17" height="17" rx="4" fill="url(#gS)"/>' +
                '<rect x="6" y="25" width="17" height="17" rx="4" fill="url(#gS)"/><rect x="25" y="25" width="17" height="17" rx="4" fill="url(#gS)"/>',
+        // My PC mark: monitor with two windows (same as the app icon)
+        mypc: '<defs><linearGradient id="gM" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5fd0ff"/><stop offset="1" stop-color="#2f6bff"/></linearGradient></defs>' +
+              '<rect x="4" y="6" width="40" height="27" rx="4" fill="none" stroke="url(#gM)" stroke-width="3"/><rect x="9" y="11" width="13" height="10" rx="2" fill="url(#gM)"/>' +
+              '<rect x="25" y="11" width="14" height="10" rx="2" fill="url(#gM)" opacity=".7"/><rect x="9" y="24" width="30" height="4" rx="2" fill="url(#gM)" opacity=".45"/>' +
+              '<rect x="20" y="34" width="8" height="4" fill="url(#gM)"/><rect x="14" y="39" width="20" height="3" rx="1.5" fill="url(#gM)"/>',
         explorer: '<path d="M4 13a4 4 0 0 1 4-4h11l4 4h17a4 4 0 0 1 4 4v20a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z" fill="#e8a83a"/>' +
                   '<path d="M4 19a4 4 0 0 1 4-4h32a4 4 0 0 1 4 4v18a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z" fill="#ffd36b"/><rect x="10" y="31" width="28" height="4" rx="2" fill="#3d9be9"/>',
         folder: '<path d="M4 13a4 4 0 0 1 4-4h11l4 4h17a4 4 0 0 1 4 4v20a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z" fill="#e8a83a"/>' +

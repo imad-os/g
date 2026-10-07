@@ -113,7 +113,10 @@
 
     function hideSplash() {
         var s = document.getElementById('boot-splash');
-        if (s && s.parentNode) s.parentNode.removeChild(s);
+        if (!s || !s.parentNode) return;
+        if (/(^| )warm( |$)/.test(document.documentElement.className)) { s.parentNode.removeChild(s); return; }
+        s.className = 'bye';                                           // fade out, then free it
+        setTimeout(function () { if (s.parentNode) s.parentNode.removeChild(s); }, 400);
     }
 
     function url(path) {

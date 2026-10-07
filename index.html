@@ -15,18 +15,46 @@
          On a PC browser it simply fails to load, which is harmless. -->
     <script src="$WEBAPIS/webapis/webapis.js"></script>
 
-    <!-- Splash shown while js/boot/loader.js picks the hosted or the bundled app -->
+    <!-- Boot screen (Windows style): black, logo, orbiting dots. Inline SVG + transform-only CSS: nothing to decode, light on 1 GB TVs. -->
     <style>
-        html, body { margin: 0; height: 100%; background: #0f1226; overflow: hidden; }
-        #boot-splash { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #0f1226; z-index: 10000;
-                       display: -webkit-box; display: -webkit-flex; display: flex;
-                       -webkit-box-align: center; -webkit-align-items: center; align-items: center;
-                       -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; }
-        #boot-splash img { width: 512px; height: 423px; max-width: 60%; max-height: 60%; }
+        html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+        #boot-splash { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 10000;
+                       display: flex; flex-direction: column; align-items: center; justify-content: center;
+                       opacity: 1; transition: opacity .35s ease-out; }
+        #boot-splash.bye { opacity: 0; }
+        #boot-splash svg { width: 150px; height: 150px; }
+        .bs-spin { position: relative; width: 60px; height: 60px; margin-top: 90px; }
+        .bs-spin i { position: absolute; left: 0; top: 0; width: 60px; height: 60px; opacity: 0;
+                     animation: bs-orbit 3.2s infinite; }
+        .bs-spin i:after { content: ""; position: absolute; left: 28px; top: 0; width: 7px; height: 7px; border-radius: 50%; background: #fff; }
+        .bs-spin i:nth-child(2) { animation-delay: .16s; }
+        .bs-spin i:nth-child(3) { animation-delay: .32s; }
+        .bs-spin i:nth-child(4) { animation-delay: .48s; }
+        .bs-spin i:nth-child(5) { animation-delay: .64s; }
+        @keyframes bs-orbit {
+            0%   { transform: rotate(0deg);   opacity: 1; animation-timing-function: ease-out; }
+            35%  { transform: rotate(220deg); opacity: 1; animation-timing-function: linear; }
+            55%  { transform: rotate(250deg); opacity: 1; animation-timing-function: ease-in; }
+            90%  { transform: rotate(540deg); opacity: 1; }
+            100% { transform: rotate(540deg); opacity: 0; }
+        }
+        html.warm #boot-splash { transition: none; }
+        html.warm #boot-splash .bs-spin, html.warm #boot-splash svg { display: none; }
     </style>
+    <script>
+        // opening or leaving a game reloads this page: skip the logo then (just black until the screen is ready)
+        if (/[?&](play|from)=/.test(location.search)) document.documentElement.className += ' warm';
+    </script>
 </head>
 <body>
-    <div id="boot-splash" aria-hidden="true"><img src="icon.png" alt=""></div>
+    <div id="boot-splash" aria-hidden="true">
+        <svg viewBox="0 0 100 100"><defs><linearGradient id="bsg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5fd0ff"/><stop offset="1" stop-color="#2f6bff"/></linearGradient></defs>
+            <rect x="8" y="12" width="84" height="56" rx="8" fill="none" stroke="url(#bsg)" stroke-width="6"/>
+            <rect x="19" y="23" width="26" height="20" rx="3" fill="url(#bsg)"/><rect x="50" y="23" width="31" height="20" rx="3" fill="url(#bsg)" opacity=".7"/>
+            <rect x="19" y="47" width="62" height="7" rx="3.5" fill="url(#bsg)" opacity=".45"/>
+            <rect x="40" y="72" width="20" height="8" fill="url(#bsg)"/><rect x="28" y="82" width="44" height="6" rx="3" fill="url(#bsg)"/></svg>
+        <div class="bs-spin"><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
 
     <!-- Loads app.html + app-manifest.json (CSS/JS) from the hosted copy when available, else from this package -->
     <script src="js/boot/loader.js"></script>
