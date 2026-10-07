@@ -1,6 +1,6 @@
 {
-  "build": 8,
-  "version": "2.3.0",
+  "build": 9,
+  "version": "2.4.0",
   "shell": 1,
   "css": [
     "css/launcher.css"
@@ -19,6 +19,7 @@
     "js/launcher/keyboard.js",
     "js/launcher/desktop.js",
     "js/launcher/window.js",
+    "js/launcher/updater.js",
     "js/launcher/apps/settings.js",
     "js/launcher/apps/explorer.js",
     "js/launcher/apps/browser.js",

@@ -17,6 +17,12 @@
   the hosted copy at the next start: **bump `build` in `app-manifest.json`** (and a game's
   `game-manifest.json` `build` when it changes). Don't change `shell` unless `config.xml`/loader
   changes need a new package.
+- **Updates:** `js/boot/loader.js` lives in the **package** (a change there reaches TVs only with a
+  new .wgt; bump `config.xml` version, **never** bump `shell`: old packages would stop accepting
+  online builds). It waits 4 s for the hosted manifest; if the server is slow it runs the last
+  hosted build that worked (`boot_good`, saved at ready / by Settings > Update) before falling back
+  to the built-in copy. `js/launcher/updater.js` + Settings > Update (check, download with progress,
+  restart) are hosted code and reach TVs as a normal online update.
 - **Two pages:** opening a game or installed app loads `index.html?play=<id>` (no desktop is built
   there); quitting loads `index.html?from=<id>` (fresh desktop). Same packaged index.html/loader.
 - `js/launcher/`: desktop shell (`desktop.js`), full-screen app window (`window.js`), apps

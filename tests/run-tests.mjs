@@ -23,6 +23,8 @@
 //  16. installed apps: list from Firebase (mocked), My PC SDK in a sandboxed cross-origin iframe
 //  17. installer: mypc-app.json parsing
 //  18. installer page: catalog of imad-os's g_ repositories (GitHub API and Firebase mocked)
+//  19. smart startup: slow server -> last known online build; failures are not blamed
+//  20. Settings > Update: check, download with progress, restart; error cases
 //
 //  CHROMIUM_PATH=/path/to/chrome uses an existing Chromium instead of Playwright's download.
 
@@ -895,6 +897,102 @@ async function main() {
         check(upd.config.speed === 9 && upd.order === 1, 'updating an app keeps its config and its position');
         check(await page.evaluate(() => !!document.getElementById('url') && !!document.getElementById('btn-fetch')), 'the manual address section is still there for apps outside imad-os');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('19. smart startup: slow server -> last known online build');
+    {
+        const full = JSON.parse(fs.readFileSync(path.join(ROOT, 'app-manifest.json'), 'utf8'));
+        const seed = (page, build) => page.addInitScript(([m, hosted, b]) => {
+            try { if (!localStorage.getItem('__seeded')) { localStorage.setItem('boot_good', JSON.stringify({ manifest: Object.assign({}, m, { build: b }), base: hosted, at: Date.now() })); localStorage.setItem('__seeded', '1'); } } catch (e) {}
+        }, [full, HOSTED, build]);
+        // 1) the server does not answer the manifest, but the last online build is known and its files load
+        let page = await newPage(browser, base);
+        await seed(page, 99);
+        await routeHosted(page, { breakFile: 'app-manifest.json' });
+        await page.goto(base + 'index.html');
+        await page.waitForFunction(() => window.AppBoot && window.Desktop && document.querySelector('.dicon'), null, { timeout: 20000 });
+        check(await page.evaluate(() => AppBoot.source() === 'remote' && AppBoot.build() === 99 && AppBoot.reason() === 'stale' && AppBoot.stale()), 'slow server: the last known online build runs instead of the older built-in copy');
+        check(await playable(page), 'a game is playable from it');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+        // 2) the network is really down: built-in copy, and the last known build is not blamed
+        page = await newPage(browser, base);
+        await seed(page, 99);
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForFunction(() => window.AppBoot && AppBoot.source() === 'local' && document.querySelector('.dicon'), null, { timeout: 20000 });
+        check(await page.evaluate(() => localStorage.getItem('boot_bad_build') === null && Number(localStorage.getItem('boot_stale_fail')) > 0 && AppBoot.reason() === 'forced'), 'offline: the built-in copy runs and the last known build is not marked bad');
+        await page.reload();
+        await page.waitForSelector('.dicon', { timeout: 15000 });
+        check(await page.evaluate(() => AppBoot.source() === 'local' && AppBoot.reason() === 'unreachable'), 'the shortcut rests for a while after a failure (no slow start every time)');
+        await page.context().close();
+        // 3) a hosted build that reaches ready is remembered
+        page = await newPage(browser, base);
+        await routeHosted(page, { manifest: { build: 98 } });
+        await page.goto(base + 'index.html');
+        await page.waitForFunction(() => window.AppBoot && AppBoot.source() === 'remote' && document.querySelector('.dicon'), null, { timeout: 15000 });
+        check(await page.evaluate((h) => { const g = JSON.parse(localStorage.getItem('boot_good')); return g.manifest.build === 98 && g.base === h && AppBoot.reason() === 'update'; }, HOSTED), 'a hosted build that started fine is saved as the last known good one');
+        await page.context().close();
+    }
+
+    console.log('20. Settings > Update');
+    {
+        const key = async (page, ...ks) => { for (const k of ks) { await page.keyboard.press(k); await page.waitForTimeout(50); } };
+        const status = (page) => page.evaluate(() => (document.querySelector('.set-status .set-card-name') || {}).textContent || '');
+        // up to date -> a newer build appears -> check, download with progress, restart into it
+        let page = await newPage(browser, base);
+        const over = {};
+        await routeHosted(page, { manifest: over });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('.dicon', { timeout: 15000 });
+        check(await page.evaluate(() => AppBoot.source()) === 'local' && await page.evaluate(() => typeof AppBoot.reason === 'function'), 'the built-in copy of the same build runs, with the smart loader');
+        await page.evaluate(() => Win.open('settings', 'update'));
+        await page.waitForFunction(() => /up to date/.test((document.querySelector('.set-status .set-card-name') || {}).textContent || ''), null, { timeout: 8000 });
+        check(true, 'opening the page checks by itself: "' + await status(page) + '"');
+        check(await page.evaluate(() => !/Never/.test(document.querySelector('.set-main').textContent) && /Built-in copy/.test(document.querySelector('.set-main').textContent)), 'it shows the last check and where the app runs from');
+        over.build = 99; over.version = '9.9.0';
+        await key(page, 'ArrowRight', 'Enter');                                       // Check for updates
+        await page.waitForFunction(() => /available/.test((document.querySelector('.set-status .set-card-name') || {}).textContent || ''), null, { timeout: 8000 });
+        check(/9\.9\.0.*99/.test(await page.textContent('.set-status')), 'a newer build is found: ' + (await page.textContent('.set-status')));
+        check(await page.evaluate(() => document.activeElement.classList.contains('set-primary')), 'the focus is on "Download and restart"');
+        await key(page, 'Enter');
+        await page.waitForFunction(() => Updater.state().state === 'ready', null, { timeout: 15000 });
+        check(await page.evaluate((h) => { const g = JSON.parse(localStorage.getItem('boot_good')); const u = Updater.state(); return g.manifest.build === 99 && g.base === h && u.done === u.total && u.total > 20; }, HOSTED), 'every file was downloaded and the build is saved as the one to start');
+        check(/ready/.test(await status(page)), 'the page says it is ready: "' + await status(page) + '"');
+        await key(page, 'Enter');                                                      // Restart now
+        await page.waitForFunction(() => window.AppBoot && AppBoot.build && AppBoot.build() === 99 && document.querySelector('.dicon'), null, { timeout: 20000 });
+        check(await page.evaluate(() => AppBoot.source() === 'remote' && AppBoot.reason() === 'update'), 'after the restart the new build runs');
+        await page.context().close();
+        // a build whose files cannot all be downloaded is not saved
+        page = await newPage(browser, base);
+        await routeHosted(page, { manifest: { build: 99 }, breakFile: 'js/launcher/main.js' });
+        await page.goto(base + 'index.html');
+        await page.waitForFunction(() => window.AppBoot && AppBoot.source() === 'local' && document.querySelector('.dicon'), null, { timeout: 20000 });
+        await page.evaluate(() => Win.open('settings', 'update'));
+        await page.waitForFunction(() => /available/.test((document.querySelector('.set-status .set-card-name') || {}).textContent || ''), null, { timeout: 8000 });
+        await key(page, 'ArrowRight', 'Enter');                                        // into the page, then "Download and restart"
+        await page.waitForFunction(() => Updater.state().state === 'error', null, { timeout: 20000 });
+        check(/did not finish/.test(await status(page)) && await page.evaluate(() => localStorage.getItem('boot_good') === null), 'a failed download changes nothing and is not saved');
+        check(await page.evaluate(() => document.activeElement.classList.contains('set-primary')), 'it offers to try again');
+        await page.context().close();
+        // the server does not answer: a clear message, and the reason of the last start
+        page = await newPage(browser, base);
+        await routeHosted(page, { breakFile: 'app-manifest.json' });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('.dicon', { timeout: 15000 });
+        await page.evaluate(() => Win.open('settings', 'update'));
+        await page.waitForFunction(() => /Couldn't check/.test((document.querySelector('.set-status .set-card-name') || {}).textContent || ''), null, { timeout: 8000 });
+        check(/did not answer when the app started/.test(await page.textContent('.set-main')), 'it explains why the built-in copy ran at the last start');
+        await page.context().close();
+        // a build for another shell cannot be installed from here
+        page = await newPage(browser, base);
+        await routeHosted(page, { manifest: { build: 99, shell: 2 } });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('.dicon', { timeout: 15000 });
+        await page.evaluate(() => Win.open('settings', 'update'));
+        await page.waitForFunction(() => /Samsung store/.test((document.querySelector('.set-status .set-card-name') || {}).textContent || ''), null, { timeout: 8000 });
+        check(true, 'a build that needs a new package says so');
         await page.context().close();
     }
 

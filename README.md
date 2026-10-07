@@ -36,7 +36,15 @@ them. Games report scores with `host.submitScore(score, { player, players })`.
 - **Apps** (`js/launcher/apps/`): File Explorer (Home, This PC, Desktop, Games, Apps, Pictures,
   Documents), Browser, Calculator, Calendar (notes per day), Settings (System, Personalization,
   Accounts, Sound, Time & language, Gaming, Privacy & security, About) and Leaderboards.
-- **Games on their own page:** opening a game loads `index.html?play=<id>`, so the browser throws the
+- **Updates:** the TV runs the online copy (imad-os.github.io/g) when it is newer than the built-in one,
+checked at every start. A package with the current `js/boot/loader.js` waits 4 s for the server and, if
+it is slow, runs the last online build that worked on that TV (`boot_good`) instead of the older built-in
+copy. **Settings > My PC Update** (like Windows Update) checks with a 20 s timeout, downloads every file
+with a progress bar, saves the build as the one to start, and restarts into it. It also shows where the
+app runs from and why the built-in copy ran at the last start. The loader is part of the package, so
+this needs one new .wgt (config.xml version 1.1.0); the update page itself arrives online.
+
+**Games on their own page:** opening a game loads `index.html?play=<id>`, so the browser throws the
   whole desktop away (DOM, images, timers, JS heap) and that page builds only the game. Quitting
   loads `index.html?from=<id>`: a fresh desktop focused on the game. It reuses the packaged
   `index.html` and boot loader, so no new TV package is needed.

@@ -8,6 +8,11 @@
  *   - its `build` is newer than the packaged one and not blacklisted on this TV.
  * Otherwise (no network, server down, bad deploy) the bundled copy runs: never a black screen.
  *
+ * Slow network: when the hosted manifest does not answer in time, the last hosted build that ran
+ * fine on this TV (saved as boot_good once it reached AppBoot.ready(), or by Settings > Update)
+ * runs instead of the older bundled copy. Its files come from the hosted site as usual; if they
+ * cannot be loaded the bundled copy runs for this session and this shortcut rests for 10 minutes.
+ *
  * Hosted files are loaded into this packaged document (markup from app.html, CSS/JS from the
  * manifest, <base href> = hosted URL) so the Tizen/Samsung APIs keep working.
  *
@@ -21,17 +26,23 @@
 
     var SHELL = 1;                                    // bump only together with a new .wgt
     var DEFAULT_REMOTE_BASE = 'https://imad-os.github.io/g/';
-    var MANIFEST_TIMEOUT_MS = 2500;
+    var MANIFEST_TIMEOUT_MS = 4000;
     var FILE_TIMEOUT_MS = 10000;
+    var STALE_FILE_TIMEOUT_MS = 6000;                 // when running the last known hosted build without a fresh manifest
+    var STALE_RETRY_MS = 10 * 60 * 1000;
     var READY_TIMEOUT_MS = 20000;
 
     var LS_BAD_BUILD = 'boot_bad_build';
+    var LS_GOOD = 'boot_good';                        // { manifest, base, at }: last hosted build that ran fine
+    var LS_STALE_FAIL = 'boot_stale_fail';            // time the last-known build could not be loaded
     var LS_REMOTE_BASE = 'boot_remote_base';          // optional override (staging, tests)
     var SS_FORCE_LOCAL = 'boot_force_local';
 
     var state = {
         source: 'local', base: '', build: 0, version: '', ready: false, aborting: false,
-        manifest: null, localManifest: null, localBase: ''
+        manifest: null, localManifest: null, localBase: '',
+        stale: false,         // running the last known hosted build (no fresh manifest)
+        reason: ''            // why this copy runs: update | stale | current | unreachable | bad | shell | forced
     };
     var readyTimer = null;
 
@@ -76,6 +87,12 @@
 
     function parse(text) { try { return JSON.parse(text); } catch (e) { return null; } }
 
+    // the saved last-known-good hosted manifest, only when it belongs to this hosted address
+    function readGood(base) {
+        var o = parse(lsGet(LS_GOOD));
+        return o && o.base === base && isValid(o.manifest) ? o.manifest : null;
+    }
+
     function isValid(m) {
         return !!(m && typeof m.build === 'number' && m.css && m.css.length !== undefined &&
                   m.js && m.js.length && m.games && m.games.length !== undefined);
@@ -86,7 +103,10 @@
         if (state.source !== 'remote' || state.aborting) return;
         state.aborting = true;
         log('hosted build ' + state.build + ' rejected (' + reason + '), restarting with bundled copy');
-        lsSet(LS_BAD_BUILD, String(state.build));
+        // a build that failed with a fresh manifest is bad; a last-known build that failed (maybe only
+        // the network) is not blamed, it just rests for a while
+        if (state.stale) lsSet(LS_STALE_FAIL, String(Date.now()));
+        else lsSet(LS_BAD_BUILD, String(state.build));
         ssSet(SS_FORCE_LOCAL, '1');
         location.reload();
     }
@@ -133,7 +153,8 @@
         if (!state.ready) fallbackToLocal('error during start-up');
     }
 
-    function boot(manifest, base) {
+    function boot(manifest, base, stale) {
+        state.stale = !!stale;
         state.source = base ? 'remote' : 'local';
         state.base = base;
         state.build = manifest.build;
@@ -141,7 +162,7 @@
         state.manifest = manifest;
         log('starting ' + state.source + ' build ' + state.build + ' (' + state.version + ')');
 
-        get(url('app.html'), base ? FILE_TIMEOUT_MS : 0, function (err, html) {
+        get(url('app.html'), base ? (stale ? STALE_FILE_TIMEOUT_MS : FILE_TIMEOUT_MS) : 0, function (err, html) {
             if (err || !html) {
                 if (base) return fallbackToLocal('app.html ' + err);
                 log('bundled app.html missing: ' + err);
@@ -179,26 +200,41 @@
 
             if (ssGet(SS_FORCE_LOCAL)) {
                 ssDel(SS_FORCE_LOCAL);
+                state.reason = 'forced';
                 return boot(local, '');
             }
 
             var base = remoteBase();
-            if (base === state.localBase) return boot(local, '');   // PC browser on the hosted site itself
+            if (base === state.localBase) { state.reason = 'current'; return boot(local, ''); }   // PC browser on the hosted site itself
 
             get(base + 'app-manifest.json?t=' + Date.now(), MANIFEST_TIMEOUT_MS, function (rErr, rText) {
                 var remote = parse(rText);
                 var bad = lsGet(LS_BAD_BUILD);
+                var why;
                 if (rErr || !isValid(remote)) {
                     log('hosted manifest unavailable (' + (rErr || 'invalid') + ')');
+                    // slow or no network: the last hosted build that worked here beats the (older) bundled copy
+                    var good = readGood(base), failedAt = parseInt(lsGet(LS_STALE_FAIL), 10) || 0;
+                    if (good && good.build > local.build && good.shell === SHELL && String(good.build) !== bad && Date.now() - failedAt > STALE_RETRY_MS) {
+                        log('using the last hosted build ' + good.build + ' (server slow or unreachable)');
+                        state.reason = 'stale';
+                        return boot(good, base, true);
+                    }
+                    why = 'unreachable';
                 } else if (remote.shell !== SHELL) {
                     log('hosted build ' + remote.build + ' needs shell ' + remote.shell + ', package has ' + SHELL);
+                    why = 'shell';
                 } else if (remote.build <= local.build) {
                     log('bundled build ' + local.build + ' is up to date');
+                    why = 'current';
                 } else if (bad === String(remote.build)) {
                     log('hosted build ' + remote.build + ' previously failed, skipping');
+                    why = 'bad';
                 } else {
+                    state.reason = 'update';
                     return boot(remote, base);
                 }
+                state.reason = why;
                 boot(local, '');
             });
         });
@@ -212,6 +248,9 @@
             state.ready = true;
             if (readyTimer) clearTimeout(readyTimer);
             window.removeEventListener('error', onStartupError);
+            // a hosted build that reached this point works on this TV: remember it for slow starts
+            if (state.source === 'remote' && !state.stale) lsSet(LS_GOOD, JSON.stringify({ manifest: state.manifest, base: state.base, at: Date.now() }));
+            if (state.stale) lsSet(LS_STALE_FAIL, '0');
             hideSplash();
             log('ready (' + state.source + ' build ' + state.build + ')');
         },
@@ -220,6 +259,8 @@
         build: function () { return state.build; },
         version: function () { return state.version; },
         base: function () { return state.base; },              // '' when bundled
+        reason: function () { return state.reason; },          // why this copy runs (see state.reason); Settings > Update shows it
+        stale: function () { return state.stale; },
         manifest: function () { return state.manifest; },
         localManifest: function () { return state.localManifest; },
         localBase: function () { return state.localBase; }   // absolute URL of the packaged copy

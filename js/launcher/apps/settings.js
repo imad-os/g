@@ -15,7 +15,8 @@
         { id: 'time', icon: 'clock', label: 'sysTime' },
         { id: 'gaming', icon: 'controller', label: 'sysGaming' },
         { id: 'privacy', icon: 'shield', label: 'sysPrivacy' },
-        { id: 'about', icon: 'info', label: 'about' }
+        { id: 'about', icon: 'info', label: 'about' },
+        { id: 'update', icon: 'reload', label: 'sysUpdate' }
     ];
 
     var body, nav, main, page = 'system', rows = [];
@@ -77,6 +78,8 @@
         } else if (id === 'privacy') {
             lines = t('privacyText');
             for (i = 0; i < lines.length; i++) out.push({ kind: 'text', value: lines[i] });
+        } else if (id === 'update') {
+            updateRows(out);
         } else if (id === 'about') {
             out.push({ kind: 'info', label: t('version'), value: AppBoot.version() });
             out.push({ kind: 'info', label: t('build'), value: String(AppBoot.build()) });
@@ -117,8 +120,48 @@
 
     function navBtn(id) { return nav.querySelector('[data-page="' + (id || page) + '"]'); }
 
+    /* ---------- Update (Windows Update style): the work is done by Updater (js/launcher/updater.js) ---------- */
+
+    function updateRows(out) {
+        var u = Updater.state(), inf = Updater.info(), title, detail = '', prog = null;
+        if (u.state === 'checking') title = t('updChecking');
+        else if (u.state === 'available') { title = t('updAvailable'); detail = t('updNew') + ': v' + u.remote.version + ' (' + t('build') + ' ' + u.remote.build + ')'; }
+        else if (u.state === 'downloading') { title = t('updDownloading'); detail = u.done + ' / ' + u.total; prog = u.total ? u.done / u.total : 0; }
+        else if (u.state === 'ready') title = t('updReady');
+        else if (u.state === 'uptodate') title = t('updUpToDate');
+        else if (u.state === 'error') title = t(u.error === 'shell' ? 'updNeedsPackage' : u.error === 'download' ? 'updDownloadFailed' : 'updCheckFailed');
+        else title = t('updCheck');
+        out.push({ kind: 'status', title: title, detail: detail, progress: prog, busy: u.state === 'checking' || u.state === 'downloading' });
+
+        if (u.state === 'ready') out.push({ kind: 'action', label: t('updRestart'), primary: true, run: function () { Updater.restart(); } });
+        else if (u.state === 'available' || (u.state === 'error' && u.error === 'download' && u.remote)) out.push({ kind: 'action', label: t('updInstall'), primary: true, run: function () { Updater.install(); } });
+        if (u.state !== 'checking' && u.state !== 'downloading' && u.state !== 'ready') out.push({ kind: 'action', label: t('updCheck'), run: function () { Updater.check(); } });
+
+        out.push({ kind: 'info', label: t('version'), value: inf.version });
+        out.push({ kind: 'info', label: t('build'), value: String(inf.build) });
+        out.push({ kind: 'info', label: t('updRunning'), value: t(inf.source === 'remote' ? 'updRunOnline' : 'updRunBuiltIn') });
+        var last = Updater.lastChecked();
+        out.push({ kind: 'info', label: t('updLast'), value: last ? Desktop.dateText(new Date(last), { day: 'numeric', month: 'short' }) + ' ' + Desktop.timeText(new Date(last)) : t('updNever') });
+        var why = { stale: 'updWhyStale', unreachable: 'updWhyUnreachable', bad: 'updWhyBad', forced: 'updWhyForced' }[inf.reason];
+        if (why) out.push({ kind: 'info', label: t('updWhy'), value: t(why) });
+        if (!inf.smart) out.push({ kind: 'text', value: t('updOldPackage') });
+    }
+
+    // the Updater changed (progress, result): redraw the page and keep the focus on the same row
+    function onUpdater() {
+        if (!main || page !== 'update') return;
+        var c = Focus.current(), inRows = !!c && inMain(c) && c.getAttribute('data-row') !== null;
+        var idx = inRows ? +c.getAttribute('data-row') : -1, oldKind = rows[idx] && rows[idx].kind;
+        var target = renderMain(idx >= 0 ? idx : undefined);
+        if (!inRows) return;                       // the focus is on the page list: leave it there
+        // same kind of row at that place: keep the focus; otherwise (the button you pressed is gone) the main action
+        var same = target && rows[idx] && rows[idx].kind === oldKind;
+        Focus.focus(same ? target : (main.querySelector('.set-primary') || main.querySelector('[data-focus]') || navBtn()));
+    }
+
     function showPage(id) {
         page = id;
+        if (id === 'update') Updater.autoCheck();
         var btns = nav.querySelectorAll('.set-nav-btn');
         for (var i = 0; i < btns.length; i++) btns[i].className = 'set-nav-btn' + (btns[i].getAttribute('data-page') === id ? ' on' : '');
         renderMain();
@@ -140,7 +183,8 @@
             var r = rows[i], b;
             if (r.kind === 'wallpapers') { b = wallpaperRow(r); main.appendChild(b); if (i === focusIdx) target = b.querySelector('.on') || b.querySelector('button'); continue; }
             if (r.kind === 'profile') { main.appendChild(profileCard()); continue; }
-            b = el('button', 'set-row' + (r.kind === 'text' ? ' set-text' : '') + (r.danger ? ' set-danger' : ''));
+            if (r.kind === 'status') { main.appendChild(statusCard(r)); continue; }
+            b = el('button', 'set-row' + (r.kind === 'text' ? ' set-text' : '') + (r.danger ? ' set-danger' : '') + (r.primary ? ' set-primary' : ''));
             b.setAttribute('data-focus', '');
             b.setAttribute('data-row', i);
             if (r.kind === 'text') { b.textContent = r.value; b.setAttribute('aria-label', r.value); }
@@ -179,6 +223,23 @@
             if (i === focusIdx) target = b;
         }
         return target;
+    }
+
+    // big status line with an optional progress bar (Update page)
+    function statusCard(r) {
+        var c = el('div', 'set-card set-status' + (r.busy ? ' busy' : ''));
+        c.setAttribute('role', 'status');
+        c.appendChild(el('div', 'set-card-name', r.title));
+        if (r.detail) c.appendChild(el('div', 'set-row-desc', r.detail));
+        if (r.progress !== null && r.progress !== undefined) {
+            var bar = el('div', 'set-slider-bar set-progress'), fill = el('span', 'set-slider-fill');
+            fill.style.width = Math.round(r.progress * 100) + '%';
+            bar.appendChild(fill);
+            bar.setAttribute('role', 'progressbar');
+            bar.setAttribute('aria-valuenow', String(Math.round(r.progress * 100)));
+            c.appendChild(bar);
+        }
+        return c;
     }
 
     function profileCard() {
@@ -289,11 +350,13 @@
             nav = el('nav', 'set-nav');
             main = el('div', 'set-main');
             body.appendChild(nav); body.appendChild(main);
+            Updater.onChange(onUpdater);
+            if (page === 'update') Updater.autoCheck();
             renderNav();
             renderMain();
             return navBtn();
         },
-        close: function () { body = nav = main = null; rows = []; },
+        close: function () { Updater.offChange(onUpdater); Updater.cancel(); body = nav = main = null; rows = []; },
         refresh: function () { if (nav) { renderNav(); renderMain(); } },
         action: action,
         back: back
