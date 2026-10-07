@@ -18,6 +18,8 @@
 //  12. menu covers come back after a game
 //  13. profiles: create, switch from home, separate saves, shared settings, delete
 //  14. Parchís: Moroccan rules, a full CPU game, a person's turn
+//  15. desktop shell: taskbar clock, Start menu, full-screen apps (calculator, calendar, settings,
+//      explorer, browser) that free everything when they close
 //
 //  CHROMIUM_PATH=/path/to/chrome uses an existing Chromium instead of Playwright's download.
 
@@ -111,7 +113,7 @@ async function main() {
         const page = await newPage(browser, base);
         await routeHosted(page, { manifest: { build: 99 } });
         await page.goto(base + 'index.html');
-        await page.waitForFunction(() => window.AppBoot && window.Menu && document.querySelector('.tile'), null, { timeout: 15000 });
+        await page.waitForFunction(() => window.AppBoot && window.Desktop && document.querySelector('.dicon'), null, { timeout: 15000 });
         check(await page.evaluate(() => AppBoot.source()) === 'remote', 'AppBoot.source() is "remote"');
         check(await page.evaluate(() => AppBoot.build()) === 99, 'build 99 is running');
         check(await page.evaluate(() => document.querySelector('base') && document.querySelector('base').href) === HOSTED, '<base href> points to the hosted copy');
@@ -127,7 +129,7 @@ async function main() {
         await routeHosted(page, { offline: true });
         const t0 = Date.now();
         await page.goto(base + 'index.html');
-        await page.waitForSelector('.tile', { timeout: 15000 });
+        await page.waitForSelector('.dicon', { timeout: 15000 });
         check(await page.evaluate(() => AppBoot.source()) === 'local', 'AppBoot.source() is "local"');
         check(Date.now() - t0 < 6000, 'menu shown quickly without network (' + (Date.now() - t0) + ' ms)');
         check(await playable(page), 'a game is playable offline');
@@ -139,11 +141,11 @@ async function main() {
         const page = await newPage(browser, base);
         await routeHosted(page, { manifest: { build: 77 }, breakFile: 'js/launcher/main.js' });
         await page.goto(base + 'index.html');
-        await page.waitForFunction(() => window.AppBoot && AppBoot.source() === 'local' && document.querySelector('.tile'), null, { timeout: 20000 });
+        await page.waitForFunction(() => window.AppBoot && AppBoot.source() === 'local' && document.querySelector('.dicon'), null, { timeout: 20000 });
         check(await page.evaluate(() => localStorage.getItem('boot_bad_build')) === '77', 'build 77 recorded as bad');
         check(await playable(page), 'bundled copy is playable after the fallback');
         await page.reload();
-        await page.waitForSelector('.tile', { timeout: 15000 });
+        await page.waitForSelector('.dicon', { timeout: 15000 });
         check(await page.evaluate(() => AppBoot.source()) === 'local', 'blacklisted build is skipped on the next launch');
         await page.context().close();
     }
@@ -153,7 +155,7 @@ async function main() {
         const page = await newPage(browser, base);
         await routeHosted(page, { manifest: { build: 50, shell: 2 } });
         await page.goto(base + 'index.html');
-        await page.waitForSelector('.tile', { timeout: 15000 });
+        await page.waitForSelector('.dicon', { timeout: 15000 });
         check(await page.evaluate(() => AppBoot.source()) === 'local', 'shell mismatch keeps the bundled copy');
         await page.context().close();
     }
@@ -163,7 +165,7 @@ async function main() {
         const page = await newPage(browser, base);
         await routeHosted(page, { offline: true });
         await page.goto(base + 'index.html');
-        await page.waitForSelector('.tile');
+        await page.waitForSelector('.dicon');
         await page.keyboard.press('Escape');
         check(await page.evaluate(() => !document.getElementById('dialog-backdrop').hidden), 'Back on the main menu opens the exit confirmation');
         await page.keyboard.press('Escape');
@@ -259,12 +261,12 @@ async function main() {
         await page.keyboard.press('Escape');
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost.state() === 'idle');
-        await page.focus('#btn-scores'); await page.keyboard.press('Enter');
-        check(await page.evaluate(() => !document.getElementById('scores').hidden), 'Top scores screen opens');
+        await page.focus('[data-app="scores"]'); await page.keyboard.press('Enter');
+        check(await page.evaluate(() => Win.current() === 'scores' && !document.getElementById('window').hidden), 'Leaderboards app opens full screen');
         const label = await page.evaluate(() => [...document.querySelectorAll('.score-col')].map((c) => c.getAttribute('aria-label')).join(' | '));
         check(/Neon Snake.*1: ZZZ, 1011 points/.test(label), 'Voice Guide label lists the table');
         await page.keyboard.press('Escape');
-        check(await page.evaluate(() => document.getElementById('scores').hidden && document.activeElement.id === 'btn-scores'), 'Back closes the Scores screen');
+        check(await page.evaluate(() => document.getElementById('window').hidden && document.activeElement.getAttribute('data-app') === 'scores'), 'Back closes the app and refocuses its icon');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }
@@ -363,7 +365,7 @@ async function main() {
         const icons = [];
         page.on('response', (r) => { if (/favicon\.ico|icon-32\.png|icon\.png/.test(r.url())) icons.push(r.status()); });
         await page.goto(base + 'index.html');
-        await page.waitForSelector('.tile');
+        await page.waitForSelector('.dicon');
         check(await page.evaluate(() => document.getElementById('netpop').hidden), 'no network popup while online');
         await page.focus('[data-game="snake"]'); await page.keyboard.press('Enter');
         await page.waitForFunction(() => window.GameHost.state() === 'running');
@@ -425,21 +427,75 @@ async function main() {
         await page.context().close();
     }
 
+    console.log('11b. Super Jumper 2 players: lives, deaths, respawns, power-ups');
+    {
+        const page = await newPage(browser, base);
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('[data-game="jumper"]');
+        await page.focus('[data-game="jumper"]'); await page.keyboard.press('Enter');
+        await page.waitForFunction(() => window.GameHost.state() === 'running');
+        await page.waitForTimeout(300);
+        const G = 'document.querySelector("iframe").contentWindow';
+        const dbg = () => page.evaluate(G + '.JumperDebug()');
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
+        await page.keyboard.press('KeyF');
+        await page.waitForTimeout(100);
+        await page.evaluate(G + '.JumperCheat.enter("w1-1")');
+        await page.waitForFunction(G + '.JumperDebug().mode === "play"');
+        let d = await dbg();
+        check(d.hudLives === '\u00D7 5' && d.hudLives2 === '\u00D7 5', 'HUD shows each hero with its own lives (' + d.hudLives + ' / ' + d.hudLives2 + ')');
+        check(await page.evaluate(G + '.JumperCheat.tiles(15)') >= 3, 'stages have several power-up blocks (grow berry / fire bloom)');
+        // player 1 falls while player 2 plays on: P1 respawns next to P2
+        await page.evaluate(G + '.JumperCheat.kill(1)');
+        await page.waitForFunction(G + '.JumperDebug().dead === false', null, { timeout: 5000 }).catch(() => {});
+        d = await dbg();
+        check(!d.dead && d.lives === 4 && d.mode === 'play' && Math.abs(d.x - d.p2.x) < 20, 'a fallen player 1 respawns next to player 2');
+        // player 1 waits to respawn while player 2 leaves co-op: no frozen game
+        await page.waitForTimeout(2600);
+        await page.evaluate(G + '.JumperCheat.kill(1)');
+        await page.waitForTimeout(300);
+        await page.evaluate(G + '.JumperCheat.leave()');
+        const ok = await page.waitForFunction(G + '.JumperDebug().mode === "play" && ' + G + '.JumperDebug().dead === false', null, { timeout: 8000 }).then(() => true, () => false);
+        d = await dbg();
+        check(ok && d.lives === 3 && !d.twoP, 'player 2 leaving while player 1 is down restarts the stage (no freeze)');
+        // back to two players: P1 loses the last life and sits out, P2 plays on; then P2 falls
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => [...document.querySelectorAll('#pause-items button')].filter((b) => /Two players/.test(b.textContent))[0].click());
+        await page.keyboard.press('KeyF');
+        await page.waitForTimeout(300);
+        await page.evaluate(G + '.JumperCheat.setLives(1, 1)');
+        await page.evaluate(G + '.JumperCheat.kill(1)');
+        await page.waitForTimeout(3000);
+        d = await dbg();
+        check(d.out && d.mode === 'play' && !d.p2.dead && d.hudLives === '\u00D7 0', 'player 1 out of lives sits out while player 2 plays on');
+        await page.evaluate(G + '.JumperCheat.kill(2)');
+        await page.waitForFunction(G + '.JumperDebug().mode === "retry"', null, { timeout: 5000 }).catch(() => {});
+        d = await dbg();
+        check(d.mode === 'retry' && d.p2.lives === 4, 'the stage card (hero x lives) shows before the restart');
+        await page.waitForFunction(G + '.JumperDebug().mode === "play"', null, { timeout: 5000 }).catch(() => {});
+        d = await dbg();
+        check(d.mode === 'play' && !d.p2.dead, 'the stage restarts with player 2');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
     console.log('12. covers come back after a game');
     {
         const page = await newPage(browser, base);
         await routeHosted(page, { offline: true });
         await page.goto(base + 'index.html');
         await page.waitForSelector('[data-game="snake"]');
-        await page.waitForFunction(() => [...document.querySelectorAll('.tile img')].every((i) => i.complete));
+        await page.waitForFunction(() => [...document.querySelectorAll('#desk-icons img')].every((i) => i.complete));
         await page.focus('[data-game="snake"]'); await page.keyboard.press('Enter');
         await page.waitForFunction(() => window.GameHost.state() === 'running');
-        check(await page.evaluate(() => [...document.querySelectorAll('.tile img')].every((i) => !i.getAttribute('src'))), 'covers are released while a game runs');
+        check(await page.evaluate(() => [...document.querySelectorAll('#desk-icons img')].every((i) => !i.getAttribute('src'))), 'covers are released while a game runs');
         await page.keyboard.press('Escape');
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost.state() === 'idle');
-        await page.waitForFunction(() => [...document.querySelectorAll('.tile img')].every((i) => i.complete), null, { timeout: 5000 }).catch(() => {});
-        const vis = await page.evaluate(() => [...document.querySelectorAll('.tile img')].map((i) => i.style.visibility !== 'hidden' && i.naturalWidth > 0));
+        await page.waitForFunction(() => [...document.querySelectorAll('#desk-icons img')].every((i) => i.complete), null, { timeout: 5000 }).catch(() => {});
+        const vis = await page.evaluate(() => [...document.querySelectorAll('#desk-icons img')].map((i) => i.style.visibility !== 'hidden' && i.naturalWidth > 0));
         check(vis.length === 7 && vis.every(Boolean), 'all 7 covers visible again on the home screen');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
@@ -455,8 +511,10 @@ async function main() {
         const ver = JSON.parse(fs.readFileSync(path.join(ROOT, 'app-manifest.json'), 'utf8'));
         check(await page.textContent('#app-version') === 'v' + ver.version + ' (Build ' + ver.build + ')', 'home shows the version: ' + await page.textContent('#app-version'));
         await page.evaluate(() => { AudioPrefs.setMusic(3); Scores.add('snake', 'PPP', 70); });
+        await page.focus('#tb-start'); await page.keyboard.press('Enter');
+        check(await page.evaluate(() => Desktop.startOpen()), 'the Start button opens the Start menu');
         await page.focus('#btn-profile'); await page.keyboard.press('Enter');
-        check(await page.evaluate(() => !document.getElementById('profiles').hidden), 'the profile button opens the Profiles screen');
+        check(await page.evaluate(() => !document.getElementById('profiles').hidden), 'the profile button in Start opens the Profiles screen');
         await page.focus('#profile-new'); await page.keyboard.press('Enter');
         // remote: OK on the focused "A" key, then a PC keyboard types the rest
         await page.keyboard.press('Enter');
@@ -471,6 +529,7 @@ async function main() {
         await page.reload();
         await page.waitForFunction(() => { const b = document.getElementById('profile-name'); return b && b.textContent; });
         check(await page.evaluate(() => Store.profile()) === 'p2', 'the active profile is remembered');
+        await page.focus('#tb-start'); await page.keyboard.press('Enter');
         await page.focus('#btn-profile'); await page.keyboard.press('Enter');
         await page.focus('[data-profile="p1"]'); await page.keyboard.press('Enter');
         check(await page.evaluate(() => Store.profile() === 'p1' && Scores.list('snake').length === 1 && document.getElementById('profiles').hidden), 'switching back from the home screen restores that profile');
@@ -533,8 +592,70 @@ async function main() {
         await page.keyboard.press('Escape');
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost.state() === 'idle');
-        await page.focus('#btn-scores'); await page.keyboard.press('Enter');
+        await page.focus('[data-app="scores"]'); await page.keyboard.press('Enter');
         check(await page.evaluate(() => document.querySelectorAll('.score-col').length) === 6, 'Parchís (no points) has no top-10 column');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('15. desktop shell: taskbar, Start, full-screen apps');
+    {
+        const page = await newPage(browser, base);
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons [data-game="parchis"]');
+        const key = async (...ks) => { for (const k of ks) { await page.keyboard.press(k); await page.waitForTimeout(40); } };
+        check(/\d{1,2}:\d{2}/.test(await page.textContent('#tray-time')) && (await page.textContent('#tray-date')).length > 5, 'taskbar clock shows time and date (' + await page.textContent('#tray-time') + ')');
+        check(await page.evaluate(() => document.querySelectorAll('#desk-icons [data-game]').length === 7 && !!document.querySelector('#desk-icons [data-app="explorer"]')), 'desktop icons: 7 games plus apps');
+        await page.focus('#tb-start'); await key('Enter');
+        check(await page.evaluate(() => Desktop.startOpen() && document.querySelectorAll('#start-pinned [data-focus]').length === 13), 'Start menu lists 6 apps and 7 games');
+        await key('Escape');
+        check(await page.evaluate(() => !Desktop.startOpen() && document.activeElement.id === 'tb-start'), 'Back closes Start');
+        // calculator from the taskbar, with the remote
+        await page.focus('#tb-calculator'); await key('Enter');
+        check(await page.evaluate(() => !document.getElementById('window').hidden && document.getElementById('desktop').hidden), 'an app opens full screen and the desktop is hidden');
+        check(await page.evaluate(() => [...document.querySelectorAll('#desktop img')].every((i) => !i.getAttribute('src'))), 'desktop covers are released while an app runs');
+        await key('Enter', 'ArrowRight', 'Enter', 'ArrowDown', 'ArrowRight', 'Enter', 'ArrowDown', 'ArrowDown', 'Enter');   // 5, 6, +, =
+        check(await page.textContent('.calc-disp') === '112', 'calculator with the remote: 56 + 56 = ' + await page.textContent('.calc-disp'));
+        await page.keyboard.type('7*6=');
+        check(await page.textContent('.calc-disp') === '42', 'calculator with a PC keyboard: 7*6 = 42');
+        await key('Escape');
+        check(await page.evaluate(() => document.getElementById('window').hidden && document.getElementById('win-body').childNodes.length === 0 && document.activeElement.id === 'tb-calculator'), 'Back closes the app, frees its content and refocuses the taskbar button');
+        // calendar: today, add a note with the on-screen keyboard
+        await page.evaluate(() => Win.open('calendar'));
+        check(await page.evaluate(() => document.activeElement.className.indexOf('cal-today') >= 0), 'calendar opens on today');
+        await key('Enter');
+        await page.keyboard.type('match');
+        await page.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
+        const notes = await page.evaluate(() => Store.get('cal_notes', {}));
+        check(Object.keys(notes).length === 1 && Object.values(notes)[0][0] === 'Match' && await page.evaluate(() => !!document.querySelector('.cal-today .cal-dot')), 'a note is saved on the day and marked');
+        await key('Escape');
+        // settings with the remote: background
+        await page.evaluate(() => Win.open('settings'));
+        await key('ArrowDown', 'ArrowRight', 'ArrowRight', 'Enter');
+        check(await page.evaluate(() => Store.get('wallpaper') === 'aurora' && document.getElementById('wallpaper').className.indexOf('wp-aurora') >= 0), 'Settings > Personalization changes the background');
+        await key('Escape', 'ArrowDown', 'ArrowDown', 'ArrowRight', 'ArrowLeft');
+        check(await page.evaluate(() => AudioPrefs.music()) === 6, 'Settings > Sound: left lowers the music volume');
+        await key('Escape', 'Escape');
+        // explorer: Games folder starts a game; quitting comes back to the desktop
+        await page.evaluate(() => Win.open('explorer', 'games'));
+        await key('Enter');
+        await page.waitForFunction(() => window.GameHost.state() === 'running', null, { timeout: 8000 });
+        check(await page.evaluate(() => document.getElementById('window').hidden && Win.current() === null), 'opening a game from File Explorer closes the app first');
+        await key('Escape');
+        await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
+        await page.waitForFunction(() => window.GameHost.state() === 'idle');
+        check(await page.evaluate(() => !document.getElementById('desktop').hidden && document.activeElement.getAttribute('data-game') === 'jumper'), 'quitting the game returns to the desktop');
+        // browser: the page iframe is gone after closing
+        await page.evaluate(() => Win.open('browser'));
+        await key('Enter'); await page.keyboard.type('example.com');
+        await page.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
+        check(await page.evaluate(() => document.querySelectorAll('.br-frame').length === 1 && document.activeElement.className.indexOf('br-view') >= 0), 'browser loads the address and focuses the page');
+        await key('Escape', 'Escape');
+        check(await page.evaluate(() => document.querySelectorAll('iframe').length === 0 && document.getElementById('window').hidden), 'closing the browser removes its page');
+        // open/close every app 5 times: nothing left behind
+        for (let i = 0; i < 5; i++) for (const a of ['explorer', 'browser', 'calculator', 'calendar', 'settings', 'scores']) { await page.evaluate((x) => Win.open(x), a); await page.evaluate(() => Win.close()); }
+        check(await page.evaluate(() => document.getElementById('win-body').childNodes.length === 0 && document.querySelectorAll('iframe').length === 0 && !document.getElementById('desktop').hidden), 'apps opened and closed 30 times leave nothing behind');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }

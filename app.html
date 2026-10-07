@@ -1,27 +1,43 @@
 <!-- Launcher markup. Injected into <body> by js/boot/loader.js (bundled package or hosted copy). -->
 <div id="stage" class="stage">
 
-    <!-- Main menu -->
-    <main id="menu" class="screen menu" aria-labelledby="menu-title">
-        <header class="menu-head">
-            <div class="head-left">
-                <h1 id="menu-title" class="logo" data-i18n="appTitle">Arcade</h1>
-                <span id="app-version" class="version"></span>
+    <!-- Desktop: wallpaper, icons, taskbar and Start menu (js/launcher/desktop.js) -->
+    <main id="desktop" class="desktop" aria-labelledby="desk-title">
+        <div id="wallpaper" class="wp"></div>
+        <h1 id="desk-title" class="sr-only" data-i18n="appTitle">Arcade</h1>
+        <div id="desk-icons" class="desk-icons" role="list"></div>
+
+        <div id="start" class="start" role="dialog" aria-modal="true" aria-labelledby="start-title" hidden>
+            <h2 id="start-title" class="start-h" data-i18n="pinned">Pinned</h2>
+            <div id="start-pinned" class="start-grid" role="list"></div>
+            <h2 class="start-h" data-i18n="recommended">Recommended</h2>
+            <div id="start-recent" class="start-recent"></div>
+            <div class="start-foot">
+                <button id="btn-profile" class="start-user" data-focus><span id="profile-avatar" class="avatar" aria-hidden="true"></span><span id="profile-name"></span></button>
+                <button id="btn-power" class="start-power" data-focus data-i18n-aria-label="power"></button>
             </div>
-            <div class="head-right">
-                <span id="input-indicator" class="chip" role="status"></span>
-                <button id="btn-profile" class="btn btn-profile" data-focus><span id="profile-avatar" class="avatar" aria-hidden="true"></span><span id="profile-name"></span></button>
-                <button id="btn-scores" class="btn" data-focus data-i18n="scores">Top scores</button>
-                <button id="btn-settings" class="btn" data-focus data-i18n="settings">Settings</button>
+        </div>
+
+        <footer id="taskbar" class="taskbar">
+            <div id="tb-apps" class="tb-apps"></div>
+            <div class="tray">
+                <span id="input-indicator" class="tray-ic" role="status"></span>
+                <span id="tray-net" class="tray-ic" aria-hidden="true"></span>
+                <span id="tray-vol" class="tray-ic" aria-hidden="true"></span>
+                <button id="tray-clock" class="tray-clock" data-focus><span id="tray-time"></span><span id="tray-date"></span></button>
+                <span id="app-version" class="tray-ver"></span>
             </div>
-        </header>
-        <div id="game-grid" class="grid" role="list"></div>
+        </footer>
     </main>
 
-    <!-- Settings -->
-    <section id="settings" class="screen settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
-        <h2 id="settings-title" class="screen-title" data-i18n="settings">Settings</h2>
-        <div id="settings-list" class="settings-list"></div>
+    <!-- One app at a time, full screen; its content is destroyed when it closes (js/launcher/window.js) -->
+    <section id="window" class="window" role="dialog" aria-modal="true" aria-labelledby="win-title" data-scroll="y" hidden>
+        <div class="win-bar">
+            <span id="win-icon" class="win-icon" aria-hidden="true"></span>
+            <h2 id="win-title" class="win-title"></h2>
+            <button id="win-close" class="win-close" data-focus data-i18n-aria-label="close"></button>
+        </div>
+        <div id="win-body" class="win-body"></div>
     </section>
 
     <!-- Player profiles: switch, create, rename, delete -->
@@ -37,7 +53,7 @@
         </div>
     </section>
 
-    <!-- Name entry with an on-screen keyboard (works with the remote; a PC keyboard can type too) -->
+    <!-- On-screen keyboard (works with the remote; a PC keyboard can type too) -->
     <div id="namer" class="backdrop namer" hidden>
         <div class="dialog namer-box" role="dialog" aria-modal="true" aria-labelledby="namer-title">
             <h2 id="namer-title" class="dialog-title"></h2>
@@ -45,20 +61,6 @@
             <div id="namer-keys" class="namer-keys"></div>
         </div>
     </div>
-
-    <!-- Top-10 tables of every game -->
-    <section id="scores" class="screen scores" role="dialog" aria-modal="true" aria-labelledby="scores-title" hidden>
-        <h2 id="scores-title" class="screen-title" data-i18n="scores">Top scores</h2>
-        <div id="scores-grid" class="scores-grid"></div>
-        <button id="scores-close" class="btn btn-primary" data-focus data-i18n="close">Close</button>
-    </section>
-
-    <!-- Text pages: controller help, privacy policy, about -->
-    <section id="page" class="screen page" role="dialog" aria-modal="true" aria-labelledby="page-title" hidden>
-        <h2 id="page-title" class="screen-title"></h2>
-        <div id="page-body" class="page-body"></div>
-        <button id="page-close" class="btn btn-primary" data-focus data-i18n="close">Close</button>
-    </section>
 
     <!-- Game layer: one game at a time, in an iframe created by js/launcher/game-host.js -->
     <section id="game-layer" class="game-layer" tabindex="-1" hidden>

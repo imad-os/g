@@ -1,6 +1,6 @@
 {
-  "build": 4,
-  "version": "1.3.0",
+  "build": 5,
+  "version": "2.0.0",
   "shell": 1,
   "css": [
     "css/launcher.css"
@@ -14,7 +14,16 @@
     "js/core/perf.js",
     "js/core/input.js",
     "js/core/focus.js",
-    "js/launcher/menu.js",
+    "js/launcher/icons.js",
+    "js/launcher/keyboard.js",
+    "js/launcher/desktop.js",
+    "js/launcher/window.js",
+    "js/launcher/apps/settings.js",
+    "js/launcher/apps/explorer.js",
+    "js/launcher/apps/browser.js",
+    "js/launcher/apps/calculator.js",
+    "js/launcher/apps/calendar.js",
+    "js/launcher/apps/scores.js",
     "js/launcher/profiles-ui.js",
     "js/launcher/game-host.js",
     "js/launcher/main.js"

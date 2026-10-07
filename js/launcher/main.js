@@ -79,10 +79,7 @@ var App = (function () {
         try { window.close(); } catch (e2) {}
     }
 
-    function updateIndicator() {
-        var d = Input.device();
-        $('input-indicator').textContent = I18n.t(d === 'pad' ? 'inputPad' : d === 'keyboard' ? 'inputKeys' : 'inputRemote');
-    }
+    function updateIndicator() { if (window.Desktop) Desktop.updateTray(); }
 
     /* ---------- router ---------- */
     function route(action, pressed, repeat, dev) {
@@ -100,32 +97,12 @@ var App = (function () {
 
         if (action === 'padLost') { toast(I18n.t('padOff').split('.')[0]); return; }
         if (!pressed) return;
-        var isBack = (action === 'back' || action === 'cancel') && !repeat;
 
-        if (ProfilesUI.namerOpen()) return ProfilesUI.namerAction(action, repeat);
+        // top to bottom: keyboard over everything, profiles overlay, the open app, the desktop
+        if (Keyboard.isOpen()) return Keyboard.action(action, repeat);
         if (ProfilesUI.screenOpen()) return ProfilesUI.screenAction(action, repeat);
-        if (!$('page').hidden) {
-            if (isBack) Menu.closePage();
-            else if (action === 'confirm' && !repeat) Menu.confirmFocused();
-            return;
-        }
-        if (!$('scores').hidden) {
-            if (isBack) Menu.closeScores();
-            else if (action === 'left' || action === 'right' || action === 'up' || action === 'down') Focus.move(action);
-            else if (action === 'confirm' && !repeat) Menu.confirmFocused();
-            return;
-        }
-        if (!$('settings').hidden) {
-            if (isBack) Menu.closeSettings();
-            else if (action === 'up' || action === 'down') Focus.move(action);
-            else if (action === 'left' || action === 'right') Menu.settingsAdjust(action);
-            else if (action === 'confirm' && !repeat) Menu.confirmFocused();
-            return;
-        }
-        // main menu
-        if (isBack) confirm(I18n.t('exitTitle'), I18n.t('exitText'), exitApp);
-        else if (action === 'left' || action === 'right' || action === 'up' || action === 'down') Focus.move(action);
-        else if (action === 'confirm' && !repeat) Menu.confirmFocused();
+        if (Win.isOpen()) return Win.action(action, repeat);
+        Desktop.action(action, repeat);
     }
 
     /* ---------- game list from the active app manifest ---------- */
@@ -172,17 +149,17 @@ var App = (function () {
     }
 
     function onGameExit(id) {
-        Menu.show();
-        var tile = Menu.tileFor(id);
-        if (tile) Focus.focus(tile);
+        Desktop.show(Desktop.tileFor(id));
     }
 
     function play(g) {
         if (benchCancel) { benchCancel(); benchCancel = null; }
-        Menu.hide();
-        Menu.releaseImages();
+        Desktop.hide();
+        Desktop.releaseImages();
         GameHost.launch(g, onGameExit);
     }
+
+    function profileChanged() { Desktop.profileChanged(); Win.refresh(); }
 
     function start() {
         fit();
@@ -196,6 +173,7 @@ var App = (function () {
         updateIndicator();
         showVersion();
         GameHost.init();
+        Win.init();
         watchNetwork();
         $('dialog-yes').onclick = function () { var cb = dialogYes; closeDialog(); if (cb) cb(); };
         $('dialog-no').onclick = closeDialog;
@@ -209,9 +187,9 @@ var App = (function () {
         });
 
         loadGames(function (games) {
-            Menu.init(games, play);
-            ProfilesUI.init(Menu.profileChanged);
-            Menu.show();
+            Desktop.init(games, play);
+            ProfilesUI.init(profileChanged);
+            Desktop.show();
             I18n.apply();
             AppBoot.ready();
             // One-time device benchmark while the menu is idle.
@@ -221,16 +199,16 @@ var App = (function () {
         });
     }
 
-    // re-applies texts that are not data-i18n driven (called after a language change)
     // Version on the home screen, so it is easy to see that an online update arrived
     // (the hosted copy is picked up on the next start, no new package needed).
     function showVersion() {
         $('app-version').textContent = 'v' + AppBoot.version() + ' (' + I18n.t('build') + ' ' + AppBoot.build() + ')';
     }
 
-    function refresh() { updateIndicator(); ProfilesUI.renderButton(); showVersion(); }
+    // after a language change: everything that is not data-i18n driven
+    function refresh() { Desktop.render(); ProfilesUI.renderButton(); showVersion(); Desktop.tick(); }
 
-    return { start: start, confirm: confirm, toast: toast, refresh: refresh };
+    return { start: start, confirm: confirm, toast: toast, refresh: refresh, exitApp: exitApp };
 })();
 
 App.start();

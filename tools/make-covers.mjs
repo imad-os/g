@@ -42,7 +42,7 @@ const browser = await chromium.launch({ executablePath: CHROMIUM, args: ['--auto
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
 await page.route('**/imad-os.github.io/**', (r) => r.abort());
 await page.goto(BASE + 'index.html');
-await page.waitForSelector('.tile');
+await page.waitForSelector('.dicon');
 const G = 'document.querySelector("iframe").contentWindow';
 for (const id of Object.keys(SCRIPTS)) {
     if (ONLY.length && ONLY.indexOf(id) < 0) continue;

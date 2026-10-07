@@ -23,7 +23,24 @@ changes the letter, Left/Right moves, OK saves. The last initials are remembered
 button on the main menu shows the tables (Parchís has a winner, not points, so it has none). Voice Guide reads each table. *Reset progress* clears
 them. Games report scores with `host.submitScore(score, { player, players })`.
 
-**Profiles:** the profile button at the top of the home screen opens the Profiles screen. There you
+**Desktop (v2):** the launcher looks like a dark Windows 11 style PC.
+- **Desktop:** wallpaper (4 CSS backgrounds, no image files), icons for the games and apps, and a
+  taskbar with Start, pinned apps, input device / network / volume icons and a clock. The clock
+  ticks once a minute and only while the desktop is on screen.
+- **Start menu:** every app and game, a recommended game, the profile button and Exit.
+- **Apps** (`js/launcher/apps/`): File Explorer (Home, This PC, Desktop, Games, Apps, Pictures,
+  Documents), Browser, Calculator, Calendar (notes per day), Settings (System, Personalization,
+  Accounts, Sound, Time & language, Gaming, Privacy & security, About) and Leaderboards.
+- **Full screen, one at a time:** `js/launcher/window.js` hides the desktop (releasing the game
+  covers and stopping the clock) and destroys the app's content, timers and iframe when it closes.
+  Games still run in their own iframe and are freed on exit.
+- **Remote:** arrows move, OK opens, Back goes back (up a folder, back a page, then closes the app),
+  Back on the desktop asks to exit. A PC keyboard types into the calculator and on-screen keyboard;
+  the Windows key opens Start.
+- **Browser:** pages load in one sandboxed iframe; Up/Down scroll it. Some websites refuse to be
+  shown inside another app (X-Frame-Options) and stay blank.
+
+**Profiles:** the profile button in the Start menu (or Settings > Accounts) opens the Profiles screen. There you
 can switch profile, create one (name typed with an on-screen keyboard; a PC keyboard can type too),
 rename it or delete it. Each profile has its own saves, top scores and last played game. Language,
 volumes and graphics are shared by the whole TV. Storage keys are `arc_<profile>_<key>` and

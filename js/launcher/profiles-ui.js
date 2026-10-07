@@ -3,8 +3,7 @@
 var ProfilesUI = (function () {
     'use strict';
 
-    var KEYS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'.split('');
-    var namerCb = null, namerText = '', onChange = null;
+    var onChange = null;
 
     function $(id) { return document.getElementById(id); }
     function el(tag, cls, text) {
@@ -55,8 +54,8 @@ var ProfilesUI = (function () {
         return target;
     }
 
+    // an overlay over the desktop or the Settings app; closing it returns focus where it was
     function open() {
-        $('menu').hidden = true;
         $('profiles').hidden = false;
         I18n.apply($('profiles'));
         Focus.push($('profiles'), renderList());
@@ -64,10 +63,8 @@ var ProfilesUI = (function () {
 
     function close() {
         $('profiles').hidden = true;
-        $('menu').hidden = false;
         Focus.pop();
         renderButton();
-        Focus.set($('menu'), $('btn-profile'));
     }
 
     function changed() { renderButton(); if (onChange) onChange(); }
@@ -118,87 +115,12 @@ var ProfilesUI = (function () {
         });
     }
 
-    /* ---------------- on-screen keyboard ---------------- */
-
-    function drawNamer() {
-        $('namer-text').textContent = namerText || ' ';
-        $('namer-text').className = 'namer-text' + (namerText ? '' : ' namer-empty');
-    }
-
     function openNamer(title, text, cb) {
-        namerCb = cb;
-        namerText = text || '';
-        $('namer-title').textContent = title;
-        var box = $('namer-keys');
-        box.innerHTML = '';
-        function key(label, cls, fn, aria) {
-            var b = el('button', 'btn key' + (cls ? ' ' + cls : ''), label);
-            b.setAttribute('data-focus', '');
-            if (aria) b.setAttribute('aria-label', aria);
-            b.onclick = fn;
-            box.appendChild(b);
-            return b;
-        }
-        for (var i = 0; i < KEYS.length; i++) key(KEYS[i], '', (function (c) { return function () { type(c); }; })(KEYS[i]));
-        key(I18n.t('space'), 'key-wide', function () { type(' '); });
-        key('⌫', 'key-wide', erase, I18n.t('erase'));
-        key(I18n.t('cancel'), 'key-wide', closeNamer);
-        key(I18n.t('save'), 'key-wide btn-primary', submit);
-        drawNamer();
-        $('namer').hidden = false;
-        Focus.push($('namer'), box.firstChild);
-        A11y.announce(title + '. ' + I18n.t('namerHint'));
-    }
-
-    function type(c) {
-        if (namerText.length >= Profiles.NAME_MAX) return;
-        // Capitalise like a name: first letter of each word upper, the rest lower.
-        var prev = namerText.charAt(namerText.length - 1);
-        if (c !== ' ') c = !namerText || prev === ' ' ? c.toUpperCase() : c.toLowerCase();
-        else if (!namerText || prev === ' ') return;
-        namerText += c;
-        drawNamer();
-        A11y.announce(c === ' ' ? I18n.t('space') : c);
-    }
-    function erase() { namerText = namerText.slice(0, -1); drawNamer(); A11y.announce(namerText || I18n.t('erase')); }
-
-    function submit() {
-        var name = namerText.replace(/^\s+|\s+$/g, '');
-        if (!name) { A11y.announce(I18n.t('namerHint')); return; }
-        var cb = namerCb;
-        closeNamer();
-        if (cb) cb(name);
-    }
-
-    function closeNamer() {
-        $('namer').hidden = true;
-        namerCb = null;
-        Focus.pop();
-    }
-
-    // A PC keyboard types directly (letters/digits/space/backspace/enter) while the keyboard is open.
-    // Window capture phase, so these keys never reach the menu input mapping (W A S D, Z, X...).
-    function onRawKey(e) {
-        if ($('namer').hidden) return;
-        var k = e.keyCode;
-        if ((k >= 65 && k <= 90) || (k >= 48 && k <= 57) || k === 32 || k === 8) {
-            e.preventDefault();
-            e.stopPropagation();
-            if (e.type !== 'keydown') return;
-            if (k === 8) erase();
-            else if (k === 32) type(' ');
-            else type(String.fromCharCode(k));
-        }
+        Keyboard.open({ title: title, text: text, max: Profiles.NAME_MAX, mode: 'name' }, cb);
     }
 
     // router hooks (main.js)
-    function namerOpen() { return !$('namer').hidden; }
     function screenOpen() { return !$('profiles').hidden; }
-    function namerAction(action, repeat) {
-        if (action === 'left' || action === 'right' || action === 'up' || action === 'down') Focus.move(action);
-        else if (action === 'confirm' && !repeat) { var c = Focus.current(); if (c) c.click(); }
-        else if ((action === 'back' || action === 'cancel') && !repeat) closeNamer();
-    }
     function screenAction(action, repeat) {
         if ((action === 'back' || action === 'cancel') && !repeat) close();
         else if (action === 'left' || action === 'right' || action === 'up' || action === 'down') Focus.move(action);
@@ -212,13 +134,11 @@ var ProfilesUI = (function () {
         $('profile-rename').onclick = rename;
         $('profile-delete').onclick = del;
         $('profiles-close').onclick = close;
-        window.addEventListener('keydown', onRawKey, true);
-        window.addEventListener('keyup', onRawKey, true);
         renderButton();
     }
 
     return {
         init: init, open: open, close: close, renderButton: renderButton,
-        namerOpen: namerOpen, screenOpen: screenOpen, namerAction: namerAction, screenAction: screenAction
+        screenOpen: screenOpen, screenAction: screenAction, nameOf: nameOf, avatar: avatar
     };
 })();
