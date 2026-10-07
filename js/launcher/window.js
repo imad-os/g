@@ -33,7 +33,15 @@ var Win = (function () {
         body.className = 'win-body app-' + id;
         $('window').hidden = false;
         var first = null;
-        try { first = def.open(body, arg); } catch (e) { try { console.warn('[Win] ' + id + ': ' + e); } catch (e2) {} }
+        try { first = def.open(body, arg); } catch (e) {
+            try { console.warn('[Win] ' + id + ': ' + e); } catch (e2) {}
+            // never a silent failure: show what went wrong (Back or the close button still work)
+            var msg = document.createElement('div');
+            msg.className = 'win-error';
+            msg.style.cssText = 'padding:40px;font-size:26px;color:#fff;white-space:pre-wrap';
+            msg.textContent = I18n.t(id) + ': ' + (e && e.message ? e.message : e);
+            body.appendChild(msg);
+        }
         I18n.apply($('window'));
         Focus.reset();
         Focus.set($('window'), first || $('win-close'));

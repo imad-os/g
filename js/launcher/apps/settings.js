@@ -235,7 +235,7 @@
         var lbl = '';
         for (var i = 0; i < PAGES.length; i++) if (PAGES[i].id === page) lbl = t(PAGES[i].label);
         main.appendChild(el('h3', 'set-title', lbl));
-        rows = rowsFor(page);
+        try { rows = rowsFor(page); } catch (e) { rows = [{ kind: 'text', value: String(e && e.message || e) }]; }   // a broken row never blocks the page
         var target = null;
         for (i = 0; i < rows.length; i++) {
             var r = rows[i], b;

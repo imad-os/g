@@ -1167,6 +1167,9 @@ async function main() {
         check(first && first.svg && first.dots === 5 && first.img === 0 && first.bg === 'rgb(0, 0, 0)', 'black splash with inline logo, 5 orbit dots and no image to decode');
         await page.waitForFunction(() => !document.getElementById('boot-splash'), null, { timeout: 20000 });
         check(true, 'splash removed after the desktop is ready');
+        await page.evaluate(() => { Win.register('boom', { icon: 'settings', title: function () { return 'Boom'; }, open: function () { throw new Error('kaput'); }, close: function () {} }); Win.open('boom'); });
+        check(await page.evaluate(() => !document.getElementById('window').hidden && /kaput/.test(document.getElementById('win-body').textContent)), 'an app that fails to open shows the error instead of nothing');
+        await page.evaluate(() => Win.close());
         await page.goto(base + 'index.html?play=jumper', { waitUntil: 'commit' });
         check(await page.evaluate(() => document.documentElement.classList.contains('warm')), 'opening a game uses the plain black screen (warm)');
         await page.context().close();
