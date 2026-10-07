@@ -53,7 +53,7 @@ var GameHost = (function () {
             announce: function (text) { A11y.announce(text); },
             save: function (k, v) { return Store.set('game_' + id + '_' + k, v); },
             load: function (k, def) { return Store.get('game_' + id + '_' + k, def); },
-            progress: function (p) { $('game-loading-fill').style.width = Math.round(Math.max(0, Math.min(1, p)) * 100) + '%'; },
+            progress: function (p) { setProgress(p); },
             loaded: onLoaded,
             failed: function (msg) { fail(msg || 'game reported failure'); },
             pause: function () { openPause(); },
@@ -78,9 +78,33 @@ var GameHost = (function () {
 
     /* ---------- loading ---------- */
 
+    function setProgress(p) {
+        var pct = Math.round(Math.max(0, Math.min(1, p)) * 100);
+        $('game-loading-fill').style.width = pct + '%';
+        $('game-loading-bar').setAttribute('aria-valuenow', String(pct));
+    }
+
+    // the app's icon on the start screen (a game's cover or an installed app's icon); freed once it is open
+    function showIcon() {
+        var box = $('game-loading-icon');
+        box.innerHTML = '';
+        if (game.icon) {
+            var img = document.createElement('img');
+            img.alt = '';
+            img.onerror = function () { box.innerHTML = Icons.svg('game'); };
+            img.src = game.icon;
+            box.appendChild(img);
+        } else box.innerHTML = Icons.svg('game');
+    }
+    function hideLoading() {
+        $('game-loading').hidden = true;
+        $('game-loading-icon').innerHTML = '';
+    }
+
     function showLoading() {
         $('game-loading-title').textContent = title();
-        $('game-loading-fill').style.width = '0%';
+        setProgress(0);
+        showIcon();
         $('game-loading').hidden = false;
         $('game-error').hidden = true;
         $('pause').hidden = true;
@@ -112,7 +136,7 @@ var GameHost = (function () {
                         config: game.remote.config || {}
                     });
                     break;
-                case 'progress': if (state === 'loading') $('game-loading-fill').style.width = Math.round(Math.max(0, Math.min(1, +d.p || 0)) * 100) + '%'; break;
+                case 'progress': if (state === 'loading') setProgress(+d.p || 0); break;
                 case 'ready': onLoaded(); break;
                 case 'failed': fail('app: ' + d.reason); break;
                 case 'menu':
@@ -218,7 +242,7 @@ var GameHost = (function () {
     function onLoaded() {
         if (state !== 'loading') return;
         clearTimeout(loadTimer);
-        $('game-loading').hidden = true;
+        hideLoading();
         state = 'running';
         Input.setExternalPoll(!game.remote);    // an installed app cannot poll: the launcher reads the pads
         screenSaver(false);     // the game polls gamepads at the start of each frame
@@ -241,7 +265,7 @@ var GameHost = (function () {
             return load();
         }
         state = 'error';
-        $('game-loading').hidden = true;
+        hideLoading();
         $('game-error').hidden = false;
         A11y.announce(I18n.t('loadError'));
         Focus.push($('game-error'), $('game-error-retry'));
@@ -337,7 +361,7 @@ var GameHost = (function () {
         $('entry').hidden = true;
         $('pause').hidden = true;
         $('game-error').hidden = true;
-        $('game-loading').hidden = true;
+        hideLoading();
         $('game-layer').hidden = true;
         var id = game && game.id;
         game = null;
@@ -346,7 +370,8 @@ var GameHost = (function () {
 
     function launch(g, onExit) {
         if (state !== 'idle') return;
-        game = { id: g.id, manifest: g.manifest, bundledBase: g.bundledBase, bundledManifest: g.bundledManifest, remote: g.remote || null };
+        game = { id: g.id, manifest: g.manifest, bundledBase: g.bundledBase, bundledManifest: g.bundledManifest, remote: g.remote || null,
+                 icon: g.iconUrl || (g.manifest ? (g.base || '') + 'games/' + g.id + '/' + (g.manifest.cover || 'cover.png') : '') };
         base = g.base;
         triedBundled = base === g.bundledBase;
         onExitCb = onExit;
@@ -461,6 +486,7 @@ var GameHost = (function () {
     }
 
     function init() {
+        Icons.put($('game-loading-logo'), 'start');
         $('game-error-retry').onclick = retry;
         $('game-error-back').onclick = function () { Focus.pop(); exit(); };
         $('entry-ok').onclick = saveEntry;

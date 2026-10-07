@@ -66,18 +66,24 @@
     <section id="game-layer" class="game-layer" tabindex="-1" hidden>
         <div id="game-frame-box" class="game-frame-box"></div>
 
+        <!-- App start screen (Windows style): icon, name, thin progress bar, status -->
         <div id="game-loading" class="game-loading" hidden>
-            <div id="game-loading-title" class="loading-title"></div>
-            <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" data-i18n-aria-label="loading">
-                <div id="game-loading-fill" class="bar-fill"></div>
+            <div class="gl-center">
+                <div id="game-loading-icon" class="gl-icon" aria-hidden="true"></div>
+                <div id="game-loading-title" class="gl-title"></div>
+                <div id="game-loading-bar" class="gl-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-i18n-aria-label="loading">
+                    <div id="game-loading-fill" class="bar-fill"></div>
+                </div>
+                <div class="gl-status"><span class="gl-ring" aria-hidden="true"></span><span data-i18n="loadingStatus">Getting things ready…</span></div>
             </div>
+            <div class="gl-brand" aria-hidden="true"><span id="game-loading-logo" class="gl-logo"></span>My PC</div>
         </div>
 
         <div id="game-error" class="dialog" role="dialog" aria-modal="true" aria-labelledby="game-error-text" hidden>
-            <p id="game-error-text" class="dialog-text" data-i18n="loadError">The game could not be loaded.</p>
+            <p id="game-error-text" class="dialog-text" data-i18n="loadError">This app can't open right now.</p>
             <div class="dialog-buttons">
                 <button id="game-error-retry" class="btn btn-primary" data-focus data-i18n="retry">Retry</button>
-                <button id="game-error-back" class="btn" data-focus data-i18n="backToMenu">Back to menu</button>
+                <button id="game-error-back" class="btn" data-focus data-i18n="backToMenu">Close</button>
             </div>
         </div>
 

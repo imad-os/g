@@ -683,8 +683,10 @@ async function main() {
         await routeHosted(page, { offline: true });
         // the SDK and the example app, served from "other websites"
         await page.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
-        await page.context().route(APP + '**', (r) => {
+        let slowOnce = true;
+        await page.context().route(APP + '**', async (r) => {
             const rel = r.request().url().slice(APP.length).split('?')[0] || 'index.html';
+            if (rel === 'index.html' && slowOnce) { slowOnce = false; await new Promise((x) => setTimeout(x, 900)); }   // keeps the start screen up for the test
             const p = path.join(ROOT, 'sdk/example', rel);
             if (!fs.existsSync(p)) return r.fulfill({ status: 404, body: '' });
             r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || (p.endsWith('.svg') ? 'image/svg+xml' : 'text/plain'), headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(p) });
@@ -712,7 +714,12 @@ async function main() {
         const shown = await page.waitForSelector(icon, { timeout: 8000 }).then(() => true, () => false);
         check(shown && await page.evaluate(() => !document.querySelector('[data-game="app-hidden-one"]')), 'the installed app from Firebase appears on the desktop (hidden ones do not)');
         await page.focus(icon); await page.keyboard.press('Enter');
+        await page.waitForSelector('#game-loading:not([hidden]) .gl-icon img', { timeout: 8000 });
+        check(await page.evaluate(() => document.getElementById('game-loading-title').textContent === 'Star Catcher' && /icon\.svg$/.test(document.querySelector('.gl-icon img').src) &&
+            /Getting things ready/.test(document.querySelector('.gl-status').textContent) && document.getElementById('game-loading-bar').getAttribute('aria-label') === 'Opening'),
+            'the start screen shows the app icon and name, with PC-style texts ("Opening", "Getting things ready…")');
         const ran = await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 10000 }).then(() => true, () => false);
+        check(await page.evaluate(() => document.getElementById('game-loading').hidden && document.querySelector('.gl-icon').childNodes.length === 0), 'once the app is open, the start screen is hidden and its icon is freed');
         const fr = await page.evaluate(() => { const f = document.querySelector('iframe'); return f && { src: f.src, sandbox: f.getAttribute('sandbox') }; });
         check(ran && fr && fr.src.indexOf(APP) === 0 && fr.sandbox === 'allow-scripts allow-same-origin allow-pointer-lock', 'it opens full screen in a sandboxed iframe on its own origin, and reports ready through the SDK');
         const frame = page.frames().find((f) => f.url().indexOf(APP) === 0);
