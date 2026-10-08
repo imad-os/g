@@ -29,6 +29,7 @@
   (`apps/*.js`: settings, explorer, browser, calculator, calendar, scores), on-screen keyboard,
   profiles, `game-host.js` (bundled games in a same-origin iframe; installed apps in a sandboxed
   cross-origin iframe through the SDK protocol), `main.js` (router: the only place handling Back).
+- **Profiles are users:** every profile has its own settings (language, clock, background, volumes, graphics, saves: `arc_<profile>_*`); only hardware facts and the top-10 records are TV-wide (`arc_dev_*`). Switching profile goes through `js/launcher/welcome.js` (sign-in screen, then the app restarts as that profile). Records are saved automatically under the profile name (no initials screen). `Welcome.afterBoot()` also shows "My PC is up to date" once per new build.
 - `js/core/`: storage (per-profile keys `arc_<profile>_*`, TV-wide `arc_dev_*`), i18n (en, fr,
   es, ar + RTL), input, focus, perf, scores, `cloud.js` (installed apps from Firestore REST).
 - `games/`: built-in games on `games/shared/gamekit.js`.

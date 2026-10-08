@@ -1,6 +1,6 @@
 {
-  "build": 15,
-  "version": "2.7.1",
+  "build": 16,
+  "version": "2.8.0",
   "shell": 1,
   "css": [
     "css/launcher.css"
@@ -27,6 +27,7 @@
     "js/launcher/apps/calendar.js",
     "js/launcher/apps/scores.js",
     "js/launcher/profiles-ui.js",
+    "js/launcher/welcome.js",
     "js/launcher/game-host.js",
     "js/launcher/main.js"
   ],

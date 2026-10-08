@@ -11,7 +11,7 @@
 //   5. launch/exit x20: no leaked iframes, JS heap back to baseline +-10%
 //   6. destroy() closes the AudioContext, stops the rAF loop; Back opens pause; Back on menu asks to exit
 //   7. Super Jumper: every stage loads and can be finished
-//   8. top-10 tables: a qualifying score asks for initials and appears on the Scores screen
+//   8. top-10 tables: a qualifying score is saved under the profile's name and appears on the Scores screen
 //  10. network loss shows a popup (Samsung checklist), reconnecting shows another; favicon served
 //   9. Super Jumper 2-player co-op: arrows + WASD, and two gamepads, each drive only their own hero
 //  11. Super Jumper controls: stable ground contact, Down ducks, steering and momentum in the air
@@ -28,6 +28,7 @@
 //  21. Browser: focus theft, Guide, Channel / Page keys, wheel, remote and mouse modes
 //  22. Tab, wheel, Guide, device detection, Settings > Devices with a simulated controller
 //  24. Super Jumper stages: different layouts and hills
+//  25. Profiles: own settings (language, clock, background), switch-user screen, update message, shared records
 //  23. Boot screen: black, inline logo, orbit dots, fades out; no logo when opening a game
 //
 //  CHROMIUM_PATH=/path/to/chrome uses an existing Chromium instead of Playwright's download.
@@ -108,8 +109,8 @@ async function playable(page, id = 'blocks') {
     await page.waitForTimeout(100);
     const paused = await page.evaluate(() => window.GameHost.state());
     await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
-    await page.waitForTimeout(100);
-    return running && paused === 'paused' && (await page.evaluate(() => window.GameHost.state())) === 'idle';
+    const idle = await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle', null, { timeout: 15000 }).then(() => true, () => false);   // the desktop page loads again
+    return running && paused === 'paused' && idle;
 }
 
 async function main() {
@@ -260,16 +261,13 @@ async function main() {
         const scores = [500, 900, 100];
         for (const sc of scores) {
             await page.evaluate((v) => document.querySelector('iframe').contentWindow.GameAPI._gk.submitScore(v), sc);
-            await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'entry');
-            await page.keyboard.press('ArrowUp');                     // A -> B on the first letter
-            await page.focus('#entry-ok'); await page.keyboard.press('Enter');
-            await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running');
+            await page.waitForFunction((n) => Scores.list('snake').length >= n, scores.indexOf(sc) + 1);
         }
         await page.evaluate(() => document.querySelector('iframe').contentWindow.GameAPI._gk.submitScore(0));
-        check(await page.evaluate(() => window.GameHost.state()) === 'running', 'a zero score does not ask for initials');
+        check(await page.evaluate(() => window.GameHost.state()) === 'running', 'a zero score is not recorded and nothing pops up');
         const list = await page.evaluate(() => Scores.list('snake'));
         check(list.length === 3 && list[0].s === 900 && list[2].s === 100, 'table sorted best first: ' + list.map((e) => e.n + ' ' + e.s).join(', '));
-        check(list[1].n === 'BAA' && list[0].n === 'CAA', 'initials entered with the remote are saved and remembered for next time (' + list[1].n + ', ' + list[0].n + ')');
+        check(list.every((e) => e.n === 'Player 1' && e.p === 'p1') && !(await page.evaluate(() => !!document.getElementById('entry'))), 'records are saved automatically under the profile name, no initials screen (' + list.map((e) => e.n).join(', ') + ')');
         for (let i = 0; i < 12; i++) await page.evaluate((v) => Scores.add('snake', 'ZZZ', v), 1000 + i);
         check(await page.evaluate(() => Scores.list('snake').length) === 10, 'table keeps only the top 10');
         await page.keyboard.press('Escape');
@@ -338,14 +336,9 @@ async function main() {
         await page.evaluate(G + '.JumperCheat.setScore(1, 4321)'); await page.evaluate(G + '.JumperCheat.setScore(2, 1234)');
         await page.evaluate(G + '.JumperCheat.setLives(1, 1)'); await page.evaluate(G + '.JumperCheat.setLives(2, 1)');
         await page.evaluate(G + '.JumperCheat.kill(2)'); await page.evaluate(G + '.JumperCheat.kill(1)');
-        await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'entry', null, { timeout: 8000 });
-        const t1 = await page.textContent('#entry-title');
-        await page.focus('#entry-ok'); await page.keyboard.press('Enter');
-        await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'entry' && /2/.test(document.getElementById('entry-title').textContent));
-        await page.keyboard.press('Escape');
-        await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running');
+        await page.waitForFunction(() => Scores.list('jumper').length >= 2, null, { timeout: 8000 });
         const top = await page.evaluate(() => Scores.list('jumper').map((e) => e.n + ' ' + e.s).join(', '));
-        check(/Player 1/.test(t1) && top === 'AAA 4321, PL2 1234', 'game over: both players enter initials (' + top + ')');
+        check(top === 'Player 1 4321, Player 2 1234', 'game over: both players are recorded automatically (' + top + ')');
         await page.keyboard.press('Escape');
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
@@ -542,7 +535,7 @@ async function main() {
         check(await page.textContent('#profile-name') === 'Player 1', 'a first profile "Player 1" exists');
         const ver = JSON.parse(fs.readFileSync(path.join(ROOT, 'app-manifest.json'), 'utf8'));
         check(await page.textContent('#app-version') === 'v' + ver.version + ' (Build ' + ver.build + ')', 'home shows the version: ' + await page.textContent('#app-version'));
-        await page.evaluate(() => { AudioPrefs.setMusic(3); Scores.add('snake', 'PPP', 70); });
+        await page.evaluate(() => { AudioPrefs.setMusic(7); Scores.add('snake', 'PPP', 70); });
         await page.focus('#tb-start'); await page.keyboard.press('Enter');
         check(await page.evaluate(() => Desktop.startOpen()), 'the Start button opens the Start menu');
         await page.focus('#btn-profile'); await page.keyboard.press('Enter');
@@ -553,9 +546,10 @@ async function main() {
         await page.keyboard.type('na');
         check(await page.textContent('#namer-text') === 'Ana', 'on-screen keyboard and PC keys type a name');
         await page.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
+        check(await page.evaluate(() => !!document.querySelector('.welcome') && /Ana/.test(document.querySelector('.welcome').textContent)), 'creating a profile shows the sign-in screen with the new user');
+        await signedIn(page);
         check(await page.evaluate(() => Store.profile() === 'p2' && Profiles.current().name === 'Ana'), 'a new profile is created and becomes active');
-        check(await page.evaluate(() => Scores.list('snake').length === 0 && Store.get('vol_music') === 3), 'the new profile has its own scores; settings are shared');
-        check(await page.evaluate(() => Scores.lastName(1)) === 'ANA', 'initials start from the profile name');
+        check(await page.evaluate(() => Scores.list('snake').length === 1 && Store.get('vol_music') !== 7), 'records are shared by every profile, settings are not');
         await page.keyboard.press('Escape');
         check(/Ana/.test(await page.textContent('#btn-profile')), 'home shows the active profile');
         await page.reload();
@@ -564,12 +558,17 @@ async function main() {
         await page.focus('#tb-start'); await page.keyboard.press('Enter');
         await page.focus('#btn-profile'); await page.keyboard.press('Enter');
         await page.focus('[data-profile="p1"]'); await page.keyboard.press('Enter');
-        check(await page.evaluate(() => Store.profile() === 'p1' && Scores.list('snake').length === 1 && document.getElementById('profiles').hidden), 'switching back from the home screen restores that profile');
+        await signedIn(page);
+        check(await page.evaluate(() => Store.profile() === 'p1' && Store.get('vol_music') === 7 && document.getElementById('profiles').hidden), 'switching back signs in as that profile with its own settings');
+        await page.focus('#tb-start'); await page.keyboard.press('Enter');
         await page.focus('#btn-profile'); await page.keyboard.press('Enter');
         await page.focus('[data-profile="p2"]'); await page.keyboard.press('Enter');
+        await signedIn(page);
+        await page.focus('#tb-start'); await page.keyboard.press('Enter');
         await page.focus('#btn-profile'); await page.keyboard.press('Enter');
         await page.focus('#profile-delete'); await page.keyboard.press('Enter');
         await page.focus('#dialog-yes'); await page.keyboard.press('Enter');
+        await signedIn(page);
         check(await page.evaluate(() => Profiles.list().length === 1 && Store.profile() === 'p1' && !Object.keys(localStorage).some((k) => k.indexOf('arc_p2_') === 0)), 'deleting a profile removes it and its data');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
@@ -756,10 +755,8 @@ async function main() {
         check(await page.evaluate(() => window.GameHost.state()) === 'paused' && items.indexOf('Restart') > 0, 'Back opens My PC\'s pause menu with the app\'s own items (' + items.join(', ') + ')');
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[0].click(); });
         await frame.evaluate(() => MyPC.submitScore(321));
-        const entry = await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'entry', null, { timeout: 4000 }).then(() => true, () => false);
-        check(entry, 'MyPC.submitScore asks for initials (top 10)');
-        await page.focus('#entry-ok'); await page.keyboard.press('Enter');
-        check(await page.evaluate(() => Scores.list('app-star-catcher')[0].s === 321), 'the score is saved in its own top-10 table');
+        await page.waitForFunction(() => Scores.list('app-star-catcher').length === 1, null, { timeout: 4000 }).catch(() => {});
+        check(await page.evaluate(() => Scores.list('app-star-catcher')[0].s === 321 && window.GameHost.state() === 'paused' || window.GameHost.state() === 'running'), 'MyPC.submitScore saves the record for the profile by itself, no initials screen');
         await page.keyboard.press('Escape');
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
@@ -1168,6 +1165,39 @@ async function main() {
         await page.context().close();
     }
 
+    console.log('25. profiles are users: own settings, switch-user screen, update message, shared records');
+    {
+        const page = await newPage(browser, base);
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon');
+        await page.evaluate(() => { I18n.setLang('fr'); Store.set('wallpaper', 'aurora'); Store.set('clock24', true); Scores.add('snake', 'Player 1', 900, 'p1'); });
+        await page.evaluate(() => { const p = Profiles.create('Sam'); Welcome.switchUser(p.id); });
+        check(await page.evaluate(() => !!document.querySelector('.welcome-user .avatar') && /Sam/.test(document.querySelector('.welcome').textContent)), 'switching user shows the sign-in screen with the avatar and name');
+        check(await signedIn(page), 'the app restarts as the other user');
+        check(await page.evaluate(() => Store.profile() === 'p2' && I18n.lang() === 'en' && Store.get('wallpaper') !== 'aurora' && Store.get('clock24') !== true), 'the new profile has its own language, clock and background');
+        await page.evaluate(() => { I18n.setLang('es'); Store.set('wallpaper', 'bloom'); Scores.add('snake', 'Sam', 500, 'p2'); });
+        await page.evaluate(() => Welcome.switchUser('p1'));
+        check(await signedIn(page), 'switching back works');
+        check(await page.evaluate(() => Store.profile() === 'p1' && I18n.lang() === 'fr' && Store.get('wallpaper') === 'aurora' && Store.get('clock24') === true && document.documentElement.lang === 'fr'), 'every profile keeps its own language, clock and background');
+        await page.focus('[data-app="scores"]'); await page.keyboard.press('Enter');
+        const hall = await page.evaluate(() => document.querySelector('.lb-pane').textContent);
+        check(/Joueur 1/.test(hall) && /Sam/.test(hall), 'Leaderboards show the results of every profile');
+        await page.evaluate(() => Win.close());
+        // update message: once per new build
+        await page.evaluate(() => Store.rawSet('arc_dev_seen_build', 1));
+        await page.reload();
+        await page.waitForSelector('.welcome-update');
+        check(await page.evaluate(() => document.querySelector('.welcome-update').textContent.indexOf(AppBoot.version()) > 0), 'after an update the boot shows that My PC was updated, with the version');
+        await page.keyboard.press('Enter');
+        await page.waitForFunction(() => !document.querySelector('.welcome'), null, { timeout: 4000 });
+        await page.reload();
+        await page.waitForSelector('#desk-icons .dicon'); await page.waitForTimeout(600);
+        check(await page.evaluate(() => !document.querySelector('.welcome')), 'the update message shows only once per build');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
     console.log('24. Super Jumper stages differ from each other');
     {
         const dir = path.join(ROOT, 'games/jumper/assets/levels');
@@ -1212,6 +1242,17 @@ async function main() {
     srv.close();
     console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed');
     process.exit(failures ? 1 : 0);
+}
+
+// After a profile switch the app restarts as that profile (welcome screen): wait for the new desktop.
+async function signedIn(page) {
+    for (let i = 0; i < 80; i++) {
+        await page.waitForTimeout(250);
+        try {
+            if (await page.evaluate(() => location.search === '' && !document.querySelector('.welcome') && !!document.querySelector('#desk-icons .dicon') && !!window.Welcome)) return true;
+        } catch (e) { /* the page is reloading */ }
+    }
+    return false;
 }
 
 // Launch a game, start it, play briefly, quit to menu. Returns the state of the destroyed game.

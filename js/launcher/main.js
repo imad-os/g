@@ -83,6 +83,7 @@ var App = (function () {
 
     /* ---------- router ---------- */
     function route(action, pressed, repeat, dev) {
+        if (Welcome.open()) { Welcome.action(action, pressed); return; }
         if (action === 'padConnected') { toast(I18n.t('padOn')); return; }
 
         if (dialogOpen) {
@@ -247,6 +248,7 @@ var App = (function () {
             });
             I18n.apply();
             AppBoot.ready();
+            Welcome.afterBoot();
             // One-time device benchmark while the menu is idle.
             setTimeout(function () {
                 if (!GameHost.active()) benchCancel = Perf.benchmark(function () { benchCancel = null; });

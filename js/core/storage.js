@@ -1,12 +1,16 @@
 /* Namespaced, exception-safe localStorage (quota errors and disabled storage never crash the app).
  *
- * Keys are per profile (arc_<profile>_<key>): game saves, top scores, last game, initials...
- * TV-wide settings (language, volumes, graphics, benchmark) are shared by every profile
- * (arc_dev_<key>). The profile list itself is arc_profiles, the active one arc_profile. */
+ * Keys are per profile (arc_<profile>_<key>): settings (language, clock, background, volumes,
+ * graphics), game saves, last game... Like user accounts on a PC.
+ * Only hardware facts are TV-wide (arc_dev_<key>): benchmark, update check, last seen build, and
+ * the top-10 record tables (js/core/scores.js). A setting a profile has not changed yet starts from
+ * the value this TV had before profiles had their own settings. The profile list is arc_profiles,
+ * the active one arc_profile. */
 var Store = (function () {
     'use strict';
     var PREFIX = 'arc_';
-    var DEVICE = { lang: 1, vol_music: 1, vol_sfx: 1, gfx: 1, perf_bench_v1: 1, wallpaper: 1, clock24: 1, update_checked: 1, br_native: 1 };
+    var DEVICE = { perf_bench_v1: 1, update_checked: 1, seen_build: 1 };
+    var LEGACY = { lang: 1, vol_music: 1, vol_sfx: 1, gfx: 1, wallpaper: 1, clock24: 1, br_native: 1 };   // were TV-wide before
 
     function raw(k) { try { var v = localStorage.getItem(k); return v === null ? undefined : JSON.parse(v); } catch (e) { return undefined; } }
     function rawSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
@@ -14,17 +18,24 @@ var Store = (function () {
     var profile = raw(PREFIX + 'profile');
     if (typeof profile !== 'string' || !/^p\d+$/.test(profile)) profile = 'p1';
 
-    // Settings used to live in profile p1: move them to the shared space once.
+    // Settings used to live in profile p1: move them to the shared space once (they are the starting
+    // values of every profile until it changes them).
     (function migrate() {
-        for (var k in DEVICE) {
+        if (raw(PREFIX + 'dev_settings_v2')) return;
+        for (var k in LEGACY) {
             var old = raw(PREFIX + 'p1_' + k);
             if (old !== undefined && raw(PREFIX + 'dev_' + k) === undefined) rawSet(PREFIX + 'dev_' + k, old);
         }
+        rawSet(PREFIX + 'dev_settings_v2', 1);
     })();
 
     function key(k) { return PREFIX + (DEVICE[k] ? 'dev' : profile) + '_' + k; }
 
-    function get(k, def) { var v = raw(key(k)); return v === undefined ? def : v; }
+    function get(k, def) {
+        var v = raw(key(k));
+        if (v === undefined && LEGACY[k]) v = raw(PREFIX + 'dev_' + k);
+        return v === undefined ? def : v;
+    }
     function set(k, v) { return rawSet(key(k), v); }
     function remove(k) { try { localStorage.removeItem(key(k)); } catch (e) {} }
 

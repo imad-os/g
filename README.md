@@ -23,10 +23,11 @@ There are no image or audio files to download or decode, and no third-party libr
 characters, levels and melodies are original. Nothing uses Nintendo or Tetris names or assets.
 
 **Top scores:** every game keeps a top-10 table on the TV, managed by `js/core/scores.js`. When a game
-ends with a score that makes the table, the launcher asks for 3 initials, arcade style: Up/Down
-changes the letter, Left/Right moves, OK saves. The last initials are remembered. The **Top scores**
-button on the main menu shows the tables (Parchís has a winner, not points, so it has none). Voice Guide reads each table. *Reset progress* clears
-them. Games report scores with `host.submitScore(score, { player, players })`.
+ends with a score that makes the table, the launcher saves it by itself under the name of the active
+profile (no typing). Records are shared by every profile: the **Leaderboards** app shows a Hall of Fame
+(best players over all games) and the top 10 of each game (Parchís has a winner, not points, so it has
+none). Voice Guide reads each table.
+Games report scores with `host.submitScore(score, { player, players })`.
 
 **Desktop (v2):** the launcher looks like a dark Windows 11 style PC.
 - **Desktop:** wallpaper (4 CSS backgrounds, no image files), icons for the games and apps, and a
@@ -272,9 +273,9 @@ The tests run headless Chromium with mocked `tizen` and `webapis` and cover thes
   the JS heap by more than 10%;
 - Back opens the exit dialog on the menu and the pause menu in a game;
 - every Super Jumper stage loads and can be finished, including the bosses;
-- top-10 tables: initials entry, sorting, the 10-entry cap and the Scores screen (Voice Guide label
+- top-10 tables: automatic records, sorting, the 10-entry cap and the Scores screen (Voice Guide label
   and Back);
 - 2-player co-op with arrows + WASD and with two (mocked) gamepads: joining, each device moving only
-  its own hero, respawn, both players entering initials at game over, and unplug → pause.
+  its own hero, respawn, both players recorded automatically at game over, and unplug → pause.
 
 `npm run covers` regenerates the menu covers from real gameplay frames.

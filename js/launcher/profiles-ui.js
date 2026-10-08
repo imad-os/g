@@ -70,12 +70,8 @@ var ProfilesUI = (function () {
     function changed() { renderButton(); if (onChange) onChange(); }
 
     function pick(id) {
-        if (id !== Profiles.current().id) {
-            Profiles.use(id);
-            changed();
-            App.toast(I18n.t('hello') + ', ' + nameOf(Profiles.current()) + '!');
-        }
         close();
+        if (id !== Profiles.current().id) Welcome.switchUser(id);
     }
 
     function refocus(id) {
@@ -88,10 +84,8 @@ var ProfilesUI = (function () {
         openNamer(I18n.t('newProfile'), '', function (name) {
             var p = Profiles.create(name);
             if (!p) return;
-            Profiles.use(p.id);
-            changed();
-            App.toast(I18n.t('hello') + ', ' + nameOf(p) + '!');
-            refocus();
+            close();
+            Welcome.switchUser(p.id);
         });
     }
 
@@ -109,9 +103,8 @@ var ProfilesUI = (function () {
         if (Profiles.list().length < 2) return;
         App.confirm(I18n.t('deleteTitle'), I18n.t('deleteText').replace('%s', nameOf(p)), function () {
             Profiles.remove(p.id);
-            changed();
-            App.toast(I18n.t('hello') + ', ' + nameOf(Profiles.current()) + '!');
-            refocus();
+            close();
+            Welcome.switchUser(Profiles.current().id, true);     // the deleted one was active: sign in as another
         });
     }
 

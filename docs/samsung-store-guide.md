@@ -104,7 +104,7 @@ works fully without a network.
 4. Super Jumper → OK on stage 1-1 → play. Return → pause menu shows *Two players*. Choose it and
    press OK/A on a second controller (gamepad, or the remote if player 1 uses a gamepad) to add
    player 2.
-5. End a game with a high score → enter 3 initials (Up/Down letter, Left/Right move, OK save) →
+5. End a game with a high score → the record is saved automatically for the active profile →
    main menu → *Top scores* shows it.
 6. Unplug the network cable in any screen → popup "No network connection…". The games keep
    working. Reconnect → "Network connected".

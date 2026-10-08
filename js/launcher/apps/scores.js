@@ -1,4 +1,4 @@
-/* Leaderboards app: a Hall of Fame (best players over all games) and the top-10 of every game.
+/* Leaderboards app (results of every profile on this TV): a Hall of Fame (best players over all games) and the top-10 of every game.
  * Left: the list (Up / Down; the right side follows the focus). Right: podium for 1-3, bars for 4-10.
  * Hall of Fame points: 10 for a #1, 9 for #2 ... 1 for #10 in each game, added up per player name. */
 (function () {
@@ -22,8 +22,8 @@
             if (games[i].manifest.scores === false) continue;
             list = Scores.list(games[i].id);
             for (k = 0; k < list.length; k++) {
-                n = list[k].n;
-                r = map[n] || (map[n] = { n: n, s: 0, w: 0, g: 0, seen: {} });
+                n = list[k].p ? 'p:' + list[k].p : 'n:' + list[k].n;       // the same profile, whatever its name
+                r = map[n] || (map[n] = { n: list[k].n, s: 0, w: 0, g: 0, seen: {} });
                 if (!r.seen[games[i].id]) { r.seen[games[i].id] = 1; r.g++; }
                 r.s += 10 - k;
                 if (k === 0) r.w++;

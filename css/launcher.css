@@ -293,8 +293,8 @@ svg { display: block; width: 100%; height: 100%; }
 [dir="rtl"] .lb-sub { margin-left: 0; margin-right: 24px; }
 .lb-empty { margin-top: 120px; font-size: 32px; color: #9a9a9a; text-align: center; }
 .lb-podium { display: flex; align-items: flex-end; justify-content: center; height: 400px; margin-bottom: 28px; }
-.lb-pod { width: 250px; margin: 0 14px; text-align: center; }
-.lb-pod-name { font-size: 40px; font-weight: 700; letter-spacing: 3px; }
+.lb-pod { width: 290px; margin: 0 12px; text-align: center; }
+.lb-pod-name { font-size: 38px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lb-pod-score { margin-bottom: 10px; font-size: 30px; color: #cfcfcf; }
 .lb-block { height: 120px; border-radius: 14px 14px 0 0; font-size: 64px; font-weight: 700; line-height: 120px; color: rgba(0, 0, 0, 0.45);
             transform-origin: bottom; animation: lb-rise .5s ease-out; }
@@ -309,12 +309,39 @@ svg { display: block; width: 100%; height: 100%; }
 .lb-row { display: flex; align-items: center; height: 62px; font-size: 28px; }
 .lb-row.lb-none { opacity: 0.3; }
 .lb-r { width: 56px; color: #9a9a9a; }
-.lb-n { width: 130px; font-weight: 700; letter-spacing: 2px; }
+.lb-n { width: 250px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lb-bar { flex: 1; height: 14px; margin: 0 24px; border-radius: 7px; background: #2b2b2b; overflow: hidden; }
 .lb-fill { display: block; height: 100%; border-radius: 7px; background: linear-gradient(90deg, #2f6bff, #5fd0ff); }
 .lb-s { width: 150px; text-align: right; font-weight: 700; }
 .lb-meta { width: 150px; text-align: right; font-size: 22px; color: #ffc83d; }
 [dir="rtl"] .lb-s, [dir="rtl"] .lb-meta { text-align: left; }
+
+/* ---------- sign-in / update screens ---------- */
+.welcome { position: fixed; left: 0; top: 0; width: 1920px; height: 1080px; z-index: 900; display: flex; align-items: center; justify-content: center;
+           background: radial-gradient(ellipse at 50% 30%, #1d3f8a 0%, #0b1330 70%); opacity: 1; transition: opacity .4s ease-out; }
+.welcome.bye { opacity: 0; }
+.welcome-card { text-align: center; animation: wl-in .5s ease-out; }
+.welcome-avatar { display: block; width: 220px; height: 220px; margin: 0 auto 36px; line-height: 220px; font-size: 110px; border-radius: 50%; }
+.welcome-logo { width: 160px; height: 160px; margin: 0 auto 28px; }
+.welcome-logo svg { width: 100%; height: 100%; }
+.welcome-title { margin: 0; font-size: 64px; font-weight: 600; }
+.welcome-sub { margin: 14px 0 0; font-size: 34px; color: #b8c4e8; }
+.welcome .bs-spin { margin: 70px auto 0; }
+@keyframes wl-in { from { transform: translateY(24px) scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
+.welcome .bs-spin { position: relative; width: 60px; height: 60px; }
+.welcome .bs-spin i { position: absolute; left: 0; top: 0; width: 60px; height: 60px; opacity: 0; animation: bs-orbit 3.2s infinite; }
+.welcome .bs-spin i:after { content: ""; position: absolute; left: 28px; top: 0; width: 7px; height: 7px; border-radius: 50%; background: #fff; }
+.welcome .bs-spin i:nth-child(2) { animation-delay: .16s; }
+.welcome .bs-spin i:nth-child(3) { animation-delay: .32s; }
+.welcome .bs-spin i:nth-child(4) { animation-delay: .48s; }
+.welcome .bs-spin i:nth-child(5) { animation-delay: .64s; }
+@keyframes bs-orbit {
+    0%   { transform: rotate(0deg);   opacity: 1; animation-timing-function: ease-out; }
+    35%  { transform: rotate(220deg); opacity: 1; animation-timing-function: linear; }
+    55%  { transform: rotate(250deg); opacity: 1; animation-timing-function: ease-in; }
+    90%  { transform: rotate(540deg); opacity: 1; }
+    100% { transform: rotate(540deg); opacity: 0; }
+}
 
 /* ---------- dialogs and toasts ---------- */
 .backdrop { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: rgba(0, 0, 0, 0.6); z-index: 50; }
@@ -358,13 +385,6 @@ svg { display: block; width: 100%; height: 100%; }
              padding: 44px 52px; border-radius: 12px; background: #2b2b2b; border: 1px solid #444; text-align: center; }
 .pause-title { margin: 0 0 30px; font-size: 48px; font-weight: 600; }
 .pause-items .btn { display: block; width: 100%; margin: 0 0 16px; }
-
-/* ---------- initials entry ---------- */
-.entry-box { width: 860px; margin-left: -430px; }
-.entry-score { margin: 0 0 28px; font-size: 38px; }
-.entry-letters { margin-bottom: 20px; }
-.entry-letters .btn { min-width: 0; width: 120px; height: 140px; margin: 0 12px; padding: 0; font-size: 80px; }
-.entry-hint { margin: 0 0 28px; font-size: 24px; color: #c5c5c5; }
 
 /* ---------- network popup (shown above games too) ---------- */
 .netpop { position: absolute; left: 50%; top: 40px; width: 1100px; margin-left: -550px; padding: 24px 36px; border-radius: 12px;

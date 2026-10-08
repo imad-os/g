@@ -43,7 +43,7 @@
     </style>
     <script>
         // opening or leaving a game reloads this page: skip the logo then (just black until the screen is ready)
-        if (/[?&](play|from)=/.test(location.search)) document.documentElement.className += ' warm';
+        if (/[?&](play|from|user)=/.test(location.search)) document.documentElement.className += ' warm';
     </script>
 </head>
 <body>

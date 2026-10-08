@@ -163,7 +163,7 @@ MyPC.app_config.speed      // e.g. 2
 | `MyPC.isDown(action)` | `true` while an action is held (read it in your fixed-step update) |
 | `MyPC.save(key, value)` | save JSON data (per My PC profile; 64 KB per app in total) |
 | `MyPC.load(key, default)` | read saved data (synchronous; available from `onInit`) |
-| `MyPC.submitScore(score, {player, players})` | at game over: My PC asks for 3 initials if it makes the top 10 |
+| `MyPC.submitScore(score, {player, players})` | at game over: if it makes the top 10, My PC saves it by itself under the name of the active profile (no typing) |
 | `MyPC.announce(text)` | read text aloud with the TV's Voice Guide (game over, level names, menus) |
 | `MyPC.setMenu([{id, label}])` | up to 6 extra pause-menu items (e.g. Restart, Level select); `label` already translated |
 | `MyPC.pause()` | ask My PC to open the pause menu (e.g. your own on-screen pause button) |

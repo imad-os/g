@@ -66,7 +66,7 @@ Office submission.
 | The gamepad can operate the pause menu (the launcher polls pads while the game loop is stopped) | Automated ✅ |
 | A button or key still held when the pause menu opens never counts as a new press (no open/close flicker) | Automated ✅ |
 | 2-player co-op: each hero reads only its own device (remote/arrows, WASD, pad 1, pad 2) | Automated ✅ / On TV with 2 pads |
-| Top-10 initials entry works with the remote only (Up/Down letter, Left/Right move, OK save, Back saves) | Automated ✅ |
+| Top-10 records are saved automatically under the profile name (nothing to type) | Automated ✅ |
 | Only the keys that are used are registered: MediaPlayPause, MediaPlay, MediaPause, ColorF0Red, ChannelUp / ChannelDown (scroll a page in the browser and calendar), Guide (Start menu / browser toolbar) | ✅ |
 
 ## Performance and memory
