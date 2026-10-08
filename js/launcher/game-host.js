@@ -199,7 +199,9 @@ var GameHost = (function () {
         iframe.setAttribute('allow', 'autoplay; gamepad; fullscreen');
         iframe.setAttribute('referrerpolicy', 'no-referrer');
         api = remoteApi();
-        iframe.src = game.remote.entry;
+        // the version in the address: a new version published in the App Store never opens from the TV's cache
+        var v = game.remote.version, e = String(game.remote.entry).split('#');
+        iframe.src = v ? e[0] + (e[0].indexOf('?') < 0 ? '?' : '&') + 'mypc_v=' + encodeURIComponent(v) + (e[1] !== undefined ? '#' + e[1] : '') : e.join('#');
         $('game-frame-box').appendChild(iframe);
         $('game-layer').focus();
     }

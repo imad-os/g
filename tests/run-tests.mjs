@@ -773,7 +773,7 @@ async function main() {
             if (!fs.existsSync(p)) return r.fulfill({ status: 404, body: '' });
             r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || (p.endsWith('.svg') ? 'image/svg+xml' : 'text/plain'), headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(p) });
         });
-        let firestoreUp = true, liveSpeed = 1, removed = false;
+        let firestoreUp = true, liveSpeed = 1, liveVersion = '1.0.0', removed = false;
         // the app's config as Firestore stores it: nested map, list, null
         const cfgValue = (speed) => ({ mapValue: { fields: { speed: { integerValue: String(speed) },
             levels: { arrayValue: { values: [{ integerValue: '1' }, { stringValue: 'a' }] } },
@@ -791,7 +791,7 @@ async function main() {
             if (!firestoreUp) return r.abort('internetdisconnected');
             if (!/\/documents\/apps(\/|\?|$)/.test(r.request().url())) return r.fallback();      // counters, backup...: the shared fake
             const json = (status, o) => r.fulfill({ status, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(o) });
-            if (r.request().url().indexOf('/documents/apps/star-catcher') > 0) return removed ? json(404, { error: { code: 404, status: 'NOT_FOUND' } }) : json(200, { fields: Object.assign({}, doc.fields, { config: cfgValue(liveSpeed) }) });
+            if (r.request().url().indexOf('/documents/apps/star-catcher') > 0) return removed ? json(404, { error: { code: 404, status: 'NOT_FOUND' } }) : json(200, { fields: Object.assign({}, doc.fields, { config: cfgValue(liveSpeed), version: { stringValue: liveVersion } }) });
             json(200, { documents: [doc, hidden] });
         });
         await page.goto(base + 'index.html');
@@ -832,11 +832,12 @@ async function main() {
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
         check(await page.evaluate(() => document.querySelectorAll('iframe').length === 0 && document.activeElement.getAttribute('data-game') === 'app-star-catcher'), 'quitting removes the iframe and returns to its desktop icon');
         // the owner changes the config in the installer: the next launch gets it (the saved list still has the old one)
-        liveSpeed = 3;
+        liveSpeed = 3; liveVersion = '1.0.1';
         await page.focus(icon); await page.keyboard.press('Enter');
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 10000 });
         const f2 = page.frames().find((f) => f.url().indexOf(APP) === 0);
         check(await f2.evaluate(() => MyPC.app_config.speed) === 3, 'the config is read again from Firebase before the app opens (the saved copy was older)');
+        check(/[?&]mypc_v=1\.0\.1(&|$)/.test(f2.url()), 'a new version published in the store opens at once: its version is in the address, so the TV cache is skipped (' + f2.url() + ')');
         await f2.evaluate(() => MyPC.exit());
         check(await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body, null, { timeout: 4000 }).then(() => true, () => false), 'MyPC.exit() closes the app');
         // uninstalled meanwhile: opening it sends you straight back to the desktop

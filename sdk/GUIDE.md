@@ -299,8 +299,18 @@ Voice Guide announcements.
 5. It is in the **App Store** of every My PC right away (Home shows the newest apps and the popular
    ones). People install it there; it then appears on their desktop, in Start and in File Explorer.
 
-To update an app, push the new version (bump `version`), then press **Check** and **Update** in
-the App Store Manager if the name, icon or entry changed. Code changes go live without reinstalling.
+**To update an app** (TVs get it the next time the app is opened, no need to restart My PC):
+1. Bump `version` in `mypc-app.json` (e.g. `1.2.0` -> `1.3.0`), and put that same version on every
+   file `index.html` loads from your own site: `<script src="game.js?v=1.3.0">`,
+   `<link rel="stylesheet" href="style.css?v=1.3.0">`, and images or sounds loaded from code
+   (`'sprites.png?v=' + VERSION`). Keep the SDK `<script>` as it is.
+2. Push, and wait until GitHub Pages has published it (repository → Actions: green tick).
+3. In the App Store Manager press **Update** next to the app (or paste the address, **Check**, **Update**).
+
+Right before an app opens, My PC reads its document in the store again and loads
+`index.html?mypc_v=<version>`. A new version number therefore always skips the TV's cache (and
+GitHub's 10-minute cache) for `index.html`, and the `?v=` on your files does the same for them.
+If the version is not bumped, TVs may keep showing the old files for a while.
 Scores sent with `MyPC.submitScore` go to the TV's Leaderboards and, when they are good enough, to
 the World records.
 
@@ -319,3 +329,4 @@ the World records.
 - [ ] texts in `en` (and `fr`, `es`, `ar` if possible), using `info.lang`
 - [ ] works standalone: open `index.html` in Chrome, play with the arrows + Enter, Esc pauses
 - [ ] served over https with CORS (GitHub Pages)
+- [ ] every own script, stylesheet and asset is loaded with `?v=<version>`, the same as `version` in `mypc-app.json` (bumped for every release)

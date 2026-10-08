@@ -197,7 +197,7 @@ var App = (function () {
             g.remote.prepare = function (done) {
                 Cloud.fetchApp(a.id, function (err, fresh) {
                     if (err === 'notfound') return done(false);
-                    if (!err && fresh) { g.remote.entry = fresh.entry; g.remote.config = fresh.config; }
+                    if (!err && fresh) { g.remote.entry = fresh.entry; g.remote.config = fresh.config; g.remote.version = fresh.version || ''; }
                     done(true);
                 });
             };

@@ -14,6 +14,10 @@ screen, performance, languages, publishing). Follow every MUST, finish each task
 checklist, and when the guide has changed, update this app to match it. If anything in this file
 disagrees with the guide, the guide wins.
 
+For every release: bump `version` in `mypc-app.json` and the same `?v=<version>` on every own file
+`index.html` loads (section 10 of the guide), so TVs never open old cached files.
+
 When a task is done: commit, push, and tell the owner the address to paste into the My PC
 App Store Manager (https://imad-os.github.io/g/installer/): `https://<owner>.github.io/<repo>/`
-(GitHub Pages: Settings → Pages → Deploy from a branch → main / root).
+(GitHub Pages: Settings → Pages → Deploy from a branch → main / root), and to press **Update** next to
+the app in the App Store Manager once GitHub Pages has published it.
