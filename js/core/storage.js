@@ -12,8 +12,17 @@ var Store = (function () {
     var DEVICE = { perf_bench_v1: 1, update_checked: 1, seen_build: 1 };
     var LEGACY = { lang: 1, vol_music: 1, vol_sfx: 1, gfx: 1, wallpaper: 1, clock24: 1, br_native: 1 };   // were TV-wide before
 
+    var hooks = [];
     function raw(k) { try { var v = localStorage.getItem(k); return v === null ? undefined : JSON.parse(v); } catch (e) { return undefined; } }
-    function rawSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+    function rawSet(k, v) {
+        try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { return false; }
+        for (var i = 0; i < hooks.length; i++) { try { hooks[i](k); } catch (e2) {} }
+        return true;
+    }
+
+    // a TV that never ran My PC (or was reset): nothing of ours in storage yet (js/core/backup.js may restore it)
+    var fresh = true;
+    try { for (var n = 0; n < localStorage.length; n++) if (String(localStorage.key(n)).indexOf(PREFIX) === 0) { fresh = false; break; } } catch (e) {}
 
     var profile = raw(PREFIX + 'profile');
     if (typeof profile !== 'string' || !/^p\d+$/.test(profile)) profile = 'p1';
@@ -37,7 +46,7 @@ var Store = (function () {
         return v === undefined ? def : v;
     }
     function set(k, v) { return rawSet(key(k), v); }
-    function remove(k) { try { localStorage.removeItem(key(k)); } catch (e) {} }
+    function remove(k) { try { localStorage.removeItem(key(k)); } catch (e) {} for (var i = 0; i < hooks.length; i++) { try { hooks[i](key(k)); } catch (e2) {} } }
 
     function dropPrefix(full) {
         try {
@@ -59,7 +68,9 @@ var Store = (function () {
         profile: function () { return profile; },
         setProfile: function (id) { profile = id; rawSet(PREFIX + 'profile', id); },
         dropProfile: function (id) { dropPrefix(PREFIX + id + '_'); },
-        rawGet: raw, rawSet: rawSet
+        rawGet: raw, rawSet: rawSet,
+        fresh: function () { return fresh; },
+        onWrite: function (fn) { hooks.push(fn); }       // fn(fullKey) after every write (cloud backup)
     };
 })();
 

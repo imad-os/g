@@ -393,6 +393,7 @@ var GameHost = (function () {
         var name = slot > 1 ? I18n.t('player') + ' ' + slot : Profiles.name(p, I18n.t('player'));
         var rank = Scores.add(id, name, score, slot > 1 ? '' : p.id);
         if (!rank) return;
+        World.submit(id, name, score);                      // world records (sent now, or later when offline)
         App.toast((multi || slot > 1 ? name + ': ' : '') + I18n.t('newHigh') + ' ' + I18n.t('rank') + ' ' + rank);
     }
 

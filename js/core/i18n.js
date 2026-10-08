@@ -8,7 +8,7 @@ var I18n = (function () {
     var S = {
         en: {
             netOff: 'No network connection. Your games keep working offline.', netOn: 'Network connected',
-            scores: 'Top scores', newHigh: 'New high score!', rank: 'Rank', entryHint: 'Up and down: change letter. Left and right: move. OK: save.', save: 'Save', letter: 'Letter', of: 'of', noScores: 'No scores yet', switching: 'Switching user', preparing: 'Preparing your desktop', updatedTitle: 'My PC is up to date', updatedSub: 'Updated to version %s', hallOfFame: 'Hall of Fame', hallSub: 'Top players across all games', crowns: 'Wins', gamesCount: 'Games', totalPts: 'Total points', champion: 'Champion', player: 'Player', points: 'points',
+            scores: 'Top scores', newHigh: 'New high score!', rank: 'Rank', entryHint: 'Up and down: change letter. Left and right: move. OK: save.', save: 'Save', letter: 'Letter', of: 'of', noScores: 'No scores yet', cloudBackup: 'Cloud backup', cloudBackupDesc: 'Profiles, settings, saves, apps and records come back after a reinstall', deleteBackup: 'Delete the cloud backup', deleteBackupDone: 'The cloud backup was deleted.', cloudFail: 'Could not reach the cloud. Try again later.', worldShare: 'Share my records with the world', worldShareDesc: 'Player name and score in World records', store: 'App Store', storeHome: 'Home', storeGames: 'Games', storeApps: 'Apps', storeLibrary: 'Library', storeSearch: 'Search', storeNew: 'New', storePopular: 'Popular', storeFeatured: 'Featured', storeSeeMore: 'See more', storeGet: 'Install', storeOpen: 'Open', storeUninstall: 'Uninstall', storeInstalling: 'Installing…', storeInstalled: 'Installed', storeInstalledToast: '%s is installed. It is on your desktop.', storeUninstallTitle: 'Uninstall %s?', storeUninstallText: 'It will be removed from this TV. Its saved progress is kept.', storeUninstalled: '%s was uninstalled.', storeEmpty: 'Nothing here yet.', storeOffline: 'You are offline. This is the last list this TV saw.', storeSearchHint: 'Type a name…', storeNoResults: 'No results.', storeInstalls: '%s installs', storeGame: 'Game', storeApp: 'App', storeVersion: 'Version', storeLibraryEmpty: 'Nothing installed yet. Find games and apps on Home.', thisTv: 'This TV', world: 'World', worldOffline: 'World records need the internet. These are the last ones this TV saw.', worldEmpty: 'No world records yet.', worldLoading: 'Loading world records…', restoredTitle: 'Welcome back!', restoredSub: 'Your profiles, settings, apps and records are back.', openStore: 'Open the App Store', switching: 'Switching user', preparing: 'Preparing your desktop', updatedTitle: 'My PC is up to date', updatedSub: 'Updated to version %s', hallOfFame: 'Hall of Fame', hallSub: 'Top players across all games', crowns: 'Wins', gamesCount: 'Games', totalPts: 'Total points', champion: 'Champion', player: 'Player', points: 'points',
             appTitle: 'My PC', games: 'Games', settings: 'Settings', play: 'Play',
             badgeNew: 'New', badgeUpdated: 'Updated', lastPlayed: 'Last played',
             language: 'Language', musicVol: 'Music volume', sfxVol: 'Sound effects volume',
@@ -56,7 +56,7 @@ var I18n = (function () {
             items: 'items', upFolder: 'Up', forward: 'Forward', reload: 'Reload',
             go: 'Go', addressHint: 'Search or type a web address', browserHello: 'Where to?', frameNote: 'Some websites do not allow being shown inside another app. They stay blank here.',
             pageHint: 'Web page. Up and down scroll.',
-            sysApps: 'Apps', installedApps: 'Installed apps', installHint: 'To install apps and games, open imad-os.github.io/g/installer on a computer.', refreshApps: 'Check for new apps', appsRefreshed: 'App list updated', appsOffline: 'Could not reach the app list. Showing the saved one.', noApps: 'No apps installed yet', openApp: 'OK: open',
+            sysApps: 'Apps', installedApps: 'Installed apps', installHint: 'Get apps and games in the App Store.', refreshApps: 'Check for new apps', appsRefreshed: 'App list updated', appsOffline: 'Could not reach the app list. Showing the saved one.', noApps: 'No apps installed yet', openApp: 'OK: open',
             sysUpdate: 'My PC Update', updChecking: 'Checking for updates…',
             updUpToDate: 'You\'re up to date', updAvailable: 'An update is available',
             updNew: 'New version', updDownloading: 'Downloading the update…',
@@ -80,16 +80,18 @@ var I18n = (function () {
             brModeRemote: 'Remote mode: Up and Down scroll the page. Guide goes to the toolbar.', brModeMouse: 'Mouse mode: use the mouse on the page. Click a toolbar button to leave it.',
             brPageFocus: 'The page has the keyboard. Click a toolbar button, or press Guide on a gamepad, to leave.',
             privacyText: [
-                'My PC does not collect, store or share any personal data.',
-                'Game progress and settings are saved only on this TV and can be deleted with Reset progress.',
-                'At start-up the app downloads update files from imad-os.github.io and the list of installed apps from Firebase (Google). No identifier is sent.',
+                'Cloud backup: the profiles, settings, saved games, installed apps and records of this TV are copied to Firebase (Google), so they come back after a reinstall or a reset. You can turn it off and delete the copy above.',
+                'The copy is filed under a code made from this TV\'s own id; the id itself is never sent.',
+                'World records send the player name and the score to Firebase, where every My PC can see them. You can turn this off above.',
+                'The App Store counts how many times each app is installed and opened, not by whom.',
+                'At start-up the app downloads update files from imad-os.github.io and the App Store list from Firebase (Google).',
                 'Installed apps run from their own websites, which have their own privacy policies.',
                 'There are no ads, accounts or in-app purchases.'
             ]
         },
         fr: {
             netOff: 'Pas de connexion réseau. Vos jeux fonctionnent hors ligne.', netOn: 'Réseau connecté',
-            scores: 'Meilleurs scores', newHigh: 'Nouveau record !', rank: 'Rang', entryHint: 'Haut et bas : changer la lettre. Gauche et droite : se déplacer. OK : enregistrer.', save: 'Enregistrer', letter: 'Lettre', of: 'sur', noScores: 'Aucun score', switching: 'Changement d\'utilisateur', preparing: 'Préparation de votre bureau', updatedTitle: 'My PC est à jour', updatedSub: 'Mise à jour vers la version %s', hallOfFame: 'Temple de la gloire', hallSub: 'Meilleurs joueurs de tous les jeux', crowns: 'Victoires', gamesCount: 'Jeux', totalPts: 'Points totaux', champion: 'Champion', player: 'Joueur', points: 'points',
+            scores: 'Meilleurs scores', newHigh: 'Nouveau record !', rank: 'Rang', entryHint: 'Haut et bas : changer la lettre. Gauche et droite : se déplacer. OK : enregistrer.', save: 'Enregistrer', letter: 'Lettre', of: 'sur', noScores: 'Aucun score', cloudBackup: 'Sauvegarde en ligne', cloudBackupDesc: 'Profils, réglages, parties, applications et records reviennent après une réinstallation', deleteBackup: 'Supprimer la sauvegarde en ligne', deleteBackupDone: 'La sauvegarde en ligne a été supprimée.', cloudFail: 'Impossible de joindre le cloud. Réessayez plus tard.', worldShare: 'Partager mes records avec le monde', worldShareDesc: 'Nom du joueur et score dans les records mondiaux', store: 'App Store', storeHome: 'Accueil', storeGames: 'Jeux', storeApps: 'Applications', storeLibrary: 'Bibliothèque', storeSearch: 'Rechercher', storeNew: 'Nouveautés', storePopular: 'Populaires', storeFeatured: 'À la une', storeSeeMore: 'Voir plus', storeGet: 'Installer', storeOpen: 'Ouvrir', storeUninstall: 'Désinstaller', storeInstalling: 'Installation…', storeInstalled: 'Installé', storeInstalledToast: '%s est installé. Il est sur votre bureau.', storeUninstallTitle: 'Désinstaller %s ?', storeUninstallText: 'Il sera retiré de cette TV. Sa progression est conservée.', storeUninstalled: '%s a été désinstallé.', storeEmpty: 'Rien pour le moment.', storeOffline: 'Vous êtes hors ligne. Voici la dernière liste vue par cette TV.', storeSearchHint: 'Tapez un nom…', storeNoResults: 'Aucun résultat.', storeInstalls: '%s installations', storeGame: 'Jeu', storeApp: 'Application', storeVersion: 'Version', storeLibraryEmpty: 'Rien d\'installé. Trouvez des jeux et des applications dans Accueil.', thisTv: 'Cette TV', world: 'Monde', worldOffline: 'Les records mondiaux demandent Internet. Voici les derniers vus par cette TV.', worldEmpty: 'Pas encore de record mondial.', worldLoading: 'Chargement des records mondiaux…', restoredTitle: 'Bon retour !', restoredSub: 'Vos profils, réglages, applications et records sont de retour.', openStore: 'Ouvrir l\'App Store', switching: 'Changement d\'utilisateur', preparing: 'Préparation de votre bureau', updatedTitle: 'My PC est à jour', updatedSub: 'Mise à jour vers la version %s', hallOfFame: 'Temple de la gloire', hallSub: 'Meilleurs joueurs de tous les jeux', crowns: 'Victoires', gamesCount: 'Jeux', totalPts: 'Points totaux', champion: 'Champion', player: 'Joueur', points: 'points',
             appTitle: 'My PC', games: 'Jeux', settings: 'Paramètres', play: 'Jouer',
             badgeNew: 'Nouveau', badgeUpdated: 'Mis à jour', lastPlayed: 'Dernier joué',
             language: 'Langue', musicVol: 'Volume de la musique', sfxVol: 'Volume des effets',
@@ -137,7 +139,7 @@ var I18n = (function () {
             items: 'éléments', upFolder: 'Dossier parent', forward: 'Suivant', reload: 'Actualiser',
             go: 'Aller', addressHint: 'Rechercher ou saisir une adresse web', browserHello: 'Où allons-nous ?', frameNote: 'Certains sites refusent de s’afficher dans une autre application. Ils restent vides ici.',
             pageHint: 'Page web. Haut et bas pour défiler.',
-            sysApps: 'Applications', installedApps: 'Applications installées', installHint: 'Pour installer des applications et des jeux, ouvrez imad-os.github.io/g/installer sur un ordinateur.', refreshApps: 'Rechercher de nouvelles applications', appsRefreshed: 'Liste des applications à jour', appsOffline: 'Liste des applications injoignable. La liste enregistrée est affichée.', noApps: 'Aucune application installée', openApp: 'OK : ouvrir',
+            sysApps: 'Applications', installedApps: 'Applications installées', installHint: 'Trouvez des applications et des jeux dans l\'App Store.', refreshApps: 'Rechercher de nouvelles applications', appsRefreshed: 'Liste des applications à jour', appsOffline: 'Liste des applications injoignable. La liste enregistrée est affichée.', noApps: 'Aucune application installée', openApp: 'OK : ouvrir',
             sysUpdate: 'Mise à jour de My PC', updChecking: 'Recherche de mises à jour…',
             updUpToDate: 'Vous êtes à jour', updAvailable: 'Une mise à jour est disponible',
             updNew: 'Nouvelle version', updDownloading: 'Téléchargement de la mise à jour…',
@@ -161,16 +163,18 @@ var I18n = (function () {
             brModeRemote: 'Mode télécommande : Haut et Bas font défiler la page. Guide va à la barre d\'outils.', brModeMouse: 'Mode souris : utilisez la souris sur la page. Cliquez sur un bouton de la barre pour la quitter.',
             brPageFocus: 'La page a le clavier. Cliquez sur un bouton de la barre, ou appuyez sur Guide sur une manette, pour la quitter.',
             privacyText: [
-                "My PC ne collecte, ne stocke et ne partage aucune donnée personnelle.",
-                'La progression et les réglages sont enregistrés uniquement sur ce téléviseur.',
-                "Au démarrage, l'application télécharge des fichiers de mise à jour depuis imad-os.github.io et la liste des applications installées depuis Firebase (Google). Aucun identifiant n'est envoyé.",
+                "Sauvegarde en ligne : les profils, réglages, parties, applications installées et records de cette TV sont copiés dans Firebase (Google) pour revenir après une réinstallation ou une réinitialisation. Vous pouvez la désactiver et supprimer la copie ci-dessus.",
+                "La copie est rangée sous un code calculé à partir de l'identifiant de la TV ; l'identifiant lui-même n'est jamais envoyé.",
+                "Les records mondiaux envoient le nom du joueur et le score à Firebase, où chaque My PC peut les voir. Vous pouvez désactiver cela ci-dessus.",
+                "L'App Store compte combien de fois chaque application est installée et ouverte, sans savoir par qui.",
+                "Au démarrage, l'application télécharge des fichiers de mise à jour depuis imad-os.github.io et la liste de l'App Store depuis Firebase (Google).",
                 'Les applications installées fonctionnent depuis leur propre site, avec leur propre politique de confidentialité.',
                 "Pas de publicité, de compte ni d'achat intégré."
             ]
         },
         es: {
             netOff: 'Sin conexión de red. Tus juegos siguen funcionando sin conexión.', netOn: 'Red conectada',
-            scores: 'Mejores puntuaciones', newHigh: '¡Nuevo récord!', rank: 'Puesto', entryHint: 'Arriba y abajo: cambiar letra. Izquierda y derecha: mover. OK: guardar.', save: 'Guardar', letter: 'Letra', of: 'de', noScores: 'Sin puntuaciones', switching: 'Cambiando de usuario', preparing: 'Preparando tu escritorio', updatedTitle: 'My PC está actualizado', updatedSub: 'Actualizado a la versión %s', hallOfFame: 'Salón de la fama', hallSub: 'Mejores jugadores de todos los juegos', crowns: 'Victorias', gamesCount: 'Juegos', totalPts: 'Puntos totales', champion: 'Campeón', player: 'Jugador', points: 'puntos',
+            scores: 'Mejores puntuaciones', newHigh: '¡Nuevo récord!', rank: 'Puesto', entryHint: 'Arriba y abajo: cambiar letra. Izquierda y derecha: mover. OK: guardar.', save: 'Guardar', letter: 'Letra', of: 'de', noScores: 'Sin puntuaciones', cloudBackup: 'Copia en la nube', cloudBackupDesc: 'Perfiles, ajustes, partidas, aplicaciones y récords vuelven tras reinstalar', deleteBackup: 'Borrar la copia en la nube', deleteBackupDone: 'Se ha borrado la copia en la nube.', cloudFail: 'No se pudo conectar con la nube. Inténtalo más tarde.', worldShare: 'Compartir mis récords con el mundo', worldShareDesc: 'Nombre del jugador y puntuación en los récords mundiales', store: 'App Store', storeHome: 'Inicio', storeGames: 'Juegos', storeApps: 'Aplicaciones', storeLibrary: 'Biblioteca', storeSearch: 'Buscar', storeNew: 'Novedades', storePopular: 'Populares', storeFeatured: 'Destacado', storeSeeMore: 'Ver más', storeGet: 'Instalar', storeOpen: 'Abrir', storeUninstall: 'Desinstalar', storeInstalling: 'Instalando…', storeInstalled: 'Instalado', storeInstalledToast: '%s está instalado. Está en tu escritorio.', storeUninstallTitle: '¿Desinstalar %s?', storeUninstallText: 'Se quitará de esta TV. Su progreso se conserva.', storeUninstalled: '%s se ha desinstalado.', storeEmpty: 'Aún no hay nada.', storeOffline: 'Sin conexión. Esta es la última lista que vio esta TV.', storeSearchHint: 'Escribe un nombre…', storeNoResults: 'Sin resultados.', storeInstalls: '%s instalaciones', storeGame: 'Juego', storeApp: 'Aplicación', storeVersion: 'Versión', storeLibraryEmpty: 'Aún no hay nada instalado. Encuentra juegos y aplicaciones en Inicio.', thisTv: 'Esta TV', world: 'Mundo', worldOffline: 'Los récords mundiales necesitan Internet. Estos son los últimos que vio esta TV.', worldEmpty: 'Aún no hay récords mundiales.', worldLoading: 'Cargando récords mundiales…', restoredTitle: '¡Bienvenido de nuevo!', restoredSub: 'Tus perfiles, ajustes, aplicaciones y récords han vuelto.', openStore: 'Abrir la App Store', switching: 'Cambiando de usuario', preparing: 'Preparando tu escritorio', updatedTitle: 'My PC está actualizado', updatedSub: 'Actualizado a la versión %s', hallOfFame: 'Salón de la fama', hallSub: 'Mejores jugadores de todos los juegos', crowns: 'Victorias', gamesCount: 'Juegos', totalPts: 'Puntos totales', champion: 'Campeón', player: 'Jugador', points: 'puntos',
             appTitle: 'My PC', games: 'Juegos', settings: 'Ajustes', play: 'Jugar',
             badgeNew: 'Nuevo', badgeUpdated: 'Actualizado', lastPlayed: 'Último jugado',
             language: 'Idioma', musicVol: 'Volumen de la música', sfxVol: 'Volumen de efectos',
@@ -218,7 +222,7 @@ var I18n = (function () {
             items: 'elementos', upFolder: 'Subir', forward: 'Adelante', reload: 'Recargar',
             go: 'Ir', addressHint: 'Busca o escribe una dirección web', browserHello: '¿Adónde vamos?', frameNote: 'Algunas webs no permiten mostrarse dentro de otra aplicación. Aquí se quedan en blanco.',
             pageHint: 'Página web. Arriba y abajo para desplazarte.',
-            sysApps: 'Aplicaciones', installedApps: 'Aplicaciones instaladas', installHint: 'Para instalar aplicaciones y juegos, abre imad-os.github.io/g/installer en un ordenador.', refreshApps: 'Buscar aplicaciones nuevas', appsRefreshed: 'Lista de aplicaciones actualizada', appsOffline: 'No se pudo cargar la lista. Se muestra la guardada.', noApps: 'Aún no hay aplicaciones instaladas', openApp: 'OK: abrir',
+            sysApps: 'Aplicaciones', installedApps: 'Aplicaciones instaladas', installHint: 'Consigue aplicaciones y juegos en la App Store.', refreshApps: 'Buscar aplicaciones nuevas', appsRefreshed: 'Lista de aplicaciones actualizada', appsOffline: 'No se pudo cargar la lista. Se muestra la guardada.', noApps: 'Aún no hay aplicaciones instaladas', openApp: 'OK: abrir',
             sysUpdate: 'Actualización de My PC', updChecking: 'Buscando actualizaciones…',
             updUpToDate: 'Estás al día', updAvailable: 'Hay una actualización disponible',
             updNew: 'Nueva versión', updDownloading: 'Descargando la actualización…',
@@ -242,16 +246,18 @@ var I18n = (function () {
             brModeRemote: 'Modo mando: Arriba y Abajo desplazan la página. Guía va a la barra de herramientas.', brModeMouse: 'Modo ratón: usa el ratón en la página. Haz clic en un botón de la barra para salir.',
             brPageFocus: 'La página tiene el teclado. Haz clic en un botón de la barra, o pulsa Guía en un mando, para salir.',
             privacyText: [
-                'My PC no recopila, guarda ni comparte datos personales.',
-                'El progreso y los ajustes se guardan solo en este televisor.',
-                'Al iniciar, la aplicación descarga archivos de actualización desde imad-os.github.io y la lista de aplicaciones instaladas desde Firebase (Google). No se envía ningún identificador.',
+                'Copia en la nube: los perfiles, ajustes, partidas, aplicaciones instaladas y récords de esta TV se copian en Firebase (Google) para recuperarlos tras reinstalar o restablecer. Puedes desactivarla y borrar la copia arriba.',
+                'La copia se guarda con un código calculado a partir del identificador de la TV; el identificador nunca se envía.',
+                'Los récords mundiales envían el nombre del jugador y la puntuación a Firebase, donde cualquier My PC puede verlos. Puedes desactivarlo arriba.',
+                'La App Store cuenta cuántas veces se instala y se abre cada aplicación, sin saber quién.',
+                'Al iniciar, la aplicación descarga archivos de actualización desde imad-os.github.io y la lista de la App Store desde Firebase (Google).',
                 'Las aplicaciones instaladas se ejecutan desde sus propias webs, con su propia política de privacidad.',
                 'Sin anuncios, cuentas ni compras.'
             ]
         },
         ar: {
             netOff: 'لا يوجد اتصال بالشبكة. ألعابك تعمل دون اتصال.', netOn: 'تم الاتصال بالشبكة',
-            scores: 'أفضل النتائج', newHigh: 'نتيجة قياسية جديدة!', rank: 'المرتبة', entryHint: 'أعلى وأسفل: تغيير الحرف. يسار ويمين: تنقل. OK: حفظ.', save: 'حفظ', letter: 'الحرف', of: 'من', noScores: 'لا توجد نتائج بعد', switching: 'تبديل المستخدم', preparing: 'جارٍ تجهيز سطح المكتب', updatedTitle: 'تم تحديث My PC', updatedSub: 'تم التحديث إلى الإصدار %s', hallOfFame: 'قاعة المشاهير', hallSub: 'أفضل اللاعبين في كل الألعاب', crowns: 'انتصارات', gamesCount: 'ألعاب', totalPts: 'مجموع النقاط', champion: 'البطل', player: 'اللاعب', points: 'نقطة',
+            scores: 'أفضل النتائج', newHigh: 'نتيجة قياسية جديدة!', rank: 'المرتبة', entryHint: 'أعلى وأسفل: تغيير الحرف. يسار ويمين: تنقل. OK: حفظ.', save: 'حفظ', letter: 'الحرف', of: 'من', noScores: 'لا توجد نتائج بعد', cloudBackup: 'النسخ الاحتياطي السحابي', cloudBackupDesc: 'تعود الملفات الشخصية والإعدادات والألعاب والتطبيقات والأرقام القياسية بعد إعادة التثبيت', deleteBackup: 'حذف النسخة السحابية', deleteBackupDone: 'تم حذف النسخة السحابية.', cloudFail: 'تعذر الوصول إلى السحابة. حاول لاحقًا.', worldShare: 'مشاركة أرقامي القياسية مع العالم', worldShareDesc: 'اسم اللاعب والنتيجة في الأرقام القياسية العالمية', store: 'متجر التطبيقات', storeHome: 'الرئيسية', storeGames: 'الألعاب', storeApps: 'التطبيقات', storeLibrary: 'المكتبة', storeSearch: 'بحث', storeNew: 'الجديد', storePopular: 'الأكثر شعبية', storeFeatured: 'مميز', storeSeeMore: 'المزيد', storeGet: 'تثبيت', storeOpen: 'فتح', storeUninstall: 'إلغاء التثبيت', storeInstalling: 'جارٍ التثبيت…', storeInstalled: 'مثبت', storeInstalledToast: 'تم تثبيت %s. إنه على سطح المكتب.', storeUninstallTitle: 'إلغاء تثبيت %s؟', storeUninstallText: 'ستتم إزالته من هذا التلفاز. يتم الاحتفاظ بتقدمه.', storeUninstalled: 'تم إلغاء تثبيت %s.', storeEmpty: 'لا شيء هنا بعد.', storeOffline: 'أنت غير متصل. هذه آخر قائمة شاهدها هذا التلفاز.', storeSearchHint: 'اكتب اسمًا…', storeNoResults: 'لا توجد نتائج.', storeInstalls: '%s تثبيت', storeGame: 'لعبة', storeApp: 'تطبيق', storeVersion: 'الإصدار', storeLibraryEmpty: 'لا شيء مثبت بعد. ابحث عن ألعاب وتطبيقات في الرئيسية.', thisTv: 'هذا التلفاز', world: 'العالم', worldOffline: 'الأرقام القياسية العالمية تحتاج إلى الإنترنت. هذه آخر ما شاهده هذا التلفاز.', worldEmpty: 'لا توجد أرقام قياسية عالمية بعد.', worldLoading: 'جارٍ تحميل الأرقام القياسية العالمية…', restoredTitle: 'مرحبًا بعودتك!', restoredSub: 'عادت ملفاتك الشخصية وإعداداتك وتطبيقاتك وأرقامك القياسية.', openStore: 'فتح متجر التطبيقات', switching: 'تبديل المستخدم', preparing: 'جارٍ تجهيز سطح المكتب', updatedTitle: 'تم تحديث My PC', updatedSub: 'تم التحديث إلى الإصدار %s', hallOfFame: 'قاعة المشاهير', hallSub: 'أفضل اللاعبين في كل الألعاب', crowns: 'انتصارات', gamesCount: 'ألعاب', totalPts: 'مجموع النقاط', champion: 'البطل', player: 'اللاعب', points: 'نقطة',
             appTitle: 'My PC', games: 'الألعاب', settings: 'الإعدادات', play: 'العب',
             badgeNew: 'جديد', badgeUpdated: 'محدّث', lastPlayed: 'آخر لعبة',
             language: 'اللغة', musicVol: 'مستوى الموسيقى', sfxVol: 'مستوى المؤثرات',
@@ -299,7 +305,7 @@ var I18n = (function () {
             items: 'عناصر', upFolder: 'للأعلى', forward: 'التالي', reload: 'إعادة التحميل',
             go: 'انتقال', addressHint: 'ابحث أو اكتب عنوان موقع', browserHello: 'إلى أين؟', frameNote: 'بعض المواقع لا تسمح بعرضها داخل تطبيق آخر، وتبقى فارغة هنا.',
             pageHint: 'صفحة ويب. أعلى وأسفل للتمرير.',
-            sysApps: 'التطبيقات', installedApps: 'التطبيقات المثبتة', installHint: 'لتثبيت التطبيقات والألعاب افتح imad-os.github.io/g/installer على كمبيوتر.', refreshApps: 'البحث عن تطبيقات جديدة', appsRefreshed: 'تم تحديث قائمة التطبيقات', appsOffline: 'تعذر الوصول إلى قائمة التطبيقات. تُعرض القائمة المحفوظة.', noApps: 'لا توجد تطبيقات مثبتة بعد', openApp: 'OK: فتح',
+            sysApps: 'التطبيقات', installedApps: 'التطبيقات المثبتة', installHint: 'احصل على التطبيقات والألعاب من متجر التطبيقات.', refreshApps: 'البحث عن تطبيقات جديدة', appsRefreshed: 'تم تحديث قائمة التطبيقات', appsOffline: 'تعذر الوصول إلى قائمة التطبيقات. تُعرض القائمة المحفوظة.', noApps: 'لا توجد تطبيقات مثبتة بعد', openApp: 'OK: فتح',
             sysUpdate: 'تحديث My PC', updChecking: 'جارٍ البحث عن تحديثات…',
             updUpToDate: 'أنت على أحدث إصدار', updAvailable: 'يوجد تحديث متاح',
             updNew: 'الإصدار الجديد', updDownloading: 'جارٍ تنزيل التحديث…',
@@ -323,9 +329,11 @@ var I18n = (function () {
             brModeRemote: 'وضع جهاز التحكم: أعلى وأسفل يمرّران الصفحة. Guide ينتقل إلى شريط الأدوات.', brModeMouse: 'وضع الفأرة: استخدم الفأرة على الصفحة. انقر زراً في الشريط للخروج.',
             brPageFocus: 'الصفحة تملك لوحة المفاتيح. انقر زراً في الشريط أو اضغط Guide على وحدة تحكم للخروج.',
             privacyText: [
-                'لا يجمع My PC أي بيانات شخصية ولا يخزنها ولا يشاركها.',
-                'يتم حفظ التقدم والإعدادات على هذا التلفاز فقط.',
-                'عند التشغيل يقوم التطبيق بتنزيل ملفات التحديث من imad-os.github.io وقائمة التطبيقات المثبتة من Firebase (Google). لا يتم إرسال أي معرّف.',
+                'النسخ الاحتياطي السحابي: تُنسخ الملفات الشخصية والإعدادات والألعاب المحفوظة والتطبيقات المثبتة والأرقام القياسية لهذا التلفاز إلى Firebase (Google) لتعود بعد إعادة التثبيت أو إعادة الضبط. يمكنك إيقافه وحذف النسخة أعلاه.',
+                'تُحفظ النسخة برمز محسوب من معرّف التلفاز؛ ولا يُرسل المعرّف نفسه أبدًا.',
+                'ترسل الأرقام القياسية العالمية اسم اللاعب والنتيجة إلى Firebase حيث يمكن لكل My PC رؤيتها. يمكنك إيقاف ذلك أعلاه.',
+                'يحسب متجر التطبيقات عدد مرات تثبيت كل تطبيق وفتحه، دون معرفة من قام بذلك.',
+                'عند التشغيل يقوم التطبيق بتنزيل ملفات التحديث من imad-os.github.io وقائمة متجر التطبيقات من Firebase (Google).',
                 'تعمل التطبيقات المثبتة من مواقعها الخاصة، ولكل منها سياسة خصوصية خاصة بها.',
                 'لا توجد إعلانات أو حسابات أو مشتريات.'
             ]

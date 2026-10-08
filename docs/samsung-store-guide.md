@@ -47,7 +47,7 @@ Upload them right the first time.
 | Language change not applied everywhere (Speedy defect) | every string goes through `I18n` and is re-applied on change. Games pick up the language on launch |
 | OK key activates twice | keydown `preventDefault`. Tested: one activation per press |
 | Screensaver during play (gamepad users never touch the remote) | screensaver off while a game runs, back on when paused or in the menu (`webapis.appcommon`) |
-| Uninstall must delete all app data | everything is in the app's own `localStorage`, removed with the app |
+| Uninstall must delete all app data | everything on the TV is in the app's own `localStorage`, removed with the app. The optional cloud backup (Firestore `tvs/<id>`) stays online so a reinstall can restore it; people can delete it in Settings > Privacy & security. Mention the backup and the world records (player name + score) in the privacy policy you give Seller Office. |
 | IP / copyright (names, characters, look-alike designs) | all art, music and names are original. Block Drop uses its own well size (12×18) and colours. Tile Merge has its own palette. No "Mario/Tetris" wording anywhere in the package |
 | Missing test info | no login, no purchases, no region lock. Say so in the App UI Description |
 | Content not reachable by testers (geo/IP block, test server) | none. The hosted copy is public on GitHub Pages |

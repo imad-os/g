@@ -84,5 +84,7 @@ Office submission.
 - All names, characters, art, levels, music and sound effects are original. No third-party assets
   are used.
 - The game titles avoid trademarks: "Block Drop", not Tetris, and "Tile Merge", not 2048-branded.
-- No personal data is collected. The privacy text is in Settings → Privacy policy. Age rating:
+- No accounts, ads or analytics. The optional cloud backup (profiles, settings, saves, apps, records, under a hash of
+  the DUID) and the World records (profile name + score) are described in Settings → Privacy & security and
+  privacy.html, and can be turned off there. Age rating:
   everyone (cartoon action, no violence beyond stomping).

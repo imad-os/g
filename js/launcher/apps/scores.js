@@ -1,6 +1,7 @@
-/* Leaderboards app (results of every profile on this TV): a Hall of Fame (best players over all games) and the top-10 of every game.
+/* Leaderboards app: a Hall of Fame (best players over all games) and the top-10 of every game.
+ * Two scopes on top: This TV (every profile of this TV) and World (every My PC, js/core/world.js).
  * Left: the list (Up / Down; the right side follows the focus). Right: podium for 1-3, bars for 4-10.
- * Hall of Fame points: 10 for a #1, 9 for #2 ... 1 for #10 in each game, added up per player name. */
+ * Hall of Fame points: 10 for a #1, 9 for #2 ... 1 for #10 in each game, added up per player. */
 (function () {
     'use strict';
 
@@ -15,14 +16,15 @@
     }
     function t(k) { return I18n.t(k); }
 
-    // best players over every game with points
-    function overall(games) {
+    // best players over every game with points. listOf(gameId) -> entries; the same player is the same
+    // profile on this TV, or the same name on the same TV in the world
+    function overall(games, listOf, world) {
         var map = {}, order = [], i, k, list, n, r;
         for (i = 0; i < games.length; i++) {
             if (games[i].manifest.scores === false) continue;
-            list = Scores.list(games[i].id);
+            list = listOf(games[i].id);
             for (k = 0; k < list.length; k++) {
-                n = list[k].p ? 'p:' + list[k].p : 'n:' + list[k].n;       // the same profile, whatever its name
+                n = world ? 'w:' + list[k].tv + ':' + list[k].n : list[k].p ? 'p:' + list[k].p : 'n:' + list[k].n;
                 r = map[n] || (map[n] = { n: list[k].n, s: 0, w: 0, g: 0, seen: {} });
                 if (!r.seen[games[i].id]) { r.seen[games[i].id] = 1; r.g++; }
                 r.s += 10 - k;
@@ -68,10 +70,19 @@
         icon: 'scores',
         title: function () { return t('leaderboards'); },
         open: function (body) {
-            var games = Desktop.games(), side = el('div', 'lb-side'), pane = el('div', 'lb-pane'), first = null;
-            var tabs = [], i, hall = overall(games);
-            side.setAttribute('role', 'list');
+            var games = Desktop.games(), side = el('div', 'lb-side'), pane = el('div', 'lb-pane'), list = el('div', 'lb-list');
+            var tabs = [], scope = 'tv', worldData = World.cached(), worldErr = false, loading = false, alive = true;
+            var scopeBar = el('div', 'lb-scope'), scopeBtns = {};
+            list.setAttribute('role', 'list');
+            side.appendChild(scopeBar); side.appendChild(list);
             body.appendChild(side); body.appendChild(pane);
+            var ids = [];
+            for (var g = 0; g < games.length; g++) if (games[g].manifest.scores !== false) ids.push(games[g].id);
+
+            function listOf(id) {
+                if (scope === 'tv') return Scores.list(id);
+                return (worldData[id] || []).slice(0, 10);
+            }
 
             function show(tab) {
                 pane.innerHTML = '';
@@ -80,35 +91,74 @@
                 head.appendChild(el('h2', '', tab.title));
                 head.appendChild(el('span', 'lb-sub', tab.sub));
                 pane.appendChild(head);
-                if (!tab.rows.length) { pane.appendChild(el('div', 'lb-empty', t('noScores'))); return; }
+                if (scope === 'world' && (loading || worldErr)) pane.appendChild(el('p', 'lb-note', t(loading ? 'worldLoading' : 'worldOffline')));
+                if (!tab.rows.length) { pane.appendChild(el('div', 'lb-empty', t(scope === 'world' ? 'worldEmpty' : 'noScores'))); return; }
                 var top = tab.rows[0].s || 1;
                 pane.appendChild(podium(tab.rows));
                 pane.appendChild(bars(tab.rows, top, tab.hall));
             }
 
-            function add(title, sub, rows, isHall, icon) {
+            function add(title, sub, rows, isHall) {
                 var b = el('div', 'lb-tab'), spoken = [title], k, tab = { el: b, title: title, sub: sub, rows: rows, hall: isHall };
                 b.setAttribute('data-focus', ''); b.setAttribute('tabindex', '0'); b.setAttribute('role', 'listitem');
                 var ic = el('span', 'lb-ic'); if (isHall) ic.innerHTML = CROWN; else ic.textContent = title.charAt(0);
                 b.appendChild(ic);
                 b.appendChild(el('span', 'lb-t', title));
                 b.appendChild(el('span', 'lb-top', rows.length ? String(rows[0].s) : ''));
-                if (!rows.length) spoken.push(t('noScores'));
+                if (!rows.length) spoken.push(t(scope === 'world' ? 'worldEmpty' : 'noScores'));
                 for (k = 0; k < rows.length; k++) spoken.push((k + 1) + ': ' + rows[k].n + ', ' + rows[k].s + ' ' + t('points'));
-                b.setAttribute('aria-label', spoken.join('. '));
+                b.setAttribute('aria-label', (scope === 'world' ? t('world') + '. ' : '') + spoken.join('. '));
                 b.addEventListener('focus', function () { show(tab); });
                 b.addEventListener('mouseenter', function () { show(tab); });
-                tabs.push(tab); side.appendChild(b);
-                if (!first) first = b;
+                tabs.push(tab); list.appendChild(b);
             }
 
-            add(t('hallOfFame'), t('hallSub'), hall, true);
-            for (i = 0; i < games.length; i++) {
-                if (games[i].manifest.scores === false) continue;       // e.g. Parchís: a winner, no points
-                add(I18n.pick(games[i].manifest.title), t('scores'), Scores.list(games[i].id).map(function (e) { return { n: e.n, s: e.s, w: 0, g: 0 }; }), false);
+            // keeps the tab (by position) that had the focus
+            function build(keepIdx) {
+                tabs = [];
+                list.innerHTML = '';
+                add(t('hallOfFame'), t(scope === 'world' ? 'world' : 'hallSub'), overall(games, listOf, scope === 'world'), true);
+                for (var i = 0; i < games.length; i++) {
+                    if (games[i].manifest.scores === false) continue;       // e.g. Parchís: a winner, no points
+                    add(I18n.pick(games[i].manifest.title), t(scope === 'world' ? 'world' : 'scores'), listOf(games[i].id).map(function (e) { return { n: e.n, s: e.s, w: 0, g: 0 }; }), false);
+                }
+                var at = keepIdx >= 0 && tabs[keepIdx] ? tabs[keepIdx] : tabs[0];
+                show(at);
+                return at.el;
             }
-            show(tabs[0]);
-            return first;
-        }
+
+            function setScope(sc) {
+                scope = sc;
+                for (var k in scopeBtns) scopeBtns[k].className = 'lb-scope-btn' + (k === sc ? ' on' : '');
+                if (sc === 'world') {
+                    loading = true; worldErr = false;
+                    World.fetch(ids, function (err, data) {
+                        if (!alive) return;
+                        loading = false; worldErr = !!err; worldData = data || {};
+                        if (scope !== 'world') return;
+                        var cur = Focus.current(), idx = -1;
+                        for (var j = 0; j < tabs.length; j++) if (tabs[j].el === cur) idx = j;
+                        var f = build(idx >= 0 ? idx : 0);
+                        if (idx >= 0) Focus.focus(f);
+                    });
+                }
+                build(0);
+                A11y.announce(t(sc === 'world' ? 'world' : 'thisTv'));
+            }
+
+            [['tv', 'thisTv', 'tv'], ['world', 'world', 'globe']].forEach(function (d) {
+                var b = el('button', 'lb-scope-btn' + (d[0] === scope ? ' on' : ''));
+                b.setAttribute('data-focus', '');
+                b.setAttribute('data-scope', d[0]);
+                var ic = el('span', 'lb-scope-ic'); Icons.put(ic, d[2]);
+                b.appendChild(ic); b.appendChild(el('span', '', t(d[1])));
+                b.onclick = function () { if (scope !== d[0]) setScope(d[0]); };
+                scopeBtns[d[0]] = b;
+                scopeBar.appendChild(b);
+            });
+            this._stop = function () { alive = false; };
+            return build(0);
+        },
+        close: function () { if (this._stop) this._stop(); }
     });
 })();

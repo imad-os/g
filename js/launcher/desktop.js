@@ -5,20 +5,21 @@ var Desktop = (function () {
     'use strict';
 
     var games = [];             // built-in games: [{ id, manifest, base, bundledBase }]
-    var installed = [];         // installed from the computer (Firebase), same shape + remote
+    var installed = [];         // installed from the App Store (Firebase catalog), same shape + remote
     var onPlay = null;
     var lastPlayed = null, clockTimer = 0, startReturn = null;
 
     // desktop apps (opened full screen by Win)
     var APPS = [
         { id: 'explorer', icon: 'pc', label: 'thisPc' },
+        { id: 'store', icon: 'store', label: 'store' },
         { id: 'browser', icon: 'browser', label: 'browser' },
         { id: 'calculator', icon: 'calculator', label: 'calculator' },
         { id: 'calendar', icon: 'calendar', label: 'calendar' },
         { id: 'scores', icon: 'scores', label: 'leaderboards' },
         { id: 'settings', icon: 'settings', label: 'settings' }
     ];
-    var PINNED = ['explorer', 'browser', 'calendar', 'calculator', 'settings'];
+    var PINNED = ['explorer', 'store', 'browser', 'calendar', 'calculator', 'settings'];
     var WALLPAPERS = ['bloom', 'aurora', 'sunset', 'night'];
 
     function $(id) { return document.getElementById(id); }
@@ -107,6 +108,7 @@ var Desktop = (function () {
         box.innerHTML = '';
         box.appendChild(button('dicon', 'app', appById('explorer'), true));
         box.appendChild(button('dicon', 'app', appById('browser'), true));
+        box.appendChild(button('dicon', 'app', appById('store'), true));
         for (i = 0; i < games.length; i++) box.appendChild(button('dicon', 'game', games[i], true));
         for (i = 0; i < installed.length; i++) box.appendChild(button('dicon', 'game', installed[i], true));
         box.appendChild(button('dicon', 'app', appById('scores'), true));

@@ -1,8 +1,10 @@
 rules_version = '2';
 
 // My PC (formerly Arcade): Firestore security rules.
-//  - Anyone (the TVs) can READ the game list and the installed apps. TVs never sign in.
-//  - Only signed-in admins can create / update / delete games and apps.
+//  - Anyone (the TVs) can READ the App Store catalog ("apps"). TVs never sign in.
+//  - Only signed-in admins can publish / update / remove apps (App Store Manager, installer/index.html).
+//  - TVs may write only small, checked things: +1 on an app's counters, their own backup document,
+//    the world records (top 10 per game).
 //  - An admin is a user whose UID has a document in /admins (created by hand in the console).
 //  - Writes are validated so a mistake in the admin page cannot break every TV.
 service cloud.firestore {
@@ -69,10 +71,63 @@ service cloud.firestore {
           && (!('config' in d) || d.config is map);
     }
 
-    // Read by every TV (REST: .../documents/apps), written only by admins from the installer page.
+    // The App Store catalog, read by every TV (REST: .../documents/apps), written only by admins.
     match /apps/{appId} {
       allow read: if true;
       allow create, update: if isAdmin() && appId.matches('^[a-z0-9-]{2,32}$') && validApp(appId, request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // App counters for "Popular" in the App Store: anyone may add exactly 1 to one counter.
+    function plusOne(f) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([f])
+          && request.resource.data[f] == resource.data.get(f, 0) + 1;
+    }
+    match /appstats/{appId} {
+      allow read: if true;
+      allow create: if appId.matches('^[a-z0-9-]{2,32}$')
+          && request.resource.data.keys().hasOnly(['installs', 'opens'])
+          && request.resource.data.get('installs', 0) in [0, 1] && request.resource.data.get('opens', 0) in [0, 1];
+      allow update: if request.resource.data.keys().hasOnly(['installs', 'opens']) && (plusOne('installs') || plusOne('opens'));
+      allow delete: if isAdmin();
+    }
+
+    // A TV's backup (js/core/backup.js): profiles, settings, saves, installed apps, records, plus a summary
+    // for the App Store Manager. The id is a hash of the TV's own id, so it cannot be guessed; anyone who
+    // has it can read, replace or delete (Settings > Privacy) that one document. Only admins can list them all.
+    function shortText(v, n) { return v is string && v.size() <= n; }
+    function validTv(id, d) {
+      return d.keys().hasOnly(['tv', 'src', 'model', 'version', 'build', 'lang', 'firstSeen', 'lastSeen',
+                               'profiles', 'names', 'installed', 'top', 'blob', 'size'])
+          && d.tv == id
+          && shortText(d.src, 10) && shortText(d.model, 60) && shortText(d.version, 20) && shortText(d.lang, 5)
+          && d.build is int && d.firstSeen is int && d.lastSeen is int && d.profiles is int && d.size is int
+          && d.names is list && d.names.size() <= 8
+          && d.installed is list && d.installed.size() <= 200
+          && d.top is map && d.top.size() <= 100
+          && d.blob is string && d.blob.size() <= 900000;
+    }
+    match /tvs/{tvId} {
+      allow get, delete: if true;
+      allow list: if isAdmin();
+      allow create, update: if tvId.matches('^tv-[a-f0-9]{20,40}$') && validTv(tvId, request.resource.data);
+    }
+
+    // World records: the best 10 of each game on every My PC (js/core/world.js). Up to 10 small entries.
+    function okEntry(l, i) {
+      return l.size() <= i || (l[i] is map && l[i].keys().hasOnly(['n', 's', 'd', 'tv'])
+          && shortText(l[i].n, 24) && l[i].s is int && l[i].s >= 0 && l[i].d is int && shortText(l[i].tv, 48));
+    }
+    match /records/{gameId} {
+      allow read: if true;
+      allow create, update: if gameId.matches('^[a-z0-9-]{2,40}$')
+          && request.resource.data.keys().hasOnly(['list', 'updatedAt'])
+          && request.resource.data.updatedAt is int
+          && request.resource.data.list is list && request.resource.data.list.size() <= 10
+          && okEntry(request.resource.data.list, 0) && okEntry(request.resource.data.list, 1) && okEntry(request.resource.data.list, 2)
+          && okEntry(request.resource.data.list, 3) && okEntry(request.resource.data.list, 4) && okEntry(request.resource.data.list, 5)
+          && okEntry(request.resource.data.list, 6) && okEntry(request.resource.data.list, 7) && okEntry(request.resource.data.list, 8)
+          && okEntry(request.resource.data.list, 9);
       allow delete: if isAdmin();
     }
 

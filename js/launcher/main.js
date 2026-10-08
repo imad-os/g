@@ -190,6 +190,7 @@ var App = (function () {
             var list = Cloud.apps(), a = null;
             for (var i = 0; i < list.length; i++) if ('app-' + list[i].id === id) a = list[i];
             if (!a) return go(null);
+            Cloud.count(a.id, 'opens');                // "popular" in the App Store
             var g = Desktop.fromCloud(a);
             // Before the app opens (behind its loading screen): read its document again so the config
             // is current. Offline or slow (2.5 s), the saved copy is used. Uninstalled: back to the desktop.
@@ -235,6 +236,17 @@ var App = (function () {
         var playId = param('play');
         if (playId) return startGame(playId);
 
+        // My PC was reinstalled or the TV was reset: bring back this TV's profiles, settings, apps and records
+        if (Store.fresh()) {
+            return Backup.restore(function (restored) {
+                if (restored) return location.replace(page('?restored=1'));
+                desktop();
+            });
+        }
+        desktop();
+    }
+
+    function desktop() {
         loadGames(function (games) {
             Desktop.init(games, play);
             ProfilesUI.init(profileChanged);
@@ -246,9 +258,13 @@ var App = (function () {
                 Desktop.setInstalled(list);
                 if (!document.getElementById('desktop').hidden) Focus.focus(keep && document.body.contains(keep) ? keep : document.querySelector('#desk-icons [data-focus]'));
             });
+            // installed or uninstalled in the App Store
+            Cloud.onChange(function () { Desktop.setInstalled(Cloud.apps()); });
             I18n.apply();
             AppBoot.ready();
             Welcome.afterBoot();
+            Backup.start();
+            World.flush();
             // One-time device benchmark while the menu is idle.
             setTimeout(function () {
                 if (!GameHost.active()) benchCancel = Perf.benchmark(function () { benchCancel = null; });

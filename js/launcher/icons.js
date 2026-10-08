@@ -64,6 +64,16 @@ var Icons = (function () {
         info: '<circle cx="24" cy="24" r="19" fill="#5b8def"/><rect x="21.5" y="20" width="5" height="15" rx="2.5" fill="#fff"/><circle cx="24" cy="13.5" r="3" fill="#fff"/>',
         controller: '<path d="M14 15h20a10 10 0 0 1 9.6 12.8l-2.2 7.5a5 5 0 0 1-8.6 1.7L29 32H19l-3.8 5a5 5 0 0 1-8.6-1.7l-2.2-7.5A10 10 0 0 1 14 15z" fill="#4cd97b"/>',
         plus: '<path d="M24 10v28M10 24h28" stroke="#fff" stroke-width="4" stroke-linecap="round"/>',
+        // App Store: a shopping bag with four coloured tiles (original art)
+        store: '<path d="M16 15v-3a8 8 0 0 1 16 0v3" fill="none" stroke="#8fd3ff" stroke-width="3.2" stroke-linecap="round"/>' +
+               '<path d="M7 15h34l-2.4 25a4 4 0 0 1-4 3.6H13.4a4 4 0 0 1-4-3.6z" fill="#2f6bff"/>' +
+               '<rect x="15" y="21" width="8" height="8" rx="1.6" fill="#ff7a59"/><rect x="25" y="21" width="8" height="8" rx="1.6" fill="#4cd97b"/>' +
+               '<rect x="15" y="31" width="8" height="8" rx="1.6" fill="#4fc3ff"/><rect x="25" y="31" width="8" height="8" rx="1.6" fill="#ffc83d"/>',
+        library: '<rect x="8" y="8" width="8" height="32" rx="2" fill="#fff"/><rect x="19" y="8" width="8" height="32" rx="2" fill="#fff"/><path d="M30 10l7-2 6 30-7 2z" fill="#fff"/>',
+        gamepadNav: '<path d="M14 15h20a10 10 0 0 1 9.6 12.8l-2.2 7.5a5 5 0 0 1-8.6 1.7L29 32H19l-3.8 5a5 5 0 0 1-8.6-1.7l-2.2-7.5A10 10 0 0 1 14 15z" fill="#fff"/>',
+        appsNav: '<rect x="7" y="7" width="15" height="15" rx="3" fill="#fff"/><rect x="26" y="7" width="15" height="15" rx="3" fill="#fff"/><rect x="7" y="26" width="15" height="15" rx="3" fill="#fff"/><rect x="26" y="26" width="15" height="15" rx="3" fill="#fff"/>',
+        globe: '<circle cx="24" cy="24" r="17" fill="none" stroke="#4fc3ff" stroke-width="3"/><path d="M7 24h34M24 7c6 6 6 28 0 34M24 7c-6 6-6 28 0 34" fill="none" stroke="#4fc3ff" stroke-width="3"/>',
+        tv: '<rect x="5" y="9" width="38" height="25" rx="3" fill="#8fd3ff"/><rect x="16" y="37" width="16" height="3" rx="1.5" fill="#8fd3ff"/>',
         trash: '<path d="M10 12h28M19 12V8h10v4M13 12l2 29h18l2-29" fill="none" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"/>'
     };
 

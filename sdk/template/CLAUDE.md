@@ -15,5 +15,5 @@ checklist, and when the guide has changed, update this app to match it. If anyth
 disagrees with the guide, the guide wins.
 
 When a task is done: commit, push, and tell the owner the address to paste into the My PC
-installer (https://imad-os.github.io/g/installer/): `https://<owner>.github.io/<repo>/`
+App Store Manager (https://imad-os.github.io/g/installer/): `https://<owner>.github.io/<repo>/`
 (GitHub Pages: Settings → Pages → Deploy from a branch → main / root).

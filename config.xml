@@ -6,10 +6,10 @@
      - screen size declared with a <feature>; only the privileges actually used.
      - XXXXXXXXXX = the 10-character package ID from Seller Office / Certificate Manager. The
        tizen:application id is "<package>.<name>" and must never change between versions.
-     Bump SHELL in js/boot/loader.js and "shell" in app-manifest.json whenever this file changes
-     after the first release. -->
+     Every package upload needs a higher version. Never change SHELL in js/boot/loader.js or "shell" in
+     app-manifest.json: older packages would stop accepting the online builds. -->
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
-        id="https://imad-os.github.io/g/arcade" version="1.2.0" viewmodes="maximized">
+        id="https://imad-os.github.io/g/arcade" version="1.3.0" viewmodes="maximized">
     <tizen:application id="XXXXXXXXXX.arcade" package="XXXXXXXXXX" required_version="4.0"/>
     <name>My PC</name>
     <description>Seven arcade and board games for your TV: a platformer with 3 worlds and 2-player co-op, Parchís for 2 to 4 players with Moroccan rules, plus falling blocks, sky hopping, snake, brick breaking and tile merging. Player profiles keep everyone's progress apart.</description>
@@ -23,6 +23,8 @@
     <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
     <!-- webapis.network: network disconnection popup (mandatory in the Samsung checklist) -->
     <tizen:privilege name="http://developer.samsung.com/privilege/network.public"/>
+    <!-- webapis.productinfo.getDuid(): the TV's own id, so a reinstalled My PC finds its cloud backup (js/core/backup.js) -->
+    <tizen:privilege name="http://developer.samsung.com/privilege/productinfo"/>
     <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable"
                    encryption="disable" install-location="auto" hwkey-event="enable"/>
     <tizen:metadata key="http://samsung.com/tv/metadata/multitasking.support" value="true"/>

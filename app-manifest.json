@@ -1,6 +1,6 @@
 {
-  "build": 16,
-  "version": "2.8.0",
+  "build": 17,
+  "version": "2.9.0",
   "shell": 1,
   "css": [
     "css/launcher.css"
@@ -8,6 +8,8 @@
   "js": [
     "js/core/storage.js",
     "js/core/cloud.js",
+    "js/core/backup.js",
+    "js/core/world.js",
     "js/core/i18n.js",
     "js/core/a11y.js",
     "js/core/scores.js",
@@ -26,6 +28,7 @@
     "js/launcher/apps/calculator.js",
     "js/launcher/apps/calendar.js",
     "js/launcher/apps/scores.js",
+    "js/launcher/apps/store.js",
     "js/launcher/profiles-ui.js",
     "js/launcher/welcome.js",
     "js/launcher/game-host.js",

@@ -43,6 +43,7 @@
         } else if (id === 'apps') {
             var inst = Desktop.installed();
             out.push({ kind: 'text', value: t('installHint') });
+            out.push({ kind: 'action', label: t('openStore'), primary: true, run: function () { Win.open('store'); } });
             out.push({ kind: 'action', label: t('refreshApps'), run: function () {
                 Cloud.refresh(function (err, list) {
                     if (!err) Desktop.setInstalled(list);
@@ -77,6 +78,13 @@
                 App.confirm(t('resetTitle'), t('resetText'), function () { Store.clearPrefix('game_'); App.toast(t('resetDone')); });
             } });
         } else if (id === 'privacy') {
+            out.push({ kind: 'toggle', label: t('cloudBackup'), desc: t('cloudBackupDesc'), get: function () { return Backup.on(); }, set: function (v) { Backup.setOn(v); } });
+            out.push({ kind: 'toggle', label: t('worldShare'), desc: t('worldShareDesc'), get: function () { return World.on(); }, set: function (v) { World.setOn(v); } });
+            out.push({ kind: 'action', label: t('deleteBackup'), danger: true, run: function () {
+                App.confirm(t('deleteBackup') + '?', t('cloudBackupDesc'), function () {
+                    Backup.erase(function (err) { App.toast(t(err ? 'cloudFail' : 'deleteBackupDone')); if (Win.current() === 'settings') { var f = renderMain(1); if (f) Focus.focus(f); } });
+                });
+            } });
             lines = t('privacyText');
             for (i = 0; i < lines.length; i++) out.push({ kind: 'text', value: lines[i] });
         } else if (id === 'devices') {

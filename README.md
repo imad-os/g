@@ -5,8 +5,9 @@ seven built-in games and installable apps/games, playable with the TV remote, a 
 keyboard. It also runs in any desktop browser.
 
 **Make a new app or game:** give `https://imad-os.github.io/g/sdk/GUIDE.md` and a description of
-the game to Claude Code in a new repository. **Install it:** open
-`https://imad-os.github.io/g/installer/` on a computer (setup: `firebase/SETUP.md`).
+the game to Claude Code in a new repository. **Publish it:** open the App Store Manager,
+`https://imad-os.github.io/g/installer/`, on a computer (setup: `firebase/SETUP.md`). People then
+install it on their TV from the **App Store** app.
 
 | Game | Type | Notes |
 |---|---|---|
@@ -58,14 +59,25 @@ this needs one new .wgt (config.xml version 1.1.0); the update page itself arriv
 - **Browser:** pages load in one sandboxed iframe; Up/Down scroll it. Some websites refuse to be
   shown inside another app (X-Frame-Options) and stay blank.
 
-**Installed apps (My PC SDK):**
+**App Store (My PC SDK apps):**
 - Each app is a static website with `mypc-app.json` and the SDK (`sdk/mypc-sdk.js`); see
   `sdk/GUIDE.md` and the example in `sdk/example/`.
-- `installer/` (desktop browser, Firebase sign-in, admins only) reads the manifest and writes the
-  Firestore `apps` collection.
-- The TV reads that list at start-up with the Firestore REST API (`js/core/cloud.js`, no sign-in),
-  keeps the last good list for offline use, and shows the apps on the desktop, in Start, File
-  Explorer and Settings > Apps.
+- `installer/` is the **App Store Manager** (desktop browser, Firebase sign-in, admins only): it reads
+  the manifest and publishes the app in the Firestore `apps` collection (the store catalog). It also
+  shows statistics: the TVs running My PC (model, version, profiles, installed apps, best scores),
+  installs and opens per app, and the world records.
+- The **App Store** app on the TV (`js/launcher/apps/store.js`) reads the catalog with the Firestore
+  REST API (`js/core/cloud.js`, no sign-in), keeps the last good list for offline use, and has Home
+  (featured = newest, New, Popular by installs and opens), Games, Apps, Library and Search. Install /
+  Open / Uninstall; installed apps show on the desktop, in Start, File Explorer and Settings > Apps.
+
+**Cloud backup and world records:**
+- `js/core/backup.js`: the TV's id is a hash of its Samsung DUID (never sent itself). Profiles,
+  settings, saves, installed apps and records are copied to Firestore `tvs/<id>` a little after they
+  change; a reinstalled My PC (or a reset TV) restores them at its first start.
+- `js/core/world.js`: new records go to `records/<game>` (best 10 on every My PC, written with a
+  Firestore precondition so two TVs never erase each other). Leaderboards has **This TV / World**.
+- Both can be turned off, and the backup deleted, in Settings > Privacy & security.
 - An app runs full screen in a sandboxed iframe on its own origin. `game-host.js` talks to it with
   `postMessage` (`{ mypc: 1, type, data }`): My PC sends the input actions, pause/resume/destroy and
   its saved data; the app reports progress, ready, saves, scores and announcements. Back is always

@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>My PC – Install apps</title>
+<title>My PC – App Store Manager</title>
 <link rel="icon" type="image/png" sizes="32x32" href="../icon-32.png">
-<!-- Desktop browser page (not part of the TV package): installs apps on every My PC.
-     It signs in with Firebase Authentication and writes the "apps" collection that the TVs read. -->
+<!-- Desktop browser page (not part of the TV package): the App Store Manager. It publishes apps and games
+     to the My PC App Store (Firestore "apps"); each TV installs what its users pick in the App Store app.
+     It also shows the statistics: TVs running My PC, their installed apps and best scores, world records. -->
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -51,12 +52,22 @@
   .modal .box { background: #2b2b2b; border-radius: 12px; padding: 22px 26px; width: min(640px, 100%); max-height: 100%; overflow: auto; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6); }
   .modal h3 { margin: 0 0 4px; font-size: 20px; }
   a { color: #4cc2ff; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; }
+  .stat { background: #2b2b2b; border-radius: 10px; padding: 14px 18px; }
+  .stat b { display: block; font-size: 28px; font-weight: 600; }
+  .tv { background: #2b2b2b; border-radius: 10px; padding: 14px 18px; margin-bottom: 6px; }
+  .tv .name { font-weight: 600; }
+  .tv .line { margin-top: 3px; }
+  .recs { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+  .rec { background: #2b2b2b; border-radius: 10px; padding: 12px 16px; }
+  .rec ol { margin: 6px 0 0; padding-left: 20px; }
+  .tag.cnt { background: #22405c; }
 </style>
 </head>
 <body>
 <header>
   <img src="../icon-32.png" alt="" width="28" height="28">
-  <h1>My PC – Install apps</h1>
+  <h1>My PC – App Store Manager</h1>
   <span id="who" class="who"></span>
   <button id="btn-out" hidden>Sign out</button>
 </header>
@@ -83,7 +94,7 @@
   <section id="notadmin" hidden>
     <h2>Almost there</h2>
     <div class="card">
-      <p>This account can't install apps yet. In the Firebase console, open <b>Firestore → Data</b>, collection
+      <p>This account can't manage the App Store yet. In the Firebase console, open <b>Firestore → Data</b>, collection
          <code>admins</code>, and add a document whose ID is your user ID:</p>
       <p><code id="uid"></code> <button id="btn-copy" class="small">Copy</button></p>
       <p class="muted small">Then reload this page. See <code>firebase/SETUP.md</code> in the repository.</p>
@@ -96,7 +107,7 @@
     <div class="card cat">
       <div class="row">
         <span class="muted grow small">GitHub repositories of <b id="owner2"></b> whose name starts with <code id="prefix"></code>
-          and that have GitHub Pages turned on. Installed ones are marked; new versions can be updated.</span>
+          and that have GitHub Pages turned on. Apps already in the store are marked; new versions can be updated.</span>
         <button id="btn-scan">Refresh</button>
       </div>
       <p id="scan-msg" class="small"></p>
@@ -104,11 +115,11 @@
       <div id="catalog-actions" class="row" hidden>
         <label class="row small" style="margin:0"><input type="checkbox" id="sel-all"> Select all</label>
         <span class="grow"></span>
-        <button id="btn-install-sel" class="primary" disabled>Install selected</button>
+        <button id="btn-install-sel" class="primary" disabled>Add selected to the store</button>
       </div>
     </div>
 
-    <h2>Install from another address</h2>
+    <h2>Add from another address</h2>
     <div class="card">
       <label for="url">App address (the folder that contains <code>mypc-app.json</code>)</label>
       <div class="row">
@@ -123,15 +134,23 @@
           <div id="pv-desc" class="muted"></div>
           <div class="muted small">Opens <span id="pv-entry"></span></div>
         </div>
-        <button id="btn-install" class="primary">Install</button>
+        <button id="btn-install" class="primary">Add to store</button>
       </div>
     </div>
     <p class="muted small">Building a new app? Give the SDK guide to Claude:
       <a href="../sdk/GUIDE.md" target="_blank" rel="noopener">sdk/GUIDE.md</a>.</p>
 
-    <h2>Installed apps <span id="count" class="muted small"></span></h2>
+    <h2>Apps in the store <span id="count" class="muted small"></span></h2>
     <div id="list"></div>
-    <p class="muted small">TVs pick up changes the next time My PC starts.</p>
+    <p class="muted small">Every My PC sees the store right away. People install apps on their TV with the App Store app.</p>
+
+    <h2>TVs with My PC <span id="tv-count" class="muted small"></span></h2>
+    <div id="tv-summary" class="stats"></div>
+    <p id="tv-msg" class="small"></p>
+    <div id="tvs"></div>
+
+    <h2>World records</h2>
+    <div id="records" class="recs"></div>
   </section>
 
   <p id="boot" class="muted">Loading…</p>
@@ -173,7 +192,7 @@
   const auth = getAuth(app), db = getFirestore(app);
   const $ = (id) => document.getElementById(id);
   const show = (id) => ['signin', 'notadmin', 'admin'].forEach((s) => { $(s).hidden = s !== id; });
-  let user = null, apps = [], pending = null, found = [];
+  let user = null, apps = [], pending = null, found = [], stats = {};
   const OWNER = 'imad-os', PREFIX = 'g_';         // catalog: OWNER's repositories named PREFIX...
   $('owner').textContent = $('owner2').textContent = OWNER;
   $('prefix').textContent = PREFIX + '…';
@@ -190,7 +209,7 @@
   const authErr = (e) => AUTH_MSG[e.code] || e.message;
   // Firestore refusals: after an installer update the published rules may be older than the page
   const fbErr = (e) => e.code === 'permission-denied'
-    ? 'Firebase refused it. If the rules were not republished since the last update, publish firebase/firestore.rules again (the apps rules now allow "config").'
+    ? 'Firebase refused it. If the rules were not republished since the last update, publish firebase/firestore.rules again.'
     : 'Firebase refused it: ' + e.message;
 
   $('btn-google').onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch((e) => say('signin-msg', authErr(e), 'err'));
@@ -221,8 +240,68 @@
   async function load() {
     const snap = await getDocs(collection(db, 'apps'));
     apps = snap.docs.map((d) => d.data()).sort((a, b) => (a.order || 0) - (b.order || 0));
+    try { stats = {}; (await getDocs(collection(db, 'appstats'))).docs.forEach((d) => { stats[d.id] = d.data(); }); } catch (e) { stats = {}; }
     render();
     renderCatalog();
+    loadTvs();
+  }
+
+  /* ---------- statistics: TVs running My PC (their backup document), world records ---------- */
+
+  const GAME_NAMES = { jumper: 'Super Jumper', blocks: 'Block Drop', hopper: 'Sky Hopper', snake: 'Neon Snake', breaker: 'Brick Breaker', merge: 'Tile Merge', parchis: 'Parchís' };
+  const gameName = (id) => GAME_NAMES[id] || (id.indexOf('app-') === 0 && (apps.find((a) => a.id === id.slice(4)) || {}).name) || id;
+  const when = (ms) => {
+    if (!ms) return '–';
+    const d = (Date.now() - ms) / 86400000;
+    return d < 1 / 24 ? 'just now' : d < 1 ? Math.round(d * 24) + ' h ago' : d < 60 ? Math.round(d) + ' days ago' : new Date(ms).toLocaleDateString();
+  };
+  function statCard(label, value) { const c = document.createElement('div'); c.className = 'stat'; c.innerHTML = '<b></b><span class="muted small"></span>'; c.querySelector('b').textContent = value; c.querySelector('span').textContent = label; return c; }
+
+  async function loadTvs() {
+    let tvs = [], recs = [];
+    say('tv-msg', '');
+    try { tvs = (await getDocs(collection(db, 'tvs'))).docs.map((d) => Object.assign({ id: d.id }, d.data())); }
+    catch (e) { say('tv-msg', e.code === 'permission-denied' ? 'Publish the new firebase/firestore.rules to see the TVs (see firebase/SETUP.md).' : 'Could not read the TVs: ' + e.message, 'err'); }
+    try { recs = (await getDocs(collection(db, 'records'))).docs.map((d) => ({ id: d.id, list: (d.data().list || []) })); } catch (e) { recs = []; }
+    tvs.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+    const week = Date.now() - 7 * 86400000;
+    let installs = 0, opens = 0;
+    Object.values(stats).forEach((s) => { installs += s.installs || 0; opens += s.opens || 0; });
+    const sum = $('tv-summary');
+    sum.innerHTML = '';
+    sum.appendChild(statCard('TVs with My PC', tvs.length));
+    sum.appendChild(statCard('used in the last 7 days', tvs.filter((t) => (t.lastSeen || 0) > week).length));
+    sum.appendChild(statCard('installs from the store', installs));
+    sum.appendChild(statCard('apps opened', opens));
+    $('tv-count').textContent = tvs.length ? '(' + tvs.length + ')' : '';
+    const box = $('tvs');
+    box.innerHTML = '';
+    if (!tvs.length) box.innerHTML = '<p class="muted">No TV has sent its backup yet.</p>';
+    tvs.forEach((t) => {
+      const row = document.createElement('div');
+      row.className = 'tv';
+      row.innerHTML = '<div><span class="name"></span> <span class="muted small meta"></span></div><div class="line small prof"></div><div class="line small inst"></div><div class="line small top"></div>';
+      row.querySelector('.name').textContent = (t.model || 'TV') + ' · ' + t.id.slice(3, 11);
+      row.querySelector('.meta').textContent = 'My PC ' + (t.version || '?') + ' (build ' + (t.build || '?') + ') · ' + (t.lang || '') + ' · last seen ' + when(t.lastSeen) +
+        ' · first seen ' + when(t.firstSeen) + ' · backup ' + Math.round((t.size || 0) / 1024) + ' KB' + (t.src === 'random' ? ' · no TV id (browser or old package)' : '');
+      row.querySelector('.prof').textContent = 'Profiles: ' + ((t.names || []).join(', ') || '–');
+      row.querySelector('.inst').textContent = 'Installed: ' + ((t.installed || []).map((id) => (apps.find((a) => a.id === id) || { name: id }).name).join(', ') || 'nothing from the store');
+      const top = Object.entries(t.top || {}).sort((a, b) => b[1].s - a[1].s).map(([g, e]) => gameName(g) + ': ' + e.n + ' ' + e.s);
+      row.querySelector('.top').textContent = 'Best scores: ' + (top.join(' · ') || '–');
+      box.appendChild(row);
+    });
+    const rb = $('records');
+    rb.innerHTML = '';
+    recs = recs.filter((r) => r.list.length);
+    if (!recs.length) rb.innerHTML = '<p class="muted">No world record yet.</p>';
+    recs.forEach((r) => {
+      const c = document.createElement('div');
+      c.className = 'rec';
+      c.innerHTML = '<b></b><ol></ol>';
+      c.querySelector('b').textContent = gameName(r.id);
+      r.list.slice(0, 5).forEach((e) => { const li = document.createElement('li'); li.textContent = e.n + ' – ' + e.s; c.querySelector('ol').appendChild(li); });
+      rb.appendChild(c);
+    });
   }
 
   /* ---------- catalog: the owner's g_ repositories on GitHub Pages ---------- */
@@ -272,7 +351,7 @@
       if (!f.app) {
         row.innerHTML = '<div class="grow"><span class="name"></span> <span class="muted small err"></span></div>';
         row.querySelector('.name').textContent = f.c.repo;
-        row.querySelector('.err').textContent = '– not installable: ' + f.error;
+        row.querySelector('.err').textContent = '– not a My PC app: ' + f.error;
         return box.appendChild(row);
       }
       const st = InstallerLib.status(apps, f.app);
@@ -286,13 +365,13 @@
       row.querySelector('img').src = f.app.icon || '../icon-32.png';
       row.querySelector('.name').textContent = f.app.name;
       row.querySelector('.type').textContent = f.app.type;
-      row.querySelector('.st').textContent = st === 'new' ? 'Not installed' : st === 'update' ? 'Update available' : 'Installed';
+      row.querySelector('.st').textContent = st === 'new' ? 'Not in store' : st === 'update' ? 'Update available' : 'In store';
       row.querySelector('.st').className = 'tag st ' + st;
       row.querySelector('.ver').textContent = 'v' + f.app.version;
       row.querySelector('.desc').textContent = f.app.description;
       row.querySelector('.url').textContent = f.c.repo + ' · ' + f.app.url;
       const act = row.querySelector('.act');
-      act.textContent = st === 'new' ? 'Install' : st === 'update' ? 'Update' : 'Installed';
+      act.textContent = st === 'new' ? 'Add to store' : st === 'update' ? 'Update' : 'In store';
       act.disabled = st === 'installed';
       act.className = 'act' + (st === 'installed' ? '' : ' primary');
       act.onclick = async () => { act.disabled = true; await installMany([f.app]); };
@@ -305,7 +384,7 @@
   function updateSel() {
     const sel = found.filter((f) => f.selected && f.app && InstallerLib.status(apps, f.app) !== 'installed');
     $('btn-install-sel').disabled = !sel.length;
-    $('btn-install-sel').textContent = sel.length ? 'Install selected (' + sel.length + ')' : 'Install selected';
+    $('btn-install-sel').textContent = sel.length ? 'Add selected to the store (' + sel.length + ')' : 'Add selected to the store';
     const avail = found.filter((f) => f.app && InstallerLib.status(apps, f.app) !== 'installed');
     $('sel-all').checked = !!avail.length && avail.every((f) => f.selected);
   }
@@ -355,7 +434,7 @@
   });
   $('cfg-modal').addEventListener('mousedown', (e) => { if (e.target === $('cfg-modal')) closeConfig(); });
 
-  // installs or updates apps (an update keeps its desktop position, visibility and config)
+  // adds apps to the store or updates them (an update keeps its position, visibility and config)
   async function installMany(list) {
     let done = 0, failed = [];
     for (const a of list) {
@@ -367,7 +446,7 @@
       try { await setDoc(doc(db, 'apps', a.id), data); done++; } catch (e) { failed.push(a.name + ': ' + fbErr(e)); }
     }
     found.forEach((f) => { f.selected = false; });
-    say('scan-msg', failed.length ? 'Not installed: ' + failed.join('; ') : done + ' app' + (done === 1 ? '' : 's') + ' installed. TVs show them the next time My PC starts.', failed.length ? 'err' : 'ok');
+    say('scan-msg', failed.length ? 'Not added: ' + failed.join('; ') : done + ' app' + (done === 1 ? '' : 's') + ' in the App Store now.', failed.length ? 'err' : 'ok');
     await load();
   }
 
@@ -375,15 +454,15 @@
     const box = $('list');
     box.innerHTML = '';
     $('count').textContent = apps.length ? '(' + apps.length + ')' : '';
-    if (!apps.length) { box.innerHTML = '<p class="muted">No apps installed yet.</p>'; return; }
+    if (!apps.length) { box.innerHTML = '<p class="muted">The store is empty.</p>'; return; }
     apps.forEach((a, i) => {
       const row = document.createElement('div');
       row.className = 'app';
-      row.innerHTML = '<img alt=""><div class="grow"><div><span class="name"></span><span class="tag type"></span><span class="tag cfg" hidden>config</span><span class="tag off" hidden>Hidden on TVs</span></div>' +
+      row.innerHTML = '<img alt=""><div class="grow"><div><span class="name"></span><span class="tag type"></span><span class="tag cfg" hidden>config</span><span class="tag off" hidden>Hidden</span><span class="tag cnt"></span></div>' +
         '<div class="muted small url"></div></div>' +
         '<button class="up" title="Move up">▲</button><button class="down" title="Move down">▼</button>' +
         '<button class="cfg">Config</button>' +
-        '<button class="toggle"></button><a class="open" target="_blank" rel="noopener"><button>Open</button></a><button class="danger del">Uninstall</button>';
+        '<button class="toggle"></button><a class="open" target="_blank" rel="noopener"><button>Open</button></a><button class="danger del">Remove</button>';
       row.querySelector('img').src = a.icon || '../icon-32.png';
       row.querySelector('.name').textContent = a.name;
       row.querySelector('.type').textContent = a.type;
@@ -393,15 +472,17 @@
       row.querySelector('.cfg.tag').textContent = keys + ' setting' + (keys === 1 ? '' : 's');
       row.querySelector('button.cfg').onclick = () => editConfig(a);
       row.querySelector('.url').textContent = a.url;
+      const st = stats[a.id] || {};
+      row.querySelector('.cnt').textContent = (st.installs || 0) + ' installs · ' + (st.opens || 0) + ' opens';
       row.querySelector('.open').href = a.entry;
-      row.querySelector('.toggle').textContent = a.enabled === false ? 'Show on TVs' : 'Hide on TVs';
+      row.querySelector('.toggle').textContent = a.enabled === false ? 'Show in store' : 'Hide from store';
       row.querySelector('.up').disabled = i === 0;
       row.querySelector('.down').disabled = i === apps.length - 1;
       row.querySelector('.toggle').onclick = () => update(a, { enabled: a.enabled === false });
       row.querySelector('.up').onclick = () => move(i, -1);
       row.querySelector('.down').onclick = () => move(i, 1);
       row.querySelector('.del').onclick = async () => {
-        if (!confirm('Uninstall "' + a.name + '" from every My PC?')) return;
+        if (!confirm('Remove "' + a.name + '" from the App Store? TVs that installed it can no longer open it.')) return;
         await deleteDoc(doc(db, 'apps', a.id));
         load();
       };
@@ -418,7 +499,7 @@
     load();
   }
 
-  // 1. read mypc-app.json, 2. show what will be installed
+  // 1. read mypc-app.json, 2. show what will be added
   $('btn-fetch').onclick = async () => {
     $('preview').hidden = true; pending = null;
     let where;
@@ -440,12 +521,12 @@
     $('pv-version').textContent = 'v' + pending.version;
     $('pv-desc').textContent = pending.description;
     $('pv-entry').textContent = pending.entry;
-    $('btn-install').textContent = exists ? 'Update' : 'Install';
+    $('btn-install').textContent = exists ? 'Update' : 'Add to store';
     $('preview').hidden = false;
-    say('fetch-msg', exists ? 'Already installed: this updates it.' : 'Ready to install.', 'ok');
+    say('fetch-msg', exists ? 'Already in the store: this updates it.' : 'Ready to add to the App Store.', 'ok');
   };
 
-  // 3. write it: every TV gets it at its next start
+  // 3. write it: it is in the App Store of every My PC
   $('btn-install').onclick = async () => {
     if (!pending) return;
     const old = apps.find((a) => a.id === pending.id);
@@ -456,7 +537,7 @@
     $('btn-install').disabled = true;
     try {
       await setDoc(doc(db, 'apps', pending.id), data);
-      say('fetch-msg', '"' + pending.name + '" is installed. TVs show it the next time My PC starts.', 'ok');
+      say('fetch-msg', '"' + pending.name + '" is in the App Store now.', 'ok');
       $('preview').hidden = true; $('url').value = ''; pending = null;
       load();
     } catch (e) {

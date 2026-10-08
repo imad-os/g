@@ -2,7 +2,8 @@
  *   Welcome.switchUser(id)  "Hi, <name>" with the user's avatar and a spinner, then the app restarts as that
  *                           profile (language, clock, background... all load from the profile's own settings)
  *   Welcome.afterBoot()     on the new page: the same welcome screen fades out; after an update the screen
- *                           says that My PC was updated (shown once per new build)
+ *                           says that My PC was updated (shown once per new build); after a restore from the
+ *                           cloud (reinstalled My PC, reset TV) it says that the data came back
  * Plain transforms and opacity only (cheap on a 1 GB TV). */
 var Welcome = (function () {
     'use strict';
@@ -69,7 +70,12 @@ var Welcome = (function () {
 
     function afterBoot() {
         var fromSwitch = /[?&]user=1/.test(location.search), up = updated(), p = Profiles.current();
-        if (up) {
+        var restored = /[?&]restored=1/.test(location.search);
+        if (restored) {
+            blocking = true;
+            build('update', p, I18n.t('restoredTitle'), I18n.t('restoredSub'));
+            timer = setTimeout(function () { close(); }, 3500);
+        } else if (up) {
             blocking = true;
             build('update', p, I18n.t('updatedTitle'), I18n.t('updatedSub').replace('%s', AppBoot.version()));
             timer = setTimeout(function () { close(); }, 2800);
@@ -78,7 +84,7 @@ var Welcome = (function () {
             build('user', p, I18n.t('hello') + ', ' + Profiles.name(p, I18n.t('player')) + '!', I18n.t('preparing'));
             timer = setTimeout(function () { close(); }, 1100);
         }
-        if (fromSwitch) { try { history.replaceState(null, '', location.href.split('?')[0]); } catch (e) {} }
+        if (fromSwitch || restored) { try { history.replaceState(null, '', location.href.split('?')[0]); } catch (e) {} }
     }
 
     // the router: while a screen is up, keys do nothing, except OK / Back dismiss the update message

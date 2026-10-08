@@ -1,7 +1,7 @@
 # My PC SDK v1: build an app or game for My PC
 
 My PC is a Samsung Smart TV app (2024 and newer TVs, Tizen 8+) that looks like a small Windows
-PC. It also runs in desktop browsers. It can install extra **apps and games built by anyone**: each one is a normal
+PC. It also runs in desktop browsers. Its **App Store** offers extra **apps and games built by anyone**: each one is a normal
 static website (for example on GitHub Pages) that includes the My PC SDK.
 
 > **For an AI assistant reading this:** you were probably given this URL and a description of a
@@ -53,7 +53,7 @@ this guide and the SDK fresh before every task.
 
 | File | Required | What |
 |---|---|---|
-| `mypc-app.json` | **MUST** | the manifest, read by the installer (section 3) |
+| `mypc-app.json` | **MUST** | the manifest, read by the App Store Manager (section 3) |
 | `index.html` | **MUST** | the entry page (or whatever `entry` says) |
 | `icon.png` or `icon.svg` | SHOULD | square icon, 256×256 or larger, shown on the desktop and in Start |
 | other files | MAY | your JS, CSS, images, audio, all relative paths |
@@ -136,7 +136,7 @@ After `onPause` the game **MUST NOT** move or make sound until `onResume`.
 ### App config: `MyPC.app_config`
 
 Settings that the **owner changes without touching the code**: difficulty, a server address, a
-list of levels, feature switches. In the installer, each installed app has a **Config** button
+list of levels, feature switches. In the App Store Manager, each app has a **Config** button
 that edits a JSON object stored with the app in Firebase. My PC reads it again from Firebase
 **before the app opens** (offline, the last saved copy is used) and gives it to the app:
 
@@ -148,8 +148,8 @@ MyPC.app_config.speed      // e.g. 2
 - Treat it as **read-only input**. Use your own defaults for missing keys
   (`var speed = +MyPC.app_config.speed || 1;`) and ignore keys you don't know.
 - It is **not secret**: every TV downloads it, and the app's site can see it. No passwords or keys.
-- Put sensible defaults in `mypc-app.json` as `"config": { ... }`; the installer uses them on the
-  first install, and updates never overwrite what the owner has set.
+- Put sensible defaults in `mypc-app.json` as `"config": { ... }`; the App Store Manager uses them
+  when the app is added, and updates never overwrite what the owner has set.
 - Standalone (opened directly in a browser) it is `{}` unless you add `?app_config={"speed":2}`
   to the address, which lets you test different configs.
 
@@ -293,12 +293,16 @@ Voice Guide announcements.
 2. Repository → **Settings → Pages** → *Deploy from a branch* → `main` / root. Wait for
    `https://<user>.github.io/<repo>/` to show the app.
 3. Check `https://<user>.github.io/<repo>/mypc-app.json` opens in the browser.
-4. On a computer, open the installer: **`https://imad-os.github.io/g/installer/`**, sign in,
-   paste the app address, press **Check**, then **Install**.
-5. Every My PC shows it on the desktop, in Start and in File Explorer the next time it starts.
+4. On a computer, open the **App Store Manager**: **`https://imad-os.github.io/g/installer/`**, sign
+   in, paste the app address, press **Check**, then **Add to store** (or tick it under **Apps from
+   imad-os** if the repository is named `g_…`).
+5. It is in the **App Store** of every My PC right away (Home shows the newest apps and the popular
+   ones). People install it there; it then appears on their desktop, in Start and in File Explorer.
 
 To update an app, push the new version (bump `version`), then press **Check** and **Update** in
-the installer if the name, icon or entry changed. Code changes go live without reinstalling.
+the App Store Manager if the name, icon or entry changed. Code changes go live without reinstalling.
+Scores sent with `MyPC.submitScore` go to the TV's Leaderboards and, when they are good enough, to
+the World records.
 
 ## 11. Checklist (all MUST pass)
 

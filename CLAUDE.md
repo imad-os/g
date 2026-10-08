@@ -7,8 +7,13 @@
   CSS; that's fine, no need to rewrite it. This is a working rule for us: don't advertise it in
   the app UI and don't change `config.xml` `required_version` unless the owner asks.
 - The app is called **My PC** (formerly "Arcade"): a dark, Windows 11 style desktop for the TV.
-- Apps and games are **installed from a computer** with `installer/` (Firebase sign-in, admins
-  only). The TV never signs in: it reads the public `apps` collection.
+- Apps and games are **published** from a computer with the **App Store Manager** (`installer/`,
+  Firebase sign-in, admins only) into the store catalog (Firestore `apps`). Each TV installs what its
+  users pick in the **App Store** app. The TV never signs in.
+- **Cloud backup:** each TV is identified by a hash of its DUID (`Device.id()`); profiles, settings,
+  saves, installed apps and records go to Firestore `tvs/<id>` and come back after a reinstall or a
+  reset. World records in `records/<game>`. Users can turn both off (Settings > Privacy & security);
+  keep the privacy text in i18n true whenever this changes.
 - Original names and art only (no Nintendo/Tetris look-alikes).
 
 ## Where things are
@@ -31,15 +36,20 @@
   cross-origin iframe through the SDK protocol), `main.js` (router: the only place handling Back).
 - **Profiles are users:** every profile has its own settings (language, clock, background, volumes, graphics, saves: `arc_<profile>_*`); only hardware facts and the top-10 records are TV-wide (`arc_dev_*`). Switching profile goes through `js/launcher/welcome.js` (sign-in screen, then the app restarts as that profile). Records are saved automatically under the profile name (no initials screen). `Welcome.afterBoot()` also shows "My PC is up to date" once per new build.
 - `js/core/`: storage (per-profile keys `arc_<profile>_*`, TV-wide `arc_dev_*`), i18n (en, fr,
-  es, ar + RTL), input, focus, perf, scores, `cloud.js` (installed apps from Firestore REST).
+  es, ar + RTL), input, focus, perf, scores, `cloud.js` (Firestore REST: store catalog, installed list
+  `arc_dev_installed`, counters), `backup.js` (Device id, backup/restore), `world.js` (world records).
 - `games/`: built-in games on `games/shared/gamekit.js`.
-- **App config:** each installed app has a `config` object (Firestore `apps/<id>`, edited with the
-  installer's Config button). The TV re-reads the app's document before it opens
+- `apps/store.js`: the App Store app (Home / Games / Apps / Library / Search, Install / Open / Uninstall).
+- **App config:** each store app has a `config` object (Firestore `apps/<id>`, edited with the
+  App Store Manager's Config button). The TV re-reads the app's document before it opens
   (`Cloud.fetchApp`, 2.5 s, falls back to the saved list) and the app gets it as `MyPC.app_config`.
 - `sdk/`: `mypc-sdk.js` (protocol `{ mypc: 1, type, data }`), `GUIDE.md` (for building new apps
   in other repos), `example/`.
-- `installer/`: desktop-browser page (Firebase JS SDK from gstatic is OK there, never in the TV app).
-- `firebase/`: rules and owner setup steps (`SETUP.md`).
+- `installer/`: the App Store Manager, a desktop-browser page (Firebase JS SDK from gstatic is OK
+  there, never in the TV app). Also shows TV statistics and world records.
+- `firebase/`: rules and owner setup steps (`SETUP.md`). After a rules change the owner must publish
+  them again in the Firebase console. Tests use an in-memory Firestore (`fakeFirestore` in
+  `tests/run-tests.mjs`); never let tests or scripts reach the real database.
 
 ## Rules that always apply
 - One app or game at a time, full screen; free everything on close (iframes, timers, AudioContext).

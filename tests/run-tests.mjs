@@ -29,6 +29,8 @@
 //  22. Tab, wheel, Guide, device detection, Settings > Devices with a simulated controller
 //  24. Super Jumper stages: different layouts and hills
 //  25. Profiles: own settings (language, clock, background), switch-user screen, update message, shared records
+//  26. App Store: catalog, New / Popular, search, install, open, uninstall; desktop and Explorer follow
+//  27. TV id, cloud backup and restore after a reinstall, world records
 //  23. Boot screen: black, inline logo, orbit dots, fades out; no logo when opening a game
 //
 //  CHROMIUM_PATH=/path/to/chrome uses an existing Chromium instead of Playwright's download.
@@ -87,13 +89,77 @@ async function routeHosted(page, { manifest, breakFile, offline } = {}) {
     });
 }
 
-async function newPage(browser, base) {
+// An in-memory Firestore behind the REST API the TV uses (list, get, patch with preconditions, batchGet,
+// commit with increments). Every test page gets one, so tests never reach the real database.
+// db: { apps: { id: {...} }, appstats, tvs, records } (plain objects); db.down = true makes it unreachable.
+const FS_DB = 'projects/tvgames-f984d/databases/(default)/documents';
+function fsValue(v) {
+    if (v === null || v === undefined) return { nullValue: null };
+    if (typeof v === 'boolean') return { booleanValue: v };
+    if (typeof v === 'number') return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+    if (typeof v === 'string') return { stringValue: v };
+    if (Array.isArray(v)) return { arrayValue: { values: v.map(fsValue) } };
+    return { mapValue: { fields: fsFields(v) } };
+}
+function fsFields(o) { const f = {}; for (const k in o) f[k] = fsValue(o[k]); return f; }
+function fsPlain(v) {
+    if ('stringValue' in v) return v.stringValue;
+    if ('integerValue' in v) return parseInt(v.integerValue, 10);
+    if ('doubleValue' in v) return v.doubleValue;
+    if ('booleanValue' in v) return v.booleanValue;
+    if ('timestampValue' in v) return v.timestampValue;
+    if ('arrayValue' in v) return (v.arrayValue.values || []).map(fsPlain);
+    if ('mapValue' in v) { const o = {}; for (const k in v.mapValue.fields || {}) o[k] = fsPlain(v.mapValue.fields[k]); return o; }
+    return null;
+}
+async function fakeFirestore(ctx, db) {
+    for (const c of ['apps', 'appstats', 'tvs', 'records']) db[c] = db[c] || {};
+    db._t = db._t || {}; db.log = db.log || []; db._n = db._n || 0;
+    await ctx.route('https://firestore.googleapis.com/**', async (r) => {
+        if (db.down) return r.abort('internetdisconnected');
+        const req = r.request(), u = new URL(req.url()), method = req.method();
+        const p = decodeURIComponent(u.pathname).replace('/v1/' + FS_DB, '');
+        const json = (status, o) => r.fulfill({ status, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(o) });
+        const stamp = (k) => db._t[k] || (db._t[k] = '2026-01-01T00:00:0' + (db._n++ % 10) + '.' + String(db._n).padStart(6, '0') + 'Z');
+        const out = (col, id) => ({ name: FS_DB + '/' + col + '/' + id, fields: fsFields(db[col][id]), updateTime: stamp(col + '/' + id), createTime: '2026-01-01T00:00:00Z' });
+        db.log.push(method + ' ' + p);
+        const body = req.postData() ? JSON.parse(req.postData()) : null;
+        if (p === ':batchGet') return json(200, body.documents.map((n) => { const [col, id] = n.slice(FS_DB.length + 1).split('/'); return db[col] && db[col][id] ? { found: out(col, id) } : { missing: n }; }));
+        if (p === ':commit') {
+            for (const w of body.writes) {
+                const [col, id] = w.transform.document.slice(FS_DB.length + 1).split('/');
+                const d = (db[col][id] = db[col][id] || {});
+                for (const ft of w.transform.fieldTransforms) d[ft.fieldPath] = (d[ft.fieldPath] || 0) + parseInt(ft.increment.integerValue, 10);
+            }
+            return json(200, { writeResults: [] });
+        }
+        const [col, id] = p.split('/').filter(Boolean);
+        if (!db[col]) return json(404, { error: { code: 404, status: 'NOT_FOUND' } });
+        if (method === 'GET' && !id) return json(200, { documents: Object.keys(db[col]).map((k) => out(col, k)) });
+        if (method === 'GET') return db[col][id] ? json(200, out(col, id)) : json(404, { error: { code: 404, status: 'NOT_FOUND' } });
+        if (method === 'PATCH') {
+            const exists = u.searchParams.get('currentDocument.exists'), ut = u.searchParams.get('currentDocument.updateTime');
+            if (exists === 'false' && db[col][id]) return json(409, { error: { code: 409, status: 'ALREADY_EXISTS' } });
+            if (ut && stamp(col + '/' + id) !== ut) return json(400, { error: { code: 400, status: 'FAILED_PRECONDITION' } });
+            db[col][id] = fsPlain({ mapValue: { fields: body.fields } });
+            delete db._t[col + '/' + id];
+            return json(200, out(col, id));
+        }
+        if (method === 'DELETE') { delete db[col][id]; return json(200, {}); }
+        json(400, { error: { code: 400 } });
+    });
+}
+
+async function newPage(browser, base, db) {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     await ctx.addInitScript(TIZEN_MOCK);
+    db = db || {};
+    await fakeFirestore(ctx, db);
     const page = await ctx.newPage();
     page.errors = [];
     page.on('pageerror', (e) => page.errors.push(e.message));
     page.base = base;
+    page.fs = db;
     return page;
 }
 
@@ -291,6 +357,7 @@ async function main() {
     {
         const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
         await ctx.addInitScript(TIZEN_MOCK);
+        await fakeFirestore(ctx, {});
         await ctx.addInitScript(() => {
             function pad(i) { const b = []; for (let k = 0; k < 17; k++) b.push({ pressed: false, value: 0 }); return { index: i, id: 'Mock ' + i, connected: true, mapping: 'standard', buttons: b, axes: [0, 0, 0, 0] }; }
             window.__pads = [];
@@ -639,7 +706,7 @@ async function main() {
         check(/\d{1,2}:\d{2}/.test(await page.textContent('#tray-time')) && (await page.textContent('#tray-date')).length > 5, 'taskbar clock shows time and date (' + await page.textContent('#tray-time') + ')');
         check(await page.evaluate(() => document.querySelectorAll('#desk-icons [data-game]').length === 7 && !!document.querySelector('#desk-icons [data-app="explorer"]')), 'desktop icons: 7 games plus apps');
         await page.focus('#tb-start'); await key('Enter');
-        check(await page.evaluate(() => Desktop.startOpen() && document.querySelectorAll('#start-pinned [data-focus]').length === 13), 'Start menu lists 6 apps and 7 games');
+        check(await page.evaluate(() => Desktop.startOpen() && document.querySelectorAll('#start-pinned [data-focus]').length === 14), 'Start menu lists 7 apps (with the App Store) and 7 games');
         await key('Escape');
         check(await page.evaluate(() => !Desktop.startOpen() && document.activeElement.id === 'tb-start'), 'Back closes Start');
         // calculator from the taskbar, with the remote
@@ -718,8 +785,11 @@ async function main() {
         const hidden = { fields: Object.assign({}, doc.fields, { id: { stringValue: 'hidden-one' }, enabled: { booleanValue: false } }) };
         // the list always answers with config speed 1 (what the TV has saved); the single-app request, made right
         // before an app opens, answers with the live value: that tells "read again before opening" from "from the list"
+        // installed on this TV from the App Store (the store itself is tested in section 26)
+        await page.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'star-catcher', at: 1 }, { id: 'hidden-one', at: 1 }])); });
         await page.context().route('https://firestore.googleapis.com/**', (r) => {
             if (!firestoreUp) return r.abort('internetdisconnected');
+            if (!/\/documents\/apps(\/|\?|$)/.test(r.request().url())) return r.fallback();      // counters, backup...: the shared fake
             const json = (status, o) => r.fulfill({ status, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(o) });
             if (r.request().url().indexOf('/documents/apps/star-catcher') > 0) return removed ? json(404, { error: { code: 404, status: 'NOT_FOUND' } }) : json(200, { fields: Object.assign({}, doc.fields, { config: cfgValue(liveSpeed) }) });
             json(200, { documents: [doc, hidden] });
@@ -847,14 +917,22 @@ async function main() {
                 export function collection(d, name) { return { name }; }
                 export function doc(d, col, id) { return { col, id }; }
                 export async function getDoc(r) { return { exists: () => !!(db[r.col] && db[r.col][r.id]) }; }
-                export async function getDocs(c) { return { docs: Object.values(db[c.name] || {}).map((x) => ({ data: () => x })) }; }
+                export async function getDocs(c) { return { docs: Object.entries(db[c.name] || {}).map(([id, x]) => ({ id, data: () => x })) }; }
                 export async function setDoc(r, data) { (db[r.col] = db[r.col] || {})[r.id] = data; }
                 export async function updateDoc(r, f) { Object.assign(db[r.col][r.id], f); }
                 export async function deleteDoc(r) { delete db[r.col][r.id]; }
                 export function serverTimestamp() { return 'now'; }`
         };
         await page.addInitScript(() => {
-            window.__db = { admins: { U1: { name: 'owner' } }, apps: {
+            const now = Date.now();
+            window.__db = { admins: { U1: { name: 'owner' } },
+                appstats: { 'old-game': { installs: 4, opens: 11 } },
+                tvs: { 'tv-aaaabbbbccccddddeeeeffff0000': { tv: 'tv-aaaabbbbccccddddeeeeffff0000', model: 'QE55Q80D', version: '2.9.0', build: 17, lang: 'fr', src: 'duid',
+                         firstSeen: now - 20 * 86400000, lastSeen: now - 3600000, profiles: 2, names: ['Ana', 'Sam'], installed: ['old-game'], top: { jumper: { n: 'Ana', s: 4321 } }, blob: '{}', size: 2048 },
+                       'tv-1111222233334444555566667777': { tv: 'tv-1111222233334444555566667777', model: 'Browser', version: '2.8.0', build: 16, lang: 'en', src: 'random',
+                         firstSeen: now - 90 * 86400000, lastSeen: now - 30 * 86400000, profiles: 1, names: ['Player 1'], installed: [], top: {}, blob: '{}', size: 512 } },
+                records: { jumper: { list: [{ n: 'Ana', s: 4321, d: 1, tv: 'tv-a' }, { n: 'Leo', s: 999, d: 2, tv: 'tv-b' }], updatedAt: 1 } },
+                apps: {
                 'old-game': { id: 'old-game', name: 'Old Game', url: 'https://imad-os.github.io/g_oldgame/', entry: 'https://imad-os.github.io/g_oldgame/index.html', icon: '', type: 'game', version: '1.0.0', enabled: true, order: 0 } } };
         });
         await page.route(GS + '**', (r) => { const f = r.request().url().slice(GS.length); r.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: FAKE[f] || '' }); });
@@ -874,17 +952,27 @@ async function main() {
         await page.waitForSelector('#catalog .app', { timeout: 8000 });
         const rows = await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].map((r) => r.textContent));
         check(rows.length === 3 && !rows.some((t) => /speedy|nopages|archived/.test(t)), 'only g_ repositories with GitHub Pages are listed (' + rows.length + ')');
-        check(rows.some((t) => /Star Catcher.*Not installed/.test(t)) && rows.some((t) => /Old Game.*Installed/.test(t)) && rows.some((t) => /g_broken.*not installable/.test(t)),
-            'each app shows its status: new, installed, or not a My PC app');
+        check(rows.some((t) => /Star Catcher.*Not in store/.test(t)) && rows.some((t) => /Old Game.*In store/.test(t)) && rows.some((t) => /g_broken.*not a My PC app/.test(t)),
+            'each app shows its status: not in the store, in the store, or not a My PC app');
+        check(/App Store Manager/.test(await page.title()) && /App Store Manager/.test(await page.textContent('h1')), 'the installer is now the App Store Manager');
         check(await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].find((r) => /Old Game/.test(r.textContent)).querySelector('input').disabled), 'installed apps cannot be selected again');
         await page.check('#sel-all');
         await page.click('#btn-install-sel');
         await page.waitForFunction(() => window.__db.apps['star-catcher'], null, { timeout: 5000 }).catch(() => {});
         const db = await page.evaluate(() => window.__db.apps);
         check(db['star-catcher'] && db['star-catcher'].order === 1 && db['star-catcher'].url === 'https://imad-os.github.io/g_star/' && db['star-catcher'].installedBy === 'U1' && Object.keys(db).length === 2,
-            '"Install selected" installs the new app only, after the installed ones');
-        await page.waitForFunction(() => /Star Catcher.*Installed/.test(document.getElementById('catalog').textContent) && !/Not installed/.test(document.getElementById('catalog').textContent));
-        check(true, 'after installing, the catalog marks it installed');
+            '"Add selected to the store" publishes the new app only, after the ones already there');
+        await page.waitForFunction(() => /Star Catcher.*In store/.test(document.getElementById('catalog').textContent) && !/Not in store/.test(document.getElementById('catalog').textContent));
+        check(true, 'after adding, the catalog marks it in the store');
+        // statistics: TVs with My PC, their apps and best scores, world records, app counters
+        await page.waitForFunction(() => document.querySelectorAll('#tvs .tv').length === 2, null, { timeout: 5000 }).catch(() => {});
+        const tvText = await page.evaluate(() => [...document.querySelectorAll('#tvs .tv')].map((r) => r.textContent));
+        check(tvText.length === 2 && /QE55Q80D/.test(tvText[0]) && /Ana, Sam/.test(tvText[0]) && /Installed: Old Game/.test(tvText[0]) && /Super Jumper: Ana 4321/.test(tvText[0]),
+            'the TVs list shows each TV: model, profiles, installed apps and best scores (newest first)');
+        const sum = await page.textContent('#tv-summary');
+        check(/2\s*TVs with My PC/.test(sum) && /1\s*used in the last 7 days/.test(sum) && /4\s*installs/.test(sum) && /11\s*apps opened/.test(sum), 'summary: TVs, active TVs, installs and opens (' + sum + ')');
+        check(/Super Jumper.*Ana – 4321.*Leo – 999/.test(await page.textContent('#records')), 'world records are listed per game');
+        check(/4 installs · 11 opens/.test(await page.textContent('#list')), 'each app in the store shows its installs and opens');
         check(JSON.stringify(db['star-catcher'].config) === '{"speed":1}', 'a new app starts with the default config from its manifest');
         // the config editor
         const row = (name) => '#list .app:has-text("' + name + '")';
@@ -1165,6 +1253,151 @@ async function main() {
         await page.context().close();
     }
 
+    console.log('26. App Store on the TV: browse, search, install, uninstall');
+    {
+        const APP = 'https://apps.example.test/';
+        const db = {
+            apps: {
+                'star-catcher': { id: 'star-catcher', name: 'Star Catcher', description: 'Catch falling stars', url: APP + 'star/', entry: APP + 'star/index.html', icon: '', type: 'game', version: '1.0.0', enabled: true, order: 0, installedAt: '2026-03-01T10:00:00Z' },
+                'paint-pad': { id: 'paint-pad', name: 'Paint Pad', description: 'Draw with the remote', url: APP + 'paint/', entry: APP + 'paint/index.html', icon: '', type: 'app', version: '2.1.0', enabled: true, order: 1, installedAt: '2026-09-01T10:00:00Z' },
+                'old-one': { id: 'old-one', name: 'Old One', description: 'A classic', url: APP + 'old/', entry: APP + 'old/index.html', icon: '', type: 'game', version: '1.0.0', enabled: true, order: 2, installedAt: '2025-01-01T10:00:00Z' },
+                'secret': { id: 'secret', name: 'Secret', url: APP + 's/', entry: APP + 's/index.html', type: 'game', enabled: false, order: 3 }
+            },
+            appstats: { 'old-one': { installs: 9, opens: 40 } }
+        };
+        const page = await newPage(browser, base, db);
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons [data-app="store"]');
+        check(await page.evaluate(() => !!document.getElementById('tb-store') && !document.querySelector('[data-game^="app-"]')), 'App Store is on the desktop and the taskbar; nothing from the store is installed by itself');
+        await page.focus('#desk-icons [data-app="store"]'); await page.keyboard.press('Enter');
+        await page.waitForSelector('.st-hero');
+        await page.waitForFunction(() => document.querySelectorAll('.st-section').length >= 2);
+        const home = await page.evaluate(() => ({ hero: document.querySelector('.st-hero-name').textContent,
+            sections: [...document.querySelectorAll('.st-section')].map((x) => x.querySelector('h2').textContent + ': ' + [...x.querySelectorAll('.st-card-name')].map((n) => n.textContent).join(', ')) }));
+        check(home.hero === 'Paint Pad' && /^New: Paint Pad, Star Catcher, Old One/.test(home.sections[0]) && /^Popular: Old One/.test(home.sections[1]) && !home.sections.join().includes('Secret'),
+            'Home: the newest app is featured, New is by date, Popular by installs and opens, hidden apps are not shown (' + home.sections.join(' | ') + ')');
+        // search with the remote: the Search page opens the on-screen keyboard
+        await page.focus('.st-nav-btn[data-page="search"]'); await page.keyboard.press('Enter');
+        await page.waitForFunction(() => Keyboard.isOpen());
+        await page.keyboard.type('star');
+        await page.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
+        await page.waitForFunction(() => document.querySelectorAll('.st-main .st-card').length === 1);
+        check(await page.textContent('.st-main .st-card .st-card-name') === 'Star Catcher' && /star/i.test(await page.textContent('#store-search')), 'Search finds apps by name');
+        // the app's page: Install with the remote
+        await page.focus('.st-main .st-card'); await page.keyboard.press('Enter');
+        await page.waitForSelector('#store-install');
+        check(await page.evaluate(() => document.activeElement.id === 'store-install' && /Catch falling stars/.test(document.querySelector('.st-detail-desc').textContent)), 'OK opens the app\'s page, focused on Install');
+        await page.keyboard.press('Enter');
+        check(await page.evaluate(() => !!document.querySelector('.st-progress')), 'installing shows a progress bar');
+        await page.waitForSelector('#store-open', { timeout: 5000 });
+        check(await page.evaluate(() => Cloud.isInstalled('star-catcher') && document.activeElement.id === 'store-open' && !!document.getElementById('store-uninstall')), 'after installing: Open and Uninstall');
+        check(await page.evaluate(() => Desktop.installed().some((g) => g.id === 'app-star-catcher')), 'the installed game is on the desktop');
+        await page.waitForFunction(() => true);
+        await page.waitForTimeout(200);
+        check((db.appstats['star-catcher'] || {}).installs === 1, 'the install is counted for "Popular" (' + JSON.stringify(db.appstats['star-catcher']) + ')');
+        // Back returns from the app's page to the list, then closes the store
+        await page.keyboard.press('Escape');
+        check(await page.evaluate(() => !document.querySelector('.st-detail') && document.activeElement.classList.contains('st-card')), 'Back goes from the app\'s page to the list, focused on the same app');
+        await page.focus('.st-nav-btn[data-page="library"]'); await page.keyboard.press('Enter');
+        check(/Star Catcher/.test(await page.textContent('.st-main')) && await page.evaluate(() => document.querySelectorAll('.st-row').length) === 1, 'Library lists what is installed on this TV');
+        await page.evaluate(() => Win.open('explorer', 'games'));
+        check(/Star Catcher/.test(await page.textContent('.fx-list')), 'File Explorer shows the installed game');
+        // uninstall from the store
+        await page.evaluate(() => Win.open('store'));
+        await page.waitForSelector('.st-card[data-store-app="star-catcher"]');
+        await page.focus('.st-card[data-store-app="star-catcher"]'); await page.keyboard.press('Enter');
+        await page.waitForSelector('#store-uninstall');
+        await page.focus('#store-uninstall'); await page.keyboard.press('Enter');
+        await page.focus('#dialog-yes'); await page.keyboard.press('Enter');
+        await page.waitForSelector('#store-install');
+        check(await page.evaluate(() => !Cloud.isInstalled('star-catcher') && !Desktop.installed().length), 'Uninstall removes it from this TV and from the desktop');
+        // offline: the saved catalog still shows
+        db.down = true;
+        await page.evaluate(() => Win.close());
+        await page.reload();
+        await page.waitForSelector('#desk-icons [data-app="store"]');
+        await page.evaluate(() => Win.open('store'));
+        await page.waitForSelector('.st-hero');
+        await page.waitForSelector('.st-note', { timeout: 8000 }).catch(() => {});
+        check(await page.evaluate(() => document.querySelector('.st-hero-name').textContent === 'Paint Pad' && !!document.querySelector('.st-note')), 'offline, the store shows the saved list with a note');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('27. TV id, cloud backup and restore, world records');
+    {
+        const db = {};
+        const duid = (id) => `window.webapis.productinfo.getDuid = function () { return '${id}'; };`;
+        // TV 1: a few things to keep
+        let page = await newPage(browser, base, db);
+        await page.addInitScript(duid('DUID-TEST-0001'));
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon');
+        const tv1 = await page.evaluate(() => Device.id());
+        check(/^tv-[a-f0-9]{28}$/.test(tv1) && await page.evaluate(() => Device.source()) === 'duid' && !(await page.evaluate(() => JSON.stringify(Backup.doc()))).includes('DUID-TEST'),
+            'the TV id comes from the TV\'s own id, hashed (the DUID itself is never sent)');
+        await page.evaluate(() => {
+            Profiles.rename('p1', 'Ana'); Store.set('wallpaper', 'night'); I18n.setLang('es');
+            const p = Profiles.create('Sam'); Store.rawSet('arc_' + p.id + '_wallpaper', JSON.stringify('aurora'));
+            Store.rawSet('arc_dev_installed', [{ id: 'paint-pad', at: 5 }]);
+            Scores.add('snake', 'Ana', 777, 'p1'); Store.set('game_snake_data', { level: 4 });
+        });
+        await page.evaluate(() => new Promise((res) => Backup.upload(res)));
+        const doc = db.tvs[tv1];
+        check(doc && doc.tv === tv1 && doc.model === 'MOCK' && doc.installed.join() === 'paint-pad' && doc.top.snake.s === 777 && doc.names.join() === 'Ana,Sam' && doc.lang === 'es' && doc.blob.length > 100,
+            'the backup holds profiles, settings, installed apps and records, with a summary for the App Store Manager');
+        // Settings > Privacy: off means nothing is sent; "delete" removes the copy
+        await page.evaluate(() => Backup.setOn(false));
+        check(await page.evaluate(() => new Promise((res) => Backup.upload(res))) === 'off', 'with cloud backup turned off nothing is sent');
+        await page.evaluate(() => new Promise((res) => Backup.erase(res)));
+        check(!db.tvs[tv1], 'Delete the cloud backup removes this TV\'s copy');
+        await page.evaluate(() => Backup.setOn(true));
+        await page.evaluate(() => new Promise((res) => Backup.upload(res)));
+        check(!!db.tvs[tv1], 'turned on again, the backup is sent again');
+        // world records: two TVs, sorted, top 10 only
+        await page.evaluate(() => World.submit('snake', 'Ana', 500));
+        await page.waitForFunction(() => !(Store.rawGet('arc_dev_world_queue') || []).length, null, { timeout: 5000 }).catch(() => {});
+        await page.context().close();
+        // TV 1 again, after a reinstall (empty storage): everything comes back
+        page = await newPage(browser, base, db);
+        await page.addInitScript(duid('DUID-TEST-0001'));
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('.welcome', { timeout: 10000 }).catch(() => {});
+        check(await page.evaluate(() => !!document.querySelector('.welcome') && document.querySelector('.welcome').textContent.indexOf(I18n.t('restoredTitle')) >= 0), 'a reinstalled My PC finds its backup and says welcome back (in the restored language)');
+        await page.waitForSelector('#desk-icons .dicon');
+        const back = await page.evaluate(() => ({ names: Profiles.list().map((p) => p.name).join(), wp: Store.get('wallpaper'), lang: I18n.lang(), apps: Cloud.installedIds().join(),
+            rec: Scores.list('snake').map((e) => e.n + ' ' + e.s).join(), save: Store.get('game_snake_data', {}).level }));
+        check(back.names === 'Ana,Sam' && back.wp === 'night' && back.lang === 'es' && back.apps === 'paint-pad' && back.rec === 'Ana 777' && back.save === 4,
+            'profiles, settings, installed apps, records and saves are restored (' + JSON.stringify(back) + ')');
+        await page.context().close();
+        // TV 2: another id, its own record; the world list keeps both, best first
+        page = await newPage(browser, base, db);
+        await page.addInitScript(duid('DUID-TEST-0002'));
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon');
+        check(await page.evaluate(() => Device.id()) !== tv1, 'another TV has another id');
+        for (const v of [900, 100]) await page.evaluate((x) => World.submit('snake', 'Leo', x), v);
+        await page.waitForFunction(() => !(Store.rawGet('arc_dev_world_queue') || []).length, null, { timeout: 5000 }).catch(() => {});
+        const world = (db.records.snake || { list: [] }).list.map((e) => e.n + ' ' + e.s).join(', ');
+        check(world === 'Leo 900, Ana 500, Leo 100', 'world records from every TV, best first (' + world + ')');
+        for (let i = 0; i < 12; i++) await page.evaluate((x) => World.submit('snake', 'Max', x), 1000 + i);
+        await page.waitForFunction(() => !(Store.rawGet('arc_dev_world_queue') || []).length, null, { timeout: 8000 }).catch(() => {});
+        check(db.records.snake.list.length === 10 && db.records.snake.list[0].s === 1011, 'the world table keeps the best 10');
+        // Leaderboards: This TV / World
+        await page.focus('#desk-icons [data-app="scores"]'); await page.keyboard.press('Enter');
+        await page.focus('.lb-scope-btn[data-scope="world"]'); await page.keyboard.press('Enter');
+        await page.waitForFunction(() => /Max/.test(document.querySelector('.lb-pane').textContent), null, { timeout: 5000 }).catch(() => {});
+        check(await page.evaluate(() => /Max/.test(document.querySelector('.lb-pane').textContent) && document.querySelector('.lb-scope-btn.on').getAttribute('data-scope') === 'world'), 'Leaderboards > World shows the world records');
+        await page.focus('.lb-scope-btn[data-scope="tv"]'); await page.keyboard.press('Enter');
+        check(await page.evaluate(() => !/Max/.test(document.querySelector('.lb-pane').textContent)), 'This TV shows only this TV\'s records');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
     console.log('25. profiles are users: own settings, switch-user screen, update message, shared records');
     {
         const page = await newPage(browser, base);
@@ -1222,6 +1455,7 @@ async function main() {
     {
         const page = await newPage(browser, base);
         await page.goto(base + 'index.html', { waitUntil: 'commit' });
+        await page.waitForSelector('#boot-splash .bs-spin', { state: 'attached', timeout: 5000 }).catch(() => {});
         const first = await page.evaluate(() => {
             const s = document.getElementById('boot-splash');
             return s ? { svg: !!s.querySelector('svg'), dots: s.querySelectorAll('.bs-spin i').length, img: s.querySelectorAll('img').length,
@@ -1234,7 +1468,8 @@ async function main() {
         check(await page.evaluate(() => !document.getElementById('window').hidden && /kaput/.test(document.getElementById('win-body').textContent)), 'an app that fails to open shows the error instead of nothing');
         await page.evaluate(() => Win.close());
         await page.goto(base + 'index.html?play=jumper', { waitUntil: 'commit' });
-        check(await page.evaluate(() => document.documentElement.classList.contains('warm')), 'opening a game uses the plain black screen (warm)');
+        const warm = await page.waitForFunction(() => document.documentElement.classList.contains('warm'), null, { timeout: 5000 }).then(() => true, () => false);
+        check(warm, 'opening a game uses the plain black screen (warm)');
         await page.context().close();
     }
 
