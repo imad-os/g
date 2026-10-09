@@ -1755,105 +1755,187 @@ async function main() {
         await A.context().close(); await B.context().close(); await C.context().close(); await D.context().close();
     }
 
-    console.log('31. rooms through the SDK: two TVs (iframe protocol), direct connection, standalone tabs, old shell');
+    console.log('31. multiplayer through the SDK: the shell owns host / join / accept (two TVs), standalone tabs, old shell');
     {
-        const APP = 'https://apps.example.test/rooms/';
+        const APP = 'https://apps.example.test/mp/';
         const db = {};
-        db.apps = { 'ping-rooms': { id: 'ping-rooms', name: 'Ping Rooms', description: 'x', url: APP, entry: APP + 'rooms.html', icon: '', type: 'game', version: '1.0.0', enabled: true, order: 0, config: {} } };
-        const setup = async () => {
+        db.apps = { 'ping-friends': { id: 'ping-friends', name: 'Ping Friends', description: 'x', url: APP, entry: APP + 'multiplayer.html', icon: '', type: 'game', version: '1.0.0', enabled: true, order: 0, config: {} } };
+        const setup = async (shellLacksMp) => {
             const pg = await newPage(browser, base, db);
             await routeHosted(pg, { offline: true });
             await pg.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
             await pg.context().route(APP + '**', (r) => {
-                const rel = r.request().url().slice(APP.length).split('?')[0] || 'rooms.html';
+                const rel = r.request().url().slice(APP.length).split('?')[0] || 'multiplayer.html';
                 const p = path.join(ROOT, 'sdk/example', rel);
                 if (!fs.existsSync(p)) return r.fulfill({ status: 404, body: '' });
                 r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || 'text/plain', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(p) });
             });
-            await pg.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'ping-rooms', at: 1 }])); });
+            await pg.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'ping-friends', at: 1 }])); });
+            // an older My PC (or a browser without WebRTC): the shell does not offer multiplayer
+            if (shellLacksMp) await pg.addInitScript(() => { Object.defineProperty(window, 'RTCPeerConnection', { value: undefined, configurable: true }); });
             return pg;
         };
         const openApp = async (pg) => {
             await pg.goto(base + 'index.html');
-            await pg.waitForSelector('#desk-icons [data-game="app-ping-rooms"]', { timeout: 8000 });
-            await pg.focus('#desk-icons [data-game="app-ping-rooms"]'); await pg.keyboard.press('Enter');
+            await pg.waitForSelector('#desk-icons [data-game="app-ping-friends"]', { timeout: 8000 });
+            await pg.focus('#desk-icons [data-game="app-ping-friends"]'); await pg.keyboard.press('Enter');
             await pg.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 10000 });
             const f = pg.frames().find((x) => x.url().indexOf(APP) === 0);
             await f.waitForFunction(() => window.MyPC && MyPC.info());
             return f;
         };
+        const screen = (pg, title) => pg.waitForFunction((t) => { const e = document.getElementById('mp'); return e && !e.hidden && document.getElementById('mp-title').textContent === t; }, title, { timeout: 8000 }).then(() => true, () => false);
+        const hidden = (pg) => pg.waitForFunction(() => document.getElementById('mp').hidden && document.getElementById('mp-ask').hidden, null, { timeout: 8000 }).then(() => true, () => false);
+        const press = async (pg, k) => { await pg.keyboard.press(k); await pg.waitForTimeout(80); };
         const A = await setup(), B = await setup();
         const fa = await openApp(A), fb = await openApp(B);
-        check(await fa.evaluate(() => MyPC.rooms.supported === true && MyPC.apiLevel === 2), 'in My PC: MyPC.rooms.supported is true (apiLevel 2)');
+        check(await fa.evaluate(() => MyPC.multiplayer.supported === true && MyPC.apiLevel === 3 && MyPC.rooms === undefined), 'in My PC: MyPC.multiplayer.supported is true; MyPC.rooms is not public');
+        await B.evaluate(() => { Rooms.LIMITS.asksPerMin = 1000; });
 
-        // layer 1: strings through the shell
-        await fa.evaluate(async () => { window.R = await MyPC.rooms.open({ name: 'TV room', max: 2 }); window.got = []; R.onRequest((q) => { window.got.push(q); R.accept(q.id, 'ANS:' + q.offer); }); });
-        const lst = await fb.evaluate(async () => { const l = await MyPC.rooms.list(); return l; });
-        check(lst.length === 1 && lst[0].name === 'TV room' && lst[0].count === 1, 'guest app lists the room: ' + JSON.stringify(lst));
-        const ex = await fb.evaluate(async (id) => new Promise(async (res, rej) => { const q = await MyPC.rooms.ask(id, { name: 'Phone', offer: 'hello-offer' }); q.onAnswer(res); q.onDenied((w) => rej(w)); }).then((a) => ({ a }), (e) => ({ e })), lst[0].id);
-        check(ex.a === 'ANS:hello-offer', 'ask -> onRequest -> accept -> onAnswer: strings are exchanged (' + JSON.stringify(ex) + ')');
-        const rated = await fa.evaluate(() => window.got.length === 1 && window.got[0].name === 'Phone' && window.got[0].offer === 'hello-offer');
-        check(rated, 'the host got { id, name, offer }');
-        // errors reach the app as { code }
-        const e1 = await fb.evaluate(() => MyPC.rooms.ask('nosuchroom', { name: 'x', offer: 'o' }).then(() => null, (e) => e.code));
-        check(e1 === 'gone', 'a room that does not exist rejects with { code: "gone" }');
-        const e2 = await fb.evaluate(() => MyPC.rooms.open({ name: 'x'.repeat(30) }).then(() => null, (e) => e.code));
-        check(e2 === 'invalid', 'a name over 24 characters rejects with "invalid"');
-        await fa.evaluate(() => R.close());
-        check(Object.keys(db.rooms || {}).length === 0, 'room.close() deletes the room');
+        // host(): the shell's own "Open a room" screen; Back cancels
+        await fa.evaluate(() => { window.hp = MyPC.multiplayer.host({ max: 1 }).then((s) => { window.S = s; return 'ok'; }, (e) => e.code); });
+        check(await screen(A, 'Open a room') && await A.evaluate(() => GameHost.state() === 'paused' && /Player 1/.test(document.getElementById('mp-text').textContent)), 'host(): My PC shows "Open a room" (room name = the profile name) and pauses the game');
+        await press(A, 'Escape');
+        check(await fa.evaluate(() => window.hp) === 'cancelled' && await hidden(A) && await A.evaluate(() => GameHost.state() === 'running'), 'Back cancels: host() rejects { code: "cancelled" } and the game resumes');
+        // join(): empty list, Back cancels
+        await fb.evaluate(() => { window.jp = MyPC.multiplayer.join().then((p) => { window.P = p; return 'ok'; }, (e) => e.code); });
+        check(await screen(B, 'Join a friend') && await B.evaluate(() => /No rooms yet/.test(document.getElementById('mp-list').textContent)), 'join(): "Join a friend" with an empty list message');
+        await press(B, 'Escape');
+        check(await fb.evaluate(() => window.jp) === 'cancelled' && await hidden(B), 'Back cancels join(): { code: "cancelled" }');
 
-        // layer 2: a direct WebRTC connection (same machine here, no STUN)
-        await fa.evaluate(async () => { window.R2 = await MyPC.rooms.open({ name: 'Direct' }); window.msgs = []; R2.onGuest((c, g) => { window.cA = c; window.who = g.name; c.onMessage((m) => msgs.push(m)); c.onClose((w) => { window.closedA = w; }); }); });
-        const l2 = await fb.evaluate(() => MyPC.rooms.list());
-        const joined = await fb.evaluate(async (id) => { try { window.cB = await MyPC.rooms.join(id, { name: 'Ben' }); window.msgsB = []; cB.onMessage((m) => msgsB.push(m)); cB.onClose((w) => { window.closedB = w; }); return 'ok'; } catch (e) { return JSON.stringify(e); } }, l2[0].id);
-        check(joined === 'ok', 'MyPC.rooms.join gives a direct connection (' + joined + ')');
-        if (joined === 'ok') {
-            await fa.waitForFunction(() => window.cA);
-            check(await fa.evaluate(() => window.who === 'Ben'), 'host gets the connection with the guest name');
-            await fb.evaluate(() => cB.send({ hi: 1, s: 'from guest' })); await fa.evaluate(() => cA.send('from host'));
-            await fa.waitForFunction(() => window.msgs.length === 1); await fb.waitForFunction(() => window.msgsB.length === 1);
-            check(await fa.evaluate(() => JSON.stringify(window.msgs[0])) === '{"hi":1,"s":"from guest"}' && await fb.evaluate(() => window.msgsB[0]) === 'from host', 'send / onMessage work both ways (objects and strings)');
-            check(await fa.evaluate(() => { return true; }) && Object.keys(db.rooms || {}).length === 1, 'the room stays open while the host keeps it');
-            await fb.evaluate(() => cB.close());
-            await fa.waitForFunction(() => window.closedA, null, { timeout: 8000 }).catch(() => {});
-            check(await fa.evaluate(() => !!window.closedA), 'closing one side tells the other (onClose)');
+        // a real flow: host opens, guest picks, host accepts
+        await fa.evaluate(() => { window.hp = MyPC.multiplayer.host({ max: 1 }).then((s) => { window.S = s; window.got = []; s.onPeer((p) => { window.PA = p; window.msgsA = []; p.onMessage((m) => msgsA.push(m)); p.onClose(() => { window.closedA = true; }); }); return 'ok'; }, (e) => e.code); });
+        await screen(A, 'Open a room'); await press(A, 'Enter');
+        check(await fa.evaluate(() => window.hp) === 'ok' && await hidden(A), 'host(): confirming opens the room and resolves a session');
+        const room = Object.values(db.rooms)[0];
+        check(Object.keys(db.rooms).length === 1 && room.app === 'app-ping-friends' && room.name === 'Player 1' && room.max === 2, 'the room is for this app, named after the profile (max = host + 1 guest)');
+        await fb.evaluate(() => { window.jp = MyPC.multiplayer.join().then((p) => { window.PB = p; window.msgsB = []; p.onMessage((m) => msgsB.push(m)); p.onClose(() => { window.closedB = true; }); return 'ok'; }, (e) => e.code); });
+        await screen(B, 'Join a friend');
+        await B.waitForFunction(() => document.querySelectorAll('#mp-list .mp-room').length === 1, null, { timeout: 8000 });
+        check(await B.evaluate(() => /Player 1/.test(document.querySelector('#mp-list .mp-room').textContent) && /1 player/.test(document.querySelector('#mp-list .mp-room').textContent)), 'join(): the list shows the open room of this app');
+        await press(B, 'Enter');
+        check(await screen(B, 'Joining') && await B.evaluate(() => /Waiting for Player 1/.test(document.getElementById('mp-text').textContent)), 'the guest sees "Waiting for <host> to accept..."');
+        await A.waitForFunction(() => !document.getElementById('mp-ask').hidden, null, { timeout: 10000 });
+        check(await A.evaluate(() => /Player 1 wants to join/.test(document.getElementById('mp-ask-title').textContent) && GameHost.state() === 'paused'), 'the host sees "<name> wants to join: Accept / Decline" over the game, paused');
+        await press(A, 'Enter');                                       // Accept has the focus
+        check(await fa.evaluate(() => new Promise((r) => { const t = setInterval(() => { if (window.PA) { clearInterval(t); r(true); } }, 50); setTimeout(() => r(false), 12000); })), 'after Accept the host gets onPeer with a connected peer');
+        check(await fb.evaluate(() => window.jp) === 'ok' && await fb.evaluate(() => window.PB.name === 'Player 1'), 'the guest\'s join() resolves with the host as a peer');
+        check(await hidden(A) && await hidden(B) && await A.evaluate(() => GameHost.state() === 'running') && await B.evaluate(() => GameHost.state() === 'running'), 'screens closed and both games resume');
+        check(await fa.evaluate(() => window.S.peers.length === 1 && window.S.peers[0] === window.PA), 'session.peers lists the peer');
+        await fb.evaluate(() => PB.send({ n: 1, s: 'from guest' })); await fa.evaluate(() => PA.send('from host'));
+        await fa.waitForFunction(() => window.msgsA.length === 1); await fb.waitForFunction(() => window.msgsB.length === 1);
+        check(await fa.evaluate(() => JSON.stringify(msgsA[0])) === '{"n":1,"s":"from guest"}' && await fb.evaluate(() => msgsB[0]) === 'from host', 'messages arrive both ways (objects and strings, relayed by the shell)');
+        check(await fa.evaluate(() => PA.send('x'.repeat(5000)) === false) && await fa.evaluate(() => PA.send(undefined) === false), 'a message over 4 KB (or not JSON) is refused: send() returns false');
+        await A.waitForTimeout(500);
+        check(Object.keys(db.rooms || {}).length === 0, 'when max guests are in, the room closes by itself');
+        await fb.evaluate(() => PB.close());
+        await fa.waitForFunction(() => window.closedA, null, { timeout: 8000 }).catch(() => {});
+        check(await fa.evaluate(() => window.closedA === true && window.S.peers.length === 0), 'closing one side: the other gets onClose and session.peers updates');
+
+        // decline
+        await fa.evaluate(() => { window.hp = MyPC.multiplayer.host({ max: 2 }).then((s) => { window.S = s; return 'ok'; }, (e) => e.code); });
+        await screen(A, 'Open a room'); await press(A, 'Enter'); await A.waitForTimeout(300);
+        await fb.evaluate(() => { window.jp = MyPC.multiplayer.join().then(() => 'ok', (e) => e.code); });
+        await B.waitForFunction(() => document.querySelectorAll('#mp-list .mp-room').length === 1, null, { timeout: 8000 });
+        await press(B, 'Enter');
+        await A.waitForFunction(() => !document.getElementById('mp-ask').hidden, null, { timeout: 10000 });
+        await press(A, 'ArrowRight'); await press(A, 'Enter');        // Decline
+        check(await fb.evaluate(() => window.jp) === 'denied' && await hidden(B), 'declined: the guest\'s join() rejects { code: "denied" } (the shell showed the reason)');
+        // timeout
+        await B.evaluate(() => { Rooms.LIMITS.askTtl = 2500; });
+        await fb.evaluate(() => { window.jp = MyPC.multiplayer.join().then(() => 'ok', (e) => e.code); });
+        await B.waitForFunction(() => document.querySelectorAll('#mp-list .mp-room').length === 1, null, { timeout: 8000 });
+        await press(B, 'Enter');
+        check(await fb.evaluate(() => window.jp) === 'timeout', 'nobody answers: join() rejects "timeout"');
+        await B.evaluate(() => { Rooms.LIMITS.askTtl = 60000; });
+        await A.waitForFunction(() => !document.getElementById('mp-ask').hidden, null, { timeout: 5000 }).catch(() => {});
+        await press(A, 'Escape');                                      // Back = Decline
+        await hidden(A);
+        // cancel while waiting
+        await fb.evaluate(() => { window.jp = MyPC.multiplayer.join().then(() => 'ok', (e) => e.code); });
+        await B.waitForFunction(() => document.querySelectorAll('#mp-list .mp-room').length === 1, null, { timeout: 8000 });
+        await press(B, 'Enter'); await screen(B, 'Joining');
+        await press(B, 'Escape');
+        check(await fb.evaluate(() => window.jp) === 'cancelled', 'cancel while waiting: join() rejects "cancelled"');
+        await A.waitForFunction(() => !document.getElementById('mp-ask').hidden, null, { timeout: 5000 }).catch(() => {});
+        await press(A, 'Escape'); await hidden(A);
+        // room closed while a guest waits
+        await fb.evaluate(() => { window.jp = MyPC.multiplayer.join().then(() => 'ok', (e) => e.code); });
+        await B.waitForFunction(() => document.querySelectorAll('#mp-list .mp-room').length === 1, null, { timeout: 8000 });
+        await press(B, 'Enter'); await screen(B, 'Joining');
+        await fa.evaluate(() => S.close());
+        check(await fb.evaluate(() => window.jp) === 'gone', 'the host closed the room: join() rejects "gone"');
+        await A.waitForFunction(() => document.getElementById('mp-ask').hidden || true); 
+        await A.evaluate(() => { document.getElementById('mp-ask').hidden || document.getElementById('mp-ask-no').click(); });
+        // offline
+        await fa.evaluate(() => { window.hp = MyPC.multiplayer.host({ max: 1 }).then((s) => { window.S = s; return 'ok'; }, (e) => e.code); });
+        await screen(A, 'Open a room'); await press(A, 'Enter'); await A.waitForTimeout(300);
+        await fb.evaluate(() => { window.jp = MyPC.multiplayer.join().then(() => 'ok', (e) => e.code); });
+        await B.waitForFunction(() => document.querySelectorAll('#mp-list .mp-room').length === 1, null, { timeout: 8000 });
+        db.down = true;
+        await press(B, 'Enter');
+        check(await fb.evaluate(() => window.jp) === 'offline', 'offline: join() rejects "offline"');
+        db.down = false;
+        await fa.evaluate(() => S.close());
+        // rate limit: 5 asks per minute
+        const C = await setup(); const fc = await openApp(C);
+        await fa.evaluate(() => { window.hp = MyPC.multiplayer.host({ max: 7 }).then((s) => { window.S2 = s; return 'ok'; }, (e) => e.code); });
+        await screen(A, 'Open a room'); await press(A, 'Enter'); await A.waitForTimeout(300);
+        const codes = [];
+        for (let i = 0; i < 6; i++) {
+            await fc.evaluate(() => { window.jp = MyPC.multiplayer.join().then(() => 'ok', (e) => e.code); });
+            await C.waitForFunction(() => document.querySelectorAll('#mp-list .mp-room').length === 1, null, { timeout: 8000 });
+            await press(C, 'Enter');
+            if (i < 5) {
+                const n0 = (db.rules || []).filter((x) => /\/reqs$/.test(x.col) && !x.mask.length).length;
+                await screen(C, 'Joining');
+                await C.waitForFunction(() => true); await new Promise((r) => { const t = setInterval(() => { if ((db.rules || []).filter((x) => /\/reqs$/.test(x.col) && !x.mask.length).length > n0) { clearInterval(t); r(); } }, 50); });
+                await press(C, 'Escape'); codes.push(await fc.evaluate(() => window.jp));
+            }
+            else codes.push(await fc.evaluate(() => window.jp));
         }
-        // the app is closed -> the shell deletes the room
-        await A.evaluate(() => { window.GameHost.exit && window.GameHost.exit(); });
+        check(codes.slice(0, 5).every((c) => c === 'cancelled') && codes[5] === 'denied', 'rate limit: the 6th ask within a minute rejects "denied" (' + codes.join(',') + ')');
+        await A.waitForTimeout(300);
+        await A.evaluate(() => { for (let i = 0; i < 8; i++) if (!document.getElementById('mp-ask').hidden) document.getElementById('mp-ask-no').click(); });
+        // the app quits: rooms and screens are gone
         await fa.evaluate(() => MyPC.exit()).catch(() => {});
         await A.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle', null, { timeout: 8000 }).catch(() => {});
         await A.waitForTimeout(800);
-        check(Object.keys(db.rooms || {}).length === 0, 'quitting the app deletes its room (the shell cleans up)');
-        check(A.errors.length + B.errors.length === 0, 'no page errors ' + A.errors.concat(B.errors).join('; '));
-        await A.context().close(); await B.context().close();
+        check(Object.keys(db.rooms || {}).length === 0, 'quitting the app deletes its room');
+        check(A.errors.length + B.errors.length + C.errors.length === 0, 'no page errors ' + A.errors.concat(B.errors, C.errors).join('; '));
+        await A.context().close(); await B.context().close(); await C.context().close();
 
-        // an older My PC (no Rooms in the shell): supported is false and nothing breaks
-        const O = await setup();
-        await O.addInitScript(() => { Object.defineProperty(window, 'Rooms', { get: () => undefined, set: () => {}, configurable: true }); });
+        // an older My PC: supported is false, host() / join() reject "unavailable"
+        const O = await setup(true);
         const fo = await openApp(O);
-        check(await fo.evaluate(() => MyPC.rooms.supported === false) && await fo.evaluate(() => MyPC.rooms.list().then(() => 'ok', (e) => e.code)) === 'unavailable', 'old shell: MyPC.rooms.supported is false and calls reject with "unavailable"');
+        check(await fo.evaluate(() => MyPC.multiplayer.supported === false) && await fo.evaluate(() => MyPC.multiplayer.host({ max: 1 }).then(() => 'ok', (e) => e.code)) === 'unavailable', 'old shell: MyPC.multiplayer.supported is false and host() rejects "unavailable"');
         await O.context().close();
 
-        // standalone: two tabs of the same browser (BroadcastChannel + localStorage)
+        // standalone: two tabs, minimal DOM screens
         const ctx = await browser.newContext();
-        const sp = (u) => ctx.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
-        await sp();
-        await ctx.route(APP + '**', (r) => { const rel = r.request().url().slice(APP.length).split('?')[0] || 'rooms.html'; const p = path.join(ROOT, 'sdk/example', rel); r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || 'text/html', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(p) }); });
+        await ctx.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+        await ctx.route(APP + '**', (r) => { const rel = r.request().url().slice(APP.length).split('?')[0] || 'multiplayer.html'; const p = path.join(ROOT, 'sdk/example', rel); r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || 'text/html', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(p) }); });
         const t1 = await ctx.newPage(), t2 = await ctx.newPage();
-        for (const t of [t1, t2]) { await t.goto(APP + 'rooms.html'); await t.waitForFunction(() => window.MyPC && MyPC.info() && MyPC.info().standalone); }
-        check(await t1.evaluate(() => MyPC.rooms.supported === true), 'standalone: MyPC.rooms is supported (tabs of the same browser)');
-        await t1.evaluate(async () => { window.R = await MyPC.rooms.open({ name: 'Tab room', max: 2 }); window.got = []; R.onRequest((q) => { got.push(q); R.accept(q.id, 'A:' + q.offer); }); });
-        const tl = await t2.evaluate(() => MyPC.rooms.list());
-        check(tl.length === 1 && tl[0].name === 'Tab room', 'standalone: the other tab lists the room');
-        const tx = await t2.evaluate(async (id) => new Promise(async (res) => { const q = await MyPC.rooms.ask(id, { name: 'T2', offer: 'o1' }); q.onAnswer((a) => res(a)); }), tl[0].id);
-        check(tx === 'A:o1', 'standalone: ask / onRequest / accept / onAnswer work between tabs');
-        const dn = await t2.evaluate(async (id) => { await window.R_ || 0; return MyPC.rooms.ask(id, { name: 'T3', offer: 'o2' }).then((q) => new Promise((res) => q.onDenied(res)), (e) => e.code); }, tl[0].id);
-        check(dn === 'full', 'standalone: a full room rejects with "full"');
-        await t1.evaluate(() => R.close());
-        check((await t2.evaluate(() => MyPC.rooms.list())).length === 0, 'standalone: a closed room disappears from the list');
-        // the demo page itself
-        check(await t1.evaluate(() => document.querySelector('#list .row') !== null), 'the example page shows its lobby');
+        for (const t of [t1, t2]) { await t.goto(APP + 'multiplayer.html'); await t.waitForFunction(() => window.MyPC && MyPC.info() && MyPC.info().standalone); }
+        check(await t1.evaluate(() => MyPC.multiplayer.supported === true && MyPC.rooms === undefined), 'standalone: MyPC.multiplayer is supported (tabs of the same browser)');
+        await t1.evaluate(() => { window.hp = MyPC.multiplayer.host({ max: 1 }).then((s) => { window.S = s; s.onPeer((p) => { window.PA = p; window.mA = []; p.onMessage((m) => mA.push(m)); }); return 'ok'; }, (e) => e.code); });
+        await t1.waitForFunction(() => /Open a room/.test(document.body.innerText));
+        await t1.keyboard.press('Enter');
+        check(await t1.evaluate(() => window.hp) === 'ok', 'standalone: host() shows a minimal screen and opens the room');
+        await t2.evaluate(() => { window.jp = MyPC.multiplayer.join().then((p) => { window.PB = p; window.mB = []; p.onMessage((m) => mB.push(m)); return 'ok'; }, (e) => e.code); });
+        await t2.waitForFunction(() => /Join a friend/.test(document.body.innerText) && /Player/.test(document.body.innerText));
+        await t2.keyboard.press('Enter');
+        await t1.waitForFunction(() => /wants to join/.test(document.body.innerText), null, { timeout: 8000 });
+        await t1.keyboard.press('Enter');
+        check(await t2.evaluate(() => new Promise((r) => { const i = setInterval(() => { if (window.PB) { clearInterval(i); r(true); } }, 50); setTimeout(() => r(false), 12000); })) && await t1.evaluate(() => !!window.PA), 'standalone: join, accept and connect between two tabs');
+        await t2.evaluate(() => PB.send({ hi: 1 })); await t1.evaluate(() => PA.send('yo'));
+        await t1.waitForFunction(() => window.mA.length === 1); await t2.waitForFunction(() => window.mB.length === 1);
+        check(await t1.evaluate(() => mA[0].hi) === 1 && await t2.evaluate(() => mB[0]) === 'yo', 'standalone: messages both ways');
         await ctx.close();
+
+        // the two copies of the connection code (shell and SDK) stay identical
+        const grab = (f) => { const t = fs.readFileSync(path.join(ROOT, f), 'utf8'); const a = t.indexOf('/* netlink:begin'), b = t.indexOf('/* netlink:end */'); return t.slice(a, b).split('\n').map((l) => l.trim()).join('\n'); };
+        check(grab('js/core/netlink.js') === grab('sdk/mypc-sdk.js') && grab('js/core/netlink.js').length > 1000, 'js/core/netlink.js and the copy inside sdk/mypc-sdk.js are identical');
     }
 
     await browser.close();

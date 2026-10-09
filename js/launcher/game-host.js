@@ -118,7 +118,7 @@ var GameHost = (function () {
 
     // GameAPI-shaped proxy that talks to the app's My PC SDK with postMessage
     function remoteApi() {
-        var id = game.id, origin = originOf(game.remote.entry), items = [], win = null, rooms = null;
+        var id = game.id, origin = originOf(game.remote.entry), items = [], win = null, mp = null;
         function send(type, d) { if (win) { try { win.postMessage({ mypc: 1, type: type, data: d === undefined ? null : d }, origin); } catch (e) {} } }
         function onMsg(e) {
             if (!iframe || e.source !== iframe.contentWindow) return;     // only our app's frame
@@ -135,14 +135,17 @@ var GameHost = (function () {
                         profile: { id: Profiles.current().id, name: Profiles.name(null, I18n.t('player')) },
                         data: Store.get('game_' + id + '_data', {}), app: { id: id },
                         config: game.remote.config || {},
-                        rooms: typeof Rooms !== 'undefined' ? 1 : 0              // MyPC.rooms is supported (js/core/rooms.js)
+                        mp: typeof Multiplayer !== 'undefined' && typeof Rooms !== 'undefined' && NetLink.supported() ? 1 : 0   // MyPC.multiplayer is supported
                     });
                     break;
-                case 'rooms': {
-                    // lobby requests of THIS app: { rid, op, args } -> { rid, error | result }; events { ev, data } come back the same way
-                    if (typeof Rooms === 'undefined' || typeof d.rid !== 'number' || typeof d.op !== 'string') break;
-                    if (!rooms) rooms = new Rooms.Session(id, Profiles.name(null, I18n.t('player')), function (ev, data) { send('rooms', { ev: ev, data: data }); });
-                    rooms.call(d.op, d.args, function (err, res) { send('rooms', { rid: d.rid, error: err || undefined, result: res === undefined ? null : res }); });
+                case 'mp': {
+                    // multiplayer (js/launcher/multiplayer.js): { rid, op, args } -> { rid, error | result }; peers' events go back as { ev, data }
+                    if (typeof Multiplayer === 'undefined' || typeof d.op !== 'string' || (d.rid !== undefined && typeof d.rid !== 'number')) break;
+                    if (state !== 'running' && state !== 'paused') break;
+                    if (!mp) mp = Multiplayer.attach({ appId: id, send: send, hold: holdForMp, release: releaseForMp });
+                    mp.handle(d.op, d.args && typeof d.args === 'object' ? d.args : {}, function (err, res) {
+                        if (d.rid !== undefined) send('mp', { rid: d.rid, error: err || undefined, result: res === undefined ? null : res });
+                    });
                     break;
                 }
                 case 'progress': if (state === 'loading') setProgress(+d.p || 0); break;
@@ -178,7 +181,7 @@ var GameHost = (function () {
             start: function () { send('start'); },
             pause: function () { send('pause'); },
             resume: function () { send('resume'); },
-            destroy: function () { if (rooms) { rooms.destroy(); rooms = null; } send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
+            destroy: function () { if (mp) { mp.destroy(); mp = null; } send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
             menuItems: function () { return items; },
             onMenu: function (mid) { send('menu', { id: String(mid).slice(4) }); },
             onAction: function (a, pressed, repeat, dev) { send('input', { action: a, pressed: pressed, repeat: repeat, dev: dev }); }
@@ -318,6 +321,25 @@ var GameHost = (function () {
         $('pause').hidden = false;
         Focus.push($('pause'), first);
         A11y.announce(I18n.t('paused'));
+    }
+
+    // the multiplayer screens pause the game like the pause menu does (without the menu); true when this call paused it
+    function holdForMp() {
+        if (state !== 'running') return false;
+        state = 'paused';
+        try { api.pause(); } catch (e) {}
+        Input.releaseAll();
+        Input.setExternalPoll(false);
+        screenSaver(true);
+        return true;
+    }
+    function releaseForMp(didPause) {
+        if (!didPause || state !== 'paused' || !$('pause').hidden) return;       // not ours, or the pause menu is open meanwhile
+        state = 'running';
+        Input.setExternalPoll(!game.remote);
+        screenSaver(false);
+        $('game-layer').focus();
+        try { api.resume(); } catch (e) {}
     }
 
     function resume() {

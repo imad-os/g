@@ -46,9 +46,11 @@
 - **App config:** each store app has a `config` object (Firestore `apps/<id>`, edited with the
   App Store Manager's Config button). The TV re-reads the app's document before it opens
   (`Cloud.fetchApp`, 2.5 s, falls back to the saved list) and the app gets it as `MyPC.app_config`.
-- **Rooms (`MyPC.rooms`)**: apps get lobbies and direct WebRTC connections without any backend or keys. The SDK talks to
-  the shell (`js/core/rooms.js`, wired in `game-host.js`), which writes Firestore `rooms/{room}` and `rooms/{room}/reqs/{req}`
-  (rules, composite index and TTL: `firebase/SETUP.md` section 4). Apps never see Firebase; scoped by app id.
+- **Multiplayer (`MyPC.multiplayer`)**: `host()` / `join()` in the SDK; **the shell owns the flow**: its own screens (open a room, join
+  list, waiting, accept dialog) in `js/launcher/multiplayer.js` (markup `#mp` in `app.html`), signalling in `js/core/rooms.js`
+  (Firestore `rooms/{room}` + `reqs`, rules / index / TTL in `firebase/SETUP.md` section 4), the WebRTC data channel in
+  `js/core/netlink.js` (its code is also inside `sdk/mypc-sdk.js` for standalone mode; a test keeps both identical). Apps only get
+  peers; never room ids, offers or Firebase. `game-host.js` relays peers over postMessage (`mp`).
 - `sdk/`: `mypc-sdk.js` (protocol `{ mypc: 1, type, data }`), `GUIDE.md` (for building new apps
   in other repos), `example/`.
 - `installer/`: the App Store Manager, a desktop-browser page (Firebase JS SDK from gstatic is OK

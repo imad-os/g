@@ -8,7 +8,7 @@ My PC uses one Firestore database for:
 - **`tvs`**: one backup per TV (profiles, settings, saves, installed apps, records), so a
   reinstalled My PC or a reset TV gets everything back. The App Store Manager lists them as statistics.
 - **`records`**: the world records (best 10 of each game on every My PC).
-- **`rooms`** (with `rooms/<id>/reqs`): lobbies for multiplayer apps (`MyPC.rooms` in the SDK). Written only by the My PC
+- **`rooms`** (with `rooms/<id>/reqs`): lobbies for multiplayer apps (`MyPC.multiplayer` in the SDK). Written only by the My PC
   shell for the running app; short-lived documents (see **Rooms** below).
 
 TVs never sign in. They read `apps`, `appstats`, `records` and their own `tvs` document, and the rules
@@ -117,8 +117,8 @@ In the Firestore **Rules** tab → *Rules Playground*:
 - An unauthenticated `list` on `/tvs` → denied; `get` on `/tvs/tv-…` → allowed.
 - An unauthenticated `update` on `/appstats/x` that adds 2 → denied; adding 1 → allowed.
 
-## 4. Rooms (`MyPC.rooms`): index and TTL (once)
-Apps and games can offer local multiplayer without their own backend (`sdk/GUIDE.md`, "Rooms"). The shell writes
+## 4. Rooms (`MyPC.multiplayer`): index and TTL (once)
+Apps and games can offer local multiplayer without their own backend (`sdk/GUIDE.md`, "Multiplayer"). The shell writes
 `rooms/{room}` (`app, name, max, n, at, exp`) and `rooms/{room}/reqs/{req}` (`name, offer, exp, answer?, no?`); the rules
 in `firestore.rules` check size, shape and that `exp` is at most 90 s ahead. There is no sign-in, so **keep nothing private
 there**. After publishing the new rules (step 1), do these two things in the console:

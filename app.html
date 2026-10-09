@@ -108,6 +108,23 @@
         </div>
     </section>
 
+    <!-- Multiplayer (js/launcher/multiplayer.js): "Open a room", "Join a friend", waiting, and the accept dialog, over any game -->
+    <section id="mp" class="screen mp" role="dialog" aria-modal="true" aria-labelledby="mp-title" hidden>
+        <h2 id="mp-title" class="screen-title"></h2>
+        <p id="mp-text" class="profiles-hint"></p>
+        <div id="mp-list" class="mp-list" role="list"></div>
+        <div id="mp-buttons" class="profiles-buttons"></div>
+    </section>
+    <div id="mp-ask" class="backdrop mp-ask" hidden>
+        <div id="mp-ask-box" class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="mp-ask-title">
+            <h2 id="mp-ask-title" class="dialog-title"></h2>
+            <div class="dialog-buttons">
+                <button id="mp-ask-yes" class="btn btn-primary" data-focus data-i18n="mpAccept">Accept</button>
+                <button id="mp-ask-no" class="btn" data-focus data-i18n="mpDecline">Decline</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Generic confirmation dialog (exit, reset progress) -->
     <div id="dialog-backdrop" class="backdrop" hidden>
         <div id="dialog" class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="dialog-text">

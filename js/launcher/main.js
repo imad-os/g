@@ -100,6 +100,9 @@ var App = (function () {
             return;
         }
 
+        // multiplayer screens (host / join / waiting / "wants to join") sit over the running game
+        if (Multiplayer.screenOpen()) { Multiplayer.action(action, pressed, repeat); return; }
+
         if (GameHost.active()) return GameHost.onAction(action, pressed, repeat, dev);
 
         if (action === 'padLost') { toast(I18n.t('padOff').split('.')[0]); return; }
@@ -220,6 +223,7 @@ var App = (function () {
         updateIndicator();
         showVersion();
         GameHost.init();
+        Multiplayer.init();
         Win.init();
         watchNetwork();
         $('dialog-yes').onclick = function () { var cb = dialogYes; closeDialog(); if (cb) cb(); };

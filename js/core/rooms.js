@@ -1,4 +1,4 @@
-/* Rooms (lobbies) for apps and games: the shell side of MyPC.rooms (sdk/mypc-sdk.js).
+/* Rooms (lobbies) for apps and games: the signalling layer under MyPC.multiplayer (js/launcher/multiplayer.js uses it; apps never do).
  * Apps never see Firebase: they send small postMessage requests and the shell does the work with the same
  * Firestore REST helpers as the rest of My PC (js/core/cloud.js). Layout (firebase/firestore.rules):
  *   rooms/{room}            { app, name, max, n, at, exp }   exp = now + 45 s, refreshed every 15 s by the host's shell

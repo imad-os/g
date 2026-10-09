@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ping Friends</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0a0f2c; color: #fff; font: 600 3.4vh Arial, sans-serif; }
+  #app { padding: 6vh 6vw; }
+  h1 { margin: 0 0 3vh; font-size: 5vh; color: #ffd23f; }
+  .row { padding: 1.4vh 2vw; margin: 0.8vh 0; border-radius: 1vh; background: #1a2250; }
+  .row.on { background: #4cc2ff; color: #000; }
+  #log { margin-top: 3vh; color: #9fdcff; white-space: pre-line; }
+  #note { color: #ff9f9f; margin-top: 2vh; }
+</style>
+</head>
+<body>
+<div id="app"><h1>Ping Friends</h1><div id="list"></div><div id="log"></div><div id="note"></div></div>
+<script src="https://imad-os.github.io/g/sdk/mypc-sdk.js"></script>
+<script>
+/* Example of MyPC.multiplayer: two devices ping each other. My PC draws the screens ("Open a room", "Join a friend",
+ * "<name> wants to join: Accept / Decline"); the game only gets the connected peers and their messages.
+ *   Menu:  Host a game  |  Join a friend      (Up / Down / OK)
+ *   Playing: press OK to send "ping n"; the other device shows it. Pause menu > "Leave" goes back to the menu.
+ * Standalone: open this page in two tabs of the same browser (one hosts, the other joins). */
+(function () {
+    'use strict';
+    var $ = function (id) { return document.getElementById(id); };
+    var mode = 'menu', sel = 0, rows = [], session = null, peer = null, pings = 0;
+
+    function note(t) { $('note').textContent = t || ''; }
+    function log(t) { var l = $('log'); l.textContent = (l.textContent + '\n' + t).split('\n').slice(-8).join('\n'); }
+    function draw() {
+        var box = $('list'); box.innerHTML = '';
+        rows.forEach(function (r, i) { var d = document.createElement('div'); d.className = 'row' + (i === sel ? ' on' : ''); d.textContent = r.label; box.appendChild(d); });
+    }
+    function menu() {
+        mode = 'menu'; peer = null; session = null; sel = 0; $('log').textContent = '';
+        rows = [{ label: 'Host a game', run: host }, { label: 'Join a friend', run: join }];
+        if (!MyPC.multiplayer.supported) rows = [{ label: 'This My PC is too old for multiplayer' }];
+        draw();
+    }
+    function play(p) {
+        mode = 'play'; peer = p; pings = 0; rows = [{ label: 'Connected to ' + p.name + ': press OK to ping' }]; sel = 0; draw(); note('');
+        p.onMessage(function (m) { log(p.name + ': ' + m); MyPC.announce(p.name + ' ' + m); });
+        p.onClose(function () { log(p.name + ' left'); setTimeout(menu, 1500); });
+    }
+    function host() {
+        // My PC shows "Open a room"; this resolves when the player confirms. max = friends allowed (1-7)
+        MyPC.multiplayer.host({ max: 1 }).then(function (s) {
+            session = s; mode = 'hosting'; rows = [{ label: 'Room open: waiting for a friend...' }]; sel = 0; draw();
+            s.onPeer(function (p) { play(p); });                       // fires after the host pressed Accept and the connection is up
+        }, function (e) { if (e.code !== 'cancelled') note('Could not open a room: ' + e.code); });
+    }
+    function join() {
+        // My PC shows the list of rooms, asks the host and waits; it shows any problem itself
+        MyPC.multiplayer.join().then(play, function (e) { if (e.code !== 'cancelled') note('Not joined: ' + e.code); });
+    }
+
+    MyPC.init({
+        onInit: function () {
+            MyPC.setMenu([{ id: 'leave', label: 'Leave' }]);
+            MyPC.ready();
+        },
+        onStart: menu,
+        onMenu: function (id) { if (id === 'leave') { if (peer) peer.close(); if (session) session.close(); menu(); } },
+        onDestroy: function () { /* My PC closes the room and the connections by itself */ },
+        onInput: function (a, pressed, repeat) {
+            if (!pressed || repeat) return;
+            if (mode === 'play') { if (a === 'confirm' || a === 'jump') { pings++; log('me: ping ' + pings); peer.send('ping ' + pings); } return; }
+            if (mode !== 'menu') return;
+            if (a === 'down') { sel = Math.min(rows.length - 1, sel + 1); draw(); }
+            else if (a === 'up') { sel = Math.max(0, sel - 1); draw(); }
+            else if ((a === 'confirm' || a === 'jump') && rows[sel].run) rows[sel].run();
+        }
+    });
+})();
+</script>
+</body>
+</html>
