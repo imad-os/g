@@ -7,161 +7,310 @@
 <link rel="icon" type="image/png" sizes="32x32" href="../icon-32.png">
 <!-- Desktop browser page (not part of the TV package): the App Store Manager. It publishes apps and games
      to the My PC App Store (Firestore "apps"); each TV installs what its users pick in the App Store app.
-     It also shows the statistics: TVs running My PC, their installed apps and best scores, world records. -->
+     It also shows the statistics: TVs running My PC (their backup document), installs and opens per app,
+     the devices that installed each app (date and profiles), world records. Pages: #overview #apps
+     #app/<id> #add #devices #device/<id> #records. -->
 <style>
-  :root { color-scheme: dark; }
+  :root {
+    color-scheme: dark;
+    --bg: #111214; --side: #17181b; --panel: #1d1f23; --panel-2: #24272c; --line: #2c2f35; --hover: #2a2d33;
+    --text: #f2f4f8; --text-2: #b9bfca; --muted: #8a919e;
+    --accent: #4cc2ff; --accent-ink: #001826; --series-1: #3987e5;
+    --good: #3fcf8e; --warn: #f0b429; --bad: #ff7b86;
+    --radius: 12px;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; background: #202020; color: #fff; font: 15px/1.45 "Segoe UI Variable", "Segoe UI", Roboto, Arial, sans-serif; }
-  header { display: flex; align-items: center; gap: 14px; padding: 14px 28px; background: #1c1c1c; border-bottom: 1px solid #2d2d2d; }
-  header h1 { margin: 0; font-size: 18px; font-weight: 600; flex: 1; }
-  header .who { color: #c5c5c5; }
-  main { max-width: 1000px; margin: 0 auto; padding: 28px; }
-  h2 { font-size: 22px; font-weight: 600; margin: 28px 0 12px; }
-  .card { background: #2b2b2b; border-radius: 10px; padding: 20px 24px; margin-bottom: 8px; }
-  .muted { color: #c5c5c5; }
-  .err { color: #ff99a4; }
-  .ok { color: #6ee7a0; }
-  input { width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid #555; background: #1c1c1c; color: #fff; font: inherit; }
-  input:focus { outline: 2px solid #4cc2ff; border-color: transparent; }
-  label { display: block; margin: 10px 0 4px; color: #c5c5c5; }
-  button { font: inherit; padding: 9px 18px; border-radius: 6px; border: 1px solid #444; background: #3a3a3a; color: #fff; cursor: pointer; }
-  button:hover { background: #454545; }
-  button.primary { background: #4cc2ff; border-color: #4cc2ff; color: #000; font-weight: 600; }
-  button.primary:hover { background: #7dd3ff; }
-  button.danger { color: #ff99a4; }
-  button:disabled { opacity: 0.5; cursor: default; }
-  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  .grow { flex: 1; }
-  .app { display: flex; align-items: center; gap: 16px; background: #2b2b2b; border-radius: 10px; padding: 14px 18px; margin-bottom: 6px; }
-  .app img, .preview img { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; background: #1c1c1c; flex: none; }
-  .app .name { font-weight: 600; }
-  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; background: #3a3a3a; font-size: 12px; margin-left: 6px; }
-  .tag.off { background: #5a2a30; }
-  .preview { display: flex; gap: 18px; align-items: center; margin-top: 16px; padding-top: 16px; border-top: 1px solid #3a3a3a; }
-  code { background: #1c1c1c; padding: 1px 6px; border-radius: 4px; }
-  .small { font-size: 13px; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI Variable", "Segoe UI", Inter, Roboto, Arial, sans-serif; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { background: #0c0d0f; padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
   [hidden] { display: none !important; }
-  input[type=checkbox] { width: 18px; height: 18px; accent-color: #4cc2ff; flex: none; }
-  .tag.new { background: #1d4f73; } .tag.update { background: #6b5214; } .tag.installed { background: #1f5a37; }
-  .cat .app { cursor: default; }
-  .tag.cfg { background: #3b2f6b; }
-  textarea { width: 100%; min-height: 260px; padding: 10px 12px; border-radius: 6px; border: 1px solid #555; background: #1c1c1c; color: #fff;
+  .muted { color: var(--muted); } .small { font-size: 12.5px; } .err { color: var(--bad); } .ok { color: var(--good); }
+  .grow { flex: 1; min-width: 0; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  /* shell */
+  .shell { display: grid; grid-template-columns: 248px 1fr; min-height: 100vh; }
+  .side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; background: var(--side); border-right: 1px solid var(--line); padding: 18px 12px; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 18px; }
+  .brand img { width: 30px; height: 30px; }
+  .brand b { display: block; font-size: 15px; font-weight: 600; }
+  .brand span { display: block; font-size: 12px; color: var(--muted); }
+  .nav a { display: flex; align-items: center; gap: 12px; padding: 9px 12px; margin-bottom: 2px; border-radius: 8px; color: var(--text-2); position: relative; }
+  .nav a:hover { background: var(--hover); color: var(--text); text-decoration: none; }
+  .nav a.on { background: var(--panel-2); color: var(--text); font-weight: 600; }
+  .nav a.on::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 3px; background: var(--accent); }
+  .nav svg { width: 18px; height: 18px; flex: none; }
+  .nav .count { margin-left: auto; font-size: 11.5px; color: var(--muted); background: #0f1012; border-radius: 10px; padding: 0 7px; }
+  .side-foot { margin-top: auto; padding: 12px 10px 0; border-top: 1px solid var(--line); }
+  .side-foot .who { display: block; color: var(--text-2); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 8px; }
+  main { padding: 28px 36px 60px; max-width: 1280px; width: 100%; }
+  .head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 22px; }
+  .head h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.2px; }
+  .head p { margin: 4px 0 0; color: var(--muted); }
+  .crumb { color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0 0 12px; }
+
+  /* controls */
+  button, .btn { font: inherit; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  button:hover, .btn:hover { background: var(--hover); text-decoration: none; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  button.primary:hover { background: #7dd3ff; }
+  button.danger { color: var(--bad); }
+  button.ghost { background: transparent; border-color: transparent; color: var(--text-2); }
+  button.ghost:hover { background: var(--hover); color: var(--text); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button.icon { padding: 6px 9px; }
+  input[type=text], input[type=email], input[type=password], input:not([type]) { width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line); background: #0f1012; color: var(--text); font: inherit; }
+  input:focus, textarea:focus, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); flex: none; }
+  label { display: block; margin: 12px 0 5px; color: var(--text-2); font-size: 13px; }
+  textarea { width: 100%; min-height: 260px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: #0f1012; color: var(--text);
              font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; resize: vertical; tab-size: 2; }
-  textarea:focus { outline: 2px solid #4cc2ff; border-color: transparent; }
+
+  /* surfaces */
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 16px; }
+  .card.flush { padding: 0; overflow: hidden; }
+  .card-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .card-head h2 { margin: 0; }
+  .grid { display: grid; gap: 16px; }
+  .grid.two { grid-template-columns: 1.4fr 1fr; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+  .tile b { display: block; font-size: 26px; font-weight: 600; letter-spacing: -0.3px; }
+  .tile span { color: var(--muted); font-size: 12.5px; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; background: var(--panel-2); color: var(--text-2); font-size: 11.5px; margin-left: 6px; vertical-align: 1px; }
+  .tag.new { background: #13324a; color: #8fd3ff; } .tag.update { background: #45360f; color: #ffd57a; } .tag.installed { background: #123826; color: #8ff0c0; }
+  .tag.off { background: #45161c; color: #ffb3ba; } .tag.cfg { background: #2a2350; color: #c7bbff; } .tag.cnt { background: #14273b; color: #9fd0ff; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  .dot.on { background: var(--good); } .dot.idle { background: var(--warn); } .dot.gone { background: #5a5f69; }
+
+  /* tables */
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-weight: 600; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: #1a1c20; }
+  td { padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr.click { cursor: pointer; }
+  tbody tr.click:hover { background: var(--hover); }
+  td .sub { display: block; color: var(--muted); font-size: 12px; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .empty { padding: 26px; text-align: center; color: var(--muted); }
+
+  /* app rows */
+  .app { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .app:last-child { border-bottom: 0; }
+  .app img, .preview img, .ico { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; background: #0f1012; flex: none; }
+  .ico.big { width: 72px; height: 72px; border-radius: 16px; }
+  .app .name { font-weight: 600; }
+  .app .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .cat .app { padding: 10px 16px; }
+  .preview { display: flex; gap: 16px; align-items: center; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+
+  /* bar lists (one series, one hue) */
+  .bars { display: grid; gap: 9px; }
+  .bar-row { display: grid; grid-template-columns: 150px 1fr 54px; gap: 10px; align-items: center; font-size: 13px; }
+  .bar-row .lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-2); }
+  .bar-track { height: 10px; background: #15171a; border-radius: 0 4px 4px 0; overflow: hidden; }
+  .bar-fill { display: block; height: 100%; background: var(--series-1); border-radius: 0 4px 4px 0; min-width: 2px; }
+  .bar-row:hover .bar-fill { filter: brightness(1.15); }
+  .bar-row .val { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* detail */
+  .hero { display: flex; gap: 18px; align-items: center; }
+  .hero h1 { margin: 0; font-size: 24px; }
+  .kv { display: grid; grid-template-columns: 150px 1fr; gap: 8px 16px; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px; border-radius: 14px; background: var(--panel-2); font-size: 12.5px; }
+  .chip i { display: inline-block; width: 20px; height: 20px; border-radius: 50%; background: #3a4a66; color: #fff; font-style: normal; font-size: 11px; font-weight: 700; text-align: center; line-height: 20px; }
+  .recs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .rec ol { margin: 8px 0 0; padding-left: 22px; }
+  .rec li { padding: 2px 0; }
+  .rec li span { float: right; font-variant-numeric: tabular-nums; color: var(--text-2); }
+
+  /* sign-in */
+  .center { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+  .center .card { width: min(440px, 100%); }
+  .center h1 { font-size: 20px; margin: 0 0 4px; display: flex; gap: 10px; align-items: center; }
+
   .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 10; }
-  .modal .box { background: #2b2b2b; border-radius: 12px; padding: 22px 26px; width: min(640px, 100%); max-height: 100%; overflow: auto; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6); }
-  .modal h3 { margin: 0 0 4px; font-size: 20px; }
-  a { color: #4cc2ff; }
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; }
-  .stat { background: #2b2b2b; border-radius: 10px; padding: 14px 18px; }
-  .stat b { display: block; font-size: 28px; font-weight: 600; }
-  .tv { background: #2b2b2b; border-radius: 10px; padding: 14px 18px; margin-bottom: 6px; }
-  .tv .name { font-weight: 600; }
-  .tv .line { margin-top: 3px; }
-  .recs { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
-  .rec { background: #2b2b2b; border-radius: 10px; padding: 12px 16px; }
-  .rec ol { margin: 6px 0 0; padding-left: 20px; }
-  .tag.cnt { background: #22405c; }
+  .modal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 26px; width: min(640px, 100%); max-height: 100%; overflow: auto; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6); }
+  .modal h3 { margin: 0 0 4px; font-size: 18px; }
+  .toast { position: fixed; right: 24px; bottom: 24px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; box-shadow: 0 8px 30px rgba(0,0,0,.5); z-index: 20; }
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; }
+    .side { position: static; height: auto; }
+    .grid.two { grid-template-columns: 1fr; }
+    main { padding: 20px 16px 40px; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <img src="../icon-32.png" alt="" width="28" height="28">
-  <h1>My PC – App Store Manager</h1>
-  <span id="who" class="who"></span>
-  <button id="btn-out" hidden>Sign out</button>
-</header>
-<main>
-  <!-- signed out -->
-  <section id="signin" hidden>
-    <h2>Sign in</h2>
-    <div class="card" style="max-width:460px">
-      <button id="btn-google" class="primary" style="width:100%">Sign in with Google</button>
-      <p class="muted small" style="text-align:center;margin:14px 0 4px">or with e-mail</p>
-      <label for="email">E-mail</label><input id="email" type="email" autocomplete="username">
-      <label for="pass">Password</label><input id="pass" type="password" autocomplete="current-password">
-      <div class="row" style="margin-top:14px">
-        <button id="btn-in" class="primary">Sign in</button>
-        <button id="btn-up">Create account</button>
-        <span class="grow"></span>
-        <button id="btn-reset" class="small">Forgot password</button>
-      </div>
-      <p id="signin-msg" class="small"></p>
-    </div>
-  </section>
 
-  <!-- signed in but not an admin -->
-  <section id="notadmin" hidden>
-    <h2>Almost there</h2>
-    <div class="card">
-      <p>This account can't manage the App Store yet. In the Firebase console, open <b>Firestore → Data</b>, collection
-         <code>admins</code>, and add a document whose ID is your user ID:</p>
-      <p><code id="uid"></code> <button id="btn-copy" class="small">Copy</button></p>
-      <p class="muted small">Then reload this page. See <code>firebase/SETUP.md</code> in the repository.</p>
+<!-- signed out -->
+<section id="signin" class="center" hidden>
+  <div class="card">
+    <h1><img src="../icon-32.png" alt="" width="26" height="26"> App Store Manager</h1>
+    <p class="muted small" style="margin:0 0 16px">My PC – sign in with an admin account.</p>
+    <button id="btn-google" class="primary" style="width:100%;justify-content:center">Sign in with Google</button>
+    <p class="muted small" style="text-align:center;margin:14px 0 0">or with e-mail</p>
+    <label for="email">E-mail</label><input id="email" type="email" autocomplete="username">
+    <label for="pass">Password</label><input id="pass" type="password" autocomplete="current-password">
+    <div class="row" style="margin-top:14px">
+      <button id="btn-in" class="primary">Sign in</button>
+      <button id="btn-up">Create account</button>
+      <span class="grow"></span>
+      <button id="btn-reset" class="ghost small">Forgot password</button>
     </div>
-  </section>
+    <p id="signin-msg" class="small"></p>
+  </div>
+</section>
 
-  <!-- admin -->
-  <section id="admin" hidden>
-    <h2>Apps from <span id="owner"></span></h2>
-    <div class="card cat">
-      <div class="row">
-        <span class="muted grow small">GitHub repositories of <b id="owner2"></b> whose name starts with <code id="prefix"></code>
-          and that have GitHub Pages turned on. Apps already in the store are marked; new versions can be updated.</span>
-        <button id="btn-scan">Refresh</button>
-      </div>
-      <p id="scan-msg" class="small"></p>
-      <div id="catalog"></div>
-      <div id="catalog-actions" class="row" hidden>
-        <label class="row small" style="margin:0"><input type="checkbox" id="sel-all"> Select all</label>
-        <span class="grow"></span>
-        <button id="btn-install-sel" class="primary" disabled>Add selected to the store</button>
-      </div>
+<!-- signed in but not an admin -->
+<section id="notadmin" class="center" hidden>
+  <div class="card">
+    <h1>Almost there</h1>
+    <p>This account can't manage the App Store yet. In the Firebase console, open <b>Firestore → Data</b>, collection
+       <code>admins</code>, and add a document whose ID is your user ID:</p>
+    <p><code id="uid"></code> <button id="btn-copy" class="small">Copy</button></p>
+    <p class="muted small">Then reload this page. See <code>firebase/SETUP.md</code> in the repository.</p>
+  </div>
+</section>
+
+<!-- admin -->
+<div id="admin" class="shell" hidden>
+  <aside class="side">
+    <div class="brand"><img src="../icon-32.png" alt=""><div><b>App Store Manager</b><span>My PC</span></div></div>
+    <nav class="nav" aria-label="Pages">
+      <a href="#overview" data-page="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Overview</a>
+      <a href="#apps" data-page="apps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8V7a6 6 0 0 1 12 0v1"/><path d="M3.5 8h17l-1.4 12a2 2 0 0 1-2 1.8H6.9a2 2 0 0 1-2-1.8z"/></svg>Apps<span class="count" id="nav-apps"></span></a>
+      <a href="#add" data-page="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Add apps</a>
+      <a href="#devices" data-page="devices"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Devices<span class="count" id="nav-tvs"></span></a>
+      <a href="#records" data-page="records"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5v1a3 3 0 0 0 3 3M16 6h3v1a3 3 0 0 1-3 3M12 13v4M8 21h8M9 17h6"/></svg>World records</a>
+    </nav>
+    <div class="side-foot">
+      <span id="who" class="who"></span>
+      <button id="btn-out" class="ghost small">Sign out</button>
     </div>
+  </aside>
 
-    <h2>Add from another address</h2>
-    <div class="card">
-      <label for="url">App address (the folder that contains <code>mypc-app.json</code>)</label>
-      <div class="row">
-        <input id="url" class="grow" placeholder="https://someone.github.io/my-game/">
-        <button id="btn-fetch" class="primary">Check</button>
+  <main>
+    <!-- Overview -->
+    <section data-view="overview">
+      <div class="head"><div class="grow"><h1>Overview</h1><p>The App Store and the TVs running My PC.</p></div><button id="btn-reload">Refresh</button></div>
+      <p id="tv-msg" class="small"></p>
+      <div id="tv-summary" class="tiles"></div>
+      <div class="grid two">
+        <div class="card"><h2>Most installed apps</h2><div id="top-apps" class="bars"></div></div>
+        <div class="card"><h2>My PC versions on TVs</h2><div id="versions" class="bars"></div></div>
       </div>
-      <p id="fetch-msg" class="small"></p>
-      <div id="preview" class="preview" hidden>
-        <img id="pv-icon" alt="">
-        <div class="grow">
-          <div><b id="pv-name"></b><span id="pv-type" class="tag"></span> <span id="pv-version" class="muted small"></span></div>
-          <div id="pv-desc" class="muted"></div>
-          <div class="muted small">Opens <span id="pv-entry"></span></div>
+      <div class="card flush">
+        <div class="card-head"><h2 class="grow">Recently active TVs</h2><a href="#devices" class="small">All devices →</a></div>
+        <table><thead><tr><th>Device</th><th>Profiles</th><th class="num">Apps</th><th>Last seen</th></tr></thead><tbody id="recent"></tbody></table>
+      </div>
+    </section>
+
+    <!-- Apps in the store -->
+    <section data-view="apps" hidden>
+      <div class="head"><div class="grow"><h1>Apps in the store <span id="count" class="muted small"></span></h1><p>Every My PC sees the store right away. People install apps on their TV with the App Store app.</p></div>
+        <a href="#add" class="btn primary" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600">+ Add apps</a></div>
+      <div class="card flush"><div id="list"></div></div>
+      <p class="muted small">Building a new app? Give the SDK guide to Claude: <a href="../sdk/GUIDE.md" target="_blank" rel="noopener">sdk/GUIDE.md</a>.</p>
+    </section>
+
+    <!-- One app -->
+    <section data-view="app" hidden>
+      <div class="crumb"><a href="#apps">Apps</a> › <span id="ad-crumb"></span></div>
+      <div class="card"><div class="hero"><img id="ad-icon" class="ico big" alt="">
+        <div class="grow"><h1 id="ad-name"></h1><div id="ad-meta" class="muted"></div><div id="ad-desc" style="margin-top:6px"></div></div>
+        <div class="row"><button id="ad-cfg">Config</button><a id="ad-open" class="btn" target="_blank" rel="noopener">Open site</a></div></div></div>
+      <div id="ad-tiles" class="tiles"></div>
+      <div class="card flush">
+        <div class="card-head"><h2 class="grow">Devices with this app</h2><span class="muted small">from each TV's last backup</span></div>
+        <table><thead><tr><th>Device</th><th>Installed</th><th>Profiles</th><th>My PC</th><th>Last seen</th></tr></thead><tbody id="app-devices"></tbody></table>
+      </div>
+    </section>
+
+    <!-- Add apps -->
+    <section data-view="add" hidden>
+      <div class="head"><div class="grow"><h1>Add apps</h1><p>Publish apps and games built with the My PC SDK.</p></div></div>
+      <div class="card flush cat">
+        <div class="card-head"><div class="grow"><h2>Apps from <span id="owner"></span></h2>
+          <span class="muted small">GitHub repositories of <b id="owner2"></b> named <code id="prefix"></code> with GitHub Pages. Apps already in the store are marked; new versions can be updated.</span></div>
+          <button id="btn-scan">Refresh</button></div>
+        <p id="scan-msg" class="small" style="padding:0 18px"></p>
+        <div id="catalog"></div>
+        <div id="catalog-actions" class="row" style="padding:12px 18px;border-top:1px solid var(--line)" hidden>
+          <label class="row small" style="margin:0"><input type="checkbox" id="sel-all"> Select all</label>
+          <span class="grow"></span>
+          <button id="btn-install-sel" class="primary" disabled>Add selected to the store</button>
         </div>
-        <button id="btn-install" class="primary">Add to store</button>
       </div>
-    </div>
-    <p class="muted small">Building a new app? Give the SDK guide to Claude:
-      <a href="../sdk/GUIDE.md" target="_blank" rel="noopener">sdk/GUIDE.md</a>.</p>
+      <div class="card">
+        <h2>Add from another address</h2>
+        <label for="url">App address (the folder that contains <code>mypc-app.json</code>)</label>
+        <div class="row">
+          <input id="url" class="grow" placeholder="https://someone.github.io/my-game/">
+          <button id="btn-fetch" class="primary">Check</button>
+        </div>
+        <p id="fetch-msg" class="small"></p>
+        <div id="preview" class="preview" hidden>
+          <img id="pv-icon" alt="">
+          <div class="grow">
+            <div><b id="pv-name"></b><span id="pv-type" class="tag"></span> <span id="pv-version" class="muted small"></span></div>
+            <div id="pv-desc" class="muted"></div>
+            <div class="muted small">Opens <span id="pv-entry"></span></div>
+          </div>
+          <button id="btn-install" class="primary">Add to store</button>
+        </div>
+      </div>
+    </section>
 
-    <h2>Apps in the store <span id="count" class="muted small"></span></h2>
-    <div id="list"></div>
-    <p class="muted small">Every My PC sees the store right away. People install apps on their TV with the App Store app.</p>
+    <!-- Devices -->
+    <section data-view="devices" hidden>
+      <div class="head"><div class="grow"><h1>Devices</h1><p>TVs running My PC, from their cloud backup. Newest activity first.</p></div></div>
+      <div class="card flush">
+        <table><thead><tr><th>Device</th><th>Profiles</th><th class="num">Apps</th><th>My PC</th><th>Last seen</th><th>First seen</th></tr></thead><tbody id="tvs"></tbody></table>
+      </div>
+    </section>
 
-    <h2>TVs with My PC <span id="tv-count" class="muted small"></span></h2>
-    <div id="tv-summary" class="stats"></div>
-    <p id="tv-msg" class="small"></p>
-    <div id="tvs"></div>
+    <!-- One device -->
+    <section data-view="device" hidden>
+      <div class="crumb"><a href="#devices">Devices</a> › <span id="dd-crumb"></span></div>
+      <div class="card"><div class="hero"><div class="ico big" style="display:grid;place-items:center"><svg viewBox="0 0 24 24" width="38" height="38" fill="none" stroke="#8fd3ff" stroke-width="1.6"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+        <div class="grow"><h1 id="dd-name"></h1><div id="dd-meta" class="muted"></div></div>
+        <button id="dd-delete" class="danger">Delete backup</button></div></div>
+      <div class="grid two">
+        <div class="card"><h2>Profiles</h2><div id="dd-profiles" class="chips"></div>
+          <h2 style="margin-top:18px">Best scores</h2><div id="dd-top"></div></div>
+        <div class="card"><h2>Details</h2><dl id="dd-kv" class="kv"></dl></div>
+      </div>
+      <div class="card flush">
+        <div class="card-head"><h2 class="grow">Installed apps</h2></div>
+        <table><thead><tr><th>App</th><th>Installed</th></tr></thead><tbody id="dd-apps"></tbody></table>
+      </div>
+    </section>
 
-    <h2>World records</h2>
-    <div id="records" class="recs"></div>
-  </section>
+    <!-- World records -->
+    <section data-view="records" hidden>
+      <div class="head"><div class="grow"><h1>World records</h1><p>The best scores of each game on every My PC.</p></div></div>
+      <div id="records" class="recs"></div>
+    </section>
+  </main>
+</div>
 
-  <p id="boot" class="muted">Loading…</p>
-</main>
+<p id="boot" class="muted" style="padding:28px">Loading…</p>
+<div id="toast" class="toast" hidden></div>
 
 <!-- App config editor -->
 <div id="cfg-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="cfg-title">
   <div class="box">
     <h3 id="cfg-title">Config</h3>
-    <p class="muted small" style="margin:0 0 12px">A JSON object saved with the app in Firebase. Every My PC loads it before the app opens and
-      the app reads it as <code>MyPC.app_config</code>. Leave it empty for <code>{}</code>.</p>
+    <p class="muted small" style="margin:0 0 12px">A JSON object saved with the app in Firebase, the same for every TV and profile. Every My PC loads it
+      before the app opens and the app reads it as <code>MyPC.app_config</code>. Leave it empty for <code>{}</code>.
+      Anyone can read it: never put secret keys here.</p>
     <textarea id="cfg-text" spellcheck="false" aria-label="Config JSON"></textarea>
     <p id="cfg-msg" class="small"></p>
     <div class="row">
@@ -192,7 +341,8 @@
   const auth = getAuth(app), db = getFirestore(app);
   const $ = (id) => document.getElementById(id);
   const show = (id) => ['signin', 'notadmin', 'admin'].forEach((s) => { $(s).hidden = s !== id; });
-  let user = null, apps = [], pending = null, found = [], stats = {};
+  const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  let user = null, apps = [], pending = null, found = [], stats = {}, tvs = [], recs = [], tvError = '';
   const OWNER = 'imad-os', PREFIX = 'g_';         // catalog: OWNER's repositories named PREFIX...
   $('owner').textContent = $('owner2').textContent = OWNER;
   $('prefix').textContent = PREFIX + '…';
@@ -207,10 +357,12 @@
   };
   const say = (el, text, cls) => { $(el).textContent = text || ''; $(el).className = 'small ' + (cls || ''); };
   const authErr = (e) => AUTH_MSG[e.code] || e.message;
-  // Firestore refusals: after an installer update the published rules may be older than the page
+  // Firestore refusals: after an update the published rules may be older than the page
   const fbErr = (e) => e.code === 'permission-denied'
     ? 'Firebase refused it. If the rules were not republished since the last update, publish firebase/firestore.rules again.'
     : 'Firebase refused it: ' + e.message;
+  let toastT = 0;
+  const toast = (t) => { $('toast').textContent = t; $('toast').hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { $('toast').hidden = true; }, 3000); };
 
   $('btn-google').onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch((e) => say('signin-msg', authErr(e), 'err'));
   $('btn-in').onclick = () => signInWithEmailAndPassword(auth, $('email').value.trim(), $('pass').value).catch((e) => say('signin-msg', authErr(e), 'err'));
@@ -222,86 +374,160 @@
   };
   $('btn-out').onclick = () => signOut(auth);
   $('btn-copy').onclick = () => navigator.clipboard && navigator.clipboard.writeText(user.uid);
+  $('btn-reload').onclick = () => load();
 
   onAuthStateChanged(auth, async (u) => {
     user = u;
     $('boot').hidden = true;
-    $('btn-out').hidden = !u;
     $('who').textContent = u ? (u.email || u.displayName || '') : '';
     if (!u) return show('signin');
     let admin = false;
     try { admin = (await getDoc(doc(db, 'admins', u.uid))).exists(); } catch (e) { admin = false; }
     if (!admin) { $('uid').textContent = u.uid; return show('notadmin'); }
     show('admin');
+    route();
     await load();
     scan();
   });
+
+  /* ---------- pages (hash routes) ---------- */
+
+  function route() {
+    const h = location.hash.replace(/^#/, '') || 'overview';
+    const [page, arg] = h.split('/');
+    const view = { app: 'app', device: 'device' }[page] || (['overview', 'apps', 'add', 'devices', 'records'].includes(page) ? page : 'overview');
+    document.querySelectorAll('[data-view]').forEach((s) => { s.hidden = s.dataset.view !== view; });
+    const navKey = view === 'app' ? 'apps' : view === 'device' ? 'devices' : view;
+    document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('on', a.dataset.page === navKey));
+    if (view === 'app') renderApp(decodeURIComponent(arg || ''));
+    if (view === 'device') renderDevice(decodeURIComponent(arg || ''));
+    window.scrollTo(0, 0);
+  }
+  window.addEventListener('hashchange', route);
 
   async function load() {
     const snap = await getDocs(collection(db, 'apps'));
     apps = snap.docs.map((d) => d.data()).sort((a, b) => (a.order || 0) - (b.order || 0));
     try { stats = {}; (await getDocs(collection(db, 'appstats'))).docs.forEach((d) => { stats[d.id] = d.data(); }); } catch (e) { stats = {}; }
+    tvError = '';
+    try { tvs = (await getDocs(collection(db, 'tvs'))).docs.map((d) => parseTv(Object.assign({ id: d.id }, d.data()))); }
+    catch (e) { tvs = []; tvError = e.code === 'permission-denied' ? 'Publish the new firebase/firestore.rules to see the TVs (see firebase/SETUP.md).' : 'Could not read the TVs: ' + e.message; }
+    tvs.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+    try { recs = (await getDocs(collection(db, 'records'))).docs.map((d) => ({ id: d.id, list: (d.data().list || []) })); } catch (e) { recs = []; }
+    $('nav-apps').textContent = apps.length || '';
+    $('nav-tvs').textContent = tvs.length || '';
     render();
     renderCatalog();
-    loadTvs();
+    renderOverview();
+    renderDevices();
+    renderRecords();
+    route();
   }
 
-  /* ---------- statistics: TVs running My PC (their backup document), world records ---------- */
+  /* ---------- statistics helpers ---------- */
 
   const GAME_NAMES = { jumper: 'Super Jumper', blocks: 'Block Drop', hopper: 'Sky Hopper', snake: 'Neon Snake', breaker: 'Brick Breaker', merge: 'Tile Merge', parchis: 'Parchís' };
-  const gameName = (id) => GAME_NAMES[id] || (id.indexOf('app-') === 0 && (apps.find((a) => a.id === id.slice(4)) || {}).name) || id;
-  const when = (ms) => {
+  const appById = (id) => apps.find((a) => a.id === id);
+  const gameName = (id) => GAME_NAMES[id] || (id.indexOf('app-') === 0 && (appById(id.slice(4)) || {}).name) || id;
+  const ago = (ms) => {
     if (!ms) return '–';
     const d = (Date.now() - ms) / 86400000;
-    return d < 1 / 24 ? 'just now' : d < 1 ? Math.round(d * 24) + ' h ago' : d < 60 ? Math.round(d) + ' days ago' : new Date(ms).toLocaleDateString();
+    return d < 1 / 24 ? 'just now' : d < 1 ? Math.round(d * 24) + ' h ago' : d < 2 ? 'yesterday' : d < 60 ? Math.round(d) + ' days ago' : new Date(ms).toLocaleDateString();
   };
-  function statCard(label, value) { const c = document.createElement('div'); c.className = 'stat'; c.innerHTML = '<b></b><span class="muted small"></span>'; c.querySelector('b').textContent = value; c.querySelector('span').textContent = label; return c; }
+  const date = (ms) => ms ? new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '–';
+  const activity = (t) => { const d = (Date.now() - (t.lastSeen || 0)) / 86400000; return d < 7 ? 'on' : d < 30 ? 'idle' : 'gone'; };
+  const tvName = (t) => (t.model || 'TV') + ' · ' + t.id.slice(3, 9);
 
-  async function loadTvs() {
-    let tvs = [], recs = [];
-    say('tv-msg', '');
-    try { tvs = (await getDocs(collection(db, 'tvs'))).docs.map((d) => Object.assign({ id: d.id }, d.data())); }
-    catch (e) { say('tv-msg', e.code === 'permission-denied' ? 'Publish the new firebase/firestore.rules to see the TVs (see firebase/SETUP.md).' : 'Could not read the TVs: ' + e.message, 'err'); }
-    try { recs = (await getDocs(collection(db, 'records'))).docs.map((d) => ({ id: d.id, list: (d.data().list || []) })); } catch (e) { recs = []; }
-    tvs.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+  // the backup holds the exact install dates (arc_dev_installed) and the profiles with their colours
+  function parseTv(t) {
+    let keys = {};
+    try { keys = JSON.parse(t.blob || '{}') || {}; } catch (e) { keys = {}; }
+    const get = (k) => { try { return JSON.parse(keys[k]); } catch (e) { return undefined; } };
+    const inst = get('arc_dev_installed');
+    t.apps = Array.isArray(inst) ? inst.filter((x) => x && x.id).map((x) => ({ id: x.id, at: x.at || 0 })) : (t.installed || []).map((id) => ({ id, at: 0 }));
+    const prof = get('arc_profiles');
+    t.people = Array.isArray(prof) && prof.length ? prof.map((p, i) => ({ name: p.name || (t.names || [])[i] || 'Player ' + String(p.id || '').slice(1), color: p.color || '#3a4a66' }))
+      : (t.names || []).map((n) => ({ name: n, color: '#3a4a66' }));
+    delete t.blob;                                    // big; not needed any more
+    return t;
+  }
+  function tile(label, value) { return '<div class="tile"><b>' + esc(value) + '</b><span>' + esc(label) + '</span></div>'; }
+  function chips(people) { return people.length ? people.map((p) => '<span class="chip"><i style="background:' + esc(p.color) + ';color:#111">' + esc((p.name || '?').charAt(0).toUpperCase()) + '</i>' + esc(p.name) + '</span>').join('') : '<span class="muted">–</span>'; }
+  // one series, one hue; the value is printed, the bar shows the size (hover: exact title)
+  function bars(rows, unit) {
+    if (!rows.length) return '<p class="muted small">Nothing yet.</p>';
+    const max = Math.max(1, ...rows.map((r) => r.v));
+    return rows.map((r) => '<div class="bar-row" title="' + esc(r.label + ': ' + r.v + ' ' + unit) + '"><span class="lbl">' + esc(r.label) + '</span>' +
+      '<span class="bar-track"><span class="bar-fill" style="width:' + (r.v / max * 100).toFixed(1) + '%"></span></span><span class="val">' + r.v + '</span></div>').join('');
+  }
+  function devicesWith(appId) { return tvs.map((t) => ({ t, a: t.apps.find((x) => x.id === appId) })).filter((x) => x.a); }
+
+  /* ---------- Overview ---------- */
+
+  function renderOverview() {
+    say('tv-msg', tvError, tvError ? 'err' : '');
     const week = Date.now() - 7 * 86400000;
     let installs = 0, opens = 0;
     Object.values(stats).forEach((s) => { installs += s.installs || 0; opens += s.opens || 0; });
-    const sum = $('tv-summary');
-    sum.innerHTML = '';
-    sum.appendChild(statCard('TVs with My PC', tvs.length));
-    sum.appendChild(statCard('used in the last 7 days', tvs.filter((t) => (t.lastSeen || 0) > week).length));
-    sum.appendChild(statCard('installs from the store', installs));
-    sum.appendChild(statCard('apps opened', opens));
-    $('tv-count').textContent = tvs.length ? '(' + tvs.length + ')' : '';
+    $('tv-summary').innerHTML = tile('TVs with My PC', tvs.length) + tile('used in the last 7 days', tvs.filter((t) => (t.lastSeen || 0) > week).length) +
+      tile('apps in the store', apps.length) + tile('installs from the store', installs) + tile('apps opened', opens) +
+      tile('games with world records', recs.filter((r) => r.list.length).length);
+    $('top-apps').innerHTML = bars(apps.map((a) => ({ label: a.name, v: (stats[a.id] || {}).installs || 0 })).sort((x, y) => y.v - x.v).slice(0, 8), 'installs');
+    const ver = {};
+    tvs.forEach((t) => { const k = 'v' + (t.version || '?'); ver[k] = (ver[k] || 0) + 1; });
+    $('versions').innerHTML = bars(Object.entries(ver).map(([label, v]) => ({ label, v })).sort((x, y) => y.v - x.v).slice(0, 8), 'TVs');
+    $('recent').innerHTML = tvs.length ? tvs.slice(0, 5).map((t) => '<tr class="click" data-tv="' + esc(t.id) + '"><td><span class="dot ' + activity(t) + '"></span>' + esc(tvName(t)) +
+      '</td><td>' + esc(t.people.map((p) => p.name).join(', ') || '–') + '</td><td class="num">' + t.apps.length + '</td><td>' + esc(ago(t.lastSeen)) + '</td></tr>').join('')
+      : '<tr><td colspan="4" class="empty">No TV has sent its backup yet.</td></tr>';
+  }
+
+  /* ---------- Devices ---------- */
+
+  function renderDevices() {
     const box = $('tvs');
-    box.innerHTML = '';
-    if (!tvs.length) box.innerHTML = '<p class="muted">No TV has sent its backup yet.</p>';
-    tvs.forEach((t) => {
-      const row = document.createElement('div');
-      row.className = 'tv';
-      row.innerHTML = '<div><span class="name"></span> <span class="muted small meta"></span></div><div class="line small prof"></div><div class="line small inst"></div><div class="line small top"></div>';
-      row.querySelector('.name').textContent = (t.model || 'TV') + ' · ' + t.id.slice(3, 11);
-      row.querySelector('.meta').textContent = 'My PC ' + (t.version || '?') + ' (build ' + (t.build || '?') + ') · ' + (t.lang || '') + ' · last seen ' + when(t.lastSeen) +
-        ' · first seen ' + when(t.firstSeen) + ' · backup ' + Math.round((t.size || 0) / 1024) + ' KB' + (t.src === 'random' ? ' · no TV id (browser or old package)' : '');
-      row.querySelector('.prof').textContent = 'Profiles: ' + ((t.names || []).join(', ') || '–');
-      row.querySelector('.inst').textContent = 'Installed: ' + ((t.installed || []).map((id) => (apps.find((a) => a.id === id) || { name: id }).name).join(', ') || 'nothing from the store');
+    if (!tvs.length) { box.innerHTML = '<tr><td colspan="6" class="empty">' + esc(tvError || 'No TV has sent its backup yet.') + '</td></tr>'; return; }
+    box.innerHTML = tvs.map((t) => {
       const top = Object.entries(t.top || {}).sort((a, b) => b[1].s - a[1].s).map(([g, e]) => gameName(g) + ': ' + e.n + ' ' + e.s);
-      row.querySelector('.top').textContent = 'Best scores: ' + (top.join(' · ') || '–');
-      box.appendChild(row);
-    });
+      return '<tr class="click tv" data-tv="' + esc(t.id) + '"><td><span class="dot ' + activity(t) + '"></span><b>' + esc(t.model || 'TV') + '</b> <span class="muted small">' + esc(t.id.slice(3, 11)) + '</span>' +
+        '<span class="sub">' + esc(top.length ? 'Best scores: ' + top.slice(0, 3).join(' · ') : 'No scores yet') + (t.src === 'random' ? ' · no TV id (browser or old package)' : '') + '</span></td>' +
+        '<td>' + esc(t.people.map((p) => p.name).join(', ') || '–') + '</td>' +
+        '<td class="num" title="' + esc(t.apps.map((a) => (appById(a.id) || { name: a.id }).name).join(', ')) + '">' + t.apps.length + '</td>' +
+        '<td>' + esc(t.version || '?') + '<span class="sub">build ' + esc(t.build || '?') + ' · ' + esc(t.lang || '') + '</span></td>' +
+        '<td>' + esc(ago(t.lastSeen)) + '</td><td>' + esc(date(t.firstSeen)) + '</td></tr>';
+    }).join('');
+  }
+
+  function renderDevice(id) {
+    const t = tvs.find((x) => x.id === id);
+    if (!t) { $('dd-name').textContent = 'Device not found'; $('dd-meta').textContent = id; $('dd-apps').innerHTML = ''; $('dd-profiles').innerHTML = ''; $('dd-top').innerHTML = ''; $('dd-kv').innerHTML = ''; return; }
+    $('dd-crumb').textContent = tvName(t);
+    $('dd-name').textContent = t.model || 'TV';
+    $('dd-meta').innerHTML = '<span class="dot ' + activity(t) + '"></span>Last seen ' + esc(ago(t.lastSeen)) + ' · My PC ' + esc(t.version || '?') + ' (build ' + esc(t.build || '?') + ')';
+    $('dd-profiles').innerHTML = chips(t.people);
+    const top = Object.entries(t.top || {}).sort((a, b) => b[1].s - a[1].s);
+    $('dd-top').innerHTML = top.length ? '<table><tbody>' + top.map(([g, e]) => '<tr><td>' + esc(gameName(g)) + '</td><td>' + esc(e.n) + '</td><td class="num">' + e.s + '</td></tr>').join('') + '</tbody></table>' : '<p class="muted small">No scores yet.</p>';
+    $('dd-kv').innerHTML = [['Device id', t.id], ['Id source', t.src === 'duid' ? 'TV (DUID, hashed)' : t.src === 'tizen' ? 'Tizen id (hashed)' : 'random (browser or old package)'],
+      ['Language', t.lang || '–'], ['First seen', date(t.firstSeen)], ['Last seen', new Date(t.lastSeen || 0).toLocaleString()], ['Backup size', Math.round((t.size || 0) / 1024) + ' KB']]
+      .map(([k, v]) => '<dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd>').join('');
+    $('dd-apps').innerHTML = t.apps.length ? t.apps.slice().sort((a, b) => b.at - a.at).map((a) => {
+      const ap = appById(a.id);
+      return '<tr class="click" data-app="' + esc(a.id) + '"><td><img class="ico" style="width:30px;height:30px;vertical-align:middle;margin-right:10px" alt="" src="' + esc((ap && ap.icon) || '../icon-32.png') + '">' + esc(ap ? ap.name : a.id) +
+        (ap ? '' : ' <span class="tag off">removed from store</span>') + '</td><td>' + esc(a.at ? date(a.at) : 'before the App Store') + '</td></tr>';
+    }).join('') : '<tr><td colspan="2" class="empty">Nothing installed from the store.</td></tr>';
+    $('dd-delete').onclick = async () => {
+      if (!confirm('Delete the cloud backup of this TV? Its profiles, saves and settings stay on the TV, and it sends a new backup the next time My PC runs (unless the user turned the backup off).')) return;
+      try { await deleteDoc(doc(db, 'tvs', t.id)); toast('Backup deleted.'); location.hash = '#devices'; load(); } catch (e) { toast(fbErr(e)); }
+    };
+  }
+
+  /* ---------- World records ---------- */
+
+  function renderRecords() {
     const rb = $('records');
-    rb.innerHTML = '';
-    recs = recs.filter((r) => r.list.length);
-    if (!recs.length) rb.innerHTML = '<p class="muted">No world record yet.</p>';
-    recs.forEach((r) => {
-      const c = document.createElement('div');
-      c.className = 'rec';
-      c.innerHTML = '<b></b><ol></ol>';
-      c.querySelector('b').textContent = gameName(r.id);
-      r.list.slice(0, 5).forEach((e) => { const li = document.createElement('li'); li.textContent = e.n + ' – ' + e.s; c.querySelector('ol').appendChild(li); });
-      rb.appendChild(c);
-    });
+    const list = recs.filter((r) => r.list.length);
+    if (!list.length) { rb.innerHTML = '<div class="card empty">No world record yet.</div>'; return; }
+    rb.innerHTML = list.map((r) => '<div class="card rec"><b>' + esc(gameName(r.id)) + '</b><ol>' +
+      r.list.slice(0, 10).map((e) => '<li>' + esc(e.n) + ' – ' + e.s + '</li>').join('') + '</ol></div>').join('');
   }
 
   /* ---------- catalog: the owner's g_ repositories on GitHub Pages ---------- */
@@ -323,7 +549,7 @@
     found = [];
     $('catalog').innerHTML = '';
     $('catalog-actions').hidden = true;
-    say('scan-msg', 'Looking for ' + PREFIX + '… repositories of ' + OWNER + ' …');
+    say('scan-msg', 'Looking for ' + PREFIX + '… repositories of ' + OWNER + ' …', 'muted');
     let list;
     try { list = InstallerLib.catalog(await githubRepos(), OWNER, PREFIX); } catch (e) { return say('scan-msg', e.message, 'err'); }
     if (!list.length) return say('scan-msg', 'No repository named ' + PREFIX + '… with GitHub Pages yet.', 'muted');
@@ -424,6 +650,7 @@
     try {
       await updateDoc(doc(db, 'apps', cfgApp.id), { config: c });
       closeConfig();
+      toast('Config saved. TVs use it the next time the app opens.');
       await load();
     } catch (e) { say('cfg-msg', fbErr(e), 'err'); }
     finally { $('cfg-save').disabled = false; }
@@ -450,30 +677,32 @@
     await load();
   }
 
+  /* ---------- Apps page ---------- */
+
   function render() {
     const box = $('list');
     box.innerHTML = '';
     $('count').textContent = apps.length ? '(' + apps.length + ')' : '';
-    if (!apps.length) { box.innerHTML = '<p class="muted">The store is empty.</p>'; return; }
+    if (!apps.length) { box.innerHTML = '<p class="empty">The store is empty. <a href="#add">Add apps</a>.</p>'; return; }
     apps.forEach((a, i) => {
       const row = document.createElement('div');
       row.className = 'app';
-      row.innerHTML = '<img alt=""><div class="grow"><div><span class="name"></span><span class="tag type"></span><span class="tag cfg" hidden>config</span><span class="tag off" hidden>Hidden</span><span class="tag cnt"></span></div>' +
-        '<div class="muted small url"></div></div>' +
-        '<button class="up" title="Move up">▲</button><button class="down" title="Move down">▼</button>' +
-        '<button class="cfg">Config</button>' +
-        '<button class="toggle"></button><a class="open" target="_blank" rel="noopener"><button>Open</button></a><button class="danger del">Remove</button>';
+      row.innerHTML = '<img alt=""><div class="grow"><div><a class="name"></a><span class="tag type"></span><span class="tag cfg" hidden>config</span><span class="tag off" hidden>Hidden</span></div>' +
+        '<div class="muted small"><span class="cnt"></span> · <span class="url"></span></div></div>' +
+        '<div class="acts"><button class="icon up" title="Move up">▲</button><button class="icon down" title="Move down">▼</button>' +
+        '<button class="cfg">Config</button><button class="toggle"></button><a class="open btn" target="_blank" rel="noopener">Open</a><button class="danger del">Remove</button></div>';
       row.querySelector('img').src = a.icon || '../icon-32.png';
       row.querySelector('.name').textContent = a.name;
-      row.querySelector('.type').textContent = a.type;
+      row.querySelector('.name').href = '#app/' + encodeURIComponent(a.id);
+      row.querySelector('.type').textContent = a.type + ' · v' + (a.version || '?');
       row.querySelector('.off').hidden = a.enabled !== false;
       const keys = a.config ? Object.keys(a.config).length : 0;
       row.querySelector('.cfg.tag').hidden = !keys;
       row.querySelector('.cfg.tag').textContent = keys + ' setting' + (keys === 1 ? '' : 's');
       row.querySelector('button.cfg').onclick = () => editConfig(a);
       row.querySelector('.url').textContent = a.url;
-      const st = stats[a.id] || {};
-      row.querySelector('.cnt').textContent = (st.installs || 0) + ' installs · ' + (st.opens || 0) + ' opens';
+      const st = stats[a.id] || {}, n = devicesWith(a.id).length;
+      row.querySelector('.cnt').textContent = (st.installs || 0) + ' installs · ' + (st.opens || 0) + ' opens · on ' + n + ' device' + (n === 1 ? '' : 's');
       row.querySelector('.open').href = a.entry;
       row.querySelector('.toggle').textContent = a.enabled === false ? 'Show in store' : 'Hide from store';
       row.querySelector('.up').disabled = i === 0;
@@ -490,6 +719,32 @@
     });
   }
 
+  function renderApp(id) {
+    const a = appById(id);
+    if (!a) { $('ad-name').textContent = 'App not found'; $('ad-meta').textContent = id; $('app-devices').innerHTML = ''; $('ad-tiles').innerHTML = ''; return; }
+    const st = stats[a.id] || {}, list = devicesWith(a.id).sort((x, y) => (y.a.at || 0) - (x.a.at || 0));
+    $('ad-crumb').textContent = a.name;
+    $('ad-icon').src = a.icon || '../icon-32.png';
+    $('ad-name').textContent = a.name;
+    $('ad-meta').textContent = a.type + ' · version ' + (a.version || '?') + (a.enabled === false ? ' · hidden in the store' : '') + ' · ' + a.url;
+    $('ad-desc').textContent = a.description || '';
+    $('ad-open').href = a.entry;
+    $('ad-cfg').onclick = () => editConfig(a);
+    const people = list.reduce((n, x) => n + x.t.people.length, 0);
+    $('ad-tiles').innerHTML = tile('installs (all time)', st.installs || 0) + tile('times opened', st.opens || 0) + tile('devices with it now', list.length) + tile('profiles on those devices', people);
+    $('app-devices').innerHTML = list.length ? list.map(({ t, a: ia }) => '<tr class="click" data-tv="' + esc(t.id) + '"><td><span class="dot ' + activity(t) + '"></span>' + esc(tvName(t)) + '</td>' +
+      '<td>' + esc(ia.at ? date(ia.at) : 'before the App Store') + '</td><td><div class="chips">' + chips(t.people) + '</div></td>' +
+      '<td>' + esc(t.version || '?') + '</td><td>' + esc(ago(t.lastSeen)) + '</td></tr>').join('')
+      : '<tr><td colspan="5" class="empty">No device has installed it yet (or not backed up since).</td></tr>';
+  }
+
+  // table rows open the device / app page
+  document.addEventListener('click', (e) => {
+    const r = e.target.closest('tr[data-tv], tr[data-app]');
+    if (!r) return;
+    location.hash = r.dataset.tv ? '#device/' + encodeURIComponent(r.dataset.tv) : '#app/' + encodeURIComponent(r.dataset.app);
+  });
+
   async function update(a, fields) { await updateDoc(doc(db, 'apps', a.id), fields); load(); }
 
   async function move(i, d) {
@@ -504,7 +759,7 @@
     $('preview').hidden = true; pending = null;
     let where;
     try { where = InstallerLib.locate($('url').value); } catch (e) { return say('fetch-msg', e.message, 'err'); }
-    say('fetch-msg', 'Reading ' + where.manifest + ' …');
+    say('fetch-msg', 'Reading ' + where.manifest + ' …', 'muted');
     let manifest;
     try {
       const r = await fetch(where.manifest, { cache: 'no-store' });

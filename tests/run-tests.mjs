@@ -941,7 +941,9 @@ async function main() {
             window.__db = { admins: { U1: { name: 'owner' } },
                 appstats: { 'old-game': { installs: 4, opens: 11 } },
                 tvs: { 'tv-aaaabbbbccccddddeeeeffff0000': { tv: 'tv-aaaabbbbccccddddeeeeffff0000', model: 'QE55Q80D', version: '2.9.0', build: 17, lang: 'fr', src: 'duid',
-                         firstSeen: now - 20 * 86400000, lastSeen: now - 3600000, profiles: 2, names: ['Ana', 'Sam'], installed: ['old-game'], top: { jumper: { n: 'Ana', s: 4321 } }, blob: '{}', size: 2048 },
+                         firstSeen: now - 20 * 86400000, lastSeen: now - 3600000, profiles: 2, names: ['Ana', 'Sam'], installed: ['old-game'], top: { jumper: { n: 'Ana', s: 4321 } }, size: 2048,
+                         blob: JSON.stringify({ arc_dev_installed: JSON.stringify([{ id: 'old-game', at: Date.UTC(2026, 8, 14, 12) }]),
+                                                arc_profiles: JSON.stringify([{ id: 'p1', name: 'Ana', color: '#ffd23f' }, { id: 'p2', name: 'Sam', color: '#4cd97b' }]) }) },
                        'tv-1111222233334444555566667777': { tv: 'tv-1111222233334444555566667777', model: 'Browser', version: '2.8.0', build: 16, lang: 'en', src: 'random',
                          firstSeen: now - 90 * 86400000, lastSeen: now - 30 * 86400000, profiles: 1, names: ['Player 1'], installed: [], top: {}, blob: '{}', size: 512 } },
                 records: { jumper: { list: [{ n: 'Ana', s: 4321, d: 1, tv: 'tv-a' }, { n: 'Leo', s: 999, d: 2, tv: 'tv-b' }], updatedAt: 1 } },
@@ -961,13 +963,17 @@ async function main() {
             if (u.indexOf('/g_oldgame/mypc-app.json') > 0) return send({ mypc: 1, id: 'old-game', name: 'Old Game', type: 'game', version: '1.0.0' });
             r.fulfill({ status: 404, body: '' });
         });
-        await page.goto(base + 'installer/index.html');
+        await page.goto(base + 'installer/index.html#add');
         await page.waitForSelector('#catalog .app', { timeout: 8000 });
+        const go = async (h) => { await page.evaluate((x) => { location.hash = x; }, h); await page.waitForTimeout(80); };
         const rows = await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].map((r) => r.textContent));
         check(rows.length === 3 && !rows.some((t) => /speedy|nopages|archived/.test(t)), 'only g_ repositories with GitHub Pages are listed (' + rows.length + ')');
         check(rows.some((t) => /Star Catcher.*Not in store/.test(t)) && rows.some((t) => /Old Game.*In store/.test(t)) && rows.some((t) => /g_broken.*not a My PC app/.test(t)),
             'each app shows its status: not in the store, in the store, or not a My PC app');
-        check(/App Store Manager/.test(await page.title()) && /App Store Manager/.test(await page.textContent('h1')), 'the installer is now the App Store Manager');
+        check(/App Store Manager/.test(await page.title()) && /App Store Manager/.test(await page.textContent('.brand')), 'the installer is now the App Store Manager');
+        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,Devices,World records'
+            && document.querySelector('.nav a.on').dataset.page === 'add' && !document.querySelector('[data-view="add"]').hidden && document.querySelector('[data-view="overview"]').hidden),
+            'a menu with one page each: Overview, Apps, Add apps, Devices, World records');
         check(await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].find((r) => /Old Game/.test(r.textContent)).querySelector('input').disabled), 'installed apps cannot be selected again');
         await page.check('#sel-all');
         await page.click('#btn-install-sel');
@@ -977,15 +983,31 @@ async function main() {
             '"Add selected to the store" publishes the new app only, after the ones already there');
         await page.waitForFunction(() => /Star Catcher.*In store/.test(document.getElementById('catalog').textContent) && !/Not in store/.test(document.getElementById('catalog').textContent));
         check(true, 'after adding, the catalog marks it in the store');
-        // statistics: TVs with My PC, their apps and best scores, world records, app counters
-        await page.waitForFunction(() => document.querySelectorAll('#tvs .tv').length === 2, null, { timeout: 5000 }).catch(() => {});
-        const tvText = await page.evaluate(() => [...document.querySelectorAll('#tvs .tv')].map((r) => r.textContent));
-        check(tvText.length === 2 && /QE55Q80D/.test(tvText[0]) && /Ana, Sam/.test(tvText[0]) && /Installed: Old Game/.test(tvText[0]) && /Super Jumper: Ana 4321/.test(tvText[0]),
-            'the TVs list shows each TV: model, profiles, installed apps and best scores (newest first)');
+        // Overview: totals, most installed apps, recent TVs
+        await go('#overview');
         const sum = await page.textContent('#tv-summary');
-        check(/2\s*TVs with My PC/.test(sum) && /1\s*used in the last 7 days/.test(sum) && /4\s*installs/.test(sum) && /11\s*apps opened/.test(sum), 'summary: TVs, active TVs, installs and opens (' + sum + ')');
-        check(/Super Jumper.*Ana – 4321.*Leo – 999/.test(await page.textContent('#records')), 'world records are listed per game');
-        check(/4 installs · 11 opens/.test(await page.textContent('#list')), 'each app in the store shows its installs and opens');
+        check(/2\s*TVs with My PC/.test(sum) && /1\s*used in the last 7 days/.test(sum) && /4\s*installs/.test(sum) && /11\s*apps opened/.test(sum), 'Overview: TVs, active TVs, installs and opens (' + sum + ')');
+        check(/Old Game\s*4/.test(await page.textContent('#top-apps')) && /QE55Q80D/.test(await page.textContent('#recent')), 'Overview: most installed apps and recently active TVs');
+        // Devices: one row per TV, newest activity first; a TV's page lists its profiles and apps with install dates
+        await go('#devices');
+        const tvText = await page.evaluate(() => [...document.querySelectorAll('#tvs .tv')].map((r) => r.textContent));
+        check(tvText.length === 2 && /QE55Q80D/.test(tvText[0]) && /Ana, Sam/.test(tvText[0]) && /Super Jumper: Ana 4321/.test(tvText[0]),
+            'Devices lists each TV: model, profiles and best scores (newest first)');
+        await page.click('#tvs .tv:has-text("QE55Q80D")');
+        await page.waitForFunction(() => !document.querySelector('[data-view="device"]').hidden);
+        const dev = await page.evaluate(() => ({ apps: document.getElementById('dd-apps').textContent, prof: document.getElementById('dd-profiles').textContent }));
+        check(/Old Game/.test(dev.apps) && /2026/.test(dev.apps) && /Ana/.test(dev.prof) && /Sam/.test(dev.prof), 'a device page shows its profiles and its apps with the install date (' + dev.apps + ')');
+        await go('#records');
+        check(/Super Jumper.*Ana – 4321.*Leo – 999/.test(await page.textContent('#records')), 'World records are listed per game');
+        // Apps: counters per app; an app's page lists the devices that installed it
+        await go('#apps');
+        check(/4 installs · 11 opens · on 1 device/.test(await page.textContent('#list')), 'each app in the store shows its installs, opens and devices');
+        await page.click('#list .app:has-text("Old Game") a.name');
+        await page.waitForFunction(() => !document.querySelector('[data-view="app"]').hidden);
+        const devRows = await page.evaluate(() => [...document.querySelectorAll('#app-devices tr')].map((r) => r.textContent));
+        check(devRows.length === 1 && /QE55Q80D/.test(devRows[0]) && /2026/.test(devRows[0]) && /Ana/.test(devRows[0]) && /Sam/.test(devRows[0]),
+            'an app\'s page lists the devices that installed it, with the date and their profiles (' + devRows.join(' | ') + ')');
+        await go('#apps');
         check(JSON.stringify(db['star-catcher'].config) === '{"speed":1}', 'a new app starts with the default config from its manifest');
         // the config editor
         const row = (name) => '#list .app:has-text("' + name + '")';
@@ -1010,6 +1032,7 @@ async function main() {
         await page.fill('#cfg-text', '{ "speed": 9 }'); await page.click('#cfg-save');
         await page.waitForFunction(() => window.__db.apps['star-catcher'].config.speed === 9);
         starVersion = '1.0.1';
+        await go('#add');
         await page.click('#btn-scan');
         await page.waitForFunction(() => /Update available/.test(document.getElementById('catalog').textContent));
         await page.click('#catalog .app:has-text("Star Catcher") button.act');
