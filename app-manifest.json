@@ -1,6 +1,6 @@
 {
-  "build": 22,
-  "version": "2.10.1",
+  "build": 23,
+  "version": "2.11.0",
   "shell": 1,
   "css": [
     "css/launcher.css"
@@ -9,6 +9,7 @@
     "js/core/native.js",
     "js/core/storage.js",
     "js/core/cloud.js",
+    "js/core/rooms.js",
     "js/core/backup.js",
     "js/core/world.js",
     "js/core/i18n.js",

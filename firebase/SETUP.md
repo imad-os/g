@@ -8,6 +8,8 @@ My PC uses one Firestore database for:
 - **`tvs`**: one backup per TV (profiles, settings, saves, installed apps, records), so a
   reinstalled My PC or a reset TV gets everything back. The App Store Manager lists them as statistics.
 - **`records`**: the world records (best 10 of each game on every My PC).
+- **`rooms`** (with `rooms/<id>/reqs`): lobbies for multiplayer apps (`MyPC.rooms` in the SDK). Written only by the My PC
+  shell for the running app; short-lived documents (see **Rooms** below).
 
 TVs never sign in. They read `apps`, `appstats`, `records` and their own `tvs` document, and the rules
 let them write only small, checked things (+1 on a counter, their own backup, a top-10 list).
@@ -114,3 +116,22 @@ In the Firestore **Rules** tab → *Rules Playground*:
 - An unauthenticated `get` on `/apps/x` → allowed; an unauthenticated `create` → denied.
 - An unauthenticated `list` on `/tvs` → denied; `get` on `/tvs/tv-…` → allowed.
 - An unauthenticated `update` on `/appstats/x` that adds 2 → denied; adding 1 → allowed.
+
+## 4. Rooms (`MyPC.rooms`): index and TTL (once)
+Apps and games can offer local multiplayer without their own backend (`sdk/GUIDE.md`, "Rooms"). The shell writes
+`rooms/{room}` (`app, name, max, n, at, exp`) and `rooms/{room}/reqs/{req}` (`name, offer, exp, answer?, no?`); the rules
+in `firestore.rules` check size, shape and that `exp` is at most 90 s ahead. There is no sign-in, so **keep nothing private
+there**. After publishing the new rules (step 1), do these two things in the console:
+
+1. **Composite index** (the room list asks for one app's live rooms, newest first). Firestore → **Indexes → Composite → Add index**:
+   collection ID `rooms`, fields `app` Ascending, `exp` Descending, query scope **Collection**. (Or
+   `firebase deploy --only firestore:indexes` with `firebase/firestore.indexes.json`.) Until it is built (a minute) the TV
+   falls back to a simpler query, so nothing breaks.
+2. **TTL policies** so abandoned rooms and requests are deleted for free: Firestore → **TTL → Create policy**:
+   collection group `rooms`, timestamp field `exp`; then collection group `reqs`, timestamp field `exp`.
+   (CLI: `gcloud firestore fields ttls update exp --collection-group=rooms --enable-ttl` and the same for `reqs`.)
+   TTL deletes within about a day of `exp`; the apps already ignore expired rooms, and the shell deletes its own
+   room and requests when the app closes.
+
+Cost: a room costs a few writes (heartbeat every 15 s while a host waits), requests are polled every 1.5-2 s. Both stop when
+the room closes or the app is closed. Rate limits (1 open room, 5 asks per minute per TV) are in `js/core/rooms.js`.

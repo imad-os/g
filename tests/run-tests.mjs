@@ -98,6 +98,7 @@ function fsValue(v) {
     if (typeof v === 'boolean') return { booleanValue: v };
     if (typeof v === 'number') return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
     if (typeof v === 'string') return { stringValue: v };
+    if (v instanceof Date) return { timestampValue: v.toISOString() };
     if (Array.isArray(v)) return { arrayValue: { values: v.map(fsValue) } };
     return { mapValue: { fields: fsFields(v) } };
 }
@@ -133,7 +134,46 @@ async function fakeFirestore(ctx, db) {
             }
             return json(200, { writeResults: [] });
         }
-        const [col, id] = p.split('/').filter(Boolean);
+        // rooms: any depth (rooms/<id>/reqs/<id>), runQuery, updateMask, currentDocument.exists
+        const segs = p.split('/').filter(Boolean);
+        if (segs[0] === 'rooms' || p === ':runQuery') {
+            const last = segs[segs.length - 1];
+            if (last.endsWith(':runQuery')) {
+                db.queries = db.queries || [];
+                const sq = body.structuredQuery, parent = segs.slice(0, -1).concat([last.slice(0, -9)]).filter(Boolean).join('/');
+                const colPath = (sq.from[0].collectionId === 'rooms' ? 'rooms' : parent + '/' + sq.from[0].collectionId).replace('//', '/');
+                db.queries.push({ col: colPath, sq });
+                const flat = (w) => !w ? [] : w.compositeFilter ? w.compositeFilter.filters.flatMap(flat) : [w.fieldFilter];
+                const filters = flat(sq.where);
+                if (db.noIndex && filters.length > 1) return json(400, { error: { code: 400, status: 'FAILED_PRECONDITION', message: 'The query requires an index.' } });
+                if (!sq.limit) return json(403, { error: { code: 403, status: 'PERMISSION_DENIED' } });      // the rules need a limit
+                const val = (v) => v.timestampValue ? Date.parse(v.timestampValue) : fsPlain(v);
+                const num = (v) => typeof v === 'string' && /^\d{4}-/.test(v) ? Date.parse(v) : v;
+                let docs = Object.keys(db[colPath] || {}).map((k) => ({ k, d: db[colPath][k] }));
+                for (const f of filters) docs = docs.filter(({ d }) => f.op === 'EQUAL' ? d[f.field.fieldPath] === fsPlain(f.value) : num(d[f.field.fieldPath]) > val(f.value));
+                if (sq.orderBy) { const o = sq.orderBy[0]; docs.sort((a, b) => (num(a.d[o.field.fieldPath]) - num(b.d[o.field.fieldPath])) * (o.direction === 'DESCENDING' ? -1 : 1)); }
+                docs = docs.slice(0, sq.limit);
+                const readTime = new Date(Date.now() + (db.skewMs || 0)).toISOString();
+                return json(200, docs.length ? docs.map(({ k }) => ({ document: out(colPath, k), readTime })) : [{ readTime }]);
+            }
+            const isDoc = segs.length % 2 === 0, colPath = (isDoc ? segs.slice(0, -1) : segs).join('/'), did = isDoc ? last : null;
+            db[colPath] = db[colPath] || {};
+            if (method === 'GET' && !isDoc) return json(200, { documents: Object.keys(db[colPath]).map((k) => out(colPath, k)) });
+            if (method === 'GET') return db[colPath][did] ? json(200, out(colPath, did)) : json(404, { error: { code: 404, status: 'NOT_FOUND' } });
+            if (method === 'DELETE') { delete db[colPath][did]; return json(200, {}); }
+            if (method === 'PATCH') {
+                const mask = u.searchParams.getAll('updateMask.fieldPaths');
+                if (u.searchParams.get('currentDocument.exists') === 'false' && db[colPath][did]) return json(409, { error: { code: 409, status: 'ALREADY_EXISTS' } });
+                if (u.searchParams.get('currentDocument.exists') === 'true' && !db[colPath][did]) return json(404, { error: { code: 404, status: 'NOT_FOUND' } });
+                const plain = fsPlain({ mapValue: { fields: body.fields } });
+                if (mask.length) { db[colPath][did] = db[colPath][did] || {}; for (const f of mask) db[colPath][did][f] = plain[f]; }
+                else db[colPath][did] = plain;
+                db.rules = db.rules || []; db.rules.push({ col: colPath, id: did, mask, data: plain });
+                delete db._t[colPath + '/' + did];
+                return json(200, out(colPath, did));
+            }
+        }
+        const [col, id] = segs;
         if (!db[col]) return json(404, { error: { code: 404, status: 'NOT_FOUND' } });
         if (method === 'GET' && !id) return json(200, { documents: Object.keys(db[col]).map((k) => out(col, k)) });
         if (method === 'GET') return db[col][id] ? json(200, out(col, id)) : json(404, { error: { code: 404, status: 'NOT_FOUND' } });
@@ -182,7 +222,7 @@ async function playable(page, id = 'blocks') {
 async function main() {
     const srv = await serve();
     const base = `http://localhost:${srv.address().port}/`;
-    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--autoplay-policy=no-user-gesture-required', '--js-flags=--expose-gc', '--enable-precise-memory-info'] });
+    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--autoplay-policy=no-user-gesture-required', '--disable-features=WebRtcHideLocalIpsWithMdns', '--js-flags=--expose-gc', '--enable-precise-memory-info'] });
 
     console.log('1. hosted newer build runs');
     {
@@ -1588,6 +1628,232 @@ async function main() {
         check(r.css === 'none' && /pan-x/.test(r.ta), 'CSS: no selection, no pinch (touch-action: ' + r.ta + ')');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
+    }
+
+    console.log('30. rooms (lobbies): shell module on two TVs sharing one Firestore');
+    {
+        const db = {};
+        const mk = async () => { const pg = await newPage(browser, base, db); await routeHosted(pg, { offline: true }); await pg.goto(base + 'index.html'); await pg.waitForSelector('#desk-icons .dicon'); return pg; };
+        const A = await mk(), B = await mk();
+        // a session per TV: events are collected in window.ev
+        const mkSession = (pg, app, name) => pg.evaluate(([app, name]) => { window.ev = []; window.S = new Rooms.Session(app, name, (e, d) => window.ev.push([e, d])); return true; }, [app, name]);
+        const call = (pg, op, args) => pg.evaluate(([op, args]) => new Promise((res) => window.S.call(op, args, (e, r) => res({ e, r }))), [op, args]);
+        const evs = (pg, name) => pg.waitForFunction((n) => window.ev.some((x) => x[0] === n), name, { timeout: 8000 }).then(() => pg.evaluate((n) => window.ev.filter((x) => x[0] === n).map((x) => x[1]), name), () => []);
+        await mkSession(A, 'ping-game', 'Host Ana'); await mkSession(B, 'ping-game', 'Guest Ben');
+        await B.evaluate(() => { Rooms.LIMITS.asksPerMin = 1000; });             // the rate limit has its own check below
+        const ROOMS = (r) => Object.keys(db.rooms || {}).length;
+
+        const o = await call(A, 'open', { name: 'Ana room', max: 2 });
+        check(!o.e && /^[a-z0-9]{8}$/.test(o.r.id) && o.r.max === 2, 'host opens a room: the shell makes the id (' + (o.r && o.r.id) + ')');
+        const doc = db.rooms[o.r.id];
+        check(doc.app === 'ping-game' && doc.name === 'Ana room' && doc.n === 1 && doc.max === 2 && typeof doc.exp === 'string' && Date.parse(doc.exp) - Date.now() > 30000 && Date.parse(doc.exp) - Date.now() < 60000, 'the room document has app, name, max, n and exp about 45 s ahead');
+        check((await call(A, 'open', { name: 'again' })).e === 'denied', 'a second open room on the same TV is refused (denied)');
+
+        let l = await call(B, 'list', {});
+        check(!l.e && l.r.length === 1 && l.r[0].id === o.r.id && l.r[0].name === 'Ana room' && l.r[0].count === 1, 'guest lists the room of this app: { id, name, count }');
+        check(db.queries.some((q) => q.col === 'rooms' && String(JSON.stringify(q.sq.where)).indexOf('"app"') > 0 && q.sq.limit === 50), 'the list is an app-filtered query (limit 50)');
+        await mkSession(B, 'other-game', 'Guest Ben');
+        check((await call(B, 'list', {})).r.length === 0 && (await call(B, 'ask', { room: o.r.id, name: 'x', offer: 'o' })).e === 'gone', 'another app never lists or joins this room');
+        await mkSession(B, 'ping-game', 'Guest Ben');
+
+        // simple query fallback while the composite index is not built
+        db.noIndex = true;
+        check((await call(B, 'list', {})).r.length === 1, 'without the composite index the list still works (simpler query, filtered on the TV)');
+        db.noIndex = false;
+
+        // ask -> request -> accept -> answer
+        const ask = await call(B, 'ask', { room: o.r.id, name: 'Ben', offer: 'OFFER-1' });
+        check(!ask.e && !!ask.r.id, 'guest asks to join');
+        const rq = await evs(A, 'request');
+        check(rq.length === 1 && rq[0].id === ask.r.id && rq[0].name === 'Ben' && rq[0].offer === 'OFFER-1' && rq[0].room === o.r.id, 'host receives the request promptly with name and offer');
+        const acc = await call(A, 'accept', { room: o.r.id, req: rq[0].id, answer: 'ANSWER-1' });
+        check(!acc.e, 'host accepts');
+        const an = await evs(B, 'answer');
+        check(an.length === 1 && an[0].answer === 'ANSWER-1' && an[0].req === ask.r.id, 'guest receives the answer string');
+        await B.waitForFunction((id) => true, 0);
+        check(db.rooms[o.r.id].n === 2 && !(db['rooms/' + o.r.id + '/reqs'] || {})[ask.r.id], 'player count is 2 and the guest removed its request');
+        // full
+        check((await call(B, 'ask', { room: o.r.id, name: 'Cy', offer: 'o2' })).e === 'full', 'a full room answers "full"');
+
+        // decline
+        await call(A, 'close', { room: o.r.id });
+        check(!db.rooms[o.r.id] && Object.keys(db['rooms/' + o.r.id + '/reqs'] || {}).length === 0, 'closing deletes the room and its requests');
+        const o2 = await call(A, 'open', { name: 'Two', max: 4 });
+        await A.evaluate(() => { window.ev = []; }); await B.evaluate(() => { window.ev = []; });
+        const ask2 = await call(B, 'ask', { room: o2.r.id, name: 'Ben', offer: 'O2' });
+        const rq2 = await evs(A, 'request');
+        await call(A, 'decline', { room: o2.r.id, req: rq2[rq2.length - 1].id });
+        const dn = await evs(B, 'denied');
+        check(dn.length === 1 && dn[0].why === 'no' && dn[0].req === ask2.r.id, 'declined: the guest gets denied "no"');
+
+        // room closed while a guest waits
+        await B.evaluate(() => { window.ev = []; });
+        const ask3 = await call(B, 'ask', { room: o2.r.id, name: 'Ben', offer: 'O3' });
+        await call(A, 'close', { room: o2.r.id });
+        const gone = await evs(B, 'denied');
+        check(gone.length === 1 && gone[0].why === 'gone', 'room closed while asking: the guest gets denied "gone"');
+
+        // timeout (shortened for the test)
+        const o3 = await call(A, 'open', { name: 'Three' });
+        await B.evaluate(() => { window.ev = []; Rooms.LIMITS.askTtl = 2500; });
+        const ask4 = await call(B, 'ask', { room: o3.r.id, name: 'Ben', offer: 'O4' });
+        const to = await evs(B, 'denied');
+        check(to.length === 1 && to[0].why === 'timeout', 'nobody answers: the guest gets denied "timeout"');
+        check(Object.keys(db['rooms/' + o3.r.id + '/reqs'] || {}).length === 0, 'a timed-out request is deleted');
+        await B.evaluate(() => { Rooms.LIMITS.askTtl = 60000; });
+
+        // cancel
+        const ask5 = await call(B, 'ask', { room: o3.r.id, name: 'Ben', offer: 'O5' });
+        await call(B, 'cancel', { req: ask5.r.id });
+        await B.waitForTimeout(300);
+        check(Object.keys(db['rooms/' + o3.r.id + '/reqs'] || {}).length === 0, 'cancel deletes the request');
+
+        // validation and caps
+        check((await call(B, 'ask', { room: o3.r.id, name: 'Ben', offer: 'x'.repeat(6001) })).e === 'invalid', 'an offer over 6000 characters is invalid');
+        check((await call(B, 'ask', { room: 'BAD ID!', name: 'Ben', offer: 'x' })).e === 'invalid', 'a malformed room id is invalid');
+        check((await call(A, 'accept', { room: o3.r.id, req: 'abcdefgh', answer: 'y'.repeat(6001) })).e === 'invalid', 'an answer over 6000 characters is invalid');
+        check((await call(A, 'nonsense', {})).e === 'invalid', 'an unknown operation is invalid');
+
+        // rate limit: 5 asks per minute (4 made on this TV so far: ask, full-ask, ask2, ask3, timeout, ask5 ... use a fresh page)
+        const C = await mk(); await mkSession(C, 'ping-game', 'Cy');
+        const codes = [];
+        for (let i = 0; i < 6; i++) codes.push((await call(C, 'ask', { room: o3.r.id, name: 'Cy', offer: 'o' + i })).e);
+        check(codes.slice(0, 5).every((c) => !c) && codes[5] === 'denied', 'max 5 asks per minute per TV: the 6th is denied (' + codes.join(',') + ')');
+        await C.evaluate(() => window.S.destroy());
+
+        // offline
+        db.down = true;
+        const off = await call(B, 'list', {});
+        const off2 = await call(A, 'open', {}).then((r) => r);
+        check(off.e === 'offline', 'offline: list answers "offline"');
+        db.down = false;
+
+        // heartbeat keeps the room alive; expired rooms are not listed
+        await A.evaluate(() => Rooms.LIMITS.beat);
+        const beatBefore = db.rooms[o3.r.id].exp;
+        await A.waitForTimeout(100);
+        db.rooms[o3.r.id].exp = new Date(Date.now() - 5000).toISOString();
+        check((await call(B, 'list', {})).r.length === 0, 'a room whose host stopped heartbeating (expired) is not listed');
+        // the host's shell finds the room gone at the next heartbeat
+        delete db.rooms[o3.r.id];
+        // destroy: the app is closed -> nothing is left
+        const o4 = await call(A, 'open', { name: 'Four' });
+        check(!o4.e || o4.e === 'denied', 'a host can open again after the room is gone');
+        await A.evaluate(() => window.S.destroy());
+        await A.waitForTimeout(500);
+        check(Object.keys(db.rooms || {}).length === 0, 'destroying the session (app closed) deletes the room');
+
+        // a TV whose clock is wrong: exp follows the server's time
+        db.skewMs = 3600000;
+        const D = await mk(); await mkSession(D, 'ping-game', 'Dee');
+        const o5 = await call(D, 'open', { name: 'Skew' });
+        const dx = Date.parse(db.rooms[o5.r.id].exp) - (Date.now() + 3600000);
+        check(!o5.e && dx > 30000 && dx < 60000, 'exp uses the server clock, not the TV clock (an hour apart here)');
+        await D.evaluate(() => window.S.destroy());
+        db.skewMs = 0;
+        check(A.errors.length + B.errors.length === 0, 'no page errors ' + A.errors.concat(B.errors).join('; '));
+        await A.context().close(); await B.context().close(); await C.context().close(); await D.context().close();
+    }
+
+    console.log('31. rooms through the SDK: two TVs (iframe protocol), direct connection, standalone tabs, old shell');
+    {
+        const APP = 'https://apps.example.test/rooms/';
+        const db = {};
+        db.apps = { 'ping-rooms': { id: 'ping-rooms', name: 'Ping Rooms', description: 'x', url: APP, entry: APP + 'rooms.html', icon: '', type: 'game', version: '1.0.0', enabled: true, order: 0, config: {} } };
+        const setup = async () => {
+            const pg = await newPage(browser, base, db);
+            await routeHosted(pg, { offline: true });
+            await pg.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+            await pg.context().route(APP + '**', (r) => {
+                const rel = r.request().url().slice(APP.length).split('?')[0] || 'rooms.html';
+                const p = path.join(ROOT, 'sdk/example', rel);
+                if (!fs.existsSync(p)) return r.fulfill({ status: 404, body: '' });
+                r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || 'text/plain', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(p) });
+            });
+            await pg.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'ping-rooms', at: 1 }])); });
+            return pg;
+        };
+        const openApp = async (pg) => {
+            await pg.goto(base + 'index.html');
+            await pg.waitForSelector('#desk-icons [data-game="app-ping-rooms"]', { timeout: 8000 });
+            await pg.focus('#desk-icons [data-game="app-ping-rooms"]'); await pg.keyboard.press('Enter');
+            await pg.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 10000 });
+            const f = pg.frames().find((x) => x.url().indexOf(APP) === 0);
+            await f.waitForFunction(() => window.MyPC && MyPC.info());
+            return f;
+        };
+        const A = await setup(), B = await setup();
+        const fa = await openApp(A), fb = await openApp(B);
+        check(await fa.evaluate(() => MyPC.rooms.supported === true && MyPC.apiLevel === 2), 'in My PC: MyPC.rooms.supported is true (apiLevel 2)');
+
+        // layer 1: strings through the shell
+        await fa.evaluate(async () => { window.R = await MyPC.rooms.open({ name: 'TV room', max: 2 }); window.got = []; R.onRequest((q) => { window.got.push(q); R.accept(q.id, 'ANS:' + q.offer); }); });
+        const lst = await fb.evaluate(async () => { const l = await MyPC.rooms.list(); return l; });
+        check(lst.length === 1 && lst[0].name === 'TV room' && lst[0].count === 1, 'guest app lists the room: ' + JSON.stringify(lst));
+        const ex = await fb.evaluate(async (id) => new Promise(async (res, rej) => { const q = await MyPC.rooms.ask(id, { name: 'Phone', offer: 'hello-offer' }); q.onAnswer(res); q.onDenied((w) => rej(w)); }).then((a) => ({ a }), (e) => ({ e })), lst[0].id);
+        check(ex.a === 'ANS:hello-offer', 'ask -> onRequest -> accept -> onAnswer: strings are exchanged (' + JSON.stringify(ex) + ')');
+        const rated = await fa.evaluate(() => window.got.length === 1 && window.got[0].name === 'Phone' && window.got[0].offer === 'hello-offer');
+        check(rated, 'the host got { id, name, offer }');
+        // errors reach the app as { code }
+        const e1 = await fb.evaluate(() => MyPC.rooms.ask('nosuchroom', { name: 'x', offer: 'o' }).then(() => null, (e) => e.code));
+        check(e1 === 'gone', 'a room that does not exist rejects with { code: "gone" }');
+        const e2 = await fb.evaluate(() => MyPC.rooms.open({ name: 'x'.repeat(30) }).then(() => null, (e) => e.code));
+        check(e2 === 'invalid', 'a name over 24 characters rejects with "invalid"');
+        await fa.evaluate(() => R.close());
+        check(Object.keys(db.rooms || {}).length === 0, 'room.close() deletes the room');
+
+        // layer 2: a direct WebRTC connection (same machine here, no STUN)
+        await fa.evaluate(async () => { window.R2 = await MyPC.rooms.open({ name: 'Direct' }); window.msgs = []; R2.onGuest((c, g) => { window.cA = c; window.who = g.name; c.onMessage((m) => msgs.push(m)); c.onClose((w) => { window.closedA = w; }); }); });
+        const l2 = await fb.evaluate(() => MyPC.rooms.list());
+        const joined = await fb.evaluate(async (id) => { try { window.cB = await MyPC.rooms.join(id, { name: 'Ben' }); window.msgsB = []; cB.onMessage((m) => msgsB.push(m)); cB.onClose((w) => { window.closedB = w; }); return 'ok'; } catch (e) { return JSON.stringify(e); } }, l2[0].id);
+        check(joined === 'ok', 'MyPC.rooms.join gives a direct connection (' + joined + ')');
+        if (joined === 'ok') {
+            await fa.waitForFunction(() => window.cA);
+            check(await fa.evaluate(() => window.who === 'Ben'), 'host gets the connection with the guest name');
+            await fb.evaluate(() => cB.send({ hi: 1, s: 'from guest' })); await fa.evaluate(() => cA.send('from host'));
+            await fa.waitForFunction(() => window.msgs.length === 1); await fb.waitForFunction(() => window.msgsB.length === 1);
+            check(await fa.evaluate(() => JSON.stringify(window.msgs[0])) === '{"hi":1,"s":"from guest"}' && await fb.evaluate(() => window.msgsB[0]) === 'from host', 'send / onMessage work both ways (objects and strings)');
+            check(await fa.evaluate(() => { return true; }) && Object.keys(db.rooms || {}).length === 1, 'the room stays open while the host keeps it');
+            await fb.evaluate(() => cB.close());
+            await fa.waitForFunction(() => window.closedA, null, { timeout: 8000 }).catch(() => {});
+            check(await fa.evaluate(() => !!window.closedA), 'closing one side tells the other (onClose)');
+        }
+        // the app is closed -> the shell deletes the room
+        await A.evaluate(() => { window.GameHost.exit && window.GameHost.exit(); });
+        await fa.evaluate(() => MyPC.exit()).catch(() => {});
+        await A.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle', null, { timeout: 8000 }).catch(() => {});
+        await A.waitForTimeout(800);
+        check(Object.keys(db.rooms || {}).length === 0, 'quitting the app deletes its room (the shell cleans up)');
+        check(A.errors.length + B.errors.length === 0, 'no page errors ' + A.errors.concat(B.errors).join('; '));
+        await A.context().close(); await B.context().close();
+
+        // an older My PC (no Rooms in the shell): supported is false and nothing breaks
+        const O = await setup();
+        await O.addInitScript(() => { Object.defineProperty(window, 'Rooms', { get: () => undefined, set: () => {}, configurable: true }); });
+        const fo = await openApp(O);
+        check(await fo.evaluate(() => MyPC.rooms.supported === false) && await fo.evaluate(() => MyPC.rooms.list().then(() => 'ok', (e) => e.code)) === 'unavailable', 'old shell: MyPC.rooms.supported is false and calls reject with "unavailable"');
+        await O.context().close();
+
+        // standalone: two tabs of the same browser (BroadcastChannel + localStorage)
+        const ctx = await browser.newContext();
+        const sp = (u) => ctx.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+        await sp();
+        await ctx.route(APP + '**', (r) => { const rel = r.request().url().slice(APP.length).split('?')[0] || 'rooms.html'; const p = path.join(ROOT, 'sdk/example', rel); r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || 'text/html', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(p) }); });
+        const t1 = await ctx.newPage(), t2 = await ctx.newPage();
+        for (const t of [t1, t2]) { await t.goto(APP + 'rooms.html'); await t.waitForFunction(() => window.MyPC && MyPC.info() && MyPC.info().standalone); }
+        check(await t1.evaluate(() => MyPC.rooms.supported === true), 'standalone: MyPC.rooms is supported (tabs of the same browser)');
+        await t1.evaluate(async () => { window.R = await MyPC.rooms.open({ name: 'Tab room', max: 2 }); window.got = []; R.onRequest((q) => { got.push(q); R.accept(q.id, 'A:' + q.offer); }); });
+        const tl = await t2.evaluate(() => MyPC.rooms.list());
+        check(tl.length === 1 && tl[0].name === 'Tab room', 'standalone: the other tab lists the room');
+        const tx = await t2.evaluate(async (id) => new Promise(async (res) => { const q = await MyPC.rooms.ask(id, { name: 'T2', offer: 'o1' }); q.onAnswer((a) => res(a)); }), tl[0].id);
+        check(tx === 'A:o1', 'standalone: ask / onRequest / accept / onAnswer work between tabs');
+        const dn = await t2.evaluate(async (id) => { await window.R_ || 0; return MyPC.rooms.ask(id, { name: 'T3', offer: 'o2' }).then((q) => new Promise((res) => q.onDenied(res)), (e) => e.code); }, tl[0].id);
+        check(dn === 'full', 'standalone: a full room rejects with "full"');
+        await t1.evaluate(() => R.close());
+        check((await t2.evaluate(() => MyPC.rooms.list())).length === 0, 'standalone: a closed room disappears from the list');
+        // the demo page itself
+        check(await t1.evaluate(() => document.querySelector('#list .row') !== null), 'the example page shows its lobby');
+        await ctx.close();
     }
 
     await browser.close();

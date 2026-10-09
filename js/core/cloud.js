@@ -41,6 +41,7 @@ var Cloud = (function () {
         if (typeof v === 'boolean') return { booleanValue: v };
         if (typeof v === 'number') return Math.floor(v) === v && Math.abs(v) < 9e15 ? { integerValue: String(v) } : { doubleValue: v };
         if (typeof v === 'string') return { stringValue: v };
+        if (v instanceof Date) return { timestampValue: v.toISOString() };
         if (v.length !== undefined) { var vals = []; for (var i = 0; i < v.length; i++) vals.push(toValue(v[i])); return { arrayValue: { values: vals } }; }
         return { mapValue: { fields: toFields(v) } };
     }
@@ -95,7 +96,36 @@ var Cloud = (function () {
             cb(null, out);
         });
     }
+    // Writes only some fields of a document (updateMask). pre: { exists: true } fails when the document is gone.
+    function patchMask(path, data, fields, pre, timeout, cb) {
+        var q = '?', i;
+        for (i = 0; i < fields.length; i++) q += 'updateMask.fieldPaths=' + encodeURIComponent(fields[i]) + '&';
+        if (pre && pre.exists === true) q += 'currentDocument.exists=true&';
+        request('PATCH', ROOT + '/' + path + q.slice(0, -1), { fields: toFields(data) }, timeout, function (err, r) { cb(err, r ? r.updateTime : null); });
+    }
+    // Structured query (needs a limit: the rules ask for one). parent '' = top level, or 'rooms/abc' for a subcollection.
+    // cb(err, [{ id, data }])
+    // The TV's clock can be wrong: a query answer carries the server's time (readTime), kept as an offset (Cloud.now()).
+    var offset = null;
+    function query(parent, structured, timeout, cb) {
+        request('POST', ROOT + (parent ? '/' + parent : '') + ':runQuery', { structuredQuery: structured }, timeout, function (err, r) {
+            if (err || !r || r.length === undefined) return cb(err || 'json', null);
+            if (r[0] && r[0].readTime && !isNaN(Date.parse(r[0].readTime))) offset = Date.parse(r[0].readTime) - Date.now();
+            var out = [];
+            for (var i = 0; i < r.length; i++) {
+                if (!r[i].document) continue;
+                var n = r[i].document.name;
+                out.push({ id: n.slice(n.lastIndexOf('/') + 1), data: fromFields(r[i].document.fields || {}) });
+            }
+            cb(null, out);
+        });
+    }
     function remove(path, timeout, cb) { request('DELETE', ROOT + '/' + path, null, timeout, function (err) { cb(err); }); }
+    // Delete that survives the page being unloaded (an app is closed by loading the desktop page): fetch keepalive
+    function removeKeep(path) {
+        try { fetch(ROOT + '/' + path + '?key=' + CFG.apiKey, { method: 'DELETE', keepalive: true }).catch(function () {}); }
+        catch (e) { remove(path, 3000, function () {}); }
+    }
     function commit(writes, timeout, cb) { request('POST', ROOT + ':commit', { writes: writes }, timeout, function (err) { if (cb) cb(err); }); }
 
     /* ---------------- catalog ---------------- */
@@ -211,6 +241,6 @@ var Cloud = (function () {
         install: install, uninstall: uninstall, isInstalled: isInstalled, installedIds: installedIds,
         onChange: function (fn) { listeners.push(fn); },
         stats: stats, statsCached: statsCached, count: count,
-        get: get, patch: patch, remove: remove, batchGet: batchGet, commit: commit, toFields: toFields, fromFields: fromFields
+        get: get, patch: patch, patchMask: patchMask, query: query, now: function () { return Date.now() + (offset || 0); }, synced: function () { return offset !== null; }, remove: remove, removeKeep: removeKeep, batchGet: batchGet, commit: commit, toFields: toFields, fromFields: fromFields
     };
 })();

@@ -118,7 +118,7 @@ var GameHost = (function () {
 
     // GameAPI-shaped proxy that talks to the app's My PC SDK with postMessage
     function remoteApi() {
-        var id = game.id, origin = originOf(game.remote.entry), items = [], win = null;
+        var id = game.id, origin = originOf(game.remote.entry), items = [], win = null, rooms = null;
         function send(type, d) { if (win) { try { win.postMessage({ mypc: 1, type: type, data: d === undefined ? null : d }, origin); } catch (e) {} } }
         function onMsg(e) {
             if (!iframe || e.source !== iframe.contentWindow) return;     // only our app's frame
@@ -134,9 +134,17 @@ var GameHost = (function () {
                         volume: { music: AudioPrefs.music() / 10, sfx: AudioPrefs.sfx() / 10 },
                         profile: { id: Profiles.current().id, name: Profiles.name(null, I18n.t('player')) },
                         data: Store.get('game_' + id + '_data', {}), app: { id: id },
-                        config: game.remote.config || {}
+                        config: game.remote.config || {},
+                        rooms: typeof Rooms !== 'undefined' ? 1 : 0              // MyPC.rooms is supported (js/core/rooms.js)
                     });
                     break;
+                case 'rooms': {
+                    // lobby requests of THIS app: { rid, op, args } -> { rid, error | result }; events { ev, data } come back the same way
+                    if (typeof Rooms === 'undefined' || typeof d.rid !== 'number' || typeof d.op !== 'string') break;
+                    if (!rooms) rooms = new Rooms.Session(id, Profiles.name(null, I18n.t('player')), function (ev, data) { send('rooms', { ev: ev, data: data }); });
+                    rooms.call(d.op, d.args, function (err, res) { send('rooms', { rid: d.rid, error: err || undefined, result: res === undefined ? null : res }); });
+                    break;
+                }
                 case 'progress': if (state === 'loading') setProgress(+d.p || 0); break;
                 case 'ready': onLoaded(); break;
                 case 'failed': fail('app: ' + d.reason); break;
@@ -170,7 +178,7 @@ var GameHost = (function () {
             start: function () { send('start'); },
             pause: function () { send('pause'); },
             resume: function () { send('resume'); },
-            destroy: function () { send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
+            destroy: function () { if (rooms) { rooms.destroy(); rooms = null; } send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
             menuItems: function () { return items; },
             onMenu: function (mid) { send('menu', { id: String(mid).slice(4) }); },
             onAction: function (a, pressed, repeat, dev) { send('input', { action: a, pressed: pressed, repeat: repeat, dev: dev }); }

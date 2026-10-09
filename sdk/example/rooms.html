@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ping Rooms</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0a0f2c; color: #fff; font: 600 3.4vh Arial, sans-serif; }
+  #app { padding: 6vh 6vw; }
+  h1 { margin: 0 0 3vh; font-size: 5vh; color: #ffd23f; }
+  .row { padding: 1.4vh 2vw; margin: 0.8vh 0; border-radius: 1vh; background: #1a2250; }
+  .row.on { background: #4cc2ff; color: #000; }
+  #log { margin-top: 3vh; color: #9fdcff; white-space: pre-line; }
+  #note { color: #ff9f9f; margin-top: 2vh; }
+</style>
+</head>
+<body>
+<div id="app"><h1>Ping Rooms</h1><div id="list"></div><div id="log"></div><div id="note"></div></div>
+<script src="https://imad-os.github.io/g/sdk/mypc-sdk.js"></script>
+<script>
+/* Example of MyPC.rooms (local multiplayer without a backend), layer 1 + 2: one device HOSTS a room, the other
+ * lists the rooms of this app, JOINS, and then both press OK to send "ping" to each other over a direct
+ * connection. Standalone: open this page in two tabs of the same browser. In My PC: TV + phone / TV + TV.
+ * Remote: Up / Down to choose, OK to select, the pause menu has "Leave". */
+(function () {
+    'use strict';
+    var $ = function (id) { return document.getElementById(id); };
+    var mode = 'lobby', rows = [], sel = 0, room = null, conn = null, pings = 0, timer = 0;
+
+    function note(t) { $('note').textContent = t || ''; }
+    function log(t) { var l = $('log'); l.textContent = (l.textContent + '\n' + t).split('\n').slice(-8).join('\n'); }
+
+    function draw() {
+        var box = $('list'); box.innerHTML = '';
+        rows.forEach(function (r, i) {
+            var d = document.createElement('div');
+            d.className = 'row' + (i === sel ? ' on' : '');
+            d.textContent = r.label;
+            box.appendChild(d);
+        });
+    }
+    function lobby() {
+        mode = 'lobby'; room = null; conn = null; $('log').textContent = '';
+        rows = [{ label: 'Host a room', host: true }]; sel = 0; draw();
+        MyPC.rooms.list().then(function (l) {
+            if (mode !== 'lobby') return;
+            l.forEach(function (r) { rows.push({ label: 'Join ' + r.name + ' (' + r.count + ')', id: r.id }); });
+            draw();
+        }, function (e) { note('Rooms: ' + e.code); });
+        clearTimeout(timer); timer = setTimeout(function () { if (mode === 'lobby') lobby(); }, 5000);   // refresh the list
+    }
+
+    function connected(c, who) {
+        mode = 'play'; conn = c; rows = [{ label: 'Connected to ' + who + ': press OK to ping' }]; sel = 0; draw(); note('');
+        clearTimeout(timer);
+        c.onMessage(function (m) { log('peer: ' + m); MyPC.announce(String(m)); });
+        c.onClose(function (why) { log('connection closed (' + why + ')'); setTimeout(lobby, 1500); });
+    }
+
+    function host() {
+        MyPC.rooms.open({ max: 2 }).then(function (r) {
+            room = r; mode = 'host'; rows = [{ label: 'Room open: waiting for a player...' }]; sel = 0; draw(); clearTimeout(timer);
+            r.onGuest(function (c, g) { r.close(); connected(c, g.name); });
+        }, function (e) { note('Could not open a room: ' + e.code); });
+    }
+    function join(id) {
+        note('Asking...');
+        MyPC.rooms.join(id, {}).then(function (c) { connected(c, 'host'); }, function (e) { note('Not joined: ' + e.code + (e.why ? ' (' + e.why + ')' : '')); lobby(); });
+    }
+
+    MyPC.init({
+        onInit: function () {
+            if (!MyPC.rooms.supported) { rows = [{ label: 'This My PC is too old for rooms' }]; draw(); }
+            else MyPC.setMenu([{ id: 'leave', label: 'Leave room' }]);
+            MyPC.ready();
+        },
+        onStart: function () { if (MyPC.rooms.supported) lobby(); },
+        onMenu: function (id) { if (id === 'leave') { if (conn) conn.close(); if (room) room.close(); lobby(); } },
+        onDestroy: function () { if (conn) conn.close(); clearTimeout(timer); },   // My PC deletes the room by itself too
+        onInput: function (a, pressed, repeat) {
+            if (!pressed || repeat || mode === 'host') return;
+            if (mode === 'play') { if (a === 'confirm' || a === 'jump') { pings++; log('me: ping ' + pings); conn.send('ping ' + pings); } return; }
+            if (a === 'down') { sel = Math.min(rows.length - 1, sel + 1); draw(); }
+            else if (a === 'up') { sel = Math.max(0, sel - 1); draw(); }
+            else if (a === 'confirm' || a === 'jump') { var r = rows[sel]; if (r.host) host(); else if (r.id) join(r.id); }
+        }
+    });
+})();
+</script>
+</body>
+</html>

@@ -156,6 +156,65 @@ MyPC.app_config.speed      // e.g. 2
 - Standalone (opened directly in a browser) it is `{}` unless you add `?app_config={"speed":2}`
   to the address, which lets you test different configs.
 
+### Rooms: local multiplayer without a backend (`MyPC.rooms`, API level 2)
+
+Games and apps can offer rooms (a lobby) with **no server and no Firebase keys of their own**: My PC does the
+work for you. Your app never sees Firestore; it only calls `MyPC.rooms`, and My PC lists, opens and answers
+rooms **for this app only** (another app never sees your rooms). It works the same on a TV, a phone and a
+desktop browser.
+
+```js
+if (!MyPC.rooms.supported) { /* an older My PC: hide the multiplayer button */ }
+
+// HOST (layer 2: a direct connection per guest)
+MyPC.rooms.open({ name: 'Ana', max: 2 }).then(function (room) {     // name <= 24 chars (default: the profile name), max 2-8
+    room.onGuest(function (conn, guest) {                          // guest = { name }
+        conn.onMessage(function (msg) { ... });
+        conn.onClose(function (why) { ... });                      // 'closed' | 'timeout'
+        conn.send({ hello: 1 });                                   // any JSON value
+    });
+    // room.close() when the game starts or the host leaves
+});
+
+// GUEST
+MyPC.rooms.list().then(function (rooms) {                          // [{ id, name, count }], newest first, 20 at most
+    return MyPC.rooms.join(rooms[0].id, { name: 'Ben' });          // asks the host, waits for OK, connects
+}).then(function (conn) { conn.send('hi'); });
+```
+
+**Layer 1: your own strings** (use it if you do not want WebRTC, or want to approve guests yourself):
+
+| call | meaning |
+|---|---|
+| `MyPC.rooms.open({ name, max })` -> `room` | host opens a room; My PC keeps it alive (heartbeat) until `room.close()` or the app closes |
+| `MyPC.rooms.list()` -> `[{ id, name, count }]` | open rooms of this app |
+| `MyPC.rooms.ask(roomId, { name, offer })` -> `request` | a guest asks to join; `offer` is an opaque string, 6000 chars at most |
+| `request.onAnswer(fn(answer))`, `request.onDenied(fn(why))`, `request.cancel()` | `why`: `'no'` (declined), `'gone'` (room closed), `'timeout'` (60 s without an answer) |
+| `room.onRequest(fn({ id, name, offer }))` | host: a guest asked (delivered within about 2 s) |
+| `room.accept(requestId, answer)` / `room.decline(requestId)` | host answers; `answer` is an opaque string, 6000 chars at most |
+| `room.close()` | deletes the room and its requests |
+| `room.onClose(fn)` | the room was removed (e.g. the host lost its connection for a long time) |
+
+Every call returns a Promise (events use callbacks). Errors reject with `{ code }`: `offline`, `denied` (rate limit or a
+second open room), `full`, `gone`, `invalid`, `unavailable`.
+
+**Layer 2: `MyPC.rooms.join(roomId, { name })` and `room.onGuest(fn)`** build a direct **WebRTC data channel** between the two
+devices with `offer` / `answer` strings made for you (so use `onGuest` **or** `onRequest`, not both). It needs the
+**same Wi-Fi / network**: there is no STUN or relay, so devices on different networks cannot connect. The connection is
+`{ send(msg), onMessage(fn), onClose(fn), close(), peer }`: a ping every second, closed after 5 s of silence. `join` rejects
+with `denied` (the host said no), `gone`, `full`, `unavailable` (no answer, or no route: not the same network) or `invalid`.
+
+Rules and limits:
+- **Lifecycle:** one open room per TV; it disappears when the host's My PC stops heartbeating (about 45 s), when you call
+  `room.close()`, and **My PC deletes it by itself when the app is closed**. Open it only when the player chooses "Host".
+- Rate limits per TV: 1 open room, 6 opens and 5 asks per minute (`denied`).
+- Room names and payloads are public data in My PC's database: **nothing private** in them. Offers and answers contain
+  network addresses of the devices; that is how WebRTC works. Keep game rules and cheating checks in your game.
+- Treat a received message as untrusted input (validate it); never `eval` it or put it in `innerHTML`.
+- **Standalone** (the page opened directly in a browser): rooms work between **two tabs of the same browser** (BroadcastChannel +
+  localStorage), so you can test without a TV. See `sdk/example/rooms.html` (open it in two tabs).
+- Do **not** bring your own Firebase, keys or server for multiplayer.
+
 ### Calls
 
 | Call | What |
@@ -332,6 +391,7 @@ the World records.
 - [ ] fills the window at any 16:9 size, readable text, obvious focus
 - [ ] runs on Chromium 108 (Tizen 8, 2024 TVs): no CSS nesting, nothing newer than Chrome 108; no allocation in the game loop
 - [ ] saves through `MyPC.save/load`; scores through `MyPC.submitScore` (games with points)
+- [ ] multiplayer uses `MyPC.rooms` (hide it when `MyPC.rooms.supported` is false): no own backend, no Firebase keys
 - [ ] any owner-changeable setting comes from `MyPC.app_config` (with defaults in code), not hard-coded
 - [ ] texts in `en` (and `fr`, `es`, `ar` if possible), using `info.lang`
 - [ ] works standalone: open `index.html` in Chrome, play with the arrows + Enter, Esc pauses

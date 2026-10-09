@@ -46,6 +46,9 @@
 - **App config:** each store app has a `config` object (Firestore `apps/<id>`, edited with the
   App Store Manager's Config button). The TV re-reads the app's document before it opens
   (`Cloud.fetchApp`, 2.5 s, falls back to the saved list) and the app gets it as `MyPC.app_config`.
+- **Rooms (`MyPC.rooms`)**: apps get lobbies and direct WebRTC connections without any backend or keys. The SDK talks to
+  the shell (`js/core/rooms.js`, wired in `game-host.js`), which writes Firestore `rooms/{room}` and `rooms/{room}/reqs/{req}`
+  (rules, composite index and TTL: `firebase/SETUP.md` section 4). Apps never see Firebase; scoped by app id.
 - `sdk/`: `mypc-sdk.js` (protocol `{ mypc: 1, type, data }`), `GUIDE.md` (for building new apps
   in other repos), `example/`.
 - `installer/`: the App Store Manager, a desktop-browser page (Firebase JS SDK from gstatic is OK
