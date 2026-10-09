@@ -1,0 +1,12 @@
+{
+  "name": "mypc",
+  "description": "Skills for building apps and games for the My PC Samsung TV desktop",
+  "owner": { "name": "imad-os" },
+  "plugins": [
+    {
+      "name": "mypc",
+      "source": "./sdk/plugin",
+      "description": "Build or update an app/game compatible with My PC (/mypc:mypc)"
+    }
+  ]
+}

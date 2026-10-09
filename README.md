@@ -292,3 +292,14 @@ The tests run headless Chromium with mocked `tizen` and `webapis` and cover thes
   its own hero, respawn, both players recorded automatically at game over, and unplug → pause.
 
 `npm run covers` regenerates the menu covers from real gameplay frames.
+
+
+## Claude skill for building My PC apps
+
+In the repository of a new app/game, Claude can learn "My PC" from one word (`mypc`, "for My PC", ...):
+
+- Claude Code on your computer: `/plugin marketplace add imad-os/g`, then `/plugin install mypc@mypc`.
+- Claude Code on the web (plugins do not load there), in the new repo:
+  `mkdir -p .claude/skills/mypc && curl -sL https://raw.githubusercontent.com/imad-os/g/main/sdk/plugin/skills/mypc/SKILL.md -o .claude/skills/mypc/SKILL.md`, then commit it.
+
+The skill always fetches the latest `sdk/GUIDE.md` first (`sdk/plugin/skills/mypc/SKILL.md`).
