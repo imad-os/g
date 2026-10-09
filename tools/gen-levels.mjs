@@ -97,7 +97,19 @@ function buildStage(st) {
     // more than 2 tiles, a standing jump clears 5). Start, checkpoint, goal, warp, tunnels and
     // swim / fortress stages stay flat.
     const MIRROR = { '[': ']', ']': '[', '{': '}', '}': '{' };
-    const flip = (rows) => rows.map((row) => row.split('').reverse().map((ch) => MIRROR[ch] || ch).join(''));
+    // Objects wider than a tile are placed by their left column, so a mirrored one moves back to stay
+    // over the same tiles: platforms are 3 wide (2 back) and a moving one also travels 5 tiles to the
+    // right (7 back, so it still crosses the same gap).
+    const SHIFT = { m: 7, v: 2, F: 2 };
+    const flip = (rows) => rows.map((row) => {
+        const out = row.split('').reverse().map((ch) => MIRROR[ch] || ch);
+        for (let x = 0; x < out.length; x++) {
+            const ch = out[x];
+            if (!SHIFT[ch] || x - SHIFT[ch] < 0) continue;
+            out[x] = '.'; out[x - SHIFT[ch]] = ch;
+        }
+        return out.join('');
+    });
     const canVary = (c) => !/^(start|checkpoint|goal|boss|star|m_warp)$/.test(c.name) && !c.rows.some((row) => /[pWGZCKD@]/.test(row)) && c.rows[0][0] !== 'X';
     const canLift = (c) => canVary(c) && !st.water && !st.fortress && !c.rows.some((row) => /[L~]/.test(row));
     let lift = 0;

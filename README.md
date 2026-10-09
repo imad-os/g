@@ -174,7 +174,7 @@ js/launcher/             menu.js (grid, settings, pages), game-host.js (iframe l
 games/shared/            gamekit.js (loop, adaptive quality, synth, pools), game.css, strings.js
 games/<id>/              game-manifest.json, index.html, js/, cover.png
 games/jumper/assets/levels/  Tiled-compatible JSON stages + index.json
-tools/                   gen-levels.mjs, level-chunks.mjs, validate-levels.mjs, make-covers.mjs, build-wgt.sh
+tools/                   gen-levels.mjs, level-chunks.mjs, validate-levels.mjs, play-levels.mjs, make-covers.mjs, build-wgt.sh
 tests/run-tests.mjs      Playwright acceptance tests
 docs/certification.md    certification walk-through
 ```
@@ -258,6 +258,7 @@ maps with 16×16 tiles and the layers `background`, `tiles` and `entities`:
 ```sh
 node tools/gen-levels.mjs        # regenerate all 15 stages (deterministic)
 node tools/validate-levels.mjs   # check start/goal/checkpoint, 3 star coins, warps, max gap width
+node tools/play-levels.mjs       # an auto-player (weaker than a person) finishes every stage, small and big, and finds traps
 ```
 
 You can also edit a stage JSON in Tiled and run the validator on it.

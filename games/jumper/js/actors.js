@@ -4,6 +4,8 @@ var Actors = (function () {
     'use strict';
 
     var T = 16, ID = Level.ID;
+    // movement (per 60 Hz frame); tools/play-levels.mjs plays every stage with these, a little weaker
+    var TUNE = { walk: 1.8, run: 2.6, acc: 0.24, dec: 0.3, turn: 0.45, airAcc: 0.16, airDec: 0.02, airTurn: 0.24, jump: 5.3 };
 
     /* ------------------------------------------------------------------ tile physics */
 
@@ -69,7 +71,7 @@ var Actors = (function () {
         this.vx = this.vy = 0; this.dead = false; this.deadT = 0; this.inv = 0; this.star = 0;
         this.coyote = 0; this.jumpBuf = 0; this.gp = 0; this.gpT = 0; this.crouch = false; this.skid = false;
         this.wallDir = 0; this.wallLock = 0; this.swim = false; this.ride = null; this.anim = null; this.animT = 0;
-        this.walkT = 0; this.growT = 0; this.prevPower = this.power; this.jumping = false;
+        this.walkT = 0; this.memVx = 0; this.memT = 0; this.growT = 0; this.prevPower = this.power; this.jumping = false;
         this.h = this.power ? 22 : 14;
     };
     Player.prototype.setPower = function (p) {
@@ -124,20 +126,26 @@ var Actors = (function () {
             else if (!lv.solid((this.x / T) | 0, ((this.y - 8) / T) | 0) && !lv.solid(((this.x + this.w - 1) / T) | 0, ((this.y - 8) / T) | 0)) { this.y -= 8; this.h = 22; this.crouch = false; }
         } else this.crouch = wantCrouch;
 
-        // horizontal: snappy on the ground, full steering in the air, and the jump keeps its
-        // momentum when no direction is held (a TV remote often drops the arrow when OK is pressed)
-        var max = this.swim ? 1.3 : inp.run ? 2.6 : 1.8;
-        var acc = this.swim ? 0.05 : this.onGround ? (inp.run ? 0.12 : 0.11) : 0.1;
-        var dec = this.onGround ? 0.12 : 0.008;
-        if (slip) { acc *= 0.45; dec = 0.025; }
+        // horizontal: the hero answers at once (a few frames to full speed, stops and turns almost
+        // on the spot) and keeps most of its speed in a jump. A TV remote cannot hold an arrow and OK
+        // together: the speed of the last few frames before the arrow was let go is kept for a jump.
+        var K = TUNE;
+        var max = this.swim ? 1.3 : inp.run ? K.run : K.walk;
+        var acc, dec, turn;
+        if (this.swim) { acc = 0.08; dec = 0.05; turn = 0.12; }
+        else if (this.onGround) { acc = K.acc; dec = K.dec; turn = K.turn; }
+        else { acc = K.airAcc; dec = K.airDec; turn = K.airTurn; }
+        if (slip) { acc *= 0.4; dec = 0.045; turn = 0.12; }
         this.skid = false;
         if (this.gp) dir = 0;
+        if (this.memT > 0) this.memT--;
         if (dir && !this.crouch) {
             this.face = dir;
-            if (this.onGround && this.vx * dir < 0 && Math.abs(this.vx) > 0.9) {
-                this.skid = true;
-                this.vx += dir * (slip ? 0.06 : 0.2);
-                if ((W.frame & 3) === 0) W.dust(this.x + this.w / 2, this.y + this.h);
+            this.memVx = this.vx; this.memT = 10;
+            if (this.vx * dir < 0) {
+                this.vx += dir * turn;
+                if (this.vx * dir > 0) this.vx = dir * Math.min(this.vx * dir, acc);
+                if (this.onGround && Math.abs(this.vx) > 1.4) { this.skid = true; if ((W.frame & 3) === 0) W.dust(this.x + this.w / 2, this.y + this.h); }
             } else if (this.vx * dir < max) {
                 this.vx += dir * acc;
                 if (this.vx * dir > max) this.vx = dir * max;
@@ -152,7 +160,8 @@ var Actors = (function () {
         if (this.swim) {
             if (inp.jumpPressed) { this.vy = -2.4; W.sfx('jump', 0.6); this.jumpBuf = 0; }
         } else if (this.jumpBuf > 0 && this.coyote > 0 && !this.gp) {
-            this.vy = -(5.3 + Math.abs(this.vx) * 0.3);   // standing: 5 tiles high, running: 6+
+            if (!dir && this.memT > 0 && Math.abs(this.memVx) > Math.abs(this.vx)) this.vx = this.memVx;   // remote: arrow, then OK
+            this.vy = -(K.jump + Math.abs(this.vx) * 0.3);   // standing: 5 tiles high, running: 6+
             this.coyote = 0; this.jumpBuf = 0; this.jumping = true; this.onGround = false;
             if (this.crouch && this.power > 0) { this.y -= 8; this.h = 22; this.crouch = false; }
             W.sfx(this.power ? 'bigjump' : 'jump');
@@ -202,7 +211,9 @@ var Actors = (function () {
         if (Math.abs(this.vx) > 0.2) this.walkT += Math.abs(this.vx) * 1.5;
 
         // hazards
-        if (lv.spikeAt(this.x + 2, this.y + this.h - 1) || lv.spikeAt(this.x + this.w - 2, this.y + this.h - 1)) W.hurt(this);
+        // spikes hurt only feet that go into their lower part (brushing a tip while jumping over is fine)
+        var feet = this.y + this.h - 1;
+        if ((feet & 15) >= 6 && (lv.spikeAt(this.x + 3, feet) || lv.spikeAt(this.x + this.w - 3, feet))) W.hurt(this);
         if (lv.lavaAt(this.x + this.w / 2, this.y + this.h - 4)) W.die(this);
         if (this.y > lv.pxH + 24) W.die(this);
         // tile coins
@@ -384,5 +395,5 @@ var Actors = (function () {
         }
     };
 
-    return { Player: Player, Ent: Ent, make: make, UPDATE: UPDATE, overlap: overlap, moveX: moveX, moveY: moveY };
+    return { TUNE: TUNE, Player: Player, Ent: Ent, make: make, UPDATE: UPDATE, overlap: overlap, moveX: moveX, moveY: moveY };
 })();

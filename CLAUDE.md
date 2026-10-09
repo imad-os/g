@@ -38,7 +38,10 @@
 - `js/core/`: storage (per-profile keys `arc_<profile>_*`, TV-wide `arc_dev_*`), i18n (en, fr,
   es, ar + RTL), input, focus, perf, scores, `cloud.js` (Firestore REST: store catalog, installed list
   `arc_dev_installed`, counters), `backup.js` (Device id, backup/restore), `world.js` (world records).
-- `games/`: built-in games on `games/shared/gamekit.js`.
+- `games/`: built-in games on `games/shared/gamekit.js`. Super Jumper stages come from
+  `tools/gen-levels.mjs`; after any change to chunks, the generator or the hero's physics
+  (`Actors.TUNE` in `games/jumper/js/actors.js`) run `node tools/play-levels.mjs`: it plays every stage
+  with a handicapped hero and must finish all of them with no traps.
 - `apps/store.js`: the App Store app (Home / Games / Apps / Library / Search, Install / Open / Uninstall).
 - **App config:** each store app has a `config` object (Firestore `apps/<id>`, edited with the
   App Store Manager's Config button). The TV re-reads the app's document before it opens

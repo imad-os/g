@@ -315,6 +315,30 @@ async function main() {
         await page.context().close();
     }
 
+    console.log('\nSuper Jumper: controls feel and every stage played by the auto-player');
+    {
+        // the game's own physics, run without a browser (tools/play-levels.mjs)
+        const { makeWorld } = await import('../tools/play-levels.mjs');
+        const map = JSON.parse(fs.readFileSync(path.join(ROOT, 'games/jumper/assets/levels/w1-1.json'), 'utf8'));
+        const w = makeWorld(map), s0 = w.save();
+        const run = (n, set) => { for (let i = 0; i < n; i++) { Object.assign(w.inp, { left: false, right: false, jump: false, jumpPressed: false }, set ? set(i) : {}); w.step(); } };
+        run(10); run(40, () => ({ right: true }));
+        const x0 = w.p.x;
+        let stop = 0; while (w.p.vx > 0 && stop < 60) { run(1); stop++; }
+        check(stop <= 8 && w.p.x - x0 < 10, `letting go of the arrow stops the hero in ${stop} frames (${(w.p.x - x0).toFixed(1)} px)`);
+        w.load(s0); run(10); run(40, () => ({ right: true }));
+        let turn = 0; while (w.p.vx >= 0 && turn < 60) { run(1, () => ({ left: true })); turn++; }
+        check(turn <= 6, `turning around takes ${turn} frames`);
+        // TV remote: the arrow is let go a moment before OK
+        w.load(s0); run(10); run(40, () => ({ right: true })); run(5);
+        run(1, () => ({ jump: true, jumpPressed: true })); run(10, () => ({ jump: true }));
+        check(!w.p.onGround && w.p.vx > 1.2, `arrow then OK (remote) still jumps forward (vx ${w.p.vx.toFixed(2)})`);
+        const { spawnSync } = await import('node:child_process');
+        const r = spawnSync(process.execPath, [path.join(ROOT, 'tools/play-levels.mjs'), '--quick'], { encoding: 'utf8' });
+        const lines = r.stdout.trim().split('\n');
+        check(r.status === 0 && lines.length === 15, 'the auto-player (weaker than a person: walking, lower jump) finishes all 15 stages' + (r.status ? ':\n' + lines.filter((l) => !/finished/.test(l)).join('\n') : ''));
+    }
+
     console.log('8. top-10 score tables');
     {
         const page = await newPage(browser, base);
