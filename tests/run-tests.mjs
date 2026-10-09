@@ -1535,6 +1535,37 @@ async function main() {
         await page.context().close();
     }
 
+    console.log('28. profile pictures: drawn avatars, photo, Settings entry');
+    {
+        const page = await newPage(browser, base);
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon');
+        await page.focus('#tb-start'); await page.keyboard.press('Enter');
+        await page.focus('#btn-profile'); await page.keyboard.press('Enter');
+        await page.focus('#profile-picture'); await page.keyboard.press('Enter');
+        check(await page.evaluate(() => !document.getElementById('profiles-picker').hidden && document.querySelectorAll('#pic-grid .pic-cell').length === Avatars.IDS.length + 1), 'the picture picker lists the initial letter and all the drawn avatars (' + await page.evaluate(() => Avatars.IDS.length) + ')');
+        check(await page.evaluate(() => Avatars.IDS.length >= 16 && Avatars.IDS.every((id) => Avatars.svg(id).indexOf('<svg') === 0)), 'every avatar is drawn');
+        await page.keyboard.press('ArrowRight'); await page.keyboard.press('Enter');
+        check(await page.evaluate(() => !!Profiles.current().av && document.querySelector('#profile-avatar svg') !== null && document.getElementById('profiles-picker').hidden), 'picking an avatar saves it and shows it on the home button');
+        await page.keyboard.press('Escape');
+        check(await page.evaluate(() => document.getElementById('profiles').hidden), 'Back leaves the profiles screen');
+        // a photo (a data image, as the camera-less TV flow produces)
+        const png = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = c.height = 8; c.getContext('2d').fillStyle = '#f00'; c.getContext('2d').fillRect(0, 0, 8, 8); return c.toDataURL('image/png'); });
+        const out = await page.evaluate((src) => new Promise((res) => { ProfilesUI.openPicker(true); document.getElementById('pic-web'); res(true); }), png);
+        await page.evaluate((src) => { Profiles.setPicture(Profiles.current().id, { photo: src }); ProfilesUI.renderButton(); }, png);
+        check(await page.evaluate(() => !!document.querySelector('#profile-avatar img') && !!Profiles.current().photo), 'a photo shows on the home button');
+        check(await page.evaluate(() => Backup.snapshot().arc_profiles.indexOf('photo') > 0), 'the picture is part of the cloud backup');
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => { Win.open('settings'); });
+        await page.waitForSelector('.set-nav-btn[data-page="accounts"]');
+        await page.focus('.set-nav-btn[data-page="accounts"]'); await page.keyboard.press('Enter');
+        const hasRow = await page.evaluate(() => [...document.querySelectorAll('.set-row')].some((r) => /Profile picture/.test(r.textContent)));
+        check(hasRow, 'Settings > Accounts has a "Profile picture" entry');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
     await browser.close();
     srv.close();
     console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed');

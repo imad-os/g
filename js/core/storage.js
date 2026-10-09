@@ -110,6 +110,16 @@ var Profiles = (function () {
         for (var i = 0; i < l.length; i++) if (l[i].id === id) l[i].name = cleanName(name);
         Store.rawSet(KEY, l);
     }
+    // Profile picture: { av: 'cat' } (a drawn avatar), { photo: 'data:image/jpeg;...' | 'https://...' } or null (the initial letter)
+    function setPicture(id, pic) {
+        var l = list();
+        for (var i = 0; i < l.length; i++) if (l[i].id === id) {
+            delete l[i].av; delete l[i].photo;
+            if (pic && pic.av) l[i].av = String(pic.av).slice(0, 20);
+            else if (pic && pic.photo) l[i].photo = String(pic.photo).slice(0, 30000);
+        }
+        Store.rawSet(KEY, l);
+    }
     // Deletes a profile and all its data. The last profile cannot be deleted.
     function remove(id) {
         var l = list(), out = [];
@@ -127,5 +137,5 @@ var Profiles = (function () {
     // make sure the active profile exists
     if (!find(Store.profile())) Store.setProfile(list()[0].id);
 
-    return { MAX: MAX, NAME_MAX: NAME_MAX, list: list, current: current, create: create, rename: rename, remove: remove, use: use, name: name };
+    return { MAX: MAX, NAME_MAX: NAME_MAX, list: list, current: current, create: create, rename: rename, setPicture: setPicture, remove: remove, use: use, name: name };
 })();
