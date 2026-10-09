@@ -19,7 +19,9 @@
  * browser ("standalone"), the SDK plays the host itself: keyboard input, localStorage saves,
  * Esc / P = pause, so the app can be developed and tested anywhere.
  *
- * Input actions: left right up down jump run confirm cancel pause
+ * Input actions: left right up down jump run confirm cancel pause menu
+ *   'menu' = gamepad Start, short press; only sent to apps that init with { ownMenu: true }
+ *   (otherwise it opens My PC's pause menu). Holding Start, or the remote's Back, always opens My PC's menu.
  * Written in ES5 so it loads anywhere; My PC itself supports Samsung TVs from 2024 (Tizen 8+).
  */
 var MyPC = (function () {
@@ -133,7 +135,7 @@ var MyPC = (function () {
             // in a frame: say hello to My PC (it answers with "init"); keys pressed while the frame
             // has focus (mouse click on a PC) are forwarded so the host still gets Back, arrows...
             hosted = true; hostWin = window.parent;
-            post('hello', { sdk: VERSION, title: document.title });
+            post('hello', { sdk: VERSION, title: document.title, ownMenu: handlers.ownMenu === true });
             document.addEventListener('keydown', function (e) { forwardKey(e, true); });
             document.addEventListener('keyup', function (e) { forwardKey(e, false); });
             helloTimer = setTimeout(goStandalone, HELLO_WAIT);   // framed by something that is not My PC

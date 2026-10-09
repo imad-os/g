@@ -128,6 +128,7 @@ var GameHost = (function () {
             switch (m.type) {
                 case 'hello':
                     win = e.source;
+                    remote.ownMenu = !!d.ownMenu;          // the app has its own menu on gamepad Start
                     send('init', {
                         lang: I18n.lang(), rtl: I18n.rtl(), quality: { tier: Perf.profile().tier },
                         volume: { music: AudioPrefs.music() / 10, sfx: AudioPrefs.sfx() / 10 },
@@ -163,7 +164,8 @@ var GameHost = (function () {
         window.addEventListener('message', onMsg);
         var volume = function (m, s2) { send('volume', { music: m, sfx: s2 }); };
         AudioPrefs.onChange(volume);
-        return {
+        var remote = {
+            ownMenu: false,
             init: function () {},
             start: function () { send('start'); },
             pause: function () { send('pause'); },
@@ -173,6 +175,7 @@ var GameHost = (function () {
             onMenu: function (mid) { send('menu', { id: String(mid).slice(4) }); },
             onAction: function (a, pressed, repeat, dev) { send('input', { action: a, pressed: pressed, repeat: repeat, dev: dev }); }
         };
+        return remote;
     }
 
     function loadRemote(token) {
@@ -407,13 +410,20 @@ var GameHost = (function () {
             if (action === 'guide') { if (pressed && !repeat) openPause(); return; }
             if (action === 'pageUp' || action === 'pageDown' || action === 'tab' || action === 'tabBack') return;
             if (pressed && !repeat && (action === 'back' || action === 'pause')) return openPause();
+            // gamepad Start, short press: the game's own menu when it has one, else My PC's menu
+            if (action === 'menu') {
+                if (!pressed || repeat) return;
+                if (!(api && api.ownMenu)) return openPause();
+                try { api.onAction('menu', true, false, dev); api.onAction('menu', false, false, dev); } catch (e) {}
+                return;
+            }
             if (action === 'padLost') { openPause(); A11y.announce(I18n.t('padOff')); return; }
             if (api && api.onAction) { try { api.onAction(action, pressed, repeat, dev); } catch (e) {} }
             return;
         }
         if (!pressed) return;
         if (state === 'paused') {
-            if (action === 'back' || action === 'cancel' || action === 'pause') { if (!repeat) resume(); }
+            if (action === 'back' || action === 'cancel' || action === 'pause' || action === 'menu') { if (!repeat) resume(); }
             else if (action === 'up' || action === 'down') Focus.move(action);
             else if (action === 'confirm' && !repeat) { var c = Focus.current(); if (c) c.click(); }
         } else if (state === 'error') {

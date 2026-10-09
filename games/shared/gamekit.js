@@ -399,6 +399,7 @@ var GK = (function () {
                 window.GameAPI = null;
                 gk.host = host = null; gk.canvas = gk.ctx = canvas = ctx = null; gk.audio = null;
             },
+            ownMenu: !!def.ownMenu,          // true: gamepad Start (short press) goes to the game as 'menu'
             menuItems: function () { return def.menuItems ? def.menuItems(gk) : []; },
             onMenu: function (id) { return def.onMenu ? def.onMenu(gk, id) : undefined; },
             onAction: function (a, pressed, repeat, dev) {

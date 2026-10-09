@@ -44,7 +44,9 @@ this guide and the SDK fresh before every task.
 - **My PC owns the input.** Your page never receives focus on the TV. My PC sends you
   **actions** (`left`, `jump`...), not keys. Never read `keydown` yourself; use the SDK.
 - **Back is My PC's.** It opens the pause menu (Resume, your own menu items, Quit). You get
-  `onPause` / `onResume` / `onDestroy`.
+  `onPause` / `onResume` / `onDestroy`. On a gamepad, **holding Start** (Switch **+**, Xbox Menu,
+  PlayStation Options) does the same. A **short press of Start** opens My PC's menu too, unless your
+  app has its own menu: then init with `ownMenu: true` and you receive the `menu` action instead.
 - **Standalone mode:** opened directly in a browser (not inside My PC), the SDK acts as the host:
   the keyboard sends actions, Esc or P pauses, and saves go to `localStorage`. You can develop and
   test with any browser, no TV needed.
@@ -111,7 +113,8 @@ MyPC.init({
     onDestroy: function () {},       // REQUIRED: stop everything: loops, timers, AudioContext.close()
     onInput:   function (action, pressed, repeat, dev) {},  // optional: one call per action change
     onMenu:    function (id) {},     // optional: one of your pause-menu items was chosen
-    onVolume:  function (v) {}       // optional: v = { music: 0..1, sfx: 0..1 } changed in Settings
+    onVolume:  function (v) {},      // optional: v = { music: 0..1, sfx: 0..1 } changed in Settings
+    ownMenu:   false                 // optional: true = gamepad Start (short press) sends you 'menu'
 });
 ```
 
@@ -183,6 +186,10 @@ Actions: `left right up down` (directions), `jump` and `confirm` (OK / Enter / S
 - **Every action MUST be reachable with the TV remote alone:** arrows + OK. Don't rely on
   `run`/`cancel` (the remote has no such buttons), and never require a mouse, touch or text typing.
 - Back / Esc always belongs to My PC (pause menu). Never use it for in-game actions.
+- `menu`: gamepad Start (or Select), short press. Sent only to apps that init with `ownMenu: true`
+  (open your own menu on it, and close it on `menu` or `cancel`); for other apps it opens My PC's
+  pause menu. Holding Start for 0.7 s always opens My PC's pause menu, so players can still quit.
+  The TV remote has no Start: give your menu another way in too (e.g. an on-screen button with OK).
 
 ## 6. Screen
 

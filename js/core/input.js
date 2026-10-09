@@ -1,6 +1,8 @@
 /* Single input module: TV remote, keyboard and W3C gamepads -> actions.
  *
- * Actions: left right up down jump run pause back confirm cancel runToggle
+ * Actions: left right up down jump run pause menu back confirm cancel runToggle
+ *   Gamepad Start / Select (Switch +/-, Xbox Menu/View, PlayStation Options/Share): a short press is
+ *   'menu' (the game's own menu), holding it HOLD_MS is 'pause' (My PC's menu, works in every game).
  *   pageUp pageDown guide tab tabBack   (desktop and apps only: games never receive these)
  * Every action carries the device that produced it, so games can tell players apart:
  *   'keys'  TV remote, or arrows + Enter/Space/Z/X/Shift on a keyboard
@@ -40,10 +42,11 @@ var Input = (function () {
     var PAD_BUTTONS = [
         [0, ['jump', 'confirm']], [1, ['run', 'cancel']], [2, ['run']], [3, ['run']],
         [4, ['pageUp']], [5, ['pageDown']], [16, ['guide']],        // LB / RB scroll, the Guide / Home button
-        [8, ['pause']], [9, ['pause']],
+        // 8 / 9 (Select / Start): short press = 'menu', hold = 'pause' (see poll)
         [12, ['up']], [13, ['down']], [14, ['left']], [15, ['right']]
     ];
-    var REPEAT_DELAY = 380, REPEAT_RATE = 130;
+    var REPEAT_DELAY = 380, REPEAT_RATE = 130, HOLD_MS = 700;
+    var startBtn = {};              // 'padN' -> { at: time pressed, fired: hold already sent, sup: released by releaseAll }
 
     var handler = null;
     var keyHeld = {};               // keyCode -> true
@@ -135,6 +138,7 @@ var Input = (function () {
             for (var i = 0; i < acts.length; i++) { bump(dev, acts[i], -1); emit(acts[i], false, false, dev); }
         }
         for (var d in padNow) releasePad(d, true);
+        for (var s in startBtn) if (startBtn[s].at) startBtn[s].sup = true;      // no 'menu' when it is let go
     }
 
     function getPads() {
@@ -158,6 +162,16 @@ var Input = (function () {
                     for (var k = 0; k < acts.length; k++) now[acts[k]] = true;
                     any = true;
                 }
+            }
+            // Start / Select: decided when let go (short = game menu) or after HOLD_MS (My PC menu)
+            var sb = p.buttons[9], sl = p.buttons[8], st = startBtn[dev] || (startBtn[dev] = { at: 0, fired: false, sup: false });
+            if ((sb && (sb.pressed || sb.value > 0.5)) || (sl && (sl.pressed || sl.value > 0.5))) {
+                any = true;
+                if (!st.at) { st.at = t; st.fired = false; st.sup = false; }
+                else if (!st.fired && !st.sup && t - st.at >= HOLD_MS) { st.fired = true; emit('pause', true, false, dev); emit('pause', false, false, dev); }
+            } else if (st.at) {
+                if (!st.fired && !st.sup) { emit('menu', true, false, dev); emit('menu', false, false, dev); }
+                st.at = 0;
             }
             var ax = p.axes[0] || 0, ay = p.axes[1] || 0;
             if (ax < -0.5) { now.left = true; any = true; }
@@ -200,7 +214,7 @@ var Input = (function () {
         for (var d in padNow) {
             if (live[d]) continue;
             releasePad(d, false);
-            delete padNow[d]; delete padSup[d];
+            delete padNow[d]; delete padSup[d]; delete startBtn[d];
             if (+d.slice(3) === activePad || (evt && evt.gamepad && 'pad' + evt.gamepad.index === d)) activePad = -1;
             emit('padLost', true, false, d);
         }

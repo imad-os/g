@@ -435,6 +435,18 @@ async function main() {
         await page.evaluate(() => window.__press(0, 15, true)); await page.waitForTimeout(600); await page.evaluate(() => window.__press(0, 15, false));
         d = await dbg();
         check(d.x - x1 > 20, 'gamepad 1 moves player 1');
+        // Start: a short press goes to a game that has its own menu; holding it opens My PC's menu
+        await page.evaluate(G2 => { const api = eval(G2).GameAPI; api.ownMenu = true; window.__menuSeen = 0;
+            const on = api.onAction; api.onAction = function (a, p, r, dv) { if (a === 'menu' && p) window.__menuSeen++; return on.apply(this, arguments); }; }, G);
+        await tap(0, 9);
+        await page.waitForTimeout(100);
+        check(await page.evaluate(() => window.GameHost.state() === 'running' && window.__menuSeen === 1), 'a short press of Start goes to the game\'s own menu');
+        await page.evaluate(() => window.__press(0, 9, true)); await page.waitForTimeout(900);
+        check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'holding Start (Switch +) opens My PC\'s menu, even in a game with its own menu');
+        await page.evaluate(() => window.__press(0, 9, false)); await page.waitForTimeout(200);
+        check(await page.evaluate(() => window.GameHost.state() === 'paused' && window.__menuSeen === 1), 'letting go after the hold sends nothing more');
+        await tap(0, 9);
+        check(await page.evaluate(() => window.GameHost.state()) === 'running', 'Start closes My PC\'s menu again');
         await page.evaluate(() => { window.__pads[1].connected = false; window.dispatchEvent(new Event('gamepaddisconnected')); });
         await page.waitForTimeout(300);
         check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'unplugging a gamepad pauses the game');
@@ -1274,6 +1286,8 @@ async function main() {
         await page.focus('#desk-icons [data-app="store"]'); await page.keyboard.press('Enter');
         await page.waitForSelector('.st-hero');
         await page.waitForFunction(() => document.querySelectorAll('.st-section').length >= 2);
+        // the install / open counters arrive a moment after the catalog
+        await page.waitForFunction(() => { const p = document.querySelectorAll('.st-section')[1]; return p && /Old One/.test((p.querySelector('.st-card-name') || {}).textContent || ''); }, null, { timeout: 5000 }).catch(() => {});
         const home = await page.evaluate(() => ({ hero: document.querySelector('.st-hero-name').textContent,
             sections: [...document.querySelectorAll('.st-section')].map((x) => x.querySelector('h2').textContent + ': ' + [...x.querySelectorAll('.st-card-name')].map((n) => n.textContent).join(', ')) }));
         check(home.hero === 'Paint Pad' && /^New: Paint Pad, Star Catcher, Old One/.test(home.sections[0]) && /^Popular: Old One/.test(home.sections[1]) && !home.sections.join().includes('Secret'),
