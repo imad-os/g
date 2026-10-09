@@ -1,11 +1,12 @@
 {
-  "build": 21,
-  "version": "2.10.0",
+  "build": 22,
+  "version": "2.10.1",
   "shell": 1,
   "css": [
     "css/launcher.css"
   ],
   "js": [
+    "js/core/native.js",
     "js/core/storage.js",
     "js/core/cloud.js",
     "js/core/backup.js",

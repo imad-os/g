@@ -186,3 +186,22 @@ var MyPC = (function () {
 
     return pub;
 })();
+
+/* Native app feel (same guard as js/core/native.js): no pinch / Ctrl+wheel / Ctrl +/- zoom, no selection or context menu. */
+(function () {
+    'use strict';
+    if (typeof document === 'undefined') return;
+    var m = document.querySelector('meta[name="viewport"]');
+    if (!m && document.head) { m = document.createElement('meta'); m.name = 'viewport'; document.head.appendChild(m); }
+    if (m) m.setAttribute('content', 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
+    var st = document.documentElement.style;
+    st.touchAction = 'pan-x pan-y'; st.overscrollBehavior = 'none'; st.webkitUserSelect = 'none'; st.userSelect = 'none'; st.webkitTouchCallout = 'none';
+    function stop(e) { e.preventDefault(); }
+    var opt = { passive: false };
+    document.addEventListener('wheel', function (e) { if (e.ctrlKey) e.preventDefault(); }, opt);
+    document.addEventListener('touchmove', function (e) { if (e.touches && e.touches.length > 1) e.preventDefault(); }, opt);
+    ['gesturestart', 'gesturechange', 'gestureend', 'dblclick', 'contextmenu', 'dragstart'].forEach(function (n) { document.addEventListener(n, stop, opt); });
+    document.addEventListener('keydown', function (e) {
+        if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=' || e.key === '0' || e.key === '_')) e.preventDefault();
+    }, opt);
+})();

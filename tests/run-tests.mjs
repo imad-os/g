@@ -1566,6 +1566,30 @@ async function main() {
         await page.context().close();
     }
 
+    console.log('29. native app feel: no zoom, no selection, no context menu');
+    {
+        const page = await newPage(browser, base);
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon');
+        const r = await page.evaluate(() => {
+            const fire = (type, init) => { const e = new Event(type, { bubbles: true, cancelable: true }); Object.assign(e, init || {}); document.body.dispatchEvent(e); return e.defaultPrevented; };
+            const key = (k) => { const e = new KeyboardEvent('keydown', { key: k, ctrlKey: true, bubbles: true, cancelable: true }); document.body.dispatchEvent(e); return e.defaultPrevented; };
+            const w = new WheelEvent('wheel', { deltaY: -100, ctrlKey: true, bubbles: true, cancelable: true }); document.body.dispatchEvent(w);
+            const plain = new WheelEvent('wheel', { deltaY: 100, bubbles: true, cancelable: true }); document.body.dispatchEvent(plain);
+            return { meta: document.querySelector('meta[name="viewport"]').content, ctrlWheel: w.defaultPrevented, plainWheel: plain.defaultPrevented,
+                     plus: key('+'), minus: key('-'), zero: key('0'), gesture: fire('gesturestart'), dbl: fire('dblclick'), ctx: fire('contextmenu'), sel: fire('selectstart'),
+                     css: getComputedStyle(document.body).userSelect, ta: getComputedStyle(document.documentElement).touchAction };
+        });
+        check(/user-scalable=no/.test(r.meta) && /maximum-scale=1/.test(r.meta), 'the viewport forbids zoom');
+        check(r.ctrlWheel && !r.plainWheel, 'Ctrl+wheel zoom is blocked, the plain wheel still scrolls menus');
+        check(r.plus && r.minus && r.zero, 'Ctrl + / - / 0 browser zoom keys are blocked');
+        check(r.gesture && r.dbl && r.ctx && r.sel, 'pinch gesture, double-click, right-click menu and text selection are blocked');
+        check(r.css === 'none' && /pan-x/.test(r.ta), 'CSS: no selection, no pinch (touch-action: ' + r.ta + ')');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
     await browser.close();
     srv.close();
     console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed');
