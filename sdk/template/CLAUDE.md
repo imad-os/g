@@ -14,6 +14,8 @@ screen, performance, languages, publishing). Follow every MUST, finish each task
 checklist, and when the guide has changed, update this app to match it. If anything in this file
 disagrees with the guide, the guide wins.
 
+Touch controls: My PC draws a customizable pad on phones by itself (guide, "Touch controls"); do not build one, or set `"touch": false` in `mypc-app.json`.
+
 For multiplayer use `MyPC.multiplayer` (section "Multiplayer" of the guide): no own lobby, no backend, no Firebase keys.
 
 For every release: bump `version` in `mypc-app.json` and the same `?v=<version>` on every own file

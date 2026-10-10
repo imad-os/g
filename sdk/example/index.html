@@ -101,6 +101,7 @@
     function stopLoop() { if (raf) cancelAnimationFrame(raf); raf = 0; }
 
     MyPC.init({
+        pad: true,                                    // standalone on a phone: show the touch pad (inside My PC the shell draws it for every app)
         onInit: function (info) {
             t = TEXT[info.lang] || TEXT.en;
             canvas = $('c'); ctx = canvas.getContext('2d');

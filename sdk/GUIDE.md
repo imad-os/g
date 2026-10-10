@@ -156,6 +156,70 @@ MyPC.app_config.speed      // e.g. 2
 - Standalone (opened directly in a browser) it is `{}` unless you add `?app_config={"speed":2}`
   to the address, which lets you test different configs.
 
+### Touch controls (phones and tablets)
+
+My PC also runs on phones and tablets. **On a touch device My PC draws a customizable virtual pad above every app and game by
+itself, so your app needs no touch code.** The pad is a joystick plus buttons; the player customizes it (gear button: add or hide
+buttons, resize, drag anywhere, reset) and the layout is saved per app on the device (`vpad:app:<app id>`). It is never drawn on
+a TV, and not while a gamepad is the active input. It is hidden while My PC's own screens are open (pause menu, multiplayer, dialogs)
+and the pause menu gets a **Touch pad settings** entry on touch devices.
+
+What the pad sends (the same actions the TV remote and gamepads send, device `'touch'`):
+
+| Pad control | Action your `onInput` gets |
+|---|---|
+| stick | `left` `right` `up` `down` (a diagonal sends two) |
+| button **A** (default) | `confirm` **and** `jump` (like the remote's OK) |
+| button **B** (default) | `run` |
+| button **C** (in the catalog) | `cancel` |
+| button **&#9776;** (in the catalog) | `menu`: your own menu when you init with `ownMenu: true`, otherwise My PC's pause menu |
+| pause button (top) | My PC's pause menu |
+
+Defaults: **A** (ok) and **B** (run) are shown; **C** (cancel) and **&#9776;** (menu) can be added by the player.
+
+**Change the buttons in `mypc-app.json`** (optional; the App Store Manager stores it with the app):
+
+```json
+"touch": {
+  "buttons": [ { "label": "A", "action": "ok" }, { "label": "B", "action": "run" } ],
+  "catalog": [ { "label": "A", "action": "ok" }, { "label": "B", "action": "run" }, { "label": "C", "action": "cancel" }, { "label": "\u2630", "action": "menu" } ],
+  "scale": { "stick": 1, "btn": 1 }
+}
+```
+- `buttons` = shown at first, `catalog` = everything the player may add (8 entries at most each), `label` 3 characters at most,
+  `action` one of `ok` `run` `cancel` `menu`, `scale` = starting size multipliers (0.5 to 2.5; use about 1.3 for a game that is only played
+  with the pad). Invalid entries are ignored (the App Store Manager refuses them when you add the app).
+- **`"touch": false`**: your app has its **own touch UI**: My PC draws nothing.
+- The same can be said from code: `MyPC.init({ pad: false | { buttons, catalog, scale } })`; it wins over the manifest.
+  `pad: true` means "no preference". In a browser outside My PC (standalone) `MyPC.init({ pad: true })` shows the pad on touch devices,
+  feeding the SDK input directly (no fake keyboard events), so you can test on a phone.
+
+**A pad of your own: `MyPC.pad`** (API level 4; `undefined` on older SDKs). For example a phone that is only a controller for a game
+running on the TV (send the presses with `MyPC.multiplayer`):
+
+```js
+MyPC.pad.init({
+    force: true,                                            // draw it on this device whatever it is
+    id: 'controller',                                       // the saved layout is kept per id
+    buttons: [ { label: 'A', action: 'jump' }, { label: 'B', action: 'fire' } ],     // any action names here; or { label, key: 13 }
+    catalog: [ ... ],                                       // everything the player may add (default: buttons)
+    scale: { stick: 1.3, btn: 1.2 },
+    onAction: function (action, down) { peer.send({ a: action, d: down }); }     // stick: left right up down, pause button: pause
+    // send: function (keyCode, down) { ... }              // instead, or for buttons that have only a key code
+});
+MyPC.pad.hide();                                            // give the screen back to My PC's pad
+MyPC.pad.openSettings();                                    // open the player's settings from your own menu
+MyPC.pad.active();                                          // true while it is shown
+```
+In My PC the **shell draws** this pad too (right size, above your app, hidden under My PC's menus), and sends the presses back to
+`onAction` / `send`. Standalone the SDK draws it itself. Option names and the customization panel are those of the virtual pad
+library (`sdk/pad/README.md`: `buttons`, `catalog`, `scale`, `pause`, `customize`, `id`, `onAction`, `send`, `force`).
+
+Rules:
+- **Do not build your own pad.** If you do (your own touch UI), set `"touch": false` so My PC does not draw a second one.
+- Keep a way to play with the default pad: **A** is `confirm` + `jump`, **B** is `run`, the stick is the four directions.
+- Check your app on a phone (landscape and portrait) with My PC's pad, or with your own pad and `"touch": false`.
+
 ### Multiplayer: `MyPC.multiplayer` (API level 3)
 
 Games and apps can offer **local multiplayer** (friends on the same Wi-Fi) with **no lobby screen, no server and no
@@ -390,6 +454,7 @@ the World records.
 - [ ] fills the window at any 16:9 size, readable text, obvious focus
 - [ ] runs on Chromium 108 (Tizen 8, 2024 TVs): no CSS nesting, nothing newer than Chrome 108; no allocation in the game loop
 - [ ] saves through `MyPC.save/load`; scores through `MyPC.submitScore` (games with points)
+- [ ] playable on a phone with the touch pad (or with your own touch UI and `"touch": false`): no second pad of your own
 - [ ] multiplayer uses `MyPC.multiplayer`: no own lobby, no backend, no Firebase keys (hide the feature when `MyPC.multiplayer.supported` is false; handle `cancelled` quietly)
 - [ ] any owner-changeable setting comes from `MyPC.app_config` (with defaults in code), not hard-coded
 - [ ] texts in `en` (and `fr`, `es`, `ar` if possible), using `info.lang`

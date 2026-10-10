@@ -1,6 +1,6 @@
 {
-  "build": 24,
-  "version": "2.12.0",
+  "build": 25,
+  "version": "2.13.0",
   "shell": 1,
   "css": [
     "css/launcher.css"
@@ -11,6 +11,7 @@
     "js/core/cloud.js",
     "js/core/rooms.js",
     "js/core/netlink.js",
+    "js/core/virtual-pad.js",
     "js/core/backup.js",
     "js/core/world.js",
     "js/core/i18n.js",
@@ -35,6 +36,7 @@
     "js/launcher/avatars.js",
     "js/launcher/profiles-ui.js",
     "js/launcher/multiplayer.js",
+    "js/launcher/touchpad.js",
     "js/launcher/welcome.js",
     "js/launcher/game-host.js",
     "js/launcher/main.js"

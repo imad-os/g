@@ -40,6 +40,36 @@
 
     function abs(rel, base) { return new URL(rel, base).href; }
 
+    // "touch" of mypc-app.json: false (the app has its own touch UI) or { buttons, catalog, scale } (see sdk/GUIDE.md, Touch controls)
+    var TOUCH_ACTIONS = ['ok', 'run', 'cancel', 'menu'];
+    function parseTouch(t) {
+        if (t === false) return false;
+        if (t === true) return undefined;                              // the default pad: nothing to store
+        if (!isObject(t)) throw new Error('"touch" must be false or an object like { "buttons": [{ "label": "A", "action": "ok" }] }.');
+        var out = {};
+        ['buttons', 'catalog'].forEach(function (k) {
+            if (t[k] === undefined) return;
+            if (!Array.isArray(t[k])) throw new Error('"touch.' + k + '" must be a list.');
+            if (t[k].length > 8) throw new Error('"touch.' + k + '" has more than 8 entries.');
+            out[k] = t[k].map(function (b, i) {
+                if (!isObject(b) || typeof b.label !== 'string' || !b.label || b.label.length > 3) throw new Error('"touch.' + k + '[' + i + ']" needs a "label" of 1 to 3 characters.');
+                if (TOUCH_ACTIONS.indexOf(b.action) < 0) throw new Error('"touch.' + k + '[' + i + ']" action must be one of: ' + TOUCH_ACTIONS.join(', ') + '.');
+                return { label: b.label, action: b.action };
+            });
+        });
+        if (t.scale !== undefined) {
+            if (!isObject(t.scale)) throw new Error('"touch.scale" must be like { "stick": 1, "btn": 1 }.');
+            out.scale = {};
+            ['stick', 'btn'].forEach(function (k) {
+                if (t.scale[k] === undefined) return;
+                var n = +t.scale[k];
+                if (!(n >= 0.5 && n <= 2.5)) throw new Error('"touch.scale.' + k + '" must be between 0.5 and 2.5.');
+                out.scale[k] = n;
+            });
+        }
+        return out;
+    }
+
     // manifest JSON -> app document (throws an Error with a readable message)
     function toApp(m, base, order) {
         if (!m || typeof m !== 'object') throw new Error(MANIFEST + ' is not valid JSON.');
@@ -59,6 +89,9 @@
         };
         // optional default settings shipped by the app (the owner can change them in the installer)
         if (m.config !== undefined) app.config = parseConfig(JSON.stringify(m.config));
+        // optional touch controls: false = the app draws its own, or the pad's buttons / catalog / scale
+        var touch = m.touch === undefined ? undefined : parseTouch(m.touch);
+        if (touch !== undefined) app.touch = touch;
         return app;
     }
 

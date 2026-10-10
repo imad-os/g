@@ -114,6 +114,22 @@ var Input = (function () {
         }
     }
 
+    // Touch controls (js/launcher/touchpad.js): the pad's actions as a device of its own, 'touch'.
+    // 'ok' is confirm + jump like the remote's OK; 'menu' and 'pause' are taps (the Start button).
+    var TOUCH = { left: ['left'], right: ['right'], up: ['up'], down: ['down'], ok: ['confirm', 'jump'], run: ['run'], cancel: ['cancel'] };
+    var touchHeld = {};             // pad action -> true
+    function touch(action, down) {
+        var acts = TOUCH[action], i;
+        if (action === 'menu' || action === 'pause') {
+            if (down) { emit(action, true, false, 'touch'); emit(action, false, false, 'touch'); }
+            return;
+        }
+        if (!acts || !!touchHeld[action] === down) return;
+        touchHeld[action] = down;
+        for (i = 0; i < acts.length; i++) { bump('touch', acts[i], down ? 1 : -1); emit(acts[i], down, false, 'touch'); }
+    }
+    function releaseTouch() { for (var a in touchHeld) if (touchHeld[a]) touch(a, false); }
+
     // Pad buttons released by releaseAll() while still held stay "suppressed" until the player lets
     // go, so a held button never turns into a new press (e.g. Start reopening/closing the pause menu).
     var padSup = {};                // 'padN' -> { action -> true }
@@ -138,6 +154,7 @@ var Input = (function () {
             for (var i = 0; i < acts.length; i++) { bump(dev, acts[i], -1); emit(acts[i], false, false, dev); }
         }
         for (var d in padNow) releasePad(d, true);
+        releaseTouch();
         for (var s in startBtn) if (startBtn[s].at) startBtn[s].sup = true;      // no 'menu' when it is let go
     }
 
@@ -283,7 +300,7 @@ var Input = (function () {
     }
 
     function isDown(a) {
-        if ((count.keys && count.keys[a] > 0) || (count.keys2 && count.keys2[a] > 0)) return true;
+        if ((count.keys && count.keys[a] > 0) || (count.keys2 && count.keys2[a] > 0) || (count.touch && count.touch[a] > 0)) return true;
         for (var d in padNow) if (padNow[d][a] && !(padSup[d] && padSup[d][a])) return true;
         return false;
     }
@@ -291,6 +308,7 @@ var Input = (function () {
     return {
         init: init,
         onKey: onKey,                        // game iframes forward their key events here
+        touch: touch,                        // the touch pad's actions (left right up down ok run cancel menu pause)
         setHandler: function (fn) { handler = fn; },
         isDown: isDown,
         isDownDev: isDownDev,

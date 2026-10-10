@@ -8,5 +8,6 @@
   "icon": "icon.svg",
   "version": "1.0.0",
   "scores": true,
-  "config": { "speed": 1 }
+  "config": { "speed": 1 },
+  "touch": { "buttons": [{ "label": "OK", "action": "ok" }], "catalog": [{ "label": "OK", "action": "ok" }, { "label": "B", "action": "run" }, { "label": "C", "action": "cancel" }] }
 }

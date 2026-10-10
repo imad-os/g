@@ -190,9 +190,11 @@ async function fakeFirestore(ctx, db) {
     });
 }
 
-async function newPage(browser, base, db) {
-    const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-    await ctx.addInitScript(TIZEN_MOCK);
+// opts.phone: a touch phone (no Tizen mock); opts.viewport; opts.touch: touch screen without the phone flags (a desktop with a touch screen)
+async function newPage(browser, base, db, opts) {
+    opts = opts || {};
+    const ctx = await browser.newContext(opts.phone ? { viewport: opts.viewport || { width: 844, height: 390 }, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 720 }, hasTouch: !!opts.touch });
+    if (!opts.phone && !opts.desktop) await ctx.addInitScript(TIZEN_MOCK);
     db = db || {};
     await fakeFirestore(ctx, db);
     const page = await ctx.newPage();
@@ -1789,7 +1791,7 @@ async function main() {
         const press = async (pg, k) => { await pg.keyboard.press(k); await pg.waitForTimeout(80); };
         const A = await setup(), B = await setup();
         const fa = await openApp(A), fb = await openApp(B);
-        check(await fa.evaluate(() => MyPC.multiplayer.supported === true && MyPC.apiLevel === 3 && MyPC.rooms === undefined), 'in My PC: MyPC.multiplayer.supported is true; MyPC.rooms is not public');
+        check(await fa.evaluate(() => MyPC.multiplayer.supported === true && MyPC.apiLevel >= 3 && MyPC.rooms === undefined), 'in My PC: MyPC.multiplayer.supported is true; MyPC.rooms is not public');
         await B.evaluate(() => { Rooms.LIMITS.asksPerMin = 1000; });
 
         // host(): the shell's own "Open a room" screen; Back cancels
@@ -1936,6 +1938,229 @@ async function main() {
         // the two copies of the connection code (shell and SDK) stay identical
         const grab = (f) => { const t = fs.readFileSync(path.join(ROOT, f), 'utf8'); const a = t.indexOf('/* netlink:begin'), b = t.indexOf('/* netlink:end */'); return t.slice(a, b).split('\n').map((l) => l.trim()).join('\n'); };
         check(grab('js/core/netlink.js') === grab('sdk/mypc-sdk.js') && grab('js/core/netlink.js').length > 1000, 'js/core/netlink.js and the copy inside sdk/mypc-sdk.js are identical');
+    }
+
+    console.log('32. touch controls: the shell draws the pad on phones (844x390, 390x844), MyPC.pad, "touch" manifest field');
+    {
+        const APP = 'https://apps.example.test/pad/';
+        const mkdoc = (id, order, entry, touch) => Object.assign({ id, name: 'Pad ' + id, description: 'x', url: APP, entry: APP + (entry || 'index.html'), icon: '', type: 'game', version: '1.0.0', enabled: true, order, config: {} }, touch === undefined ? {} : { touch });
+        const db = { apps: {
+            'pad-def': mkdoc('pad-def', 0),
+            'pad-cust': mkdoc('pad-cust', 1, 'index.html', { buttons: [{ label: 'X', action: 'cancel' }], catalog: [{ label: 'X', action: 'cancel' }, { label: 'Y', action: 'run' }], scale: { stick: 1.5 } }),
+            'pad-off': mkdoc('pad-off', 2, 'index.html', false),
+            'pad-optoff': mkdoc('pad-optoff', 3, 'inline.html?mode=off'),
+            'pad-own': mkdoc('pad-own', 4, 'inline.html?mode=own')
+        } };
+        const INLINE = `<!doctype html><meta charset=utf-8><body style="background:#123"><script src="${HOSTED}sdk/mypc-sdk.js"></script><script>
+            var mode = (/mode=(\\w+)/.exec(location.search) || [])[1]; window.padLog = [];
+            MyPC.init({ pad: mode === 'off' ? false : undefined, onInit: function () { if (mode === 'own') MyPC.pad.init({ force: true, onAction: function (a, d) { window.padLog.push([a, d]); } }); MyPC.ready(); } });
+        <\/script>`;
+        const setup = async (o) => {
+            const pg = await newPage(browser, base, db, o);
+            await routeHosted(pg, { offline: true });
+            await pg.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+            await pg.context().route(APP + '**', (r) => {
+                const rel = r.request().url().slice(APP.length).split('?')[0] || 'index.html';
+                if (rel === 'inline.html') return r.fulfill({ status: 200, contentType: 'text/html', headers: { 'Access-Control-Allow-Origin': '*' }, body: INLINE });
+                const p = path.join(ROOT, 'sdk/example', rel);
+                if (!fs.existsSync(p)) return r.fulfill({ status: 404, body: '' });
+                r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || 'text/plain', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(p) });
+            });
+            await pg.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify(['pad-def', 'pad-cust', 'pad-off', 'pad-optoff', 'pad-own'].map((id) => ({ id, at: 1 })))); });
+            return pg;
+        };
+        const openApp = async (pg, id) => {
+            await pg.goto(base + 'index.html');
+            await pg.waitForSelector(`#desk-icons [data-game="app-${id}"]`, { timeout: 8000 });
+            await pg.focus(`#desk-icons [data-game="app-${id}"]`); await pg.keyboard.press('Enter');
+            await pg.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 10000 });
+            const f = pg.frames().find((x) => x.url().indexOf(APP) === 0);
+            await f.waitForFunction(() => window.MyPC && MyPC.info());
+            return f;
+        };
+        const padOf = (pg) => pg.evaluate(() => {
+            const root = [...document.body.children].find((e) => e.style && e.style.zIndex === '99999');
+            if (!root) return null;
+            const r = (e) => { const b = e.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height }; };
+            const out = { stick: r(root.querySelector('#vp-stick')), labels: {}, panel: null };
+            [...root.querySelectorAll('div')].forEach((e) => { const t = e.textContent; if (!e.children.length && t && t.length <= 3 && e.style.position === 'absolute' && e.style.display !== 'none') out.labels[t] = r(e); });
+            const panel = [...root.children].find((e) => e.style.position === 'fixed' && e.style.inset === '0px');
+            out.panel = !!panel && panel.style.display === 'block';
+            return out;
+        });
+        const fingers = async (pg) => {
+            const cdp = await pg.context().newCDPSession(pg);
+            let pts = [];
+            const send = (type) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p) => ({ x: p.x, y: p.y, id: p.id })) });
+            return {
+                down: async (id, x, y) => { pts = pts.filter((p) => p.id !== id).concat([{ id, x, y }]); await send('touchStart'); },
+                move: async (id, x, y) => { pts = pts.map((p) => p.id === id ? { id, x, y } : p); await send('touchMove'); },
+                up: async (id) => { const gone = pts.filter((p) => p.id === id); pts = pts.filter((p) => p.id !== id); await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: gone.map((p) => ({ x: p.x, y: p.y, id: p.id })) }); }
+            };
+        };
+        const tap = async (pg, x, y) => { const f = await fingers(pg); await f.down(9, x, y); await pg.waitForTimeout(60); await f.up(9); await pg.waitForTimeout(80); };
+        const wait = (pg) => pg.waitForTimeout(120);
+
+        const P = await setup({ phone: true });
+        const fr = await openApp(P, 'pad-def');
+        let pad = await padOf(P);
+        check(!!pad && !!pad.stick && !!pad.labels.A && !!pad.labels.B && !!pad.labels['⚙'] && !!pad.labels.II && !pad.labels.C, 'phone 844x390: the shell draws the pad (stick, A, B, pause, gear) above the app, nothing to code in the app');
+        check(await P.evaluate(() => { const r = [...document.body.children].find((e) => e.style && e.style.zIndex === '99999'); return r.parentNode === document.body && !document.getElementById('desktop').offsetParent; }), 'the pad lives on the page, over the game layer (the desktop is not built on the game page)');
+        // the stick
+        const fg = await fingers(P);
+        await fg.down(1, pad.stick.x + 45, pad.stick.y); await wait(P);
+        check(await fr.evaluate(() => MyPC.isDown('right') && !MyPC.isDown('left')), 'stick right = the SDK action "right"');
+        await fg.move(1, pad.stick.x - 45, pad.stick.y); await wait(P);
+        check(await fr.evaluate(() => MyPC.isDown('left') && !MyPC.isDown('right')), 'stick left = "left" (right released)');
+        await fg.move(1, pad.stick.x + 40, pad.stick.y - 40); await wait(P);
+        check(await fr.evaluate(() => MyPC.isDown('right') && MyPC.isDown('up')), 'a diagonal sends two actions');
+        await fg.up(1); await wait(P);
+        check(await fr.evaluate(() => !MyPC.isDown('right') && !MyPC.isDown('up') && !MyPC.isDown('left')), 'letting go releases the stick');
+        // buttons: A = confirm + jump (like the remote's OK), B = run, held while the finger stays
+        await fg.down(2, pad.labels.A.x, pad.labels.A.y); await wait(P);
+        check(await fr.evaluate(() => MyPC.isDown('confirm') && MyPC.isDown('jump') && !MyPC.isDown('run')), 'A = "confirm" + "jump" (the remote\'s OK), held while pressed');
+        await P.waitForTimeout(300);
+        check(await fr.evaluate(() => MyPC.isDown('jump')), 'a button stays held');
+        // multi-touch: stick + A + B at once
+        await fg.down(1, pad.stick.x + 45, pad.stick.y); await fg.down(3, pad.labels.B.x, pad.labels.B.y); await wait(P);
+        check(await fr.evaluate(() => MyPC.isDown('right') && MyPC.isDown('jump') && MyPC.isDown('run')), 'multi-touch: stick + A + B at the same time');
+        await fg.up(2); await wait(P);
+        check(await fr.evaluate(() => !MyPC.isDown('jump') && MyPC.isDown('run') && MyPC.isDown('right')), 'releasing A keeps B and the stick');
+        await fg.up(3); await fg.up(1); await wait(P);
+        check(await fr.evaluate(() => !MyPC.isDown('run') && !MyPC.isDown('right')), 'all released');
+
+        // the pause button: My PC's pause menu; the pad hides while it is open; the menu offers "Touch pad settings"
+        await tap(P, pad.labels.II.x, pad.labels.II.y);
+        check(await P.evaluate(() => GameHost.state() === 'paused'), 'the pause button opens My PC\'s pause menu');
+        check(!(await padOf(P)), 'the pad is hidden while My PC\'s pause menu is open');
+        const items = await P.evaluate(() => [...document.querySelectorAll('#pause-items button')].map((b) => b.textContent));
+        check(items.indexOf('Touch pad settings') > 0, 'the pause menu has "Touch pad settings" (' + items.join(', ') + ')');
+        // customize from the pause menu: add C, close, resume: C is there
+        await P.evaluate(() => { [...document.querySelectorAll('#pause-items button')].find((b) => b.textContent === 'Touch pad settings').click(); });
+        await wait(P);
+        pad = await padOf(P);
+        check(!!pad && pad.panel === true, 'Touch pad settings opens the pad\'s settings panel over the pause menu');
+        await P.evaluate(() => { [...document.querySelectorAll('div')].find((e) => !e.children.length && e.textContent === 'C' && e.style.cursor === 'pointer').click(); });
+        await P.evaluate(() => { [...document.querySelectorAll('div')].find((e) => !e.children.length && e.textContent === 'Close').click(); });
+        await wait(P);
+        check(!(await padOf(P)) && await P.evaluate(() => GameHost.state() === 'paused' && !document.getElementById('pause').hidden), 'closing the panel goes back to the pause menu (pad hidden, game still paused)');
+        await P.evaluate(() => document.querySelector('#pause-items button').click());      // Resume
+        await wait(P);
+        pad = await padOf(P);
+        check(!!pad && !!pad.labels.C && !!pad.labels.A && !!pad.labels.B, 'back in the game the pad has the new button C');
+        await fg.down(4, pad.labels.C.x, pad.labels.C.y); await wait(P);
+        check(await fr.evaluate(() => MyPC.isDown('cancel')), 'C = "cancel"');
+        await fg.up(4);
+        // the gear pauses the game while the panel is open (the library ignores a tap that follows another within 350 ms: no double-tap zoom)
+        await P.waitForTimeout(450);
+        await tap(P, pad.labels['⚙'].x, pad.labels['⚙'].y);
+        const gearInfo = JSON.stringify([await P.evaluate(() => GameHost.state()), (await padOf(P) || {}).panel, pad.labels['⚙']]);
+        check(await P.evaluate(() => GameHost.state() === 'paused') && (await padOf(P)).panel === true, 'the gear opens the settings and pauses the game');
+        await P.evaluate(() => { [...document.querySelectorAll('div')].find((e) => !e.children.length && e.textContent === 'Close').click(); });
+        await wait(P);
+        check(await P.evaluate(() => GameHost.state() === 'running') && !!(await padOf(P)), 'closing the settings resumes the game');
+        // the layout is saved on the device (per app) and survives a reload
+        const saved = await P.evaluate(() => JSON.parse(localStorage.getItem('vpad:app:app-pad-def') || 'null'));
+        check(!!saved && Object.values(saved.on).filter(Boolean).length === 1, 'the layout is saved as vpad:app:<app id>');
+        await openApp(P, 'pad-def');                                   // loads the page again: the saved layout comes back
+        pad = await padOf(P);
+        check(!!pad && !!pad.labels.C, 'after a reload the customized layout is back');
+        // quitting removes the pad
+        await P.evaluate(() => { GameHost.openPause(); }); await wait(P);
+        await P.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
+        await P.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle', null, { timeout: 8000 });
+        check(!(await padOf(P)), 'quitting the app removes the pad');
+
+        // portrait phone
+        const Q = await setup({ phone: true, viewport: { width: 390, height: 844 } });
+        const fq = await openApp(Q, 'pad-def');
+        const pq = await padOf(Q);
+        const inView = (e) => e.x - e.w / 2 >= -1 && e.x + e.w / 2 <= 391 && e.y - e.h / 2 >= -1 && e.y + e.h / 2 <= 845;
+        check(!!pq && inView(pq.stick) && inView(pq.labels.A) && inView(pq.labels.B), 'phone 390x844: the pad fits the screen');
+        const fq1 = await fingers(Q);
+        await fq1.down(1, pq.stick.x, pq.stick.y + 45); await Q.waitForTimeout(150);
+        check(await fq.evaluate(() => MyPC.isDown('down')), 'portrait: stick down = "down"');
+        await fq1.up(1);
+        await Q.context().close();
+
+        // the manifest: custom buttons and scale; touch:false; the app's own pad option; an app that draws its own pad
+        const C1 = await setup({ phone: true }); await openApp(C1, 'pad-cust');
+        const pc = await padOf(C1);
+        check(!!pc && !!pc.labels.X && !pc.labels.A && !pc.labels.B && pc.stick.w > 100, '"touch": { buttons, catalog, scale } from the store changes the buttons and the stick size');
+        await C1.context().close();
+        const C2 = await setup({ phone: true }); await openApp(C2, 'pad-off');
+        check(!(await padOf(C2)), '"touch": false: the shell draws nothing (the app has its own touch UI)');
+        await C2.context().close();
+        const C3 = await setup({ phone: true }); await openApp(C3, 'pad-optoff');
+        check(!(await padOf(C3)), 'MyPC.init({ pad: false }) hides the shell pad too');
+        await C3.context().close();
+        const C4 = await setup({ phone: true }); const f4 = await openApp(C4, 'pad-own');
+        await C4.waitForTimeout(400);
+        const p4 = await padOf(C4);
+        check(!!p4 && !!p4.labels.A && await f4.evaluate(() => MyPC.pad.active()) && await f4.evaluate(() => !document.querySelector('body > div[style*="99999"]')), 'an app that calls MyPC.pad.init({ force: true }): the SHELL draws that pad (right size, above the app), nothing is drawn inside the app');
+        const f4t = await fingers(C4);
+        await f4t.down(1, p4.stick.x + 45, p4.stick.y); await C4.waitForTimeout(150);
+        check(await f4.evaluate(() => window.padLog.some((e) => e[0] === 'right' && e[1] === true) && !MyPC.isDown('right')), 'the presses of the app\'s own pad go to the app\'s onAction (not to the default input)');
+        await f4t.up(1); await C4.waitForTimeout(100);
+        check(await f4.evaluate(() => window.padLog.some((e) => e[0] === 'right' && e[1] === false)), 'and the release too');
+        await f4.evaluate(() => MyPC.pad.hide()); await C4.waitForTimeout(300);
+        const p5 = await padOf(C4);
+        check(!!p5 && !!p5.labels.A, 'MyPC.pad.hide() gives the screen back to the shell\'s default pad');
+        await C4.context().close();
+
+        // not on a desktop mouse browser, not on a TV (even with touch), unless forced
+        const D = await setup({ desktop: true }); await openApp(D, 'pad-def');
+        check(!(await padOf(D)), 'a desktop browser with a mouse: no pad');
+        await D.context().close();
+        const T = await setup({ phone: true }); await T.addInitScript(() => { window.tizen = { tvinputdevice: { registerKey() {}, registerKeyBatch() {} }, application: { getCurrentApplication() { return { exit() {} }; } }, systeminfo: { getCapability() { return '8.0'; } } }; });
+        await openApp(T, 'pad-def');
+        check(!(await padOf(T)), 'on a TV (Tizen), never, even with a touch screen');
+        await T.context().close();
+        const F = await setup({ desktop: true }); await F.addInitScript(() => localStorage.setItem('arc_dev_touchpad', '1'));
+        await openApp(F, 'pad-def');
+        check(!!(await padOf(F)), 'forced for debugging (arc_dev_touchpad = 1, set by ?pad=1): shown on a desktop');
+        check(!Object.keys(await F.evaluate(() => Backup.snapshot())).some((k) => /touchpad/.test(k)), 'the debugging switch is not part of the cloud backup');
+        await F.context().close();
+
+        // standalone SDK on a phone: MyPC.init({ pad: true }) shows the pad and feeds the SDK directly (no fake keyboard events)
+        const S = await setup({ phone: true });
+        await S.goto(APP + 'index.html');
+        await S.waitForFunction(() => window.MyPC && MyPC.info() && MyPC.info().standalone);
+        await S.evaluate(() => { window.keyEvents = 0; document.addEventListener('keydown', () => window.keyEvents++, true); });
+        const ps = await padOf(S);
+        check(!!ps && !!ps.labels.A, 'standalone on a phone: MyPC.init({ pad: true }) shows the pad');
+        const fs2 = await fingers(S);
+        await fs2.down(1, ps.stick.x + 45, ps.stick.y); await S.waitForTimeout(150);
+        check(await S.evaluate(() => MyPC.isDown('right') && window.keyEvents === 0), 'standalone: the pad drives the SDK input directly (0 keyboard events)');
+        await fs2.up(1);
+        await S.context().close();
+
+        // validation and the copies
+        const clean = await P.evaluate(() => ({
+            off: TouchPad.clean(false).off === true,
+            def: TouchPad.clean(undefined).buttons.length === 2 && TouchPad.clean(true).catalog.length === 4,
+            long: TouchPad.clean({ buttons: [{ label: 'ABCD', action: 'ok' }, { label: 'Z', action: 'fly' }] }).buttons.length === 2,
+            max: TouchPad.clean({ catalog: Array.from({ length: 12 }, (_, i) => ({ label: 'b' + i, action: 'ok' })) }).catalog.length === 8,
+            scale: TouchPad.clean({ scale: { stick: 9, btn: 1.25 } }).scale.stick === undefined && TouchPad.clean({ scale: { stick: 9, btn: 1.25 } }).scale.btn === 1.25
+        }));
+        check(Object.values(clean).every(Boolean), 'TouchPad.clean: false = off, bad labels / actions dropped, 8 entries at most, scale limited (' + JSON.stringify(clean) + ')');
+        const lib = require(path.join(ROOT, 'installer/installer-lib.js'));
+        const base0 = 'https://x.github.io/g_x/';
+        const mf = (touch) => ({ mypc: 1, id: 'abc', name: 'Abc', touch });
+        let bad = [];
+        for (const t of [{ buttons: [{ label: 'ABCD', action: 'ok' }] }, { buttons: [{ label: 'A', action: 'jump' }] }, { catalog: Array.from({ length: 9 }, (_, i) => ({ label: 'b', action: 'ok' })) }, { scale: { stick: 5 } }, 'yes']) { try { lib.toApp(mf(t), base0, 0); bad.push('accepted ' + JSON.stringify(t)); } catch (e) { /* refused: good */ } }
+        check(bad.length === 0, 'the App Store Manager refuses a bad "touch" (label > 3 chars, unknown action, > 8 entries, bad scale)' + bad.join('; '));
+        check(lib.toApp(mf(false), base0, 0).touch === false && lib.toApp(mf({ buttons: [{ label: 'A', action: 'ok' }] }), base0, 0).touch.buttons.length === 1 && !('touch' in lib.toApp(mf(undefined), base0, 0)), '"touch": false and { buttons } are stored in the app document; nothing is stored by default');
+        check(/'touch'\]\)/.test(fs.readFileSync(path.join(ROOT, 'firebase/firestore.rules'), 'utf8')) && /d\.touch is map/.test(fs.readFileSync(path.join(ROOT, 'firebase/firestore.rules'), 'utf8')), 'the Firestore rules accept the "touch" field');
+        const norm = (t) => t.replace('window.VirtualPad = (function', 'var VirtualPad = (function').split('\n').map((l) => l.trim()).join('\n').trim();
+        const canon = norm(fs.readFileSync(path.join(ROOT, 'sdk/pad/virtual-pad.js'), 'utf8'));
+        const shellCopy = fs.readFileSync(path.join(ROOT, 'js/core/virtual-pad.js'), 'utf8');
+        const sdkText = fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js'), 'utf8');
+        const sdkBlock = norm(sdkText.slice(sdkText.indexOf('/* vpad:begin'), sdkText.indexOf('/* vpad:end */')).replace(/^.*\n/, ''));
+        check(norm(shellCopy) === canon.replace('var VirtualPad = (function', 'window.VirtualPad = (function').replace('var VirtualPad', 'window.VirtualPad') || norm(shellCopy).replace('window.VirtualPad = (function', 'var VirtualPad = (function') === canon, 'js/core/virtual-pad.js is the same file as sdk/pad/virtual-pad.js (node tools/sync-pad.mjs)');
+        check(sdkBlock === canon, 'the copy inside sdk/mypc-sdk.js is the same library (node tools/sync-pad.mjs)');
+        check(P.errors.length === 0, 'no page errors ' + P.errors.join('; '));
+        await P.context().close();
     }
 
     await browser.close();

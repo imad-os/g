@@ -56,7 +56,7 @@ var Backup = (function () {
     var MAX_BLOB = 800000;
     var DEBOUNCE = 20000, DAILY = 24 * 3600 * 1000;
     // not copied: this TV's identity, caches that come back from the internet, bookkeeping
-    var SKIP = /^arc_dev_(tvrand|backup_|catalog|appstats|world_queue|world_cache|seen_build|update_checked|perf_bench|settings_v2|scores_v2)|^arc_p\d+_cloud_apps$/;
+    var SKIP = /^arc_dev_(tvrand|backup_|catalog|appstats|world_queue|world_cache|seen_build|touchpad|update_checked|perf_bench|settings_v2|scores_v2)|^arc_p\d+_cloud_apps$/;
     var timer = 0, busy = false, enabled = false;
 
     function mine(k) { return k && k.indexOf('arc_') === 0 && !SKIP.test(k); }

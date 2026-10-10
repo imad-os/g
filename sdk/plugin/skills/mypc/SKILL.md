@@ -28,6 +28,7 @@ If anything here disagrees with the guide, the guide wins.
 - 1920x1080 TV screen; must run smoothly on a 1 GB RAM TV (no allocation per frame, free everything on quit).
 - Strings in English, French, Spanish and Arabic (right-to-left).
 - Own menu in the game: `ownMenu: true` so the gamepad Start button opens it.
+- Phones: My PC draws a customizable touch pad for every app (manifest `"touch"`, `MyPC.pad`); never build your own pad, or set `"touch": false`.
 - Multiplayer: `MyPC.multiplayer.host()` / `join()` (My PC draws the lobby and the accept dialog), never your own lobby, backend or Firebase keys.
 - Every release: bump `version` in `mypc-app.json` and the same `?v=<version>` on every own file `index.html` loads.
 - Finish with the guide's checklist.

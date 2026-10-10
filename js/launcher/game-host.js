@@ -18,6 +18,7 @@ var GameHost = (function () {
     var LOAD_TIMEOUT_MS = 20000, FILE_TIMEOUT_MS = 10000;
 
     var state = 'idle';         // idle | loading | running | paused | error
+    function setState(s) { state = s; if (typeof TouchPad !== 'undefined') TouchPad.state(s); }
     var game = null, base = '', triedBundled = false;
     var iframe = null, api = null, gameWin = null, loadTimer = 0, onExitCb = null;
     var pauseItems = [], loadSeq = 0;
@@ -129,6 +130,7 @@ var GameHost = (function () {
                 case 'hello':
                     win = e.source;
                     remote.ownMenu = !!d.ownMenu;          // the app has its own menu on gamepad Start
+                    if (typeof TouchPad !== 'undefined') { TouchPad.app(d.pad); TouchPad.relay(function (m) { send('pad', m); }); }      // MyPC.init({ pad }); presses of the app's own pad go back to it
                     send('init', {
                         lang: I18n.lang(), rtl: I18n.rtl(), quality: { tier: Perf.profile().tier },
                         volume: { music: AudioPrefs.music() / 10, sfx: AudioPrefs.sfx() / 10 },
@@ -142,12 +144,16 @@ var GameHost = (function () {
                     // multiplayer (js/launcher/multiplayer.js): { rid, op, args } -> { rid, error | result }; peers' events go back as { ev, data }
                     if (typeof Multiplayer === 'undefined' || typeof d.op !== 'string' || (d.rid !== undefined && typeof d.rid !== 'number')) break;
                     if (state !== 'running' && state !== 'paused') break;
-                    if (!mp) mp = Multiplayer.attach({ appId: id, send: send, hold: holdForMp, release: releaseForMp });
+                    if (!mp) mp = Multiplayer.attach({ appId: id, send: send, hold: hold, release: release });
                     mp.handle(d.op, d.args && typeof d.args === 'object' ? d.args : {}, function (err, res) {
                         if (d.rid !== undefined) send('mp', { rid: d.rid, error: err || undefined, result: res === undefined ? null : res });
                     });
                     break;
                 }
+                case 'pad':                                                    // the app wants a pad of its own (MyPC.pad.init({ force: true, ... })): the shell draws it
+                    if (typeof TouchPad === 'undefined') break;
+                    if (d.settings) TouchPad.settings(); else TouchPad.own(!!d.own, d.cfg);
+                    break;
                 case 'progress': if (state === 'loading') setProgress(+d.p || 0); break;
                 case 'ready': onLoaded(); break;
                 case 'failed': fail('app: ' + d.reason); break;
@@ -221,7 +227,7 @@ var GameHost = (function () {
     }
 
     function load() {
-        state = 'loading';
+        setState('loading');
         showLoading();
         A11y.announce(I18n.t('loading') + ' ' + title());
         var dir = abs(base + 'games/' + game.id + '/');
@@ -259,7 +265,7 @@ var GameHost = (function () {
         if (state !== 'loading') return;
         clearTimeout(loadTimer);
         hideLoading();
-        state = 'running';
+        setState('running');
         Input.setExternalPoll(!game.remote);    // an installed app cannot poll: the launcher reads the pads
         screenSaver(false);     // the game polls gamepads at the start of each frame
         screenSaver(false);
@@ -280,7 +286,7 @@ var GameHost = (function () {
             game.manifest = game.bundledManifest || game.manifest;
             return load();
         }
-        state = 'error';
+        setState('error');
         hideLoading();
         $('game-error').hidden = false;
         A11y.announce(I18n.t('loadError'));
@@ -296,6 +302,7 @@ var GameHost = (function () {
         var extra = [];
         try { extra = (api && api.menuItems && api.menuItems()) || []; } catch (e) {}
         pauseItems = pauseItems.concat(extra);
+        if (typeof TouchPad !== 'undefined' && TouchPad.available()) pauseItems.push({ id: '_touchpad', label: I18n.t('padSettings') });      // touch devices
         pauseItems.push({ id: '_quit', label: I18n.t('quitToMenu') });
         var target = null;
         for (var i = 0; i < pauseItems.length; i++) {
@@ -312,7 +319,7 @@ var GameHost = (function () {
 
     function openPause() {
         if (state !== 'running') return;
-        state = 'paused';
+        setState('paused');
         try { api.pause(); } catch (e) {}
         Input.releaseAll();
         Input.setExternalPoll(false);   // the game loop is stopped: the launcher reads the gamepads
@@ -324,18 +331,18 @@ var GameHost = (function () {
     }
 
     // the multiplayer screens pause the game like the pause menu does (without the menu); true when this call paused it
-    function holdForMp() {
+    function hold() {
         if (state !== 'running') return false;
-        state = 'paused';
+        setState('paused');
         try { api.pause(); } catch (e) {}
         Input.releaseAll();
         Input.setExternalPoll(false);
         screenSaver(true);
         return true;
     }
-    function releaseForMp(didPause) {
+    function release(didPause) {
         if (!didPause || state !== 'paused' || !$('pause').hidden) return;       // not ours, or the pause menu is open meanwhile
-        state = 'running';
+        setState('running');
         Input.setExternalPoll(!game.remote);
         screenSaver(false);
         $('game-layer').focus();
@@ -347,7 +354,7 @@ var GameHost = (function () {
         $('pause').hidden = true;
         Focus.pop();
         Focus.reset();
-        state = 'running';
+        setState('running');
         Input.setExternalPoll(!game.remote);
         screenSaver(false);
         $('game-layer').focus();
@@ -357,6 +364,7 @@ var GameHost = (function () {
     function pauseAction(id) {
         if (id === '_resume') return resume();
         if (id === '_quit') return exit();
+        if (id === '_touchpad') return TouchPad.settings();           // the pause menu stays; the pad's own panel opens over it
         var r;
         try { r = api.onMenu(id); } catch (e) {}
         if (r === 'stay') {
@@ -377,6 +385,7 @@ var GameHost = (function () {
     }
 
     function teardown() {
+        if (typeof TouchPad !== 'undefined') TouchPad.end();
         if (api) { try { api.destroy(); } catch (e) {} }
         api = null;
         gameWin = null;
@@ -391,7 +400,7 @@ var GameHost = (function () {
         loadSeq++;
         clearTimeout(loadTimer);
         teardown();
-        state = 'idle';
+        setState('idle');
         $('pause').hidden = true;
         $('game-error').hidden = true;
         hideLoading();
@@ -406,6 +415,7 @@ var GameHost = (function () {
         game = { id: g.id, manifest: g.manifest, bundledBase: g.bundledBase, bundledManifest: g.bundledManifest, remote: g.remote || null,
                  icon: g.iconUrl || (g.manifest ? (g.base || '') + 'games/' + g.id + '/' + (g.manifest.cover || 'cover.png') : '') };
         base = g.base;
+        if (typeof TouchPad !== 'undefined') TouchPad.begin(g.id, g.remote ? g.remote.touch : g.manifest && g.manifest.touch);
         triedBundled = base === g.bundledBase;
         onExitCb = onExit;
         $('game-layer').hidden = false;
@@ -472,7 +482,7 @@ var GameHost = (function () {
     }
 
     return {
-        init: init, launch: launch, exit: exit, onAction: onAction, openPause: openPause,
+        init: init, launch: launch, exit: exit, onAction: onAction, openPause: openPause, hold: hold, release: release,
         active: function () { return state !== 'idle'; },
         state: function () { return state; },
         frame: function () { return iframe; }
