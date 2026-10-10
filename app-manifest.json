@@ -1,5 +1,5 @@
 {
-  "build": 25,
+  "build": 26,
   "version": "2.13.0",
   "shell": 1,
   "css": [
@@ -7,6 +7,7 @@
   ],
   "js": [
     "js/core/native.js",
+    "js/core/pwa.js",
     "js/core/storage.js",
     "js/core/cloud.js",
     "js/core/rooms.js",

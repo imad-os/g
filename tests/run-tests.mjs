@@ -2074,6 +2074,7 @@ async function main() {
         // portrait phone
         const Q = await setup({ phone: true, viewport: { width: 390, height: 844 } });
         const fq = await openApp(Q, 'pad-def');
+        await Q.evaluate(() => { const c = document.getElementById('turn-cover'); if (c) c.remove(); });   // the "turn your phone" cover is tested in section 33
         const pq = await padOf(Q);
         const inView = (e) => e.x - e.w / 2 >= -1 && e.x + e.w / 2 <= 391 && e.y - e.h / 2 >= -1 && e.y + e.h / 2 <= 845;
         check(!!pq && inView(pq.stick) && inView(pq.labels.A) && inView(pq.labels.B), 'phone 390x844: the pad fits the screen');
@@ -2161,6 +2162,26 @@ async function main() {
         check(sdkBlock === canon, 'the copy inside sdk/mypc-sdk.js is the same library (node tools/sync-pad.mjs)');
         check(P.errors.length === 0, 'no page errors ' + P.errors.join('; '));
         await P.context().close();
+    }
+
+    // ---- 33. installable web app + landscape on phones
+    {
+        const mfst = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.webmanifest'), 'utf8'));
+        const sizes = mfst.icons.map((i) => i.sizes);
+        check(mfst.display === 'fullscreen' && mfst.orientation === 'landscape' && mfst.start_url && sizes.includes('192x192') && sizes.includes('512x512') && mfst.icons.some((i) => i.purpose === 'maskable'), 'manifest.webmanifest: installable (fullscreen, landscape, 192 + 512 + maskable icons)');
+        check(mfst.icons.every((i) => fs.existsSync(path.join(ROOT, i.src))) && /addEventListener\('fetch'/.test(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8')), 'the icons exist and sw.js has a fetch handler');
+        const W = await newPage(browser, base, {}, { phone: true, viewport: { width: 390, height: 844 } });
+        await W.goto(base + 'index.html');
+        await W.waitForFunction(() => window.PWA, null, { timeout: 15000 });
+        const w1 = await W.evaluate(() => ({ link: !!document.querySelector('link[rel=manifest]'), sw: 'serviceWorker' in navigator, cover: (document.getElementById('turn-cover') || {}).hidden }));
+        check(w1.link && w1.cover === false, 'phone held upright: the "turn your phone" cover shows');
+        await W.setViewportSize({ width: 844, height: 390 });
+        await W.waitForFunction(() => document.getElementById('turn-cover').hidden === true, null, { timeout: 3000 });
+        check(true, 'phone on its side: the cover goes away');
+        const sw = await W.waitForFunction(() => navigator.serviceWorker.getRegistration().then((r) => !!r), null, { timeout: 8000 }).then(() => true, () => false);
+        check(sw, 'the service worker registers');
+        check(W.errors.length === 0, 'no page errors ' + W.errors.join('; '));
+        await W.context().close();
     }
 
     await browser.close();
