@@ -181,7 +181,7 @@
         var pl = Controllers.players(), n;
         out.push({ kind: 'toggle', label: t('ctrlTitle'), desc: t('ctrlDesc'), get: function () { return Controllers.on(); }, set: function (v) { Controllers.setOn(v); } });
         if (!Controllers.on()) return;
-        out.push({ kind: 'info', label: t('ctrlAddr'), value: 'imad-os.github.io/g/controller' });
+        out.push({ kind: 'text', value: t('ctrlAddr') });
         out.push({ kind: 'info', label: t('ctrlCode'), value: Controllers.code().toUpperCase() });
         for (n = 1; n <= 2; n++) out.push({ kind: 'info', label: t('ctrlPlayer') + ' ' + n, value: pl[n] || t('ctrlFree') });
         out.push({ kind: 'action', label: t('ctrlPair'), desc: t('ctrlPairDesc'), run: function () { Controllers.pair(); App.toast(t('ctrlPairing')); } });

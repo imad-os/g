@@ -17,9 +17,13 @@ var Desktop = (function () {
         { id: 'calculator', icon: 'calculator', label: 'calculator' },
         { id: 'calendar', icon: 'calendar', label: 'calendar' },
         { id: 'scores', icon: 'scores', label: 'leaderboards' },
+        { id: 'gamepad', icon: 'controller', label: 'gamepad' },
         { id: 'settings', icon: 'settings', label: 'settings' }
     ];
     var PINNED = ['explorer', 'store', 'browser', 'calendar', 'calculator', 'settings'];
+    // the Game controller is for phones and tablets (the TV is what it controls)
+    if (window.tizen) APPS = APPS.filter(function (a) { return a.id !== 'gamepad'; });
+    else PINNED.splice(5, 0, 'gamepad');
     var WALLPAPERS = ['bloom', 'aurora', 'sunset', 'night'];
 
     function $(id) { return document.getElementById(id); }

@@ -57,7 +57,7 @@
   one My PC change: `onSettings`); run `node tools/sync-pad.mjs` after editing it (copies in `js/core/` and inside `sdk/mypc-sdk.js`).
 - **Installable web app**: `manifest.webmanifest` (fullscreen, landscape), `sw.js` (network first), `js/core/pwa.js` registers it and keeps phones in landscape
   (orientation lock after the first touch where Chrome allows it, else a "turn your phone" cover). Web only, never on the TV.
-- **Phone controller** (a phone as player 1 / 2, shows no game): `controller/` is the phone page; the TV side is `js/launcher/controllers.js`
+- **Phone controller** (a phone as player 1 / 2, shows no game): the phone side is the system app **Game controller** (`js/launcher/apps/gamepad.js`, phones only, hidden on the TV); the TV side is `js/launcher/controllers.js`
   (Settings > Devices > Phone controller). Signalling = a `rooms` doc with app `controller` and a fixed code kept in `arc_dev_ctrl`, link = NetLink;
   P1 = Input device `keys`, P2 = `keys2` (`Input.remote`). The phone reconnects by itself when the TV changes page. Separate from the in-game touch pad.
 - `sdk/`: `mypc-sdk.js` (protocol `{ mypc: 1, type, data }`), `GUIDE.md` (for building new apps

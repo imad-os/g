@@ -2185,7 +2185,7 @@ async function main() {
     }
 
     // ---- 34. phone controller: P1 / P2 from a phone, reconnecting when the TV changes page
-    console.log('34. phone controller (controller/ page, Controllers, Input.remote)');
+    console.log('34. phone controller (Game controller app, Controllers, Input.remote)');
     {
         const db = {};
         const tv = await newPage(browser, base, db);
@@ -2200,49 +2200,54 @@ async function main() {
         check(/^[a-z0-9]{8}$/.test(code) && db.rooms && db.rooms[code] && db.rooms[code].app === 'controller' && db.rooms[code].max === 3, 'a room "controller" is open under the TV\'s code');
         const phone = async (n, p) => {
             const ph = await newPage(browser, base, db, { phone: true, viewport: { width: 844, height: 390 } });
-            await ph.goto(base + 'controller/index.html?r=' + code);
-            if (p === 2) await ph.click('#p2');
-            await ph.click('#go');
+            await ph.goto(base + 'index.html');
+            await ph.waitForFunction(() => window.Win && document.querySelector('[data-game]'), null, { timeout: 20000 });
+            await ph.evaluate(() => Win.open('gamepad'));
+            await ph.fill('.gc-code', code);
+            if (p === 2) await ph.click('.gc-join .btn:nth-of-type(2)');
+            await ph.click('.gc-join > .btn-primary');
             return ph;
         };
         const press = (ph, sel, down) => ph.evaluate(([s, d]) => {
             const r = document.querySelector(s).getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
-            document.getElementById('pad').dispatchEvent(new PointerEvent(d ? 'pointerdown' : 'pointerup', { pointerId: 7, clientX: x, clientY: y, bubbles: true }));
+            document.querySelector('.gc-pad').dispatchEvent(new PointerEvent(d ? 'pointerdown' : 'pointerup', { pointerId: 7, clientX: x, clientY: y, bubbles: true }));
         }, [sel, down]);
+        check(await tv.evaluate(() => !Desktop.appById('gamepad')), 'the Game controller app is not on the TV');
         const P1 = await phone(1, 1);
         await tv.waitForFunction(() => Controllers.players()[1], null, { timeout: 40000 });
-        await P1.waitForFunction(() => window.__ctrl.state().linked, null, { timeout: 10000 });
-        check(await P1.evaluate(() => document.getElementById('pad').className === 'show' && document.getElementById('badge').textContent === 'P1'), 'the phone shows the controller as P1');
-        await press(P1, '#b-ok', true);
+        check(await P1.evaluate(() => !!Desktop.appById('gamepad') && !!document.getElementById('tb-gamepad')), 'the Game controller app is a system app on the phone (taskbar)');
+        await P1.waitForFunction(() => window.GamepadApp && window.GamepadApp.linked(), null, { timeout: 10000 });
+        check(await P1.evaluate(() => document.querySelector('.gc-pad').className === 'gc-pad show' && document.querySelector('.gc-badge').textContent === 'P1'), 'the phone shows the controller as P1');
+        await press(P1, '.gc-ok', true);
         await tv.waitForFunction(() => Input.isDownDev('keys', 'jump') && Input.isDownDev('keys', 'confirm'), null, { timeout: 3000 });
         check(!(await tv.evaluate(() => Input.isDownDev('keys2', 'jump'))), 'P1 button A = OK / jump on the "keys" device only');
-        await press(P1, '#b-ok', false);
+        await press(P1, '.gc-ok', false);
         await tv.waitForFunction(() => !Input.isDownDev('keys', 'jump'), null, { timeout: 3000 });
         check(true, 'releasing the button releases the action');
         await P1.evaluate(() => {
-            const r = document.getElementById('dpad').getBoundingClientRect();
-            document.getElementById('pad').dispatchEvent(new PointerEvent('pointerdown', { pointerId: 8, clientX: r.right - 4, clientY: r.top + r.height / 2, bubbles: true }));
+            const r = document.querySelector('.gc-dpad').getBoundingClientRect();
+            document.querySelector('.gc-pad').dispatchEvent(new PointerEvent('pointerdown', { pointerId: 8, clientX: r.right - 4, clientY: r.top + r.height / 2, bubbles: true }));
         });
         await tv.waitForFunction(() => Input.isDownDev('keys', 'right') && !Input.isDownDev('keys', 'left'), null, { timeout: 3000 });
         check(true, 'the D-pad zone gives a direction');
         const P2 = await phone(2, 2);
         await tv.waitForFunction(() => Controllers.players()[2], null, { timeout: 40000 });
-        await press(P2, '#b-run', true);
+        await press(P2, '.gc-run', true);
         await tv.waitForFunction(() => Input.isDownDev('keys2', 'run'), null, { timeout: 3000 });
         check(!(await tv.evaluate(() => Input.isDownDev('keys', 'run'))), 'P2 button B = run on the "keys2" device (the second player every game supports)');
         check(db.rooms[code].n === 3, 'the room counts the TV and both phones');
         // a third phone cannot take a player that is taken, and unknown phones are refused once pairing is closed
         await tv.evaluate(() => Controllers.pair(0));
         const P3 = await phone(3, 1);
-        await P3.waitForFunction(() => /./.test(document.getElementById('err').textContent), null, { timeout: 40000 });
-        check(await P3.evaluate(() => document.getElementById('join').hidden === false), 'a new phone is refused when pairing is closed');
+        await P3.waitForFunction(() => /./.test(document.querySelector('.gc-err').textContent), null, { timeout: 40000 });
+        check(await P3.evaluate(() => document.querySelector('.gc-join').hidden === false), 'a new phone is refused when pairing is closed');
         // the TV changes page (a game opens): the phones come back by themselves
         await tv.goto(base + 'index.html?play=blocks');
         await tv.waitForFunction(() => window.Controllers && Controllers.players()[1] && Controllers.players()[2], null, { timeout: 60000 });
         check(true, 'after the TV loaded another page both phones reconnected as P1 and P2');
         check(await tv.evaluate(() => !Input.isDownDev('keys', 'right') && !Input.isDownDev('keys2', 'run')), 'nothing stays pressed across the page change');
         await tv.evaluate(() => Controllers.setOn(false));
-        await P1.waitForFunction(() => !window.__ctrl.state().linked, null, { timeout: 10000 });
+        await P1.waitForFunction(() => !(window.GamepadApp && window.GamepadApp.linked()), null, { timeout: 10000 });
         check(await tv.evaluate(() => Controllers.players()[1] === null), 'turning it off disconnects the phones');
         check(tv.errors.length === 0 && P1.errors.length === 0 && P2.errors.length === 0, 'no page errors ' + tv.errors.concat(P1.errors, P2.errors).join('; '));
         for (const pg of [tv, P1, P2, P3]) await pg.context().close();
