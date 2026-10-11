@@ -14,6 +14,7 @@ var Controllers = (function () {
     var KEY = 'arc_dev_ctrl', APP = 'controller', MAX_PHONES = 8, PAIR_MS = 300000, HELLO_MS = 4000;
     var ACTIONS = { left: 1, right: 1, up: 1, down: 1, ok: 1, run: 1, cancel: 1, menu: 1, pause: 1 };
     var ALPHA = 'abcdefghjkmnpqrstuvwxyz23456789';
+    var status = { s: 'off', err: '' };
     var sess = null, slots = { 1: null, 2: null }, pairUntil = 0, listeners = [], timer = 0, started = false;
 
     function cfg() {
@@ -72,7 +73,7 @@ var Controllers = (function () {
     }
 
     function onEvent(ev, d) {
-        if (ev === 'closed') { stop(); schedule(2000); return; }
+        if (ev === 'closed') { stop(); status = { s: 'opening', err: '' }; changed(); schedule(2000); return; }
         if (ev !== 'request') return;
         NetLink.answer(d.offer).then(function (a) {
             sess.call('accept', { room: d.room, req: d.id, answer: a.answer }, function (err) {
@@ -86,8 +87,10 @@ var Controllers = (function () {
         var c = cfg();
         if (!c.on || sess || !NetLink.supported()) return;
         sess = new Rooms.Session(APP, 'TV', onEvent);
+        status = { s: 'opening', err: '' }; changed();
         sess.call('open', { id: c.code, max: 3, name: 'TV' }, function (err) {
-            if (err) { stop(); schedule(err === 'offline' ? 10000 : 20000); }
+            if (err) { stop(); status = { s: 'error', err: err }; changed(); schedule(err === 'offline' ? 10000 : 20000); }
+            else { status = { s: 'ready', err: '' }; changed(); }
         });
     }
     function stop() {
@@ -106,10 +109,11 @@ var Controllers = (function () {
             c.on = !!v;
             if (c.on && !c.code) c.code = makeCode();
             save(c);
-            if (c.on) { started = true; pairUntil = Date.now() + PAIR_MS; open(); } else { closePhones(); stop(); }
+            if (c.on) { started = true; pairUntil = Date.now() + PAIR_MS; open(); } else { closePhones(); stop(); status = { s: 'off', err: '' }; }
             changed();
         },
         code: function () { return cfg().code; },
+        status: function () { return status; },
         newCode: function () { var c = cfg(); c.code = makeCode(); c.ok = []; save(c); closePhones(); stop(); if (c.on) { pairUntil = Date.now() + PAIR_MS; open(); } changed(); },
         pair: function (sec) { pairUntil = Date.now() + (sec === undefined ? PAIR_MS : sec * 1000); changed(); },
         pairing: function () { return Math.max(0, Math.ceil((pairUntil - Date.now()) / 1000)); },

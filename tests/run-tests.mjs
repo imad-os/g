@@ -1335,12 +1335,18 @@ async function main() {
         const text = () => page.evaluate(() => document.querySelector('.set-main').textContent);
         check(/Keyboard.*Detected/.test(await text()) && /Mouse \/ pointer.*Detected/.test(await text()) && /None connected/.test(await text()), 'Devices lists the keyboard and mouse that were used, and no controller yet');
         await page.evaluate(() => window.__plug());
-        await page.waitForFunction(() => /Controller 1.*Xbox Wireless Controller/.test(document.querySelector('.set-main').textContent) && !!document.querySelector('.set-padtest'), null, { timeout: 4000 });
+        await page.waitForFunction(() => /Controller 1.*Xbox Wireless Controller/.test(document.querySelector('.set-main').textContent), null, { timeout: 4000 });
         check(!/STANDARD|Vendor/.test(await text()), 'a controller that is plugged in shows up at once, with a clean name');
+        check(await page.evaluate(() => !document.querySelector('.set-padtest')), 'the button test is not on the Devices list');
+        await page.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Test controller buttons/.test(r.textContent)).click());
+        await page.waitForFunction(() => !!document.querySelector('.set-padtest'), null, { timeout: 3000 });
+        check(true, '"Test controller buttons" opens the test on its own page');
         await page.evaluate(() => window.__pad(1, true));       // B
         await page.waitForFunction(() => document.querySelectorAll('.pt-b.on').length === 1 && document.querySelector('.pt-b.on').textContent === 'B', null, { timeout: 3000 });
         check(true, 'the live test lights up the button that is pressed');
         await page.evaluate(() => window.__pad(1, false));
+        await page.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Back/.test(r.textContent)).click());
+        check(await page.evaluate(() => !document.querySelector('.set-padtest') && /Test controller buttons/.test(document.querySelector('.set-main').textContent)), 'Back on the test page returns to the Devices list');
         await page.evaluate(() => Win.close());
         check(await page.evaluate(() => document.querySelectorAll('.set-padtest').length === 0), 'closing Settings stops the test');
         // games never get the desktop keys; Guide opens their pause menu
@@ -2197,6 +2203,7 @@ async function main() {
         const code = await tv.evaluate(() => Controllers.code());
         await tv.waitForFunction((c) => true, code);
         await new Promise((r) => setTimeout(r, 1500));
+        check(await tv.evaluate(() => Controllers.status().s === 'ready'), 'the status says Ready once the room is open');
         check(/^[a-z0-9]{8}$/.test(code) && db.rooms && db.rooms[code] && db.rooms[code].app === 'controller' && db.rooms[code].max === 3, 'a room "controller" is open under the TV\'s code');
         const phone = async (n, p) => {
             const ph = await newPage(browser, base, db, { phone: true, viewport: { width: 844, height: 390 } });
@@ -2246,6 +2253,10 @@ async function main() {
         await tv.waitForFunction(() => window.Controllers && Controllers.players()[1] && Controllers.players()[2], null, { timeout: 60000 });
         check(true, 'after the TV loaded another page both phones reconnected as P1 and P2');
         check(await tv.evaluate(() => !Input.isDownDev('keys', 'right') && !Input.isDownDev('keys2', 'run')), 'nothing stays pressed across the page change');
+        db.down = true; await tv.evaluate(() => { Controllers.setOn(false); Controllers.setOn(true); });
+        await tv.waitForFunction(() => Controllers.status().s === 'error', null, { timeout: 15000 });
+        check(await tv.evaluate(() => Controllers.status().err === 'offline'), 'a room that cannot open shows the reason (offline) instead of nothing');
+        db.down = false;
         await tv.evaluate(() => Controllers.setOn(false));
         await P1.waitForFunction(() => !(window.GamepadApp && window.GamepadApp.linked()), null, { timeout: 10000 });
         check(await tv.evaluate(() => Controllers.players()[1] === null), 'turning it off disconnects the phones');

@@ -32,6 +32,12 @@
 
     function rowsFor(id) {
         var out = [], i, lines;
+        if (sub === 'padtest' && id === 'devices') {
+            var pl = Input.pads();
+            if (pl.length) out.push({ kind: 'padtest', pad: pl[0].index }); else out.push({ kind: 'text', value: t('devNoPad') });
+            out.push({ kind: 'action', label: t('back'), primary: true, run: function () { leaveSub(); } });
+            return out;
+        }
         if (id === 'system') {
             out.push({ kind: 'select', label: t('graphics'), desc: t('graphicsDesc'), value: function () { return t(GFX_KEYS[Perf.setting()]); },
                        adjust: function (d) { var i2 = (GFX.indexOf(Perf.setting()) + d + GFX.length) % GFX.length; Perf.setSetting(GFX[i2]); } });
@@ -162,6 +168,7 @@
     /* ---------- Devices: what is connected, and a live test of the controller buttons ---------- */
 
     var PAD_BUTTONS = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', '\u29C9', '\u2630', 'L3', 'R3', '\u25B2', '\u25BC', '\u25C0', '\u25B6', '\u24D6'];
+    var sub = null;                 // 'padtest': the controller test page (opened by its button, Back returns)
     var padRaf = 0, padCard = null, padIdx = 0, padMask = '';
 
     function devicesRows(out) {
@@ -171,7 +178,7 @@
         out.push({ kind: 'info', label: t('devMouse'), value: seen.mouse ? t('devDetected') : t('devMoveMouse') });
         if (!pads.length) out.push({ kind: 'info', label: t('devControllers'), value: t('devNoPad') });
         for (i = 0; i < pads.length; i++) out.push({ kind: 'info', label: t('devController') + ' ' + (i + 1), value: pads[i].name + (pads[i].standard ? '' : ' \u00B7 ' + t('devGeneric')) });
-        if (pads.length) out.push({ kind: 'padtest', pad: pads[0].index });
+        out.push({ kind: 'action', label: t('devTestOpen'), desc: pads.length ? t('devTest') : t('devNoPad'), run: function () { sub = 'padtest'; var f = renderMain(0); if (f) Focus.focus(f); } });
         out.push({ kind: 'text', value: t('devMapHelp') });
         controllerRows(out);
     }
@@ -181,6 +188,8 @@
         var pl = Controllers.players(), n;
         out.push({ kind: 'toggle', label: t('ctrlTitle'), desc: t('ctrlDesc'), get: function () { return Controllers.on(); }, set: function (v) { Controllers.setOn(v); } });
         if (!Controllers.on()) return;
+        var st = Controllers.status();
+        out.push({ kind: 'info', label: t('ctrlStatus'), value: st.s === 'ready' ? t('ctrlReady') : st.s === 'error' ? t(st.err === 'offline' ? 'ctrlErr_offline' : st.err === 'denied' ? 'ctrlErr_denied' : 'ctrlErr_other') + ' (' + st.err + ')' : t('ctrlOpening') });
         out.push({ kind: 'text', value: t('ctrlAddr') });
         out.push({ kind: 'info', label: t('ctrlCode'), value: Controllers.code().toUpperCase() });
         for (n = 1; n <= 2; n++) out.push({ kind: 'info', label: t('ctrlPlayer') + ' ' + n, value: pl[n] || t('ctrlFree') });
@@ -189,6 +198,13 @@
         out.push({ kind: 'action', label: t('ctrlForget'), danger: true, run: function () { Controllers.forget(); App.toast(t('ctrlForgot')); } });
     }
 
+    function leaveSub() { sub = null; var f = renderMain(0); if (f) Focus.focus(f); }
+    // the phone controller opens its room in the background: show what happens (status, players) as it changes
+    function onCtrl() {
+        if (!main || page !== 'devices' || sub) return;
+        var c = Focus.current(), idx = c && inMain(c) ? c.getAttribute('data-row') : null, f = renderMain(idx === null ? -1 : +idx);
+        if (idx !== null && f) Focus.focus(f);
+    }
     function stopPadTest() { if (padRaf) cancelAnimationFrame(padRaf); padRaf = 0; padCard = null; }
 
     function padTestCard(r) {
@@ -240,7 +256,7 @@
     }
 
     function showPage(id) {
-        page = id;
+        page = id; sub = null;
         stopPadTest();
         if (id === 'update') Updater.autoCheck();
         var btns = nav.querySelectorAll('.set-nav-btn');
@@ -422,6 +438,7 @@
 
     function back() {
         var c = Focus.current();
+        if (sub) { leaveSub(); return true; }
         if (inMain(c)) { Focus.focus(navBtn()); return true; }
         return false;
     }
@@ -437,12 +454,13 @@
             body.appendChild(nav); body.appendChild(main);
             Updater.onChange(onUpdater);
             Input.onDevices(onDevices);
+            Controllers.onChange(onCtrl);
             if (page === 'update') Updater.autoCheck();
             renderNav();
             renderMain();
             return navBtn();
         },
-        close: function () { Updater.offChange(onUpdater); Input.offDevices(onDevices); Updater.cancel(); stopPadTest(); body = nav = main = null; rows = []; },
+        close: function () { Updater.offChange(onUpdater); Input.offDevices(onDevices); Controllers.offChange(onCtrl); sub = null; Updater.cancel(); stopPadTest(); body = nav = main = null; rows = []; },
         refresh: function () { if (nav) { renderNav(); renderMain(); } },
         action: action,
         back: back
