@@ -1,5 +1,5 @@
 {
-  "build": 26,
+  "build": 27,
   "version": "2.13.0",
   "shell": 1,
   "css": [
@@ -37,6 +37,7 @@
     "js/launcher/avatars.js",
     "js/launcher/profiles-ui.js",
     "js/launcher/multiplayer.js",
+    "js/launcher/controllers.js",
     "js/launcher/touchpad.js",
     "js/launcher/welcome.js",
     "js/launcher/game-host.js",

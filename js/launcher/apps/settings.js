@@ -173,6 +173,20 @@
         for (i = 0; i < pads.length; i++) out.push({ kind: 'info', label: t('devController') + ' ' + (i + 1), value: pads[i].name + (pads[i].standard ? '' : ' \u00B7 ' + t('devGeneric')) });
         if (pads.length) out.push({ kind: 'padtest', pad: pads[0].index });
         out.push({ kind: 'text', value: t('devMapHelp') });
+        controllerRows(out);
+    }
+
+    // Phones as player 1 / 2 (js/launcher/controllers.js)
+    function controllerRows(out) {
+        var pl = Controllers.players(), n;
+        out.push({ kind: 'toggle', label: t('ctrlTitle'), desc: t('ctrlDesc'), get: function () { return Controllers.on(); }, set: function (v) { Controllers.setOn(v); } });
+        if (!Controllers.on()) return;
+        out.push({ kind: 'info', label: t('ctrlAddr'), value: 'imad-os.github.io/g/controller' });
+        out.push({ kind: 'info', label: t('ctrlCode'), value: Controllers.code().toUpperCase() });
+        for (n = 1; n <= 2; n++) out.push({ kind: 'info', label: t('ctrlPlayer') + ' ' + n, value: pl[n] || t('ctrlFree') });
+        out.push({ kind: 'action', label: t('ctrlPair'), desc: t('ctrlPairDesc'), run: function () { Controllers.pair(); App.toast(t('ctrlPairing')); } });
+        out.push({ kind: 'action', label: t('ctrlNew'), run: function () { Controllers.newCode(); var f = renderMain(1); if (f) Focus.focus(f); } });
+        out.push({ kind: 'action', label: t('ctrlForget'), danger: true, run: function () { Controllers.forget(); App.toast(t('ctrlForgot')); } });
     }
 
     function stopPadTest() { if (padRaf) cancelAnimationFrame(padRaf); padRaf = 0; padCard = null; }

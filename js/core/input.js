@@ -130,6 +130,22 @@ var Input = (function () {
     }
     function releaseTouch() { for (var a in touchHeld) if (touchHeld[a]) touch(a, false); }
 
+    // Phones used as controllers (js/launcher/controllers.js): player 1 is the 'keys' device (like the remote and the
+    // keyboard), player 2 is 'keys2' (the second keyboard player). Every game that supports two players already reads them.
+    var remoteHeld = { 1: {}, 2: {} };
+    function remote(player, action, down) {
+        var dev = player === 2 ? 'keys2' : 'keys', held = remoteHeld[player === 2 ? 2 : 1], acts, i;
+        if (action === 'menu' || action === 'pause') {
+            if (down) { emit(action, true, false, dev); emit(action, false, false, dev); }
+            return;
+        }
+        acts = TOUCH[action];
+        if (!acts || !!held[action] === down) return;
+        held[action] = down;
+        for (i = 0; i < acts.length; i++) { bump(dev, acts[i], down ? 1 : -1); emit(acts[i], down, false, dev); }
+    }
+    function releaseRemote(player) { var h = remoteHeld[player === 2 ? 2 : 1]; for (var a in h) if (h[a]) remote(player, a, false); }
+
     // Pad buttons released by releaseAll() while still held stay "suppressed" until the player lets
     // go, so a held button never turns into a new press (e.g. Start reopening/closing the pause menu).
     var padSup = {};                // 'padN' -> { action -> true }
@@ -155,6 +171,7 @@ var Input = (function () {
         }
         for (var d in padNow) releasePad(d, true);
         releaseTouch();
+        releaseRemote(1); releaseRemote(2);
         for (var s in startBtn) if (startBtn[s].at) startBtn[s].sup = true;      // no 'menu' when it is let go
     }
 
@@ -308,6 +325,8 @@ var Input = (function () {
     return {
         init: init,
         onKey: onKey,                        // game iframes forward their key events here
+        remote: remote,                      // a phone controller's actions: remote(player 1|2, action, down)
+        releaseRemote: releaseRemote,
         touch: touch,                        // the touch pad's actions (left right up down ok run cancel menu pause)
         setHandler: function (fn) { handler = fn; },
         isDown: isDown,

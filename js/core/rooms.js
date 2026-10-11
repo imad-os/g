@@ -123,19 +123,32 @@ var Rooms = (function () {
                 if (!rate(opens, L.opensPerMin)) return cb('denied');
                 var max = Math.floor(+args.max || L.defMax);
                 if (max < L.minMax || max > L.maxMax) max = Math.max(L.minMax, Math.min(L.maxMax, max));
-                var r = { id: id(8), name: cleanName(args.name, profileName), max: max, n: 1, seen: {}, busy: false, beat: 0, poll: 0 };
+                var fixed = typeof args.id === 'string' && /^[a-z0-9]{6,16}$/.test(args.id) ? args.id : null;     // a room that keeps its code across pages (phone controllers)
+                var r = { id: fixed || id(8), name: cleanName(args.name, profileName), max: max, n: 1, seen: {}, busy: false, beat: 0, poll: 0 };
                 room = r;                                                    // reserved while the write is in flight
                 sync(function (e0) {
                     if (room !== r) return;
                     if (e0) { room = null; return cb(e0); }
-                    Cloud.patch('rooms/' + r.id, { app: appId, name: r.name, max: r.max, n: 1, at: now(), exp: new Date(now() + L.ttl) }, { exists: false }, L.timeout, function (err) {
+                    function created(err) {
                         if (room !== r) return;                              // closed meanwhile
                         if (err) { room = null; return cb(code(err)); }
                         r.beat = setInterval(function () { beat(r); }, L.beat);
                         r.poll = setInterval(function () { poll(r); }, L.poll);
                         cb(null, { id: r.id, name: r.name, max: r.max });
+                    }
+                    Cloud.patch('rooms/' + r.id, { app: appId, name: r.name, max: r.max, n: 1, at: now(), exp: new Date(now() + L.ttl) }, { exists: false }, L.timeout, function (err) {
+                        // the previous page of this TV left the room behind: take it over (only `exp` and `n` may change)
+                        if (err === 'conflict' && fixed) return Cloud.patchMask('rooms/' + r.id, { exp: new Date(now() + L.ttl), n: 1 }, ['exp', 'n'], { exists: true }, L.timeout, created);
+                        created(err);
                     });
                 });
+            },
+            count: function (args, cb) {                                     // players connected now (host included)
+                var r = room;
+                if (!r || r.id !== args.room) return cb('gone');
+                r.n = Math.max(1, Math.min(r.max, args.n | 0));
+                beat(r);
+                cb(null, true);
             },
             list: function (args, cb) {
                 var t0 = now();

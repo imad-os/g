@@ -224,6 +224,7 @@ var App = (function () {
         showVersion();
         GameHost.init();
         Multiplayer.init();
+        Controllers.start();
         Win.init();
         watchNetwork();
         $('dialog-yes').onclick = function () { var cb = dialogYes; closeDialog(); if (cb) cb(); };
