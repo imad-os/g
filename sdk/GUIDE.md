@@ -489,3 +489,15 @@ MyPC.bluetooth.disconnect();
 
 `MyPC.bluetooth.available()` reports whether the SDK has completed the hosted My PC handshake; it does not guarantee that the current TV model exposes Bluetooth LE. Native support still depends on Tizen runtime capability and the signed app's Bluetooth privilege. Apps should keep a browser-only fallback when appropriate.
 
+<!-- HR BLE test mode v1 -->
+### Host-generated HR test data
+
+When an HR app is hosted in My PC, its existing **Simulate HR** button uses a host-generated stream instead of a local browser timer:
+
+```javascript
+MyPC.bluetooth.startTest(); // host emits status 'test' and reading events once per second
+MyPC.bluetooth.stopTest();  // stops the stream
+```
+
+Test samples are synthetic (not physiological measurements) and are marked `source: 'simulation'`. Starting test mode disconnects any native sensor; starting a real BLE connection or closing the app stops test mode so sources are never mixed.
+

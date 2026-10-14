@@ -960,8 +960,11 @@ var MyPC = (function () {
         }
         return {
             available: function () { return !!(hosted && hostWin && info && !info.standalone); },
+            /* HR BLE test mode v1: test samples share the normal event channel. */
             connect: function () { return request('connect'); },
             disconnect: function () { return request('disconnect'); },
+            startTest: function () { return request('start-test'); },
+            stopTest: function () { return request('stop-test'); },
             on: function (eventName, callback) {
                 if (typeof callback !== 'function' || typeof eventName !== 'string') return function () {};
                 if (!listeners[eventName]) listeners[eventName] = [];
@@ -977,7 +980,7 @@ var MyPC = (function () {
 
     var pub = {
         version: VERSION,
-        apiLevel: 5,                     // 3 added MyPC.multiplayer, 4 adds MyPC.pad and the pad option of init() (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: 6,                     // 3 added MyPC.multiplayer, 4 adds MyPC.pad and the pad option of init() (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,

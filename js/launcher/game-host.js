@@ -125,6 +125,7 @@ var GameHost = (function () {
         function createHrBleBridge(send) {
             var adapter = null, device = null, characteristic = null;
             var valueWatchId = null, connectionWatchId = null, scanTimer = 0;
+            var testTimer = null, testActive = false, testBpm = 96, testEnergy = 12;
             var pendingRequestId = null, connectedName = '';
 
             function emit(kind, data) {
@@ -287,7 +288,64 @@ var GameHost = (function () {
                     failCurrent(error);
                 }
             }
+            /* HR BLE test mode v1: synthetic readings run in the trusted My PC host. */
+            function stopTestCore(announce) {
+                var wasActive = testActive;
+                if (testTimer !== null) {
+                    clearInterval(testTimer);
+                    testTimer = null;
+                }
+                testActive = false;
+                if (wasActive && announce) {
+                    emit('status', { status: 'test-stopped', message: 'Simulated heart-rate data stopped.' });
+                }
+            }
+            function startTest(requestId) {
+                if (pendingRequestId !== null) {
+                    var oldRequestId = pendingRequestId;
+                    pendingRequestId = null;
+                    reply(oldRequestId, false, null, 'Bluetooth scan cancelled because test data mode was started.');
+                }
+                stopScan();
+                disconnectCore(false);
+                stopTestCore(false);
+                testActive = true;
+                testBpm = 96;
+                testEnergy = 12;
+                function sendSample() {
+                    if (!testActive) return;
+                    testBpm = Math.max(65, Math.min(165, testBpm + Math.floor(Math.random() * 9) - 4));
+                    if (Math.random() < 0.08) {
+                        testBpm = Math.max(65, Math.min(165, testBpm + (Math.random() < 0.5 ? -6 : 6)));
+                    }
+                    if (Math.random() < 0.2) testEnergy += 1;
+                    var rr = Math.max(360, Math.min(1000,
+                        Math.round(60000 / testBpm + (Math.random() * 30 - 15))));
+                    emit('reading', {
+                        bpm: testBpm,
+                        contact: 'Detected',
+                        energy: testEnergy,
+                        rr: rr,
+                        deviceName: 'My PC Test Sensor',
+                        source: 'simulation'
+                    });
+                }
+                emit('status', {
+                    status: 'test',
+                    deviceName: 'My PC Test Sensor',
+                    source: 'simulation',
+                    message: 'My PC is generating simulated heart-rate readings.'
+                });
+                sendSample();
+                testTimer = setInterval(sendSample, 1000);
+                reply(requestId, true, { deviceName: 'My PC Test Sensor', simulated: true });
+            }
+            function stopTest(requestId) {
+                stopTestCore(true);
+                reply(requestId, true, {});
+            }
             function connect(requestId) {
+                if (testActive) stopTestCore(true);
                 if (pendingRequestId !== null) {
                     reply(requestId, false, null, 'A Bluetooth connection attempt is already in progress.');
                     return;
@@ -330,6 +388,7 @@ var GameHost = (function () {
                 catch (error) { failCurrent(error); }
             }
             function disconnect(requestId) {
+                stopTestCore(false);
                 if (pendingRequestId !== null) {
                     var previous = pendingRequestId;
                     pendingRequestId = null;
@@ -340,6 +399,7 @@ var GameHost = (function () {
             }
             function reject(requestId, message) { reply(requestId, false, null, message || 'Bluetooth bridge rejected the request.'); }
             function destroy() {
+                stopTestCore(false);
                 if (pendingRequestId !== null) {
                     reply(pendingRequestId, false, null, 'My PC is closing the app.');
                     pendingRequestId = null;
@@ -347,7 +407,7 @@ var GameHost = (function () {
                 disconnectCore(false);
                 adapter = null;
             }
-            return { connect: connect, disconnect: disconnect, reject: reject, destroy: destroy };
+            return { connect: connect, disconnect: disconnect, startTest: startTest, stopTest: stopTest, reject: reject, destroy: destroy };
         }
         var ble = createHrBleBridge(send);
 
@@ -381,6 +441,11 @@ var GameHost = (function () {
                         else ble.connect(d.requestId);
                     } else if (d.action === 'disconnect') {
                         ble.disconnect(d.requestId);
+                    } else if (d.action === 'start-test') {
+                        if (state !== 'running') ble.reject(d.requestId, 'The app is not running. Resume it before starting test data.');
+                        else ble.startTest(d.requestId);
+                    } else if (d.action === 'stop-test') {
+                        ble.stopTest(d.requestId);
                     } else {
                         ble.reject(d.requestId, 'Unknown Bluetooth action.');
                     }
