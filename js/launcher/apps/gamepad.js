@@ -450,6 +450,13 @@
     function lock() { try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {}); } catch (e) {} }
     function wake() { try { if (navigator.wakeLock) navigator.wakeLock.request('screen').then(function (l) { wl = l; }, function () {}); } catch (e) {} }
 
+    // My PC draws a 1920x1080 screen scaled to fit; on a phone that makes text tiny. --k scales this app's sizes back up
+    // so they read like normal phone text (1 on a TV or a big screen).
+    function readable() {
+        if (!root) return;
+        var st = document.getElementById('stage'), s = st ? st.getBoundingClientRect().width / 1920 : 1;
+        root.style.setProperty('--k', Math.max(1, Math.min(4, 0.9 / (s || 1))).toFixed(2));
+    }
     function build(body) {
         root = el('div', 'gc');
         ui.join = el('div', 'gc-join');
@@ -501,6 +508,7 @@
             want = {}; sent = {}; ui = {}; inPad = false; log = []; plot = []; seq = 0; acks = {}; rtt = 0; lastAction = null; rawSent = 0; rawLast = 0; cfg = null; perm = 'unknown';
             diag = { acked: 0, tvDuplicate: 0, tvStale: 0, unacked: 0 };
             build(body);
+            readable(); window.addEventListener('resize', readable); setTimeout(readable, 350);
             newEngine();
             pick(saved.p === 2 ? 2 : 1);
             pickMode(saved.mode);
@@ -518,6 +526,7 @@
             clearInterval(liveTimer); liveTimer = 0;
             if (VirtualPad.active()) VirtualPad.hide();
             document.removeEventListener('visibilitychange', onVis);
+            window.removeEventListener('resize', readable);
             try { if (wl) wl.release(); } catch (e) {}
             wl = null; root = null; ui = {}; eng = null;
             delete window.GamepadApp;
