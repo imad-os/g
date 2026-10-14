@@ -28,4 +28,8 @@
     <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable"
                    encryption="disable" install-location="auto" hwkey-event="enable"/>
     <tizen:metadata key="http://samsung.com/tv/metadata/multitasking.support" value="true"/>
+
+     <tizen:privilege name="http://tizen.org/privilege/bluetooth"/>
+     <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
+     
 </widget>
