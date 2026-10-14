@@ -88,6 +88,7 @@ var MyPC = (function () {
             case 'volume': if (info) { info.volume = d; call('onVolume', d); } break;
             case 'mp': multiplayer._message(d); break;
             case 'pad': pad._message(d); break;
+            case 'ble-event': bluetooth._message(d); break;
         }
     }
 
@@ -919,11 +920,67 @@ var MyPC = (function () {
         return api;
     })();
 
+    /* HR BLE bridge v1: requests go to the trusted My PC host; sensor values return as events. */
+    var bluetooth = (function () {
+        var nextId = 1, pending = {}, listeners = {};
+        function emit(name, payload) {
+            var list = (listeners[name] || []).slice();
+            for (var i = 0; i < list.length; i++) {
+                try { list[i](payload || {}); } catch (e) { try { console.error('[MyPC BLE] ' + e); } catch (x) {} }
+            }
+        }
+        function request(action) {
+            if (!hosted || !hostWin || !info || info.standalone) {
+                return Promise.reject(new Error('The My PC native Bluetooth bridge is only available inside My PC.'));
+            }
+            return new Promise(function (resolve, reject) {
+                var id = nextId++;
+                var timer = setTimeout(function () {
+                    if (!pending[id]) return;
+                    delete pending[id];
+                    reject(new Error('My PC Bluetooth request timed out.'));
+                }, 35000);
+                pending[id] = { resolve: resolve, reject: reject, timer: timer };
+                post('ble', { action: action, requestId: id });
+            });
+        }
+        function receive(d) {
+            if (!d || typeof d !== 'object') return;
+            if (d.kind === 'result' && d.requestId !== undefined) {
+                var p = pending[d.requestId];
+                if (!p) return;
+                delete pending[d.requestId];
+                clearTimeout(p.timer);
+                if (d.ok) p.resolve(d.result || {});
+                else p.reject(new Error(String(d.error || 'My PC Bluetooth operation failed.')));
+                return;
+            }
+            if (typeof d.kind !== 'string') return;
+            emit(d.kind, d);
+        }
+        return {
+            available: function () { return !!(hosted && hostWin && info && !info.standalone); },
+            connect: function () { return request('connect'); },
+            disconnect: function () { return request('disconnect'); },
+            on: function (eventName, callback) {
+                if (typeof callback !== 'function' || typeof eventName !== 'string') return function () {};
+                if (!listeners[eventName]) listeners[eventName] = [];
+                listeners[eventName].push(callback);
+                return function () {
+                    var list = listeners[eventName] || [], index = list.indexOf(callback);
+                    if (index >= 0) list.splice(index, 1);
+                };
+            },
+            _message: receive
+        };
+    })();
+
     var pub = {
         version: VERSION,
-        apiLevel: 4,                     // 3 added MyPC.multiplayer, 4 adds MyPC.pad and the pad option of init() (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: 5,                     // 3 added MyPC.multiplayer, 4 adds MyPC.pad and the pad option of init() (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
+        bluetooth: bluetooth,
         // The app's settings object, set in the installer and read before the app opens. Read it in
         // onInit (or later). Always an object ({} when none). Standalone, test it with ?app_config={"a":1}.
         app_config: {},

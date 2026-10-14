@@ -461,3 +461,31 @@ the World records.
 - [ ] works standalone: open `index.html` in Chrome, play with the arrows + Enter, Esc pauses
 - [ ] served over https with CORS (GitHub Pages)
 - [ ] every own script, stylesheet and asset is loaded with `?v=<version>`, the same as `version` in `mypc-app.json` (bumped for every release)
+
+## Native Bluetooth bridge (My PC host apps)
+
+**HR BLE bridge v1.** The installed My PC Tizen host can expose a privileged native Bluetooth LE bridge to explicitly authorized hosted apps. The app iframe must not call `tizen.bluetooth` directly; the host owns native API access and routes messages through the SDK protocol.
+
+```javascript
+MyPC.bluetooth.on('status', function (event) {
+    // scanning | connecting | connected | disconnected | error
+    console.log(event.status, event.message || '');
+});
+
+MyPC.bluetooth.on('reading', function (sample) {
+    // Heart Rate Measurement decoded by the host:
+    // { bpm, contact, energy, rr, deviceName }
+    console.log(sample.bpm);
+});
+
+MyPC.bluetooth.connect().then(function (info) {
+    console.log('Connected to ' + info.deviceName);
+}).catch(function (error) {
+    console.error(error.message);
+});
+
+MyPC.bluetooth.disconnect();
+```
+
+`MyPC.bluetooth.available()` reports whether the SDK has completed the hosted My PC handshake; it does not guarantee that the current TV model exposes Bluetooth LE. Native support still depends on Tizen runtime capability and the signed app's Bluetooth privilege. Apps should keep a browser-only fallback when appropriate.
+
