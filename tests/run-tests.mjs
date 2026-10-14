@@ -2216,6 +2216,16 @@ async function main() {
         await new Promise((r) => setTimeout(r, 1500));
         check(await tv.evaluate(() => Controllers.status().s === 'ready'), 'the status says Ready once the room is open');
         check(/^[a-z0-9]{8}$/.test(code) && db.rooms && db.rooms[code] && db.rooms[code].app === 'controller' && db.rooms[code].max === 3, 'a room "controller" is open under the TV\'s code');
+        // Settings > Devices: the phone controller has its own page with the pairing QR code
+        await tv.evaluate(() => Win.open('settings', 'devices'));
+        await tv.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Phone controller/.test(r.textContent)).click());
+        await tv.waitForSelector('.set-qr svg path', { timeout: 3000 });
+        const qr = await tv.evaluate(() => ({ url: Controllers.pairUrl(), code: document.querySelector('.set-qr-code').textContent, toggle: [...document.querySelectorAll('.set-row')].some((r) => /Phone controller/.test(r.textContent)), focus: document.activeElement.textContent }));
+        check(qr.url.endsWith('index.html?pair=' + code) && /^https:/.test(qr.url) && qr.code.indexOf(code.toUpperCase()) >= 0 && qr.toggle, 'the Phone controller page shows a QR code with the pairing link (' + qr.url + ') and the code under it');
+        check(await tv.evaluate(() => { const m = QR.matrix(Controllers.pairUrl()); return m && m.length >= 21 && m.length % 4 === 1 && m[0][0] && m[6][6] && !m[7][7]; }), 'the QR matrix has its finder patterns');
+        await tv.keyboard.press('Escape');
+        check(await tv.evaluate(() => !document.querySelector('.set-qr') && [...document.querySelectorAll('.set-row')].some((r) => /Phone controller/.test(r.textContent))), 'Back returns to Devices, where the phone controller is one row');
+        await tv.evaluate(() => Win.close());
         const phone = async (n, p) => {
             const ph = await newPage(browser, base, db, { phone: true, viewport: { width: 844, height: 390 } });
             await ph.goto(base + 'index.html');
@@ -2223,7 +2233,7 @@ async function main() {
             await ph.evaluate(() => Win.open('gamepad'));
             await ph.fill('.gc-code', code);
             if (p === 2) await ph.click('.gc-join .btn:nth-of-type(2)');
-            await ph.click('.gc-join > .btn-primary');
+            await ph.click('.gc-go');
             return ph;
         };
         // the pad is the virtual pad My PC already has (js/core/virtual-pad.js): its round buttons carry their label
@@ -2285,7 +2295,7 @@ async function main() {
         // the pad layout is kept: show C from the gear panel, leave, open the app again
         await P1.evaluate(() => Win.close());
         await P1.evaluate(() => Win.open('gamepad'));
-        await P1.click('.gc-join > .btn-primary');
+        await P1.click('.gc-go');
         await P1.waitForFunction(() => VirtualPad.active(), null, { timeout: 5000 });
         await P1.evaluate(() => { [...document.querySelectorAll('div')].find((d) => d.textContent === '⚙').click(); });
         await P1.evaluate(() => { [...document.querySelectorAll('div')].find((d) => d.textContent === 'C' && d.style.borderRadius !== '50%').click(); [...document.querySelectorAll('div')].find((d) => d.textContent === 'Close').click(); });
@@ -2293,7 +2303,7 @@ async function main() {
         await P1.reload();
         await P1.waitForFunction(() => window.Win && document.querySelector('[data-game]'), null, { timeout: 20000 });
         await P1.evaluate(() => Win.open('gamepad'));
-        await P1.click('.gc-join > .btn-primary');
+        await P1.click('.gc-go');
         await P1.waitForFunction(() => VirtualPad.active(), null, { timeout: 5000 });
         check(await P1.evaluate(() => [...document.querySelectorAll('div')].some((d) => d.textContent === 'C' && d.style.borderRadius === '50%' && d.style.display === 'flex') && !!Store.rawGet('arc_dev_vpad:controller')), 'the pad settings are kept after closing the app and reloading (no setting up again)');
         check(tv.errors.length === 0 && P1.errors.length === 0 && P2.errors.length === 0, 'no page errors ' + tv.errors.concat(P1.errors, P2.errors).join('; '));
@@ -2318,7 +2328,7 @@ async function main() {
             await ph.fill('.gc-code', code);
             await ph.click('.gc-join .gc-row:not(.gc-modes) .btn:nth-of-type(' + p + ')');
             await ph.click('.gc-modes .btn:nth-of-type(' + (modeIdx + 1) + ')');
-            await ph.click('.gc-join > .btn-primary');
+            await ph.click('.gc-go');
             await ph.waitForFunction(() => window.GamepadApp && GamepadApp.linked() && GamepadApp.config(), null, { timeout: 40000 });
             return ph;
         };
@@ -2388,8 +2398,18 @@ async function main() {
         const raw = await tv.evaluate(() => __raw);
         const total = raw.reduce((a, r) => a + r[1], 0);
         check(raw.length > 0 && raw.every((r) => r[0] === 2 && r[1] <= 12 && r[2] === 30) && total >= 22 && total <= 34, 'sensor-raw: samples arrive in small batches at the asked rate (' + total + ' samples for 1 s at 30 Hz, ' + raw.length + ' messages)');
+        // pairing by QR code: the phone camera opens My PC with ?pair=<code>; the Game controller opens and connects by itself
+        await P1.context().close();
+        await tv.waitForFunction(() => Controllers.players()[1] === null, null, { timeout: 15000 });
+        const Q = await newPage(browser, base, db, { phone: true, viewport: { width: 844, height: 390 } });
+        await Q.goto(base + 'index.html?pair=' + code);
+        await Q.waitForFunction(() => window.GamepadApp && GamepadApp.linked(), null, { timeout: 40000 });
+        check(await tv.evaluate(() => !!Controllers.players()[1]) && await Q.evaluate(() => !/pair=/.test(location.search)), 'scanning the QR code (opening its link) pairs the phone at once, and the link is cleaned from the address');
+        check(await Q.evaluate(() => GamepadApp.scanCode('https://x.test/index.html?pair=' + 'ab') === '' && GamepadApp.scanCode('not a code!') === ''), 'a scanned QR code that is not a My PC pairing link is ignored');
+        check(Q.errors.length === 0, 'no page errors on the scanning phone ' + Q.errors.join('; '));
+        await Q.context().close();
         check(tv.errors.length === 0 && P1.errors.length === 0 && P2.errors.length === 0, 'no page errors ' + tv.errors.concat(P1.errors, P2.errors).join('; '));
-        for (const pg of [tv, P1, P2]) await pg.context().close();
+        for (const pg of [tv, P2]) await pg.context().close();
     }
 
     await browser.close();

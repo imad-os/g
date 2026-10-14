@@ -268,6 +268,12 @@ var App = (function () {
             I18n.apply();
             AppBoot.ready();
             Welcome.afterBoot();
+            // a TV's pairing QR code was scanned with the phone camera: straight to the Game controller, connecting
+            var pair = param('pair');
+            if (pair && /^[a-z0-9]{6,16}$/i.test(pair)) {
+                try { history.replaceState(null, '', page('')); } catch (e) {}
+                setTimeout(function () { Win.open('gamepad', { pair: pair.toLowerCase() }); }, 300);
+            }
             Backup.start();
             World.flush();
             // One-time device benchmark while the menu is idle.

@@ -32,6 +32,7 @@
 
     function rowsFor(id) {
         var out = [], i, lines;
+        if (sub === 'phonectrl' && id === 'devices') { phoneRows(out); return out; }
         if (sub === 'padtest' && id === 'devices') {
             var pl = Input.pads();
             if (pl.length) out.push({ kind: 'padtest', pad: pl[0].index }); else out.push({ kind: 'text', value: t('devNoPad') });
@@ -180,18 +181,20 @@
         for (i = 0; i < pads.length; i++) out.push({ kind: 'info', label: t('devController') + ' ' + (i + 1), value: pads[i].name + (pads[i].standard ? '' : ' \u00B7 ' + t('devGeneric')) });
         out.push({ kind: 'action', label: t('devTestOpen'), desc: pads.length ? t('devTest') : t('devNoPad'), run: function () { sub = 'padtest'; var f = renderMain(0); if (f) Focus.focus(f); } });
         out.push({ kind: 'text', value: t('devMapHelp') });
-        controllerRows(out);
+        var pl0 = Controllers.players();
+        out.push({ kind: 'action', label: t('ctrlTitle'), desc: !Controllers.on() ? t('ctrlOff') : (pl0[1] || pl0[2]) ? [pl0[1], pl0[2]].filter(Boolean).join(', ') : t('ctrlScanDesc'),
+                   run: function () { sub = 'phonectrl'; if (Controllers.on()) Controllers.pair(); var f = renderMain(1); if (f) Focus.focus(f); } });
     }
 
-    // Phones as player 1 / 2 (js/launcher/controllers.js)
-    function controllerRows(out) {
+    // Phones as player 1 / 2 (js/launcher/controllers.js): their own page, with the pairing QR code
+    function phoneRows(out) {
         var pl = Controllers.players(), n;
+        out.push({ kind: 'action', label: t('back'), run: function () { leaveSub(); } });
         out.push({ kind: 'toggle', label: t('ctrlTitle'), desc: t('ctrlDesc'), get: function () { return Controllers.on(); }, set: function (v) { Controllers.setOn(v); } });
         if (!Controllers.on()) return;
         var st = Controllers.status();
+        out.push({ kind: 'qr', url: Controllers.pairUrl(), code: Controllers.code().toUpperCase() });
         out.push({ kind: 'info', label: t('ctrlStatus'), value: st.s === 'ready' ? t('ctrlReady') : st.s === 'error' ? t(st.err === 'offline' ? 'ctrlErr_offline' : st.err === 'denied' ? 'ctrlErr_denied' : 'ctrlErr_other') + ' (' + st.err + ')' : t('ctrlOpening') });
-        out.push({ kind: 'text', value: t('ctrlAddr') });
-        out.push({ kind: 'info', label: t('ctrlCode'), value: Controllers.code().toUpperCase() });
         for (n = 1; n <= 2; n++) out.push({ kind: 'info', label: t('ctrlPlayer') + ' ' + n, value: pl[n] || t('ctrlFree') });
         out.push({ kind: 'action', label: t('ctrlPair'), desc: t('ctrlPairDesc'), run: function () { Controllers.pair(); App.toast(t('ctrlPairing')); } });
         out.push({ kind: 'action', label: t('ctrlNew'), run: function () { Controllers.newCode(); var f = renderMain(1); if (f) Focus.focus(f); } });
@@ -201,9 +204,20 @@
     function leaveSub() { sub = null; var f = renderMain(0); if (f) Focus.focus(f); }
     // the phone controller opens its room in the background: show what happens (status, players) as it changes
     function onCtrl() {
-        if (!main || page !== 'devices' || sub) return;
+        if (!main || page !== 'devices' || (sub && sub !== 'phonectrl')) return;
         var c = Focus.current(), idx = c && inMain(c) ? c.getAttribute('data-row') : null, f = renderMain(idx === null ? -1 : +idx);
         if (idx !== null && f) Focus.focus(f);
+    }
+    // the pairing QR code: the phone's camera opens My PC on the Game controller with this TV's code
+    function qrCard(r) {
+        var card = el('div', 'set-qr'), box = el('div', 'set-qr-img'), txt = el('div', 'set-qr-txt');
+        box.innerHTML = QR.svg(r.url, { quiet: 3 });
+        card.setAttribute('aria-label', t('ctrlScan') + ' ' + t('ctrlCode') + ' ' + r.code);
+        txt.appendChild(el('div', 'set-row-name', t('ctrlScan')));
+        txt.appendChild(el('div', 'set-row-desc', t('ctrlScanHelp')));
+        txt.appendChild(el('div', 'set-qr-code', t('ctrlCode') + ': ' + r.code));
+        card.appendChild(box); card.appendChild(txt);
+        return card;
     }
     function stopPadTest() { if (padRaf) cancelAnimationFrame(padRaf); padRaf = 0; padCard = null; }
 
@@ -282,6 +296,7 @@
             if (r.kind === 'profile') { main.appendChild(profileCard()); continue; }
             if (r.kind === 'status') { main.appendChild(statusCard(r)); continue; }
             if (r.kind === 'padtest') { main.appendChild(padTestCard(r)); continue; }
+            if (r.kind === 'qr') { main.appendChild(qrCard(r)); continue; }
             b = el('button', 'set-row' + (r.kind === 'text' ? ' set-text' : '') + (r.danger ? ' set-danger' : '') + (r.primary ? ' set-primary' : ''));
             b.setAttribute('data-focus', '');
             b.setAttribute('data-row', i);

@@ -25,6 +25,7 @@
     // sensor modes
     var cfg = null, eng = null, sensing = false, perm = 'unknown', lastSample = 0, caps = { motion: false, linear: false, rotation: false }, seq = 0, acks = {}, rtt = 0;
     var log = [], diag = { acked: 0, tvDuplicate: 0, tvStale: 0, unacked: 0 }, lastAction = null, metricsTimer = 0, rawBuf = [], rawLast = 0, rawTimer = 0, rawSent = 0, liveTimer = 0;
+    var fromQr = false, triedOther = false, scan = null;
     var tab = 'live', showSettings = false, rec = null, recording = false, replay = null, lastRaw = null, plot = [];
 
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
@@ -91,7 +92,10 @@
         c.onMessage(function (m) {
             if (!m || typeof m !== 'object') return;
             if (m.t === 'ok') { linked = true; if (typeof m.session === 'string') session = m.session; save(); pick(m.p === 2 ? 2 : 1); state(t('gcOn'), true); }
-            else if (m.t === 'no') { stop(); ui.err.textContent = m.why === 'busy' ? t('gcBusy') : t('gcLocked'); }
+            else if (m.t === 'no') {
+                if (m.why === 'busy' && fromQr && !triedOther) { triedOther = true; stop(); pick(player === 1 ? 2 : 1); start(); return; }   // scanned: take the free player
+                stop(); ui.err.textContent = m.why === 'busy' ? t('gcBusy') : t('gcLocked');
+            }
             else if (m.type === 'config') { var v = SensorProto.config(m, MotionEngine.MOVES); if (v) { cfg = v; applyCfg(); note('config', v.moves.join(' ') || '—'); } }
             else if (m.type === 'ack') onAck(SensorProto.ack(m));
         });
@@ -214,6 +218,42 @@
         if (!rawBuf.length) return;
         var b = rawBuf; rawBuf = [];
         if (send({ type: 'raw', timestamp: Date.now(), sequence: ++seq, hz: cfg ? cfg.raw.hz : 30, s: b })) rawSent += b.length;
+    }
+
+    /* ---------- pairing by QR code: the TV shows <My PC address>?pair=<code> (Settings > Devices > Phone controller) ---------- */
+    function codeFrom(text) {
+        var m = /[?&]pair=([a-z0-9]{6,16})/i.exec(String(text || '')) || /^([a-z0-9]{6,16})$/i.exec(String(text || '').trim());
+        return m ? m[1].toLowerCase() : '';
+    }
+    function pairWith(c) { fromQr = true; triedOther = false; ui.code.value = c.toUpperCase(); start(); }
+    // the phone's own QR reader (BarcodeDetector, Chrome on Android); elsewhere the camera app opens the link by itself
+    function startScan() {
+        ui.err.textContent = '';
+        if (!('BarcodeDetector' in window) || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { ui.err.textContent = t('gcScanCamera'); return; }
+        var det; try { det = new window.BarcodeDetector({ formats: ['qr_code'] }); } catch (e) { ui.err.textContent = t('gcScanCamera'); return; }
+        var box = el('div', 'gc-scanner'), video = el('video', 'gc-video'), close = btn('gc-scanclose', t('cancel'), stopScan);
+        video.setAttribute('playsinline', ''); video.muted = true;
+        box.appendChild(video); box.appendChild(el('div', 'gc-scanhint', t('gcScanHint'))); box.appendChild(close);
+        root.appendChild(box);
+        scan = { box: box, video: video, stream: null, timer: 0 };
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }).then(function (s) {
+            if (!scan) { s.getTracks().forEach(function (k) { k.stop(); }); return; }
+            scan.stream = s; video.srcObject = s; video.play().catch(function () {});
+            scan.timer = setInterval(function () {
+                if (!scan || video.readyState < 2) return;
+                det.detect(video).then(function (codes) {
+                    for (var i = 0; i < codes.length; i++) { var c = codeFrom(codes[i].rawValue); if (c) { stopScan(); if (navigator.vibrate) { try { navigator.vibrate(30); } catch (e) {} } pairWith(c); return; } }
+                }, function () {});
+            }, 250);
+        }, function () { stopScan(); ui.err.textContent = t('gcScanDenied'); });
+        Focus.focus(close);
+    }
+    function stopScan() {
+        if (!scan) return;
+        clearInterval(scan.timer);
+        if (scan.stream) scan.stream.getTracks().forEach(function (k) { k.stop(); });
+        if (scan.box.parentNode) scan.box.parentNode.removeChild(scan.box);
+        scan = null;
     }
 
     /* ---------- record and replay (Debug) ---------- */
@@ -388,7 +428,7 @@
         root = el('div', 'gc');
         ui.join = el('div', 'gc-join');
         ui.join.appendChild(el('h2', 'gc-title', t('gamepad')));
-        ui.join.appendChild(el('p', 'gc-help', t('gcHelp')));
+        ui.join.appendChild(el('p', 'gc-help', t('gcHelpQr')));
         ui.code = el('input', 'gc-code');
         ui.code.maxLength = 16; ui.code.autocomplete = 'off'; ui.code.setAttribute('autocapitalize', 'characters'); ui.code.spellcheck = false;
         ui.code.placeholder = t('ctrlCode'); ui.code.setAttribute('aria-label', t('ctrlCode')); ui.code.setAttribute('data-focus', '');
@@ -403,7 +443,10 @@
         ['gcModePad', 'gcModeActions', 'gcModeRaw'].forEach(function (k, i) { ui['m' + i] = btn('', t(k), function () { pickMode(MODES[i]); }); mrow.appendChild(ui['m' + i]); });
         ui.join.appendChild(mrow);
         ui.go = btn('btn-primary gc-go', t('gcGo'), start);
-        ui.join.appendChild(ui.go);
+        var grow = el('div', 'gc-row');
+        ui.scan = btn('gc-scanbtn', t('gcScan'), startScan);
+        grow.appendChild(ui.scan); grow.appendChild(ui.go);
+        ui.join.appendChild(grow);
         ui.err = el('div', 'gc-err'); ui.err.setAttribute('role', 'alert');
         ui.join.appendChild(ui.err);
         root.appendChild(ui.join);
@@ -424,7 +467,7 @@
     Win.register('gamepad', {
         icon: 'controller',
         title: function () { return t('gamepad'); },
-        open: function (body) {
+        open: function (body, arg) {
             saved = Store.rawGet(KEY) || {};
             cid = typeof saved.cid === 'string' && /^[a-z0-9]{6,24}$/.test(saved.cid) ? saved.cid : '';
             if (!cid) for (var i = 0; i < 12; i++) cid += 'abcdefghijklmnopqrstuvwxyz0123456789'.charAt(Math.floor(Math.random() * 36));
@@ -435,12 +478,15 @@
             pick(saved.p === 2 ? 2 : 1);
             pickMode(saved.mode);
             document.addEventListener('visibilitychange', onVis);
-            window.GamepadApp = { linked: function () { return linked; }, send: function (m) { return send(m); }, running: function () { return run; }, mode: function () { return mode; },
+            fromQr = false; triedOther = false;
+            if (arg && typeof arg.pair === 'string' && codeFrom(arg.pair)) setTimeout(function () { if (root) pairWith(codeFrom(arg.pair)); }, 0);
+            window.GamepadApp = { scanCode: function (text) { var c = codeFrom(text); if (c) pairWith(c); return c; }, linked: function () { return linked; }, send: function (m) { return send(m); }, running: function () { return run; }, mode: function () { return mode; },
                                   engine: function () { return eng; }, feed: function (s) { onMotion(s); }, config: function () { return cfg; }, log: function () { return log.slice(); } };
             return ui.code;
         },
-        back: function () { if (!inPad) return false; stop(); return true; },
+        back: function () { if (scan) { stopScan(); return true; } if (!inPad) return false; stop(); return true; },
         close: function () {
+            stopScan();
             stop();
             clearInterval(liveTimer); liveTimer = 0;
             if (VirtualPad.active()) VirtualPad.hide();

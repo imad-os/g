@@ -167,6 +167,12 @@ var Controllers = (function () {
             changed();
         },
         code: function () { return cfg().code; },
+        // the link in the QR code: the phone's camera opens My PC on the Game controller, which connects by itself
+        pairUrl: function () {
+            var b = (typeof AppBoot !== 'undefined' && AppBoot.base && AppBoot.base()) || '';
+            if (!/^https:/.test(b)) b = /^https:/.test(location.href) && !/localhost|127\.0\.0\.1/.test(location.host) ? location.href.split(/[?#]/)[0].replace(/[^\/]*$/, '') : 'https://imad-os.github.io/g/';
+            return b + 'index.html?pair=' + cfg().code;
+        },
         status: function () { return status; },
         newCode: function () { var c = cfg(); c.code = makeCode(); c.ok = []; save(c); closePhones(); stop(); if (c.on) { pairUntil = Date.now() + PAIR_MS; open(); } changed(); },
         pair: function (sec) { pairUntil = Date.now() + (sec === undefined ? PAIR_MS : sec * 1000); changed(); },

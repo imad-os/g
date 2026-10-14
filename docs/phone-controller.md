@@ -1,8 +1,13 @@
 # Phone controller (Game controller app)
 
-A phone becomes player 1 or 2 of a TV running My PC. The phone shows no game. On the phone open My PC, choose
-**Game controller**, type the code shown on the TV (Settings > Devices > Phone controller), pick **P1** or **P2** and a
-mode, then **Connect**. The phone reconnects by itself every time the TV changes page (a game opens, a game quits).
+A phone becomes player 1 or 2 of a TV running My PC. The phone shows no game.
+
+**Pairing by QR code.** On the TV open Settings > Devices > **Phone controller** (its own page). It shows a QR code with
+the pairing link `<My PC address>/index.html?pair=<code>` (`Controllers.pairUrl()`, drawn by `js/core/qr.js`) and the code
+under it; new phones are accepted while the page is open (5 minutes). Scan it with the phone's camera app: My PC opens
+on the **Game controller** and connects by itself, as player 1, or player 2 if 1 is taken. Inside the app, **Scan QR
+code** uses the phone's own QR reader (`BarcodeDetector`, Chrome on Android); where there is none it says to use the
+camera app. Typing the code, picking **P1** / **P2** and a mode, then **Connect** still works. The phone reconnects by itself every time the TV changes page (a game opens, a game quits).
 
 | Mode | What the phone does | What the TV / game gets |
 |---|---|---|
