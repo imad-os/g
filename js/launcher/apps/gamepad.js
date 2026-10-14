@@ -16,6 +16,8 @@
 
     var KEY = 'arc_dev_ctrlphone', REC_MAX = 60 * 120;      // 2 minutes at 60 Hz
     var MODES = ['pad', 'sensor-actions', 'sensor-raw'];
+    // the pad layout (buttons, sizes, places) is kept in My PC's store too, so it is never lost between opens
+    var PAD_STORE = { get: function (k) { return Store.rawGet('arc_dev_' + k); }, set: function (k, v) { Store.rawSet('arc_dev_' + k, v); } };
     var PAD = { buttons: [{ label: 'A', key: 13, action: 'ok' }, { label: 'B', key: 88, action: 'run' }],
                 catalog: [{ label: 'A', key: 13, action: 'ok' }, { label: 'B', key: 88, action: 'run' }, { label: 'C', key: 8, action: 'cancel' }, { label: '☰', key: 77, action: 'menu' }] };
     var root = null, code = '', player = 1, mode = 'pad', run = false, busy = false, conn = null, linked = false, sess = null, retry = 0, wait = 0, curReq = null, offerObj = null;
@@ -44,7 +46,7 @@
         inPad = on; ui.join.hidden = on;
         ui.bar.hidden = ui.padBg.hidden = !(on && mode === 'pad');
         ui.sense.hidden = !(on && mode !== 'pad');
-        if (on && mode === 'pad') VirtualPad.init({ id: 'controller', force: true, scale: { stick: 1.35, btn: 1.25 }, buttons: PAD.buttons, catalog: PAD.catalog, onAction: padAction });
+        if (on && mode === 'pad') VirtualPad.init({ storage: PAD_STORE, id: 'controller', force: true, scale: { stick: 1.35, btn: 1.25 }, buttons: PAD.buttons, catalog: PAD.catalog, onAction: padAction });
         else if (VirtualPad.active()) VirtualPad.hide();
         if (on && mode !== 'pad') { ui.modeName.textContent = t(mode === 'sensor-raw' ? 'gcModeRaw' : 'gcModeActions'); setTab('live'); }
         if (!on && ui.go) Focus.focus(ui.go);

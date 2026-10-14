@@ -2245,6 +2245,20 @@ async function main() {
         await P1.mouse.move(st[0], st[1]); await P1.mouse.down(); await P1.mouse.move(st[0] + st[2] * 0.9, st[1], { steps: 3 });
         await tv.waitForFunction(() => Input.isDownDev('keys', 'right') && !Input.isDownDev('keys', 'left'), null, { timeout: 3000 });
         check(true, 'pushing the stick to the right gives right');
+        await P1.mouse.up();
+        await tv.waitForFunction(() => !Input.isDownDev('keys', 'right'), null, { timeout: 3000 });
+        check(await P1.evaluate(() => [...document.querySelectorAll('div')].filter((d) => /^[AB]$/.test(d.textContent) && d.style.borderRadius === '50%').every((d) => getComputedStyle(d).display === 'flex' && getComputedStyle(d).justifyContent === 'center')), 'the button letters are centred');
+        // floating stick: a touch anywhere in the left half puts the stick there; it goes back when the finger is lifted
+        const home = await P1.evaluate(() => { const r = document.getElementById('vp-stick').getBoundingClientRect(); return [r.left, r.top]; });
+        await P1.mouse.move(320, 170); await P1.mouse.down(); await P1.mouse.move(320 - 60, 170, { steps: 3 });
+        await tv.waitForFunction(() => Input.isDownDev('keys', 'left'), null, { timeout: 3000 });
+        const moved = await P1.evaluate(() => { const r = document.getElementById('vp-stick').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
+        check(Math.abs(moved[0] - 320) < 2 && Math.abs(moved[1] - 170) < 2, 'a touch in the left half starts the stick under the finger (' + moved.map(Math.round) + ')');
+        await P1.mouse.up();
+        await tv.waitForFunction(() => !Input.isDownDev('keys', 'left'), null, { timeout: 3000 });
+        const back = await P1.evaluate(() => { const r = document.getElementById('vp-stick').getBoundingClientRect(); return [r.left, r.top]; });
+        check(back[0] === home[0] && back[1] === home[1], 'lifting the finger puts the stick back in its place and releases the direction');
+        check(!(await P1.evaluate(() => { const e = document.elementFromPoint(640, 170); return e && e.parentNode && e.parentNode.id !== 'vp-stick' && e.style.width === '50%'; })), 'the right half is not a stick zone');
         const P2 = await phone(2, 2);
         await tv.waitForFunction(() => Controllers.players()[2], null, { timeout: 40000 });
         await press(P2, 'B', true);
@@ -2268,6 +2282,20 @@ async function main() {
         await tv.evaluate(() => Controllers.setOn(false));
         await P1.waitForFunction(() => !(window.GamepadApp && window.GamepadApp.linked()), null, { timeout: 10000 });
         check(await tv.evaluate(() => Controllers.players()[1] === null), 'turning it off disconnects the phones');
+        // the pad layout is kept: show C from the gear panel, leave, open the app again
+        await P1.evaluate(() => Win.close());
+        await P1.evaluate(() => Win.open('gamepad'));
+        await P1.click('.gc-join > .btn-primary');
+        await P1.waitForFunction(() => VirtualPad.active(), null, { timeout: 5000 });
+        await P1.evaluate(() => { [...document.querySelectorAll('div')].find((d) => d.textContent === '⚙').click(); });
+        await P1.evaluate(() => { [...document.querySelectorAll('div')].find((d) => d.textContent === 'C' && d.style.borderRadius !== '50%').click(); [...document.querySelectorAll('div')].find((d) => d.textContent === 'Close').click(); });
+        await P1.evaluate(() => Win.close());
+        await P1.reload();
+        await P1.waitForFunction(() => window.Win && document.querySelector('[data-game]'), null, { timeout: 20000 });
+        await P1.evaluate(() => Win.open('gamepad'));
+        await P1.click('.gc-join > .btn-primary');
+        await P1.waitForFunction(() => VirtualPad.active(), null, { timeout: 5000 });
+        check(await P1.evaluate(() => [...document.querySelectorAll('div')].some((d) => d.textContent === 'C' && d.style.borderRadius === '50%' && d.style.display === 'flex') && !!Store.rawGet('arc_dev_vpad:controller')), 'the pad settings are kept after closing the app and reloading (no setting up again)');
         check(tv.errors.length === 0 && P1.errors.length === 0 && P2.errors.length === 0, 'no page errors ' + tv.errors.concat(P1.errors, P2.errors).join('; '));
         for (const pg of [tv, P1, P2, P3]) await pg.context().close();
     }

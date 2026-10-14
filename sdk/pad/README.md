@@ -61,6 +61,8 @@ VirtualPad.init({
 | `pause` | `true` | `false` hides the pause button |
 | `customize` | `true` | `false` hides the gear (settings) button |
 | `onSettings` | none | `function (open)`: the settings panel opened (`true`) or closed (`false`) *(My PC addition)* |
+| `floating` | `true` | a touch anywhere in the left half puts the stick under the finger (back to its place on release); `false` = fixed stick *(My PC addition)* |
+| `storage` | none | `{ get(key), set(key, value) }`: where the layout is saved besides `localStorage` *(My PC addition)* |
 | `force` | `false` | show the pad anywhere; by default only on touch devices when running standalone (not inside My PC) |
 
 `?pad=1` in the page address forces the pad on and `?pad=0` hides it (handy for testing on a computer).

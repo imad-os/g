@@ -19,6 +19,7 @@ var TouchPad = (function () {
 
     var ACTIONS = { ok: 1, run: 1, cancel: 1, menu: 1 };
     var MAX_ENTRIES = 8, LABEL_MAX = 3;
+    var PAD_STORE = { get: function (k) { return Store.rawGet('arc_dev_' + k); }, set: function (k, v) { Store.rawSet('arc_dev_' + k, v); } };   // layouts kept in My PC's store
     var cur = null, appPad = null, own = false, ownCfg = null, relay = null, gameState = 'idle', settingsOpen = false, fromPause = false, held = false, listening = false;
 
     function hash(s) { var h = 7, i; for (i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 8999; return 1000 + h; }
@@ -104,7 +105,7 @@ var TouchPad = (function () {
     }
     function build() {
         var c = own ? ownCfg : cur.cfg;
-        VirtualPad.init({ id: 'app:' + cur.id + (own ? ':own' : ''), buttons: c.buttons, catalog: c.catalog, scale: c.scale, force: true, onAction: onAction, onSettings: onSettings,
+        VirtualPad.init({ storage: PAD_STORE, id: 'app:' + cur.id + (own ? ':own' : ''), buttons: c.buttons, catalog: c.catalog, scale: c.scale, force: true, onAction: onAction, onSettings: onSettings,
                           send: own ? onKey : undefined, pause: own ? c.pause : undefined, customize: own ? c.customize : undefined });
     }
     function sync() {
