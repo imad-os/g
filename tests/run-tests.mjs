@@ -2409,6 +2409,16 @@ async function main() {
         await Q.waitForFunction(() => window.GamepadApp && GamepadApp.linked(), null, { timeout: 40000 });
         check(await tv.evaluate(() => !!Controllers.players()[1]) && await Q.evaluate(() => !/pair=/.test(location.search)), 'scanning the QR code (opening its link) pairs the phone at once, and the link is cleaned from the address');
         check(await Q.evaluate(() => GamepadApp.scanCode('https://x.test/index.html?pair=' + 'ab') === '' && GamepadApp.scanCode('not a code!') === ''), 'a scanned QR code that is not a My PC pairing link is ignored');
+        // switching mode while connected: Mode > Motion moves reconnects as a motion controller, same player
+        await Q.click('.gc-bar .gc-modebtn');
+        await Q.click('.gc-modepick .btn:nth-of-type(2)');
+        await Q.waitForFunction(() => GamepadApp.mode() === 'sensor-actions' && GamepadApp.linked() && !document.querySelector('.gc-sense').hidden && !VirtualPad.active(), null, { timeout: 40000 });
+        await tv.waitForFunction(() => Controllers.modes()[1] === 'sensor-actions', null, { timeout: 10000 });
+        check(true, 'the Mode button switches a connected phone from buttons to motion moves (same player, reconnected by itself)');
+        await Q.click('.gc-stop .gc-modebtn');
+        await Q.click('.gc-modepick .btn:nth-of-type(1)');
+        await Q.waitForFunction(() => GamepadApp.mode() === 'pad' && GamepadApp.linked() && VirtualPad.active(), null, { timeout: 40000 });
+        check(true, 'and back to buttons from the motion screen');
         check(Q.errors.length === 0, 'no page errors on the scanning phone ' + Q.errors.join('; '));
         await Q.context().close();
         check(tv.errors.length === 0 && P1.errors.length === 0 && P2.errors.length === 0, 'no page errors ' + tv.errors.concat(P1.errors, P2.errors).join('; '));

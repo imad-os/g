@@ -256,6 +256,32 @@
         scan = null;
     }
 
+    /* ---------- switching mode while connected: reconnects at once with the same code and player ---------- */
+    function openModes() {
+        if (ui.modes) return;
+        if (VirtualPad.active()) VirtualPad.hide();                // the pad sits above the app: out of the way while choosing
+        var box = el('div', 'gc-modepick'), names = ['gcModePad', 'gcModeActions', 'gcModeRaw'], first = null;
+        box.appendChild(el('div', 'gc-title', t('gcMode')));
+        names.forEach(function (k, i) {
+            var b = btn(MODES[i] === mode ? 'btn-primary' : '', t(k), function () { closeModes(); switchMode(MODES[i]); });
+            box.appendChild(b); if (MODES[i] === mode) first = b;
+        });
+        box.appendChild(btn('', t('cancel'), closeModes));
+        root.appendChild(box); ui.modes = box;
+        Focus.focus(first);
+    }
+    function closeModes() {
+        if (ui.modes && ui.modes.parentNode) ui.modes.parentNode.removeChild(ui.modes);
+        ui.modes = null;
+        if (inPad && mode === 'pad' && !VirtualPad.active()) show(true);
+    }
+    function switchMode(m) {
+        if (m === mode) return;
+        var p = player;
+        stop(); pickMode(m); pick(p); save();
+        start();
+    }
+
     /* ---------- record and replay (Debug) ---------- */
     function startRecord() { stopReplay(); rec = []; recording = true; note('rec', t('gcRecording')); paint(); }
     function stopRecord() { if (!recording) return; recording = false; note('rec', rec.length + ' ' + t('gcSamples')); try { Store.rawSet('arc_dev_ctrlrec', rec.slice(0, REC_MAX)); } catch (e) {} paint(); }
@@ -380,7 +406,7 @@
         [ui.sDot, ui.sBadge, ui.modeName, ui.sState].forEach(function (x) { top.appendChild(x); });
         var sp = el('span', 'gc-grow'); top.appendChild(sp);
         ui.tLive = btn('', t('gcLive'), function () { setTab('live'); }); ui.tDebug = btn('', t('gcDebug'), function () { setTab('debug'); });
-        top.appendChild(ui.tLive); top.appendChild(ui.tDebug); top.appendChild(btn('gc-leave2', t('gcLeave'), function () { stop(); }));
+        top.appendChild(ui.tLive); top.appendChild(ui.tDebug); top.appendChild(btn('gc-modebtn', t('gcMode'), openModes)); top.appendChild(btn('gc-leave2', t('gcLeave'), function () { stop(); }));
         s.appendChild(top);
 
         ui.live = el('div', 'gc-live');
@@ -456,6 +482,7 @@
         ui.bar = el('div', 'gc-bar');
         ui.dot = el('span', 'gc-dot'); ui.badge = el('span', 'gc-badge', 'P1'); ui.state = el('span', 'gc-state');
         ui.bar.appendChild(ui.dot); ui.bar.appendChild(ui.badge); ui.bar.appendChild(ui.state);
+        ui.bar.appendChild(btn('gc-leave gc-modebtn', t('gcMode'), openModes));
         ui.bar.appendChild(btn('gc-leave', t('gcLeave'), function () { stop(); }));
         ui.bar.hidden = true;
         root.appendChild(ui.bar);
@@ -484,7 +511,7 @@
                                   engine: function () { return eng; }, feed: function (s) { onMotion(s); }, config: function () { return cfg; }, log: function () { return log.slice(); } };
             return ui.code;
         },
-        back: function () { if (scan) { stopScan(); return true; } if (!inPad) return false; stop(); return true; },
+        back: function () { if (ui.modes) { closeModes(); return true; } if (scan) { stopScan(); return true; } if (!inPad) return false; stop(); return true; },
         close: function () {
             stopScan();
             stop();
