@@ -43,6 +43,11 @@ var SensorProto = (function () {
         if (typeof r.group === 'string' && /^[a-z0-9_]{1,16}$/.test(r.group)) o.group = r.group;
         if (r.gait instanceof Array) { o.gait = r.gait.filter(function (g) { return GAITS.indexOf(g) >= 0; }); if (!o.gait.length) delete o.gait; }
         if (r.also && !depth) { o.also = rule({ signal: r.also.signal, above: r.also.above, below: r.also.below }, 1); if (!o.also) delete o.also; }
+        if (r.unless && !depth && typeof r.unless === 'object') {
+            var u = { moves: (r.unless.moves instanceof Array ? r.unless.moves : []).filter(function (m) { return NAME.test(m); }).slice(0, 8),
+                      within_ms: num(r.unless.within_ms, 0, 5000, 0), landed_ms: num(r.unless.landed_ms, 0, 2000, 0) };
+            if (u.moves.length || u.landed_ms) o.unless = u;
+        }
         if (r.end && !depth && typeof r.end === 'object' && NAME.test(r.end.name || '')) {
             var e = rule(r.end, 1);
             if (e) { e.name = r.end.name; e.min_ms = num(r.end.min_ms, 0, 5000, 0); e.max_ms = num(r.end.max_ms, 0, 10000, 3000); o.end = e; }

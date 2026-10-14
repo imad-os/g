@@ -133,6 +133,8 @@ sensor fusion: **up** is the gravity vector; **right** is the screen's right edg
 | `DUCK` | body drops 16 cm or more (`v_disp`), confirmed 220 ms later unless the body shoots up (the crouch before a jump is not a duck); group `vert` |
 | `DUCK_END` | after `DUCK`, when the player rises again (`v_vel` > 0.45 m/s, at least 350 ms after `DUCK`), or after 2.5 s at the latest |
 
+A hop to the side is airborne too: JUMP is not fired within 600 ms of LEFT / RIGHT, and LEFT / RIGHT are not fired within 450 ms of JUMP nor 250 ms after landing (rule option `unless: { moves, within_ms, landed_ms }`).
+
 While running every threshold is 30 % higher. **Sensitivity** (Settings, 0.5 to 2) lowers or raises all of them.
 
 ### Defining a move
@@ -170,6 +172,8 @@ state with latency, sensor indicators (motion permission, data flowing, gyroscop
 **Start / Stop controller**, **Recalibrate** (stand still for a second facing the TV: re-reads gravity in your grip and
 clears the drift), **Settings** (age, height, weight, phone position, sensitivity, stride length, swap left and right).
 In Motion data mode the tiles show the rate, samples sent and the live readings.
+
+**Train**: for LEFT, RIGHT, JUMP and DUCK, **Record 5** asks for the move five times (get ready, Go!, 1.6 s recorded each). `js/core/motion-train.js` measures each repetition and sets the move's limit between this player's weakest repetition (70 % of it at least) and the strongest of the other moves (moves of the same group, LEFT / RIGHT, are not compared: they already block each other); limits stay within 0.4 to 2.5 times the built-in ones. Each move shows its limit and whether it is clear of the others. The result is kept on the phone (`arc_dev_ctrltrain`) and used as rules for the built-in moves; a game's own rule for the same move wins.
 
 **Debug**: live acceleration (with and without gravity) and rotation, the computed signals and a plot of vertical /
 sideways acceleration; recent step events; every move's state (idle, defer, active, cooldown), level and last

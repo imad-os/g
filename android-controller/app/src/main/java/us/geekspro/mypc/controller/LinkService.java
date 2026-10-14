@@ -8,6 +8,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
@@ -20,6 +21,7 @@ import android.os.PowerManager;
 public final class LinkService extends Service {
     private static final String CHANNEL = "link";
     private PowerManager.WakeLock lock;
+    private WifiManager.WifiLock wifi;
 
     static void set(Context ctx, boolean on) {
         Intent i = new Intent(ctx, LinkService.class);
@@ -52,12 +54,20 @@ public final class LinkService extends Service {
             lock.setReferenceCounted(false);
             lock.acquire(4 * 60 * 60 * 1000L);              // a long game session at most; released when the link stops
         }
+        if (wifi == null) {                                 // Wi-Fi power saving with the screen off delays packets by seconds
+            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+            wifi = wm.createWifiLock(Build.VERSION.SDK_INT >= 29 ? WifiManager.WIFI_MODE_FULL_LOW_LATENCY : WifiManager.WIFI_MODE_FULL_HIGH_PERF, "mypc:controller");
+            wifi.setReferenceCounted(false);
+            wifi.acquire();
+        }
         return START_NOT_STICKY;
     }
 
     @Override public void onDestroy() {
         if (lock != null && lock.isHeld()) lock.release();
         lock = null;
+        if (wifi != null && wifi.isHeld()) wifi.release();
+        wifi = null;
         super.onDestroy();
     }
 

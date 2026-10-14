@@ -13,6 +13,7 @@
  *   m.configure({ moves, define, profile, sensitivity, strideScale })   m.calibrate()   m.reset()
  *   m.metrics() -> { gait, cadence, speed_kmh, pace_sec_per_km, distance_m, steps, confidence }
  *   m.debug()   -> { signals, detectors: [{ name, state, level, confidence, last }], diag, steps, calibrated }
+ *   m.signals() -> the live signals (no copy)
  *
  * A move is a rule on one signal, so new moves need no code (SensorProto.rule, also sent by games in `define`):
  *   { signal, above | below, for_ms, cooldown_ms, group, gait: [..], also: {signal, above|below}, defer_ms,
@@ -23,10 +24,12 @@
 var MotionEngine = (function () {
     'use strict';
 
+    // `unless`: not fired within `within_ms` after one of `moves` (a hop to the side is airborne too: it is RIGHT, not JUMP;
+    // the landing of a jump jolts sideways: it is not LEFT / RIGHT)
     var MOVES = {
-        LEFT:  { signal: 'lateral', below: -4.0, for_ms: 30, cooldown_ms: 450, group: 'side', also: { signal: 'l_vel', below: -0.3 } },
-        RIGHT: { signal: 'lateral', above: 4.0, for_ms: 30, cooldown_ms: 450, group: 'side', also: { signal: 'l_vel', above: 0.3 } },
-        JUMP:  { signal: 'freefall', above: 160, cooldown_ms: 700, group: 'vert' },
+        LEFT:  { signal: 'lateral', below: -4.0, for_ms: 30, cooldown_ms: 450, group: 'side', also: { signal: 'l_vel', below: -0.3 }, unless: { moves: ['JUMP'], within_ms: 450, landed_ms: 250 } },
+        RIGHT: { signal: 'lateral', above: 4.0, for_ms: 30, cooldown_ms: 450, group: 'side', also: { signal: 'l_vel', above: 0.3 }, unless: { moves: ['JUMP'], within_ms: 450, landed_ms: 250 } },
+        JUMP:  { signal: 'freefall', above: 160, cooldown_ms: 700, group: 'vert', unless: { moves: ['LEFT', 'RIGHT'], within_ms: 600 } },
         DUCK:  { signal: 'v_disp', below: -0.16, for_ms: 60, cooldown_ms: 900, group: 'vert', also: { signal: 'freefall', below: 60 },
                  defer_ms: 220, cancel_if: { signal: 'v_vel', above: 0.9 },
                  end: { name: 'DUCK_END', signal: 'v_vel', above: 0.45, for_ms: 60, min_ms: 350, max_ms: 2500 } }
@@ -49,7 +52,7 @@ var MotionEngine = (function () {
         opt = opt || {};
         var o = {}, rules = {}, order = [], det = {}, groups = {};
         var g = null, right = null, rightH = null, calib = null, lastT = 0;
-        var sig = {}, hist = { v: [], l: [], f: [] }, ffSince = 0;
+        var sig = {}, hist = { v: [], l: [], f: [] }, ffSince = 0, landedAt = 0;
         var vv = 0, vd = 0, lv = 0;
         var steps = [], stepArm = false, stepPeak = 0, avgPeak = 2.5, lastStep = 0, totalSteps = 0, dist = 0, gait = 'IDLE', cadence = 0, gaitConf = 0;
         var diag = { fired: 0, cooldown: 0, lockout: 0, gait: 0, cancelled: 0, ended: 0, timeouts: 0 };
@@ -124,10 +127,16 @@ var MotionEngine = (function () {
                 if (d.state === 'cooldown') { diag.cooldown++; continue; }
                 if (r.group && groups[r.group] && t < groups[r.group].until && groups[r.group].by !== name) { diag.lockout++; continue; }
                 if (r.gait && r.gait.indexOf(gait) < 0) { diag.gait++; continue; }
+                if (r.unless && recent(r.unless, t)) { diag.lockout++; continue; }
                 var conf = Math.max(0.3, Math.min(1, 0.5 + 0.5 * (d.peak - 1)));
                 if (r.defer_ms) { d.state = 'defer'; d.deferAt = t + r.defer_ms; d.deferConf = conf; continue; }
                 fire(name, R, d, t, conf);
             }
+        }
+        function recent(u, t) {
+            if (u.landed_ms && landedAt && t - landedAt < u.landed_ms) return true;
+            for (var i = 0; i < (u.moves || []).length; i++) { var o = det[u.moves[i]]; if (o && o.last && t - o.last < (u.within_ms || 0)) return true; }
+            return false;
         }
         function fire(name, R, d, t, conf) {
             var r = R.r;
@@ -201,7 +210,7 @@ var MotionEngine = (function () {
             sig.lateral = avg3(hist.l, dot(lin, rightH));
             sig.forward = avg3(hist.f, dot(lin, fwd));
             sig.magnitude = len(G);
-            if (sig.magnitude < FREEFALL) { if (!ffSince) ffSince = t; sig.freefall = t - ffSince; } else { ffSince = 0; sig.freefall = 0; }
+            if (sig.magnitude < FREEFALL) { if (!ffSince) ffSince = t; sig.freefall = t - ffSince; } else { if (sig.freefall >= 100) landedAt = t; ffSince = 0; sig.freefall = 0; }
             vv = (vv + sig.vertical * dt) * Math.exp(-dt / 0.6); vd = (vd + vv * dt) * Math.exp(-dt / 1.0);
             lv = (lv + sig.lateral * dt) * Math.exp(-dt / 0.6);
             sig.v_vel = vv; sig.v_disp = vd; sig.l_vel = lv;
@@ -246,6 +255,7 @@ var MotionEngine = (function () {
             },
             metrics: metrics,
             debug: debug,
+            signals: function () { return sig; },             // live, not a copy (the move trainer reads it every sample)
             moves: function () { return order.slice(); }
         };
     }

@@ -1,5 +1,5 @@
 {
-  "build": 41,
+  "build": 42,
   "version": "2.15.4",
   "shell": 1,
   "css": [
@@ -14,6 +14,7 @@
     "js/core/netlink.js",
     "js/core/sensor-proto.js",
     "js/core/motion.js",
+    "js/core/motion-train.js",
     "js/core/hr-ble.js",
     "js/core/qr.js",
     "js/core/virtual-pad.js",

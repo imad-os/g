@@ -27,6 +27,9 @@
     var log = [], diag = { acked: 0, tvDuplicate: 0, tvStale: 0, unacked: 0 }, lastAction = null, metricsTimer = 0, rawBuf = [], rawLast = 0, rawTimer = 0, rawSent = 0, liveTimer = 0;
     var fromQr = false, triedOther = false, scan = null;
     var tab = 'live', showSettings = false, rec = null, recording = false, replay = null, lastRaw = null, plot = [];
+    // Train tab (js/core/motion-train.js): each move done TRAIN_REPS times; this player's limits are kept on the phone
+    var TRAIN_KEY = 'arc_dev_ctrltrain', TRAIN_MOVES = ['LEFT', 'RIGHT', 'JUMP', 'DUCK'], TRAIN_REPS = 5;
+    var trained = null, trainer = null, trainBuf = [];
 
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
     function t(k) { return I18n.t(k); }
@@ -147,10 +150,17 @@
     function applyCfg() {
         if (!eng) return;
         var p = prefs(), c = cfg || SensorProto.config({ moves: SensorProto.DEFAULT_MOVES }, MotionEngine.MOVES);
-        eng.configure({ moves: c.moves, define: c.define || {}, profile: c.profile || p.profile, sensitivity: p.sensitivity, strideScale: p.stride });
+        eng.configure({ moves: c.moves, define: defines(c), profile: c.profile || p.profile, sensitivity: p.sensitivity, strideScale: p.stride });
         clearInterval(metricsTimer); metricsTimer = 0;
         if (mode === 'sensor-actions' && c.metrics.enabled) metricsTimer = setInterval(sendMetrics, Math.round(1000 / c.metrics.hz));
         if (ui.profileFrom) ui.profileFrom.textContent = c.profile ? t('gcProfileGame') : '';
+    }
+    // this player's trained limits for the built-in moves, then the game's own rules (a game's rule for the same move wins)
+    function defines(c) {
+        var d = {}, k, tr = trained && trained.define || {};
+        for (k in tr) if (tr.hasOwnProperty(k)) d[k] = tr[k];
+        for (k in (c.define || {})) if (c.define.hasOwnProperty(k)) d[k] = c.define[k];
+        return d;
     }
     function sensorsOn() {
         if (sensing) return;
@@ -164,7 +174,7 @@
     function sensorsOff() {
         if (sensing) window.removeEventListener('devicemotion', onMotion);
         sensing = false; clearInterval(metricsTimer); metricsTimer = 0; clearInterval(rawTimer); rawTimer = 0; rawBuf = [];
-        stopRecord(); stopReplay(); paint();
+        stopTrain(); stopRecord(); stopReplay(); paint();
     }
     function newEngine() {
         eng = MotionEngine.create({ onAction: onMove, onStep: function (s) { note('step', '#' + s.n + ' ' + s.gait + ' ' + s.peak.toFixed(1) + ' m/s²'); } });
@@ -178,6 +188,7 @@
                   ra: caps.rotation ? r.alpha : null, rb: caps.rotation ? r.beta : null, rg: caps.rotation ? r.gamma : null,
                   angle: screen.orientation ? screen.orientation.angle : (window.orientation || 0) };
         lastSample = now; lastRaw = s;
+        if (trainer) { trainBuf.push(s); if (trainBuf.length > 400) trainBuf.shift(); }      // the move trainer's last seconds
         if (recording && rec.length < REC_MAX) rec.push(s); else if (recording) stopRecord();
         if (mode === 'sensor-raw') return rawPush(s, now);
         eng.feed(s);
@@ -187,6 +198,7 @@
         var p = prefs(), c = cfg;
         if (p.swap && (name === 'LEFT' || name === 'RIGHT')) name = name === 'LEFT' ? 'RIGHT' : 'LEFT';
         lastAction = { name: name, at: Date.now(), conf: info.confidence };
+        if (trainer) { note('train', name); flash(); return; }                      // training: shown, never sent
         if (!c || c.moves.indexOf(name) < 0) { note('local', name); flash(); return; }     // not asked for by the game: shown, not sent
         var m = { type: 'action', action: name, timestamp: Date.now(), sequence: ++seq, confidence: info.confidence };
         if (send(m)) { acks[m.sequence] = performance.now(); note('sent', name + ' #' + m.sequence + ' ' + Math.round(info.confidence * 100) + '%'); }
@@ -285,6 +297,93 @@
         start();
     }
 
+    /* ---------- Train: each move a few times, limits from this player's own moves (js/core/motion-train.js) ---------- */
+    function loadTrained() {
+        var d = Store.rawGet(TRAIN_KEY);
+        trained = d && typeof d === 'object' && d.reps && typeof d.reps === 'object' ? d : { reps: {}, define: {}, report: [] };
+    }
+    function saveTrained() {
+        var t = MotionTrain.tune(trained.reps);
+        trained.define = t.define; trained.report = t.report;
+        try { Store.rawSet(TRAIN_KEY, trained); } catch (e) {}
+        applyCfg();
+    }
+    function buzz(ms) { if (navigator.vibrate) { try { navigator.vibrate(ms); } catch (e) {} } }
+    // one move, TRAIN_REPS times: "get ready" (1.2 s), "go" (1.6 s recorded, with the second before it), a short pause
+    function trainMove(move) {
+        if (trainer) return stopTrain();
+        if (!sensing) sensorsOn();
+        trained.reps[move] = [];
+        trainer = { move: move, n: 0, phase: 'ready', goT: 0, timer: 0 };
+        trainBuf = [];
+        note('train', move);
+        trainStep();
+    }
+    function trainStep() {
+        var T = trainer;
+        if (!T) return;
+        if (T.phase === 'ready') {
+            T.cue = t('gcTrainReady') + ' ' + (T.n + 1) + '/' + TRAIN_REPS;
+            T.phase = 'go'; T.timer = setTimeout(trainStep, 1200);
+        } else if (T.phase === 'go') {
+            buzz(60); T.goT = performance.now(); T.cue = t('gcTrainGo') + ' ' + T.move;
+            T.phase = 'end'; T.timer = setTimeout(trainStep, 1600);
+        } else {
+            buzz(20);
+            var from = T.goT - 1000, s = trainBuf.filter(function (x) { return x.t >= from; });
+            if (s.length > 20) { trained.reps[T.move].push(MotionTrain.measure(s, T.goT)); T.n++; }
+            if (T.n >= TRAIN_REPS || !sensing) return stopTrain();
+            T.phase = 'ready'; T.cue = ''; T.timer = setTimeout(trainStep, 700);
+        }
+        paint();
+    }
+    function stopTrain() {
+        if (!trainer) return;
+        clearTimeout(trainer.timer);
+        note('train', trainer.move + ' ' + trainer.n + '/' + TRAIN_REPS);
+        trainer = null; trainBuf = [];
+        saveTrained();
+        paint();
+    }
+    function paintTrain() {
+        ui.tCue.textContent = trainer ? trainer.cue || '' : '';
+        ui.tCue.className = 'gc-tcue' + (trainer && trainer.phase === 'end' ? ' go' : '');
+        TRAIN_MOVES.forEach(function (m) {
+            var row = ui.tRows[m], reps = (trained.reps[m] || []).length, r = null;
+            (trained.report || []).forEach(function (x) { if (x.move === m) r = x; });
+            row.btn.textContent = trainer && trainer.move === m ? t('gcTrainStop') : t('gcTrainDo');
+            row.btn.disabled = !!trainer && trainer.move !== m;
+            var info = reps + '/' + TRAIN_REPS + ' ' + t('gcTrainReps');
+            if (r) info += '\n' + t('gcTrainLimit') + ' ' + r.limit + ' (' + t('gcTrainWas') + ' ' + r.was + ')\n' + (r.clear ? t('gcTrainClearOk') : t('gcTrainOverlap') + ' ' + r.overlaps.join(', '));
+            else if (reps) info += '\n' + t('gcTrainNeed');
+            else info += '\n' + t('gcTrainNone');
+            row.info.textContent = info;
+            row.info.className = 'gc-tinfo' + (r && !r.clear ? ' warn' : '');
+        });
+    }
+    function buildTrain() {
+        var box = el('div', 'gc-train');
+        box.hidden = true;
+        box.appendChild(el('div', 'gc-line', t('gcTrainHelp')));
+        ui.tCue = el('div', 'gc-tcue'); ui.tCue.setAttribute('role', 'status'); ui.tCue.setAttribute('aria-live', 'assertive');
+        box.appendChild(ui.tCue);
+        var grid = el('div', 'gc-tgrid');
+        ui.tRows = {};
+        TRAIN_MOVES.forEach(function (m) {
+            var c = el('div', 'gc-tmove'), info = el('div', 'gc-tinfo');
+            c.appendChild(el('div', 'gc-tname', m));
+            var b = btn('btn-primary', t('gcTrainDo'), function () { if (trainer && trainer.move === m) stopTrain(); else trainMove(m); });
+            c.appendChild(b); c.appendChild(info);
+            grid.appendChild(c);
+            ui.tRows[m] = { btn: b, info: info };
+        });
+        box.appendChild(grid);
+        var acts = el('div', 'gc-row gc-acts');
+        acts.appendChild(btn('', t('gcTrainClear'), function () { stopTrain(); trained = { reps: {}, define: {}, report: [] }; saveTrained(); paint(); }));
+        box.appendChild(acts);
+        return box;
+    }
+
     /* ---------- record and replay (Debug) ---------- */
     function startRecord() { stopReplay(); rec = []; recording = true; note('rec', t('gcRecording')); paint(); }
     function stopRecord() { if (!recording) return; recording = false; note('rec', rec.length + ' ' + t('gcSamples')); try { Store.rawSet('arc_dev_ctrlrec', rec.slice(0, REC_MAX)); } catch (e) {} paint(); }
@@ -294,7 +393,7 @@
         if (!(r instanceof Array) || !r.length) return;
         stopRecord(); stopReplay();
         var p = prefs(), c = cfg || SensorProto.config({}, MotionEngine.MOVES), i = 0, t0 = performance.now(), base = r[0].t;
-        var e = MotionEngine.create({ moves: c.moves, define: c.define || {}, profile: c.profile || p.profile, sensitivity: p.sensitivity, strideScale: p.stride,
+        var e = MotionEngine.create({ moves: c.moves, define: defines(c), profile: c.profile || p.profile, sensitivity: p.sensitivity, strideScale: p.stride,
                                       onAction: function (n, info) { note('replay', n + ' ' + Math.round(info.confidence * 100) + '% @' + Math.round(info.t - base) + ' ms'); } });
         replay = { timer: setInterval(function () {
             var now = performance.now() - t0;
@@ -317,8 +416,8 @@
     function ind(ok, label) { return (ok === true ? '● ' : ok === false ? '○ ' : '◌ ') + label; }
     function setTab(v) {
         tab = v;
-        ui.tLive.className = 'btn' + (v === 'live' ? ' btn-primary' : ''); ui.tDebug.className = 'btn' + (v === 'debug' ? ' btn-primary' : '');
-        ui.live.hidden = v !== 'live'; ui.debug.hidden = v !== 'debug';
+        ui.tLive.className = 'btn' + (v === 'live' ? ' btn-primary' : ''); ui.tDebug.className = 'btn' + (v === 'debug' ? ' btn-primary' : ''); ui.tTrain.className = 'btn' + (v === 'train' ? ' btn-primary' : '');
+        ui.live.hidden = v !== 'live'; ui.debug.hidden = v !== 'debug'; ui.train.hidden = v !== 'train';
         clearInterval(liveTimer); liveTimer = setInterval(paint, v === 'debug' ? 150 : 250);
         paint();
     }
@@ -341,6 +440,7 @@
         }
         ui.calib.disabled = raw || !sensing;
         if (tab === 'debug') paintDebug();
+        if (tab === 'train') paintTrain();
     }
     function f1(v) { return v === null || v === undefined ? '—' : v.toFixed(1); }
     function f0(v) { return v === null || v === undefined ? '—' : String(Math.round(v)); }
@@ -409,7 +509,8 @@
         [ui.sDot, ui.sBadge, ui.modeName, ui.sState].forEach(function (x) { top.appendChild(x); });
         var sp = el('span', 'gc-grow'); top.appendChild(sp);
         ui.tLive = btn('', t('gcLive'), function () { setTab('live'); }); ui.tDebug = btn('', t('gcDebug'), function () { setTab('debug'); });
-        top.appendChild(ui.tLive); top.appendChild(ui.tDebug); top.appendChild(btn('gc-modebtn', t('gcMode'), openModes)); top.appendChild(btn('gc-leave2', t('gcLeave'), function () { stop(); }));
+        ui.tTrain = btn('', t('gcTrain'), function () { setTab('train'); });
+        top.appendChild(ui.tLive); top.appendChild(ui.tDebug); top.appendChild(ui.tTrain); top.appendChild(btn('gc-modebtn', t('gcMode'), openModes)); top.appendChild(btn('gc-leave2', t('gcLeave'), function () { stop(); }));
         s.appendChild(top);
 
         ui.live = el('div', 'gc-live');
@@ -446,6 +547,7 @@
         rr.appendChild(btn('', t('gcClear'), function () { rec = null; log = []; plot = []; Store.rawSet('arc_dev_ctrlrec', null); if (eng) eng.reset(); diag = { acked: 0, tvDuplicate: 0, tvStale: 0, unacked: 0 }; paint(); }));
         ui.debug.appendChild(rr);
         s.appendChild(ui.debug);
+        ui.train = buildTrain(); s.appendChild(ui.train);
         return s;
     }
 
@@ -512,6 +614,7 @@
             diag = { acked: 0, tvDuplicate: 0, tvStale: 0, unacked: 0 };
             build(body);
             readable(); window.addEventListener('resize', readable); setTimeout(readable, 350);
+            loadTrained(); trainer = null; trainBuf = [];
             newEngine();
             pick(saved.p === 2 ? 2 : 1);
             pickMode(saved.mode);
@@ -526,6 +629,7 @@
         close: function () {
             stopScan();
             stop();
+            stopTrain();
             clearInterval(liveTimer); liveTimer = 0;
             if (VirtualPad.active()) VirtualPad.hide();
             document.removeEventListener('visibilitychange', onVis);

@@ -1,8 +1,10 @@
 package us.geekspro.mypc.controller;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -23,8 +25,7 @@ import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 
 import com.google.zxing.client.android.Intents;
-import com.google.zxing.integration.android.IntentIntegrator;
-import com.google.zxing.integration.android.IntentResult;
+import com.journeyapps.barcodescanner.CaptureActivity;
 
 import org.json.JSONObject;
 
@@ -102,23 +103,51 @@ public final class MainActivity extends Activity {
         if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         LinkService.set(this, on);
+        web.removeCallbacks(pump);
+        if (on) web.postDelayed(pump, PUMP_MS);
     }
 
+    // With the screen off the WebView counts as hidden and its timers slow down, so the link's once-a-second ping could
+    // come too late and the TV would drop the phone (5 s of silence). While connected the app runs the ping itself.
+    private static final long PUMP_MS = 400;
+    private final Runnable pump = new Runnable() {
+        @Override public void run() {
+            if (web == null || !active) return;
+            web.evaluateJavascript("window.NetLink&&NetLink.pump&&NetLink.pump()", null);
+            web.postDelayed(this, PUMP_MS);
+        }
+    };
+
+    // the scanner screen of zxing-android-embedded, opened directly (its IntentIntegrator helper needs androidx.fragment)
+    private static final int SCAN = 7, CAMERA = 8;
+
     void scanQr() {
-        new IntentIntegrator(this)
-                .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
-                .setPrompt(getString(R.string.scan_prompt))
-                .setBeepEnabled(false)
-                .setOrientationLocked(true)
-                .addExtra(Intents.Scan.SCAN_TYPE, Intents.Scan.NORMAL_SCAN)
-                .initiateScan();
+        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] { Manifest.permission.CAMERA }, CAMERA);
+            return;
+        }
+        try {
+            startActivityForResult(new Intent(this, CaptureActivity.class)
+                    .setAction(Intents.Scan.ACTION)
+                    .putExtra(Intents.Scan.FORMATS, "QR_CODE")
+                    .putExtra(Intents.Scan.PROMPT_MESSAGE, getString(R.string.scan_prompt))
+                    .putExtra(Intents.Scan.BEEP_ENABLED, false)
+                    .putExtra(Intents.Scan.ORIENTATION_LOCKED, true), SCAN);
+        } catch (RuntimeException e) {
+            Toast.makeText(this, getString(R.string.scan_error) + " (" + e.getClass().getSimpleName() + ")", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override public void onRequestPermissionsResult(int request, String[] perms, int[] res) {
+        if (request != CAMERA) return;
+        if (res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED) scanQr();
+        else Toast.makeText(this, R.string.scan_no_camera, Toast.LENGTH_LONG).show();
     }
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
-        IntentResult r = IntentIntegrator.parseActivityResult(request, result, data);
-        if (r == null) { super.onActivityResult(request, result, data); return; }
-        if (r.getContents() == null) return;                    // cancelled
-        pair(r.getContents());
+        if (request != SCAN) { super.onActivityResult(request, result, data); return; }
+        String text = result == RESULT_OK && data != null ? data.getStringExtra(Intents.Scan.RESULT) : null;
+        if (text != null) pair(text);                            // null: cancelled
     }
 
     /** a scanned code or a pairing link: the page connects with it (GamepadApp.scanCode answers '' when it is not one) */

@@ -6,5 +6,7 @@
     <string name="scan_prompt">وجّه الكاميرا نحو رمز QR على التلفاز</string>
     <string name="scan_bad">هذا ليس رمز اقتران My PC</string>
     <string name="offline">لا يوجد اتصال بالإنترنت. تحتاج وحدة التحكم My PC إلى Wi-Fi للوصول إلى التلفاز.</string>
+    <string name="scan_error">تعذر فتح قارئ رمز QR</string>
+    <string name="scan_no_camera">تحتاج وحدة التحكم My PC إلى الكاميرا لقراءة رمز QR على التلفاز</string>
     <string name="retry">إعادة المحاولة</string>
 </resources>

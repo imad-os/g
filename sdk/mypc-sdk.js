@@ -208,12 +208,14 @@ var MyPC = (function () {
                 pc.addEventListener('icegatheringstatechange', chk);
             });
         }
+        var live = [];                                           // the ping of every open link (pump)
         function newPC() { return new RTCPeerConnection({ iceServers: [] }); }
 
         // { send(msg) -> boolean, onMessage(fn), onClose(fn), close() }. Messages: any JSON value, 4 KB at most, ordered and reliable;
         // at most 100 per second each way (more are dropped). A ping every second; closed after 5 s of silence.
+        // NetLink.pump() runs every open link's ping now: a page whose timers are slowed (the Android app, screen off) calls it.
         function makeConn(pc, dc) {
-            var msgH = null, closeH = null, buf = [], closed = false, why = '', last = Date.now(), ping = 0, tx = [], rx = [];
+            var msgH = null, closeH = null, buf = [], closed = false, why = '', last = Date.now(), ping = 0, tx = [], rx = [], sentAt = 0;
             function over(list, max) {
                 var t = Date.now(), i = 0;
                 while (i < list.length && t - list[i] > 1000) i++;
@@ -224,6 +226,7 @@ var MyPC = (function () {
             function shut(w) {
                 if (closed) return;
                 closed = true; why = w; clearInterval(ping);
+                var k = live.indexOf(beat); if (k >= 0) live.splice(k, 1);
                 try { dc.close(); } catch (e) {}
                 try { pc.close(); } catch (e2) {}
                 if (closeH) { try { closeH(w); } catch (e3) {} }
@@ -248,10 +251,15 @@ var MyPC = (function () {
             };
             dc.onclose = function () { shut('closed'); };
             pc.onconnectionstatechange = function () { if (pc.connectionState === 'failed' || pc.connectionState === 'closed') shut('closed'); };
-            ping = setInterval(function () {
-                if (Date.now() - last > SILENCE_MS) return shut('timeout');
+            function beat() {
+                var t = Date.now();
+                if (closed) return;
+                if (t - last > SILENCE_MS) return shut('timeout');
+                if (t - sentAt < 800) return;
+                sentAt = t;
                 try { dc.send('{"p":1}'); } catch (e) {}
-            }, 1000);
+            }
+            ping = setInterval(beat, 1000); live.push(beat);
             return conn;
         }
         // resolves with the connection once the data channel is open (or rejects after 15 s)
@@ -289,7 +297,7 @@ var MyPC = (function () {
                     return { answer: str, connected: dcP.then(function (dc) { return opened(pc, dc); }), cancel: function () { try { pc.close(); } catch (e) {} } };
                 }, function (e) { try { pc.close(); } catch (x) {} throw e; });
         }
-        return { offer: offer, answer: answer, MAX_MSG: MAX_MSG, supported: function () { return typeof RTCPeerConnection !== 'undefined'; } };
+        return { offer: offer, answer: answer, MAX_MSG: MAX_MSG, pump: function () { live.slice().forEach(function (b) { b(); }); }, supported: function () { return typeof RTCPeerConnection !== 'undefined'; } };
     })();
     /* netlink:end */
 

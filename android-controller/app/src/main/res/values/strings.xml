@@ -6,5 +6,7 @@
     <string name="scan_prompt">Point the camera at the QR code on the TV</string>
     <string name="scan_bad">This is not a My PC pairing code</string>
     <string name="offline">No internet connection. My PC Controller needs Wi-Fi to reach the TV.</string>
+    <string name="scan_error">Could not open the QR scanner</string>
+    <string name="scan_no_camera">My PC Controller needs the camera to read the TV\'s QR code</string>
     <string name="retry">Try again</string>
 </resources>

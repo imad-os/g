@@ -6,5 +6,7 @@
     <string name="scan_prompt">Visez le QR code affiché sur la TV</string>
     <string name="scan_bad">Ce n\'est pas un code d\'appairage My PC</string>
     <string name="offline">Pas de connexion internet. La manette My PC a besoin du Wi-Fi pour joindre la TV.</string>
+    <string name="scan_error">Impossible d\'ouvrir le lecteur de QR code</string>
+    <string name="scan_no_camera">La manette My PC a besoin de la caméra pour lire le QR code de la TV</string>
     <string name="retry">Réessayer</string>
 </resources>

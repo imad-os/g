@@ -580,7 +580,7 @@ svg { display: block; width: 100%; height: 100%; }
 /* pad mode: the virtual pad (js/core/virtual-pad.js, z-index 99999) covers the screen; this bar sits above it, bottom centre (between stick and buttons) */
 .gc-bar { position: fixed; z-index: 100000; left: 50%; transform: translateX(-50%); bottom: calc(10px * var(--k, 1) + env(safe-area-inset-bottom)); white-space: nowrap; display: flex; gap: calc(10px * var(--k, 1)); align-items: center; font-weight: 700; font-size: calc(15px * var(--k, 1)); }
 .gc-padbg { position: fixed; inset: 0; z-index: 50; background: #101226; touch-action: none; }
-.gc-padbg[hidden], .gc-bar[hidden], .gc-sense[hidden], .gc-live[hidden], .gc-debug[hidden], .gc-settings[hidden] { display: none; }
+.gc-padbg[hidden], .gc-bar[hidden], .gc-sense[hidden], .gc-live[hidden], .gc-debug[hidden], .gc-train[hidden], .gc-settings[hidden] { display: none; }
 .gc-dot { width: calc(10px * var(--k, 1)); height: calc(10px * var(--k, 1)); border-radius: 50%; background: #e55; flex: none; }
 .gc-dot.ok { background: #4d4; }
 .gc-badge { padding: calc(4px * var(--k, 1)) calc(12px * var(--k, 1)); border-radius: calc(999px * var(--k, 1)); background: #5b63ff; }
@@ -590,7 +590,7 @@ svg { display: block; width: 100%; height: 100%; }
 .gc-stop { display: flex; gap: calc(8px * var(--k, 1)); align-items: center; font-weight: 700; font-size: calc(15px * var(--k, 1)); flex: none; }
 .gc-stop .btn { font-size: calc(14px * var(--k, 1)); padding: calc(6px * var(--k, 1)) calc(12px * var(--k, 1)); min-height: 0; }
 .gc-mode { opacity: .8; } .gc-grow { flex: 1; }
-.gc-live, .gc-debug { flex: 1; overflow: auto; padding-top: calc(8px * var(--k, 1)); -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+.gc-live, .gc-debug, .gc-train { flex: 1; overflow: auto; padding-top: calc(8px * var(--k, 1)); -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 .gc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(8px * var(--k, 1)); }
 .gc-tile, .gc-lastbox, .gc-dsec { background: #1b1e3f; border: 1px solid #3a3f8f; border-radius: calc(12px * var(--k, 1)); padding: calc(8px * var(--k, 1)) calc(10px * var(--k, 1)); }
 .gc-tl { font-size: calc(12px * var(--k, 1)); opacity: .7; text-transform: uppercase; letter-spacing: .05em; }
@@ -611,3 +611,12 @@ svg { display: block; width: 100%; height: 100%; }
 .gc-debug .gc-acts { grid-column: 1 / -1; }
 .gc-pre { margin: calc(4px * var(--k, 1)) 0 0; font: calc(12px * var(--k, 1))/1.35 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; }
 .gc-plot { width: 100%; height: calc(70px * var(--k, 1)); display: block; margin-top: calc(4px * var(--k, 1)); }
+/* Train tab: each move recorded a few times, limits set from them (js/core/motion-train.js) */
+.gc-tcue { font-size: calc(30px * var(--k, 1)); font-weight: 900; text-align: center; min-height: calc(40px * var(--k, 1)); color: #ffd23f; }
+.gc-tcue.go { color: #4d4; }
+.gc-tgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: calc(8px * var(--k, 1)); margin-top: calc(8px * var(--k, 1)); }
+.gc-tmove { background: #1b1e3f; border: 1px solid #3a3f8f; border-radius: calc(12px * var(--k, 1)); padding: calc(8px * var(--k, 1)) calc(10px * var(--k, 1)); display: flex; flex-direction: column; gap: calc(6px * var(--k, 1)); }
+.gc-tmove .btn { font-size: calc(15px * var(--k, 1)); padding: calc(8px * var(--k, 1)) calc(14px * var(--k, 1)); min-height: 0; }
+.gc-tname { font-size: calc(18px * var(--k, 1)); font-weight: 800; }
+.gc-tinfo { font-size: calc(13px * var(--k, 1)); opacity: .85; white-space: pre-wrap; }
+.gc-tinfo.warn { color: #ffb347; opacity: 1; }

@@ -232,6 +232,11 @@ for (const HZ of [60, 100]) {
     check(r.at.length === 2 && r.at[1][1] - r.at[0][1] > 900, 'DUCK_END comes when the player stands up, not at the bottom of the squat (' + (r.at[1] && r.at[1][1] - r.at[0][1]) + ' ms)');
     r = run(rec([still, ...left, still, ...right, still]));
     check(r.acts.join() === 'LEFT,RIGHT', 'a step left then a step right: LEFT, RIGHT, no rebound (' + r.acts.join(',') + ')');
+    const hopRight = [{ ms: 140, l: 8, v: 10 }, { ms: 300, free: true }, { ms: 120, l: -8, v: 18 }, { ms: 150, v: -3 }];
+    r = run(rec([still, ...hopRight, still]));
+    check(r.acts.join() === 'RIGHT', 'a hop to the right (airborne too) is RIGHT only, not JUMP (' + r.acts.join(',') + ')');
+    r = run(rec([still, ...jump, { ms: 120, l: -7 }, still]));
+    check(r.acts.join() === 'JUMP', 'a jump whose landing jolts sideways is JUMP only (' + r.acts.join(',') + ')');
     r = run(rec([still, ...left, still]), { moves: ['RIGHT', 'JUMP'] });
     check(r.acts.length === 0, 'moves the game did not ask for are never sent');
     r = run(rec([still, ...duck, still]), { moves: ['DUCK'] });
@@ -248,6 +253,24 @@ for (const HZ of [60, 100]) {
     const j = rec([still, ...jump, still]);
     r = run(j.concat(j));
     check(r.acts.join() === 'JUMP', 'samples replayed with old timestamps are ignored (one JUMP)');
+    // the move trainer: limits from this player's own moves (a weak side step, a short jump) -> found; the others stay clear
+    if (HZ === 100) {
+        const T = load('js/core/motion-train.js', ctxP).MotionTrain;
+        const weakLeft = [{ ms: 130, l: -3.2 }, { ms: 130, l: 3.2 }], weakRight = [{ ms: 130, l: 3.2 }, { ms: 130, l: -3.2 }];
+        const shortJump = [{ ms: 160, v: -6 }, { ms: 140, v: 12 }, { ms: 140, free: true }, { ms: 80, v: 22 }, { ms: 150, v: -3 }];
+        const rep = (parts) => { const s = rec([{ ms: 1000 }, ...parts, { ms: 400 }]); return T.measure(s, s[0].t + 1000); };
+        r = run(rec([still, ...weakLeft, still, ...shortJump, still]));
+        check(r.acts.length === 0, 'before training: a weak side step and a short jump are missed (' + r.acts.join(',') + ')');
+        const train = { LEFT: [], RIGHT: [], JUMP: [], DUCK: [] };
+        for (let i = 0; i < 4; i++) { train.LEFT.push(rep(weakLeft)); train.RIGHT.push(rep(weakRight)); train.JUMP.push(rep(shortJump)); train.DUCK.push(rep(duck)); }
+        const tuned = T.tune(train);
+        check(Object.keys(tuned.define).sort().join() === 'DUCK,JUMP,LEFT,RIGHT' && tuned.report.every((x) => x.reps === 4), 'trainer: every move with enough repetitions gets its own rule (' + tuned.report.map((x) => x.move + ' ' + x.was + '->' + x.limit + (x.clear ? '' : ' overlaps ' + x.overlaps)).join('; ') + ')');
+        r = run(rec([still, ...weakLeft, still, ...shortJump, still, ...weakRight, still, ...duck, still]), { define: tuned.define });
+        check(r.acts.join() === 'LEFT,JUMP,RIGHT,DUCK,DUCK_END', 'after training: this player\'s moves are found, each as itself (' + r.acts.join(',') + ')');
+        r = run(rec([still, { ms: 6000, v: S(105 / 120, 2.2) }, still]), { define: tuned.define });
+        check(r.acts.length === 0, 'after training: walking in place still fires nothing (' + r.acts.join(',') + ')');
+        check(T.tune({ LEFT: train.LEFT.slice(0, 2) }).report.length === 0, 'trainer: fewer than 3 repetitions change nothing');
+    }
     const dbg = run(rec([still, ...left, ...left, still])).m.debug();
     check(dbg.diag.fired === 1 && dbg.diag.cooldown >= 1 && dbg.detectors.length === 4, 'a second side step inside the cooldown is counted as a duplicate, not sent (' + JSON.stringify(dbg.diag) + ')');
 }

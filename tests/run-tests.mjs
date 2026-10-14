@@ -2471,6 +2471,25 @@ async function main() {
             return GamepadApp.engine().debug().signals.magnitude;
         });
         check(Math.abs(mag - 9.81) < 0.05, 'Android app: native samples reach the motion engine (|g| ' + mag + ')');
+        // Train tab: Record 5 for LEFT, the player steps left on every Go (native samples), the limit is set from them
+        await A.evaluate(() => { const b = [...document.querySelectorAll('.gc-stop .btn')].find((x) => x.textContent === I18n.t('gcTrain')); b.click(); });
+        await A.evaluate(() => {
+            window.__tick = 0;
+            window.__feed = setInterval(() => {      // 10 ms samples: still, but a strong step left 1.5 s after every Go
+                const now = performance.now(), cue = document.querySelector('.gc-tcue'), s = [];
+                for (let i = 0; i < 4; i++) {
+                    const k = __tick++, go = cue && cue.classList.contains('go');
+                    if (go && !window.__goAt) window.__goAt = now; if (!go) window.__goAt = 0;
+                    const into = window.__goAt ? now - __goAt : -1, l = into > 200 && into < 330 ? -8 : into >= 330 && into < 460 ? 8 : 0;
+                    s.push([20000 + k * 10, l, -l, 0, l, -l, 9.81, 0, 0, 0]);     // up = z; sideways on x and -y (screen angle 0 or 90)
+                }
+                __mypcMotion({ n: 20000 + __tick * 10, s });
+            }, 40);
+        });
+        await A.click('.gc-tmove .btn');                               // LEFT: Record 5
+        await A.waitForFunction(() => { const d = Store.rawGet('arc_dev_ctrltrain'); return d && d.reps.LEFT && d.reps.LEFT.length === 5; }, null, { timeout: 30000 });
+        const tr = await A.evaluate(() => { clearInterval(__feed); return Store.rawGet('arc_dev_ctrltrain'); });
+        check(tr.report.length === 1 && tr.report[0].move === 'LEFT' && tr.define.LEFT && tr.define.LEFT.below < 0, 'Android app: the Train tab records a move 5 times and sets its limit (' + JSON.stringify(tr.report) + ')');
         await A.evaluate(() => document.querySelector('.gc-leave2').click());
         check(await A.evaluate(() => __nat.slice(-2).sort().join() === 'active:false,motion:false'), 'Android app: leaving stops the native sensors and the keep-awake (' + await A.evaluate(() => __nat.join()) + ')');
         check(A.errors.length === 0, 'no page errors in the Android app ' + A.errors.join('; '));
