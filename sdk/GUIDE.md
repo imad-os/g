@@ -462,62 +462,75 @@ the World records.
 - [ ] served over https with CORS (GitHub Pages)
 - [ ] every own script, stylesheet and asset is loaded with `?v=<version>`, the same as `version` in `mypc-app.json` (bumped for every release)
 
-## Native Bluetooth bridge (My PC host apps)
+## 12. Phone controllers with motion: `MyPC.sensors` (API level 8)
 
-**HR BLE bridge v1.** The installed My PC Tizen host can expose a privileged native Bluetooth LE bridge to explicitly authorized hosted apps. The app iframe must not call `tizen.bluetooth` directly; the host owns native API access and routes messages through the SDK protocol.
+Players can use a phone as a controller (My PC > **Game controller** on the phone). Besides **Buttons** (the virtual pad;
+your app just gets the usual actions) the phone has two motion modes: **Motion moves** (the phone, in the player's right
+hand, detects moves such as `LEFT` `RIGHT` `JUMP` `DUCK` `DUCK_END` and sends only the ones you ask for, plus running
+metrics if you want them) and **Motion data** (raw sensor samples at the rate you ask for).
 
-```javascript
-MyPC.bluetooth.on('status', function (event) {
-    // scanning | connecting | connected | disconnected | error
-    console.log(event.status, event.message || '');
-});
-
-MyPC.bluetooth.on('reading', function (sample) {
-    // Heart Rate Measurement decoded by the host:
-    // { bpm, contact, energy, rr, deviceName }
-    console.log(sample.bpm);
-});
-
-MyPC.bluetooth.connect().then(function (info) {
-    console.log('Connected to ' + info.deviceName);
-}).catch(function (error) {
-    console.error(error.message);
-});
-
-MyPC.bluetooth.disconnect();
+```js
+MyPC.init({ onInit: function () {
+    MyPC.sensors.setup({ moves: ['LEFT', 'RIGHT', 'JUMP', 'DUCK', 'DUCK_END'],
+                         profile: { age: 30, height: 175, weight: 70, phone_position: 'right hand' },   // optional, cm / kg
+                         metrics: { hz: 1 } });                                                         // optional
+} });
+MyPC.sensors.on('action', function (ev, player) { if (ev.action === 'JUMP') jump(player); });
+MyPC.sensors.on('metrics', function (m, player) { showPace(m.pace_sec_per_km, m.cadence, m.gait); });
 ```
 
-`MyPC.bluetooth.available()` reports whether the SDK has completed the hosted My PC handshake; it does not guarantee that the current TV model exposes Bluetooth LE. Native support still depends on Tizen runtime capability and the signed app's Bluetooth privilege. Apps should keep a browser-only fallback when appropriate.
+Also `on('raw' | 'players' | 'config')`, `stop()`, `players()`, `config()`, `available()`, and `define` in `setup` for
+moves of your own (a rule on a signal, no code on the phone). Without `setup`, motion moves simply press left / right /
+OK / down for your app. The full protocol, the rules behind each move, units and limits:
+[docs/phone-controller.md](https://github.com/imad-os/g/blob/main/docs/phone-controller.md).
 
-<!-- HR BLE test mode v1 -->
-### Host-generated HR test data
+## 13. Heart-rate sensors: `MyPC.bluetooth` (API level 7, TV only)
 
-When an HR app is hosted in My PC, its existing **Simulate HR** button uses a host-generated stream instead of a local browser timer:
+On a TV, My PC reads heart-rate sensors over Bluetooth LE for your app: anything that speaks the standard **Heart Rate
+Service** (`180D`, measurement `2A37`): chest straps (Polar H10 / H9 / H7, Garmin HRM-Dual / HRM-Pro / HRM-Fit, Decathlon
+Kalenji / Kiprun, Wahoo TICKR, Coospo…), arm bands (Polar Verity Sense / OH1) and watches that broadcast their heart rate
+(Garmin Forerunner 55 and others: on the watch, *Settings > Sensors & Accessories > Wrist Heart Rate > Broadcast Heart
+Rate*, or hold UP during an activity). Your app never touches `tizen.bluetooth`: My PC owns it and sends you events.
 
-```javascript
-MyPC.bluetooth.startTest(); // host emits status 'test' and reading events once per second
-MyPC.bluetooth.stopTest();  // stops the stream
-```
+Only allowed apps get it: the HR Monitor app (`hr-monitor`), or any app whose **config** in the App Store Manager has
+`"heartRate": true`. Others get the error "Bluetooth is not allowed for this app." Outside a TV (standalone, phones)
+every call fails with a clear message; keep a fallback.
 
-Test samples are synthetic (not physiological measurements) and are marked `source: 'simulation'`. Starting test mode disconnects any native sensor; starting a real BLE connection or closing the app stops test mode so sources are never mixed.
-
-<!-- HR BLE device picker v1 -->
-### Bluetooth device selection
-
-`MyPC.bluetooth.scan()` scans for nearby BLE devices advertising the standard Heart Rate service (`180D`) or carrying a recognizable heart-rate monitor name. It resolves with `{ devices: [{ id, name, address, type }] }` after a 10-second scan. The UI can also subscribe to `device-found` events for live list updates. The user must select a result before `MyPC.bluetooth.connect(deviceId)` will attempt a connection; the host no longer connects automatically to the first match.
-
-```javascript
-MyPC.bluetooth.on('device-found', function (event) {
-    console.log(event.device.name, event.device.address);
+```js
+MyPC.bluetooth.on('status', function (e) {
+    // e.status: scanning | scan-complete | scan-cancelled | connecting | connected | stale | no-contact
+    //           | reconnecting (e.attempt) | disconnected (e.reason: 'user' | 'lost') | error | test | test-stopped
+    show(e.status, e.message || '', e.deviceName || '');
 });
-var results = await MyPC.bluetooth.scan();
-await MyPC.bluetooth.connect(results.devices[0].id); // only after user selection
+MyPC.bluetooth.on('reading', function (r) {
+    // { bpm, format: 8 | 16, contact: 'Detected' | 'Not Detected' | 'Waiting', contactState: 'detected' | 'not-detected' | 'unsupported',
+    //   energy (kJ or null), rr (last RR interval, ms, or null), rrs: [all RR intervals in this packet, ms], deviceName, source: 'ble' | 'simulation', time }
+    heart(r.bpm);
+});
+MyPC.bluetooth.on('device-found', function (e) { addToList(e.device); });   // { id, name, address, rssi, last? }; again with updated: true when its name arrives
+
+var cap = await MyPC.bluetooth.capabilities();   // { nativeBleAvailable, reasonCode, message, powered, lastDevice, state }
+var res = await MyPC.bluetooth.scan({ seconds: 10 });   // { devices: [...] } (3 to 30 s); the user picks one
+await MyPC.bluetooth.connect(res.devices[0].id);
+await MyPC.bluetooth.reconnectLast();            // the sensor used last on this TV, no list (it scans for it)
+await MyPC.bluetooth.status();                   // { state, device, lastDevice, lastReadingAgoMs, stale }
+await MyPC.bluetooth.disconnect();
+await MyPC.bluetooth.startTest();                // simulated readings once a second (no sensor needed); stopTest()
 ```
 
-`MyPC.bluetooth.cancelScan()` stops an active scan. The scan lists only devices that appear to be heart-rate sensors; final compatibility is verified by discovering service `180D` and measurement characteristic `2A37` after connection.
+What My PC does for you:
 
-<!-- HR BLE platform support v1 -->
-### Platform capability diagnostics
+- **8- and 16-bit heart rates**, energy expended, any number of RR intervals; a truncated packet keeps its heart rate.
+  Readings with bpm 0 (strap off the skin) are not sent; a `no-contact` status is.
+- **Finding the sensor**: devices are listed once each (by address), named when the scan response arrives; the Heart Rate
+  service and its measurement are found whatever UUID form the TV firmware gives (short, long, upper case, from
+  `getServiceAllUuids`), and on firmware without characteristic UUIDs the notifying characteristic is used.
+- **Staying connected**: a sensor that drops (watch stops broadcasting, strap out of range) is reconnected by itself:
+  `reconnecting` with backoff (1, 2, 4, 8, 15 s…), first with the old handle, then by scanning for it again, for 5
+  minutes. A connection with no reading for 10 s is reported as `stale` (and `connected` again when readings come back).
+  `disconnect()` stops all of that.
+- `reasonCode` of `capabilities()`: `available`, `powered-off` (Bluetooth off in the TV settings), `no-adapter`,
+  `unsupported-tv`, `permission-denied` (the installed package lacks the Bluetooth privilege), `adapter-error`,
+  `tizen-api-unavailable` (not on a TV).
 
-`MyPC.bluetooth.capabilities()` returns a non-throwing diagnostic result such as `nativeBleAvailable`, `reasonCode`, and `message`. HR Monitor uses it to explain the difference between a browser-only launch, a My PC runtime without Tizen BLE, a missing Bluetooth privilege, an unavailable adapter, and a scan where no compatible heart-rate monitor was found.
-
+The native side is `js/core/hr-ble.js` (unit tests in `tests/unit-tests.mjs` with fake Garmin, Polar and Decathlon devices).

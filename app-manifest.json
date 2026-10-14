@@ -1,6 +1,6 @@
 {
-  "build": 33,
-  "version": "2.13.4",
+  "build": 34,
+  "version": "2.14.0",
   "shell": 1,
   "css": [
     "css/launcher.css"
@@ -12,6 +12,9 @@
     "js/core/cloud.js",
     "js/core/rooms.js",
     "js/core/netlink.js",
+    "js/core/sensor-proto.js",
+    "js/core/motion.js",
+    "js/core/hr-ble.js",
     "js/core/virtual-pad.js",
     "js/core/backup.js",
     "js/core/world.js",

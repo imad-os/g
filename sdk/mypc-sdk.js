@@ -89,6 +89,7 @@ var MyPC = (function () {
             case 'mp': multiplayer._message(d); break;
             case 'pad': pad._message(d); break;
             case 'ble-event': bluetooth._message(d); break;
+            case 'sensors': sensors._message(d); break;
         }
     }
 
@@ -920,7 +921,8 @@ var MyPC = (function () {
         return api;
     })();
 
-    /* HR BLE bridge v1: requests go to the trusted My PC host; sensor values return as events. */
+    /* MyPC.bluetooth: heart-rate sensors (any Bluetooth LE Heart Rate Service device: chest straps, watches that broadcast).
+     * Requests go to My PC (js/core/hr-ble.js on the TV); readings and status changes come back as events. */
     var bluetooth = (function () {
         var nextId = 1, pending = {}, listeners = {};
         function emit(name, payload) {
@@ -962,11 +964,12 @@ var MyPC = (function () {
         }
         return {
             available: function () { return !!(hosted && hostWin && info && !info.standalone); },
-            /* HR BLE platform support v1: expose non-destructive host capability diagnostics. */
             capabilities: function () { return request('capabilities'); },
-            /* HR BLE test mode v1 preserved; HR BLE device picker v1: scan returns candidates; connect requires the selected id. */
-            scan: function () { return request('scan'); },
+            status: function () { return request('status'); },                      // { state, device, lastDevice, lastReadingAgoMs, stale }
+            // scan({ seconds }) lists heart-rate sensors (3 to 30 s, 10 by default); connect(id) only after the user picked one
+            scan: function (opt) { return request('scan', opt && opt.seconds ? { seconds: +opt.seconds } : null); },
             connect: function (deviceId) { return request('connect', { deviceId: deviceId }); },
+            reconnectLast: function () { return request('reconnect-last'); },      // the sensor used last on this TV, no picker
             cancelScan: function () { return request('cancel-scan'); },
             disconnect: function () { return request('disconnect'); },
             startTest: function () { return request('start-test'); },
@@ -984,12 +987,49 @@ var MyPC = (function () {
         };
     })();
 
+    /* MyPC.sensors: phones used as motion controllers (Game controller app, modes "sensor-actions" and "sensor-raw").
+     * setup() tells the phones which moves this app understands and who plays; they then send only those moves.
+     *   MyPC.sensors.setup({ moves: ['LEFT', 'RIGHT', 'JUMP', 'DUCK', 'DUCK_END'],
+     *                       profile: { age: 30, height: 175, weight: 70, phone_position: 'right hand' },   // cm, kg
+     *                       metrics: { hz: 1 },          // optional: { type: 'metrics', gait, cadence, speed_kmh, ... } once a second
+     *                       raw: { hz: 30 },             // sensor-raw phones: sample rate
+     *                       define: { SPIN: { signal: 'rot', above: 300, cooldown_ms: 800 } } })   // optional: new moves
+     *   MyPC.sensors.on('action', function (ev, player) { ev.action === 'JUMP' ... });   // also 'metrics', 'raw', 'players', 'config'
+     *   MyPC.sensors.stop()
+     * Docs: docs/phone-controller.md in the My PC repository. */
+    var sensors = (function () {
+        var listeners = {}, cfg = null, players = { 1: null, 2: null };
+        function emit(name, payload, player) {
+            var list = (listeners[name] || []).slice();
+            for (var i = 0; i < list.length; i++) { try { list[i](payload, player); } catch (e) { try { console.error('[MyPC sensors] ' + e); } catch (x) {} } }
+        }
+        return {
+            available: function () { return !!(hosted && hostWin && info && !info.standalone); },
+            setup: function (opt) { if (hosted && hostWin) post('sensors', { op: 'setup', cfg: opt || {} }); },
+            stop: function () { cfg = null; if (hosted && hostWin) post('sensors', { op: 'stop' }); },
+            config: function () { return cfg; },                          // what the phones were sent (moves kept, profile, rates)
+            players: function () { return players; },                    // { 1: 'pad' | 'sensor-actions' | 'sensor-raw' | null, 2: ... }
+            on: function (name, fn) {
+                if (typeof fn !== 'function' || typeof name !== 'string') return function () {};
+                (listeners[name] || (listeners[name] = [])).push(fn);
+                return function () { var l = listeners[name] || [], i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); };
+            },
+            _message: function (d) {
+                if (!d || typeof d.ev !== 'string') return;
+                if (d.ev === 'config') { cfg = d.data || null; if (d.players) players = d.players; emit('config', cfg, 0); return; }
+                if (d.ev === 'players') { players = d.data || players; emit('players', players, 0); return; }
+                emit(d.ev, d.data, d.player);
+            }
+        };
+    })();
+
     var pub = {
         version: VERSION,
-        apiLevel: 7,                     // 3 added MyPC.multiplayer, 4 adds MyPC.pad and the pad option of init() (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: 8,                     // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,
+        sensors: sensors,
         // The app's settings object, set in the installer and read before the app opens. Read it in
         // onInit (or later). Always an object ({} when none). Standalone, test it with ?app_config={"a":1}.
         app_config: {},

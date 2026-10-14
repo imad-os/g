@@ -38,6 +38,26 @@ var GameHost = (function () {
 
     function title() { return game ? I18n.pick(game.manifest.title) : ''; }
 
+    /* ---------- phone sensors (Controllers, sensor modes): the running app's moves, metrics and raw samples ---------- */
+    var sensorsOn = false, sensorsWatch = null;
+    // cfg: { moves, define, profile, metrics, raw } (js/core/sensor-proto.js); fn(type, player, msg) gets 'action' 'metrics' 'raw' 'players'
+    function sensorsSetup(cfg, fn) {
+        if (typeof Controllers === 'undefined') return null;
+        sensorsOff();
+        var c = Controllers.sensorSetup(cfg && typeof cfg === 'object' ? cfg : {}, function (p, msg) { fn(msg.type, p, msg); });
+        if (!c) return null;
+        sensorsOn = true;
+        sensorsWatch = function () { fn('players', 0, Controllers.modes()); };
+        Controllers.onChange(sensorsWatch);
+        return c;
+    }
+    function sensorsOff() {
+        if (!sensorsOn) return;
+        sensorsOn = false;
+        if (sensorsWatch) { Controllers.offChange(sensorsWatch); sensorsWatch = null; }
+        Controllers.sensorSetup(null);
+    }
+
     /* ---------- host object given to the game ---------- */
 
     function makeHost() {
@@ -61,7 +81,9 @@ var GameHost = (function () {
             exitToMenu: function () { setTimeout(exit, 0); },
             // Top-10 tables: the game reports a final score; the launcher asks for initials if it qualifies.
             submitScore: function (score, opts) { submitScore(id, score, opts || {}); },
-            topScores: function () { return Scores.list(id); }
+            topScores: function () { return Scores.list(id); },
+            // phones in a sensor mode: host.sensors.setup({ moves: ['LEFT', 'JUMP'], metrics: { hz: 1 } }, function (type, player, msg) {})
+            sensors: { setup: sensorsSetup, stop: sensorsOff, players: function () { return typeof Controllers !== 'undefined' ? Controllers.modes() : { 1: null, 2: null }; } }
         };
     }
 
@@ -121,441 +143,9 @@ var GameHost = (function () {
     function remoteApi() {
         var id = game.id, origin = originOf(game.remote.entry), items = [], win = null, mp = null;
         function send(type, d) { if (win) { try { win.postMessage({ mypc: 1, type: type, data: d === undefined ? null : d }, origin); } catch (e) {} } }
-        /* HR BLE bridge v1; HR BLE test mode v1; HR BLE device picker v1: scan first, then connect only to the user's selected sensor. */
-        function createHrBleBridge(send) {
-            var adapter = null, device = null, characteristic = null;
-            var valueWatchId = null, connectionWatchId = null, scanTimer = 0;
-            var pendingRequestId = null, connectedName = '';
-            var discoveredDevices = Object.create(null), scanResults = [], scanMode = false;
-            var anonymousDeviceCounter = 0;
-            var testTimer = null, testActive = false, testBpm = 96, testEnergy = 12;
-
-            function emit(kind, data) {
-                var message = { kind: kind };
-                data = data || {};
-                Object.keys(data).forEach(function (key) { message[key] = data[key]; });
-                send('ble-event', message);
-            }
-            function reply(id, ok, result, error) {
-                if (id === null || id === undefined) return;
-                emit('result', { requestId: id, ok: !!ok, result: result || {}, error: error || null });
-            }
-            function errorMessage(error) {
-                if (!error) return 'Unknown Tizen Bluetooth error.';
-                return String(error.message || error.name || error).slice(0, 240);
-            }
-            function uuidKey(value) {
-                if (value && typeof value === 'object' && value.uuid !== undefined) value = value.uuid;
-                return String(value || '').toLowerCase().replace(/[^0-9a-f]/g, '');
-            }
-            function uuidMatches(value, shortUuid) {
-                var key = uuidKey(value);
-                return key === shortUuid || key.indexOf('0000' + shortUuid) === 0;
-            }
-            function addressOf(found) {
-                var address = found && found.address;
-                if (address && typeof address === 'object') {
-                    if (address.address !== undefined && address.address !== null) address = address.address;
-                    else if (address.value !== undefined && address.value !== null) address = address.value;
-                    else {
-                        var rendered = String(address);
-                        address = rendered !== '[object Object]' ? rendered : '';
-                    }
-                }
-                return String(address || '').trim();
-            }
-            function infoForDevice(found) {
-                var name = String(found && found.name || '').trim();
-                var address = addressOf(found);
-                var id = address ? address.toLowerCase() : '';
-                if (!id && name) id = 'name:' + name.toLowerCase();
-                if (!id) id = 'unknown:' + (++anonymousDeviceCounter);
-                return {
-                    id: id,
-                    name: name || 'Unnamed heart-rate sensor',
-                    address: address,
-                    type: 'heart-rate-sensor'
-                };
-            }
-            function asByteArray(value) {
-                if (value && value.value !== undefined && value.value !== value) value = value.value;
-                if (typeof value === 'string' && window.tizen && window.tizen.bluetooth &&
-                    typeof window.tizen.bluetooth.toByteArray === 'function') {
-                    try { value = window.tizen.bluetooth.toByteArray(value); } catch (e) {}
-                }
-                if (typeof ArrayBuffer !== 'undefined' && value instanceof ArrayBuffer) {
-                    return Array.prototype.slice.call(new Uint8Array(value));
-                }
-                if (typeof DataView !== 'undefined' && value instanceof DataView) {
-                    return Array.prototype.slice.call(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
-                }
-                if (value && value.buffer instanceof ArrayBuffer && value.byteLength !== undefined) {
-                    return Array.prototype.slice.call(new Uint8Array(value.buffer, value.byteOffset || 0, value.byteLength));
-                }
-                if (value && typeof value.length === 'number') {
-                    var out = [];
-                    for (var i = 0; i < value.length; i++) out.push(Number(value[i]) & 255);
-                    return out;
-                }
-                return [];
-            }
-            function decodeHeartRate(value) {
-                var bytes = asByteArray(value);
-                if (bytes.length < 2) return null;
-                var flags = bytes[0], i = 1, bpm;
-                if (flags & 1) {
-                    if (bytes.length < 3) return null;
-                    bpm = bytes[i] | (bytes[i + 1] << 8); i += 2;
-                } else {
-                    bpm = bytes[i++];
-                }
-                var contactBits = (flags >> 1) & 3;
-                var contact = contactBits === 3 ? 'Detected' : (contactBits === 2 ? 'Not Detected' : 'Waiting');
-                var energy = null, rr = null;
-                if (flags & 8) {
-                    if (i + 1 >= bytes.length) return null;
-                    energy = bytes[i] | (bytes[i + 1] << 8); i += 2;
-                }
-                if (flags & 16) {
-                    while (i + 1 < bytes.length) {
-                        var raw = bytes[i] | (bytes[i + 1] << 8);
-                        rr = Math.round(raw * 1000 / 1024);
-                        i += 2;
-                    }
-                }
-                return { bpm: bpm, contact: contact, energy: energy, rr: rr, deviceName: connectedName, source: 'ble' };
-            }
-            function stopScan() {
-                if (scanTimer) { clearTimeout(scanTimer); scanTimer = 0; }
-                if (adapter && typeof adapter.stopScan === 'function') {
-                    try { adapter.stopScan(); } catch (e) {}
-                }
-            }
-            function removeListeners() {
-                if (characteristic && valueWatchId !== null && valueWatchId !== undefined) {
-                    try { characteristic.removeValueChangeListener(valueWatchId); } catch (e) {}
-                }
-                valueWatchId = null;
-                if (device && connectionWatchId !== null && connectionWatchId !== undefined &&
-                    typeof device.removeConnectStateChangeListener === 'function') {
-                    try { device.removeConnectStateChangeListener(connectionWatchId); } catch (e) {}
-                }
-                connectionWatchId = null;
-                characteristic = null;
-            }
-            function disconnectCore(announce) {
-                stopScan();
-                scanMode = false;
-                removeListeners();
-                var old = device;
-                device = null;
-                connectedName = '';
-                if (old && typeof old.disconnect === 'function') {
-                    try { if (!old.isConnected || old.isConnected()) old.disconnect(); } catch (e) {}
-                }
-                if (announce) emit('status', { status: 'disconnected' });
-            }
-            function failCurrent(error) {
-                var id = pendingRequestId;
-                pendingRequestId = null;
-                scanMode = false;
-                var message = errorMessage(error);
-                disconnectCore(false);
-                emit('status', { status: 'error', message: message });
-                reply(id, false, null, message);
-            }
-            function failScan(error) {
-                var id = pendingRequestId;
-                pendingRequestId = null;
-                scanMode = false;
-                stopScan();
-                var message = errorMessage(error);
-                emit('status', { status: 'error', message: message });
-                reply(id, false, null, message);
-            }
-            function matchesHeartRateService(found) {
-                var uuids = found && found.uuids;
-                if (typeof uuids === 'string') uuids = [uuids];
-                if (uuids && typeof uuids.length === 'number') {
-                    for (var i = 0; i < uuids.length; i++) if (uuidMatches(uuids[i], '180d')) return true;
-                }
-                return /garmin|fr55|forerunner|heart.?rate|heart.?monitor|\bhrm\b|polar|wahoo|coospo|h10|coros/i.test(String(found && found.name || ''));
-            }
-            function rememberDevice(found) {
-                var item = infoForDevice(found);
-                if (!discoveredDevices[item.id]) {
-                    discoveredDevices[item.id] = found;
-                    scanResults.push(item);
-                    emit('device-found', { device: item });
-                }
-                return item;
-            }
-            function finishScan() {
-                if (!scanMode) return;
-                if (scanTimer) { clearTimeout(scanTimer); scanTimer = 0; }
-                if (adapter && typeof adapter.stopScan === 'function') {
-                    try { adapter.stopScan(); } catch (e) {}
-                }
-                scanMode = false;
-                var id = pendingRequestId;
-                pendingRequestId = null;
-                var devices = scanResults.slice();
-                emit('status', { status: 'scan-complete', count: devices.length });
-                emit('scan-complete', { devices: devices, count: devices.length });
-                reply(id, true, { devices: devices });
-            }
-            /* HR BLE platform support v1: inspect native Tizen BLE availability without starting a scan. */
-            function capabilities(requestId) {
-                var result = {
-                    hosted: true,
-                    platform: 'unknown',
-                    tizenApiAvailable: false,
-                    nativeBleAvailable: false,
-                    adapterAvailable: false,
-                    reasonCode: 'tizen-api-unavailable',
-                    message: 'Native Tizen Bluetooth is not exposed in this My PC runtime.'
-                };
-                if (!window.tizen || !window.tizen.bluetooth ||
-                    typeof window.tizen.bluetooth.getLEAdapter !== 'function') {
-                    reply(requestId, true, result);
-                    return;
-                }
-                result.platform = 'tizen';
-                result.tizenApiAvailable = true;
-                try {
-                    var probeAdapter = window.tizen.bluetooth.getLEAdapter();
-                    if (!probeAdapter) {
-                        result.reasonCode = 'no-adapter';
-                        result.message = 'The Tizen Bluetooth API exists, but no Bluetooth LE adapter is available.';
-                    } else {
-                        result.nativeBleAvailable = true;
-                        result.adapterAvailable = true;
-                        result.reasonCode = 'available';
-                        result.message = 'The Tizen Bluetooth LE API and adapter are available. A scan will verify sensor access.';
-                    }
-                } catch (error) {
-                    var detail = errorMessage(error);
-                    if (/not.?supported|unsupported|not implemented/i.test(detail)) {
-                        result.reasonCode = 'unsupported-tv';
-                        result.message = 'This device or TV firmware does not support the Tizen Bluetooth LE API.';
-                    } else if (/permission|privilege|security|denied|not allowed|access/i.test(detail)) {
-                        result.reasonCode = 'permission-denied';
-                        result.message = 'My PC cannot access Bluetooth. The installed signed Tizen package may be missing the Bluetooth privilege.';
-                    } else {
-                        result.reasonCode = 'adapter-error';
-                        result.message = 'Tizen Bluetooth is present but could not initialize: ' + detail;
-                    }
-                }
-                reply(requestId, true, result);
-            }
-
-            function scan(requestId) {
-                if (testActive) stopTestCore(true);
-                if (pendingRequestId !== null) {
-                    reply(requestId, false, null, 'Another Bluetooth operation is already in progress.');
-                    return;
-                }
-                if (device && characteristic && (!device.isConnected || device.isConnected())) {
-                    var connectedInfo = infoForDevice(device);
-                    discoveredDevices[connectedInfo.id] = device;
-                    reply(requestId, true, { devices: [connectedInfo], alreadyConnected: true });
-                    return;
-                }
-                if (!window.tizen || !window.tizen.bluetooth || typeof window.tizen.bluetooth.getLEAdapter !== 'function') {
-                    var unavailable = 'Tizen BLE is unavailable in this My PC host. Install/run the packaged Tizen app on a TV that supports Bluetooth LE.';
-                    emit('status', { status: 'error', message: unavailable });
-                    reply(requestId, false, null, unavailable);
-                    return;
-                }
-                try { adapter = window.tizen.bluetooth.getLEAdapter(); }
-                catch (error) { reply(requestId, false, null, errorMessage(error)); emit('status', { status: 'error', message: errorMessage(error) }); return; }
-                if (!adapter) {
-                    var noAdapter = 'No Bluetooth LE adapter is available.';
-                    reply(requestId, false, null, noAdapter);
-                    emit('status', { status: 'error', message: noAdapter });
-                    return;
-                }
-                discoveredDevices = Object.create(null);
-                scanResults = [];
-                scanMode = true;
-                pendingRequestId = requestId;
-                emit('status', { status: 'scanning', message: 'Searching for nearby heart-rate sensors…' });
-                scanTimer = setTimeout(finishScan, 10000);
-                try {
-                    adapter.startScan(function (found) {
-                        if (!scanMode || pendingRequestId !== requestId || !found || !matchesHeartRateService(found)) return;
-                        rememberDevice(found);
-                    });
-                } catch (error) {
-                    failScan(error);
-                }
-            }
-            function finishConnected(found) {
-                try {
-                    var uuids = found.uuids || [], serviceUuid = '180d';
-                    if (typeof uuids === 'string') uuids = [uuids];
-                    for (var i = 0; i < uuids.length; i++) {
-                        if (uuidMatches(uuids[i], '180d')) { serviceUuid = (uuids[i] && uuids[i].uuid !== undefined) ? uuids[i].uuid : uuids[i]; break; }
-                    }
-                    var service = found.getService(serviceUuid);
-                    if (!service) throw new Error('The selected device does not expose the Heart Rate service (180D).');
-                    var chars = service.characteristics || [], measurement = null;
-                    for (var j = 0; j < chars.length; j++) {
-                        if (uuidMatches(chars[j].uuid, '2a37')) { measurement = chars[j]; break; }
-                    }
-                    if (!measurement || typeof measurement.addValueChangeListener !== 'function') {
-                        throw new Error('The selected device has no Heart Rate Measurement characteristic (2A37).');
-                    }
-                    device = found;
-                    connectedName = String(found.name || addressOf(found) || 'Heart-rate sensor');
-                    characteristic = measurement;
-                    valueWatchId = characteristic.addValueChangeListener(function (value) {
-                        var reading = decodeHeartRate(value);
-                        if (reading && reading.bpm > 0) emit('reading', reading);
-                    });
-                    if (typeof found.addConnectStateChangeListener === 'function') {
-                        try {
-                            connectionWatchId = found.addConnectStateChangeListener({
-                                onconnected: function () {},
-                                ondisconnected: function () {
-                                    if (device !== found) return;
-                                    removeListeners(); device = null; connectedName = '';
-                                    emit('status', { status: 'disconnected' });
-                                }
-                            });
-                        } catch (e) {}
-                    }
-                    if (scanTimer) { clearTimeout(scanTimer); scanTimer = 0; }
-                    scanMode = false;
-                    var id = pendingRequestId;
-                    pendingRequestId = null;
-                    emit('status', { status: 'connected', deviceName: connectedName });
-                    reply(id, true, { deviceName: connectedName });
-                } catch (error) {
-                    failCurrent(error);
-                }
-            }
-            function connect(requestId, deviceId) {
-                if (testActive) stopTestCore(true);
-                if (scanMode && pendingRequestId !== null) {
-                    var scanId = pendingRequestId;
-                    pendingRequestId = null;
-                    scanMode = false;
-                    stopScan();
-                    reply(scanId, false, null, 'Scan cancelled because a device was selected.');
-                } else if (pendingRequestId !== null) {
-                    reply(requestId, false, null, 'Another Bluetooth connection attempt is already in progress.');
-                    return;
-                }
-                if (device && characteristic && (!device.isConnected || device.isConnected())) {
-                    reply(requestId, true, { deviceName: connectedName });
-                    return;
-                }
-                if (!deviceId || !discoveredDevices[String(deviceId)]) {
-                    reply(requestId, false, null, 'Select a heart-rate sensor from the device list. Scan again if the list is no longer current.');
-                    return;
-                }
-                var found = discoveredDevices[String(deviceId)];
-                pendingRequestId = requestId;
-                device = found;
-                connectedName = String(found.name || addressOf(found) || 'Heart-rate sensor');
-                stopScan();
-                scanMode = false;
-                emit('status', { status: 'connecting', deviceName: connectedName, message: 'Connecting to ' + connectedName + '…' });
-                scanTimer = setTimeout(function () {
-                    if (pendingRequestId !== null) failCurrent(new Error('Timed out connecting to ' + connectedName + '.'));
-                }, 20000);
-                function connected() { finishConnected(found); }
-                function failed(error) { failCurrent(error); }
-                try {
-                    if (typeof found.isConnected === 'function' && found.isConnected()) connected();
-                    else if (typeof found.connect === 'function') found.connect(connected, failed);
-                    else failed(new Error('This TV firmware cannot connect to BLE peripherals.'));
-                } catch (error) { failed(error); }
-            }
-            function disconnect(requestId) {
-                if (pendingRequestId !== null) {
-                    var previous = pendingRequestId;
-                    pendingRequestId = null;
-                    scanMode = false;
-                    stopScan();
-                    reply(previous, false, null, 'Bluetooth operation cancelled.');
-                }
-                stopTestCore(false);
-                disconnectCore(true);
-                reply(requestId, true, {});
-            }
-            function cancelScan(requestId) {
-                if (scanMode && pendingRequestId !== null) {
-                    var previous = pendingRequestId;
-                    pendingRequestId = null;
-                    scanMode = false;
-                    stopScan();
-                    emit('status', { status: 'scan-cancelled' });
-                    reply(previous, false, null, 'Bluetooth scan cancelled by user.');
-                }
-                reply(requestId, true, {});
-            }
-            function reject(requestId, message) { reply(requestId, false, null, message || 'Bluetooth bridge rejected the request.'); }
-            function stopTestCore(announce) {
-                var wasActive = testActive;
-                if (testTimer !== null) { clearInterval(testTimer); testTimer = null; }
-                testActive = false;
-                if (wasActive && announce) emit('status', { status: 'test-stopped', message: 'Simulated heart-rate data stopped.' });
-            }
-            function startTest(requestId) {
-                if (pendingRequestId !== null) {
-                    var oldRequestId = pendingRequestId;
-                    pendingRequestId = null;
-                    scanMode = false;
-                    stopScan();
-                    reply(oldRequestId, false, null, 'Bluetooth scan cancelled because test data mode was started.');
-                }
-                stopScan();
-                disconnectCore(false);
-                stopTestCore(false);
-                testActive = true;
-                testBpm = 96;
-                testEnergy = 12;
-                function sendSample() {
-                    if (!testActive) return;
-                    testBpm = Math.max(65, Math.min(165, testBpm + Math.floor(Math.random() * 9) - 4));
-                    if (Math.random() < 0.08) testBpm = Math.max(65, Math.min(165, testBpm + (Math.random() < 0.5 ? -6 : 6)));
-                    if (Math.random() < 0.2) testEnergy += 1;
-                    var rr = Math.max(360, Math.min(1000, Math.round(60000 / testBpm + (Math.random() * 30 - 15))));
-                    emit('reading', { bpm: testBpm, contact: 'Detected', energy: testEnergy, rr: rr, deviceName: 'My PC Test Sensor', source: 'simulation' });
-                }
-                emit('status', { status: 'test', deviceName: 'My PC Test Sensor', source: 'simulation', message: 'My PC is generating simulated heart-rate readings.' });
-                sendSample();
-                testTimer = setInterval(sendSample, 1000);
-                reply(requestId, true, { deviceName: 'My PC Test Sensor', simulated: true });
-            }
-            function stopTest(requestId) {
-                stopTestCore(true);
-                reply(requestId, true, {});
-            }
-            function destroy() {
-                stopTestCore(false);
-                if (pendingRequestId !== null) {
-                    reply(pendingRequestId, false, null, 'My PC is closing the app.');
-                    pendingRequestId = null;
-                }
-                disconnectCore(false);
-                adapter = null;
-            }
-            return {
-                capabilities: capabilities,
-                scan: scan,
-                connect: connect,
-                disconnect: disconnect,
-                cancelScan: cancelScan,
-                startTest: startTest,
-                stopTest: stopTest,
-                reject: reject,
-                destroy: destroy
-            };
-        }
-        var ble = createHrBleBridge(send);
+        function bleAllowed() { return id === 'hr-monitor' || !!(game.remote.config && game.remote.config.heartRate === true); }
+        // heart-rate sensors over Bluetooth LE (js/core/hr-ble.js), only for apps allowed to use them (bleAllowed)
+        var ble = HrBle.create(function (kind, m) { send('ble-event', m); });
 
         function onMsg(e) {
             if (!iframe || e.source !== iframe.contentWindow) return;     // only our app's frame
@@ -577,31 +167,11 @@ var GameHost = (function () {
                     });
                     break;
                 case 'ble':
-                    /* BLE is intentionally restricted to the HR monitor app and its own origin. */
-                    if (e.origin !== origin || id !== 'hr-monitor' || typeof d.requestId !== 'number') {
-                        if (typeof d.requestId === 'number') ble.reject(d.requestId, 'Bluetooth bridge is not authorized for this app/origin.');
-                        break;
-                    }
-                    if (d.action === 'capabilities') {
-                        ble.capabilities(d.requestId);
-                    } else if (d.action === 'scan') {
-                        if (state !== 'running') ble.reject(d.requestId, 'The app is not running. Resume it before scanning.');
-                        else ble.scan(d.requestId);
-                    } else if (d.action === 'connect') {
-                        if (state !== 'running') ble.reject(d.requestId, 'The app is not running. Resume it before connecting.');
-                        else ble.connect(d.requestId, d.deviceId);
-                    } else if (d.action === 'cancel-scan') {
-                        ble.cancelScan(d.requestId);
-                    } else if (d.action === 'disconnect') {
-                        ble.disconnect(d.requestId);
-                    } else if (d.action === 'start-test') {
-                        if (state !== 'running') ble.reject(d.requestId, 'The app is not running. Resume it before starting test data.');
-                        else ble.startTest(d.requestId);
-                    } else if (d.action === 'stop-test') {
-                        ble.stopTest(d.requestId);
-                    } else {
-                        ble.reject(d.requestId, 'Unknown Bluetooth action.');
-                    }
+                    // MyPC.bluetooth: the HR Monitor app, or an app the App Store Manager allowed ("heartRate": true in its config)
+                    if (typeof d.requestId !== 'number') break;
+                    if (e.origin !== origin || !bleAllowed()) { ble.reject(d.requestId, 'Bluetooth is not allowed for this app.'); break; }
+                    if (state !== 'running' && /^(scan|connect|reconnect-last|start-test)$/.test(d.action)) { ble.reject(d.requestId, 'The app is not running. Resume it first.'); break; }
+                    ble.handle(String(d.action), d.requestId, { deviceId: d.deviceId, seconds: d.seconds });
                     break;
                 case 'mp': {
                     // multiplayer (js/launcher/multiplayer.js): { rid, op, args } -> { rid, error | result }; peers' events go back as { ev, data }
@@ -613,6 +183,12 @@ var GameHost = (function () {
                     });
                     break;
                 }
+                case 'sensors':                                                // MyPC.sensors: { op: 'setup', cfg } | { op: 'stop' }
+                    if (d.op === 'stop') { sensorsOff(); break; }
+                    if (d.op !== 'setup' || (state !== 'running' && state !== 'paused' && state !== 'loading')) break;
+                    var sc = sensorsSetup(d.cfg, function (type, p, msg) { send('sensors', { ev: type, player: p, data: msg }); });
+                    send('sensors', { ev: 'config', data: sc, players: typeof Controllers !== 'undefined' ? Controllers.modes() : null });
+                    break;
                 case 'pad':                                                    // the app wants a pad of its own (MyPC.pad.init({ force: true, ... })): the shell draws it
                     if (typeof TouchPad === 'undefined') break;
                     if (d.settings) TouchPad.settings(); else TouchPad.own(!!d.own, d.cfg);
@@ -849,6 +425,7 @@ var GameHost = (function () {
 
     function teardown() {
         if (typeof TouchPad !== 'undefined') TouchPad.end();
+        sensorsOff();
         if (api) { try { api.destroy(); } catch (e) {} }
         api = null;
         gameWin = null;

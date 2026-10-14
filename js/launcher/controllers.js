@@ -5,9 +5,16 @@
  *   - Link: the same WebRTC data channel as multiplayer (js/core/netlink.js); presses never go through Firebase.
  *   - Player 1 = the 'keys' device (like the remote / keyboard), player 2 = 'keys2': every game already reads both (Input.remote).
  *   - A phone is trusted by a random id. New phones are accepted only for 5 minutes after "Pair a phone" in Settings > Devices.
- * Phone -> TV: { t: 'hi', p: 1|2, cid, name } then { t: 'k', a: action, d: 1|0 }.   TV -> phone: { t: 'ok', p } | { t: 'no', why: 'busy'|'locked' }
+ * Phone -> TV: { t: 'hi', p: 1|2, cid, name, proto, mode, session, caps, now } then { t: 'k', a: action, d: 1|0 } (pad mode).
+ * TV -> phone: { t: 'ok', p, proto, session } | { t: 'no', why: 'busy'|'locked' }.
+ * Sensor modes ('sensor-actions', 'sensor-raw'; protocol js/core/sensor-proto.js, docs/phone-controller.md): the TV sends the
+ * phone a config (the moves the running app wants, the player profile, metrics on/off and rate); the phone sends only those
+ * moves ({ type: 'action' }, acknowledged with { type: 'ack' }), metrics when asked, raw samples in sensor-raw mode.
+ * Duplicated or stale actions (sequence numbers, timestamps on the TV clock) are dropped. While no app asked for sensor
+ * events, moves work the menus and the games: LEFT / RIGHT = left / right, JUMP = OK (jump), DUCK..DUCK_END = down held.
  *   Controllers.start()  (every page, does nothing while off)   .on() .setOn(v) .code() .newCode() .pair() .forget()
- *   .players() -> { 1: name|null, 2: name|null }   .pairing() -> seconds left   .onChange(fn) */
+ *   .players() -> { 1: name|null, 2: name|null }   .modes() -> { 1: mode|null, 2: mode|null }   .pairing() -> seconds left   .onChange(fn)
+ *   .sensorSetup(cfg, listener(player, msg)) | .sensorSetup(null)   (game-host.js, for the running app)   .sensorStats() */
 var Controllers = (function () {
     'use strict';
 
@@ -16,6 +23,8 @@ var Controllers = (function () {
     var ALPHA = 'abcdefghjkmnpqrstuvwxyz23456789';
     var status = { s: 'off', err: '' };
     var sess = null, slots = { 1: null, 2: null }, pairUntil = 0, listeners = [], timer = 0, started = false;
+    var appCfg = null, appListener = null, cfgSeq = 0;
+    var FALLBACK = { LEFT: 'left', RIGHT: 'right', JUMP: 'ok', DUCK: 'down', DUCK_END: 'down' };
 
     function cfg() {
         var c = Store.rawGet(KEY);
@@ -60,16 +69,61 @@ var Controllers = (function () {
                 }
                 if (slots[p] && slots[p].cid !== cid) { conn.send({ t: 'no', why: 'busy' }); return setTimeout(function () { conn.close(); }, 300); }
                 if (slots[p]) { var old = slots[p]; slots[p] = null; Input.releaseRemote(p); old.conn.close(); }
-                slot = { conn: conn, cid: cid, p: p, name: name || 'Phone' };
+                var h = SensorProto.hello(m);
+                slot = { conn: conn, cid: cid, p: p, name: name || 'Phone', mode: h.mode, proto: h.proto, session: h.session || SensorProto.session(),
+                         offset: h.now ? Date.now() - h.now : null, seen: SensorProto.tracker(), stats: { actions: 0, duplicate: 0, stale: 0, invalid: 0, metrics: 0, raw: 0 } };
                 slots[p] = slot;
-                conn.send({ t: 'ok', p: p });
+                conn.send({ t: 'ok', p: p, proto: SensorProto.VERSION, session: slot.session });
+                if (slot.mode !== 'pad') sendConfig(slot);
                 say(I18n.t('ctrlOn').replace('%s', slot.name).replace('%n', p));
                 report();
                 return;
             }
-            if (m.t === 'k' && typeof m.a === 'string' && ACTIONS.hasOwnProperty(m.a)) Input.remote(slot.p, m.a, m.d === 1);
+            if (m.t === 'k') { if (typeof m.a === 'string' && ACTIONS.hasOwnProperty(m.a)) Input.remote(slot.p, m.a, m.d === 1); return; }
+            if (slot.mode !== 'pad') sensorMessage(slot, m);
         });
         conn.onClose(function () { clearTimeout(t); if (slot) drop(slot.p, slot); });
+    }
+
+    /* ---------- sensor modes ---------- */
+    function currentCfg() { return appCfg || SensorProto.config({ moves: SensorProto.DEFAULT_MOVES, metrics: { enabled: false } }); }
+    function sendConfig(slot) {
+        var c = JSON.parse(JSON.stringify(currentCfg()));
+        c.session = slot.session; c.sequence = ++cfgSeq; c.timestamp = Date.now();
+        slot.cfg = c;
+        slot.conn.send(c);
+    }
+    function sensorMessage(slot, m) {
+        var st = slot.stats, v;
+        if (!m || typeof m !== 'object') return;
+        if (m.type === 'action') {
+            v = SensorProto.action(m);
+            if (!v || slot.cfg.moves.indexOf(v.action) < 0) { st.invalid++; return; }
+            var r = slot.seen.check(v.sequence, v.timestamp, slot.offset);
+            slot.conn.send({ type: 'ack', sequence: v.sequence, duplicate: r === 'duplicate' || undefined, stale: r === 'stale' || undefined });
+            if (r !== 'ok') { st[r]++; changed(); return; }
+            st.actions++; slot.last = v.action;
+            deliver(slot.p, v);
+            changed();
+        } else if (m.type === 'metrics') {
+            v = SensorProto.metrics(m);
+            if (!v || !slot.cfg.metrics.enabled) { st.invalid++; return; }
+            st.metrics++; deliver(slot.p, v);
+        } else if (m.type === 'raw') {
+            v = SensorProto.raw(m);
+            if (!v || slot.mode !== 'sensor-raw') { st.invalid++; return; }
+            st.raw++; if (appListener) deliver(slot.p, v);
+        } else st.invalid++;
+    }
+    // to the running app when it asked for sensor events; otherwise moves drive the menus and games like buttons
+    function deliver(p, msg) {
+        if (appCfg && appListener) { try { appListener(p, msg); } catch (e) {} return; }
+        if (msg.type !== 'action' || !FALLBACK[msg.action]) return;
+        var a = FALLBACK[msg.action];
+        if (msg.action === 'DUCK') return Input.remote(p, a, true);
+        if (msg.action === 'DUCK_END') return Input.remote(p, a, false);
+        Input.remote(p, a, true);
+        setTimeout(function () { Input.remote(p, a, false); }, 120);
     }
 
     function onEvent(ev, d) {
@@ -120,6 +174,21 @@ var Controllers = (function () {
         forget: function () { var c = cfg(); c.ok = []; save(c); closePhones(); changed(); },
         phones: function () { return cfg().ok.length; },
         players: function () { return { 1: slots[1] ? slots[1].name : null, 2: slots[2] ? slots[2].name : null }; },
+        modes: function () { return { 1: slots[1] ? slots[1].mode : null, 2: slots[2] ? slots[2].mode : null }; },
+        // the running app asks for sensor events (MyPC.sensors.setup); null when it closes. Returns the config phones get.
+        sensorSetup: function (cfg, listener) {
+            appCfg = cfg ? SensorProto.config(cfg, typeof MotionEngine !== 'undefined' ? MotionEngine.MOVES : null) : null;
+            appListener = appCfg ? listener || null : null;
+            for (var p = 1; p <= 2; p++) if (slots[p] && slots[p].mode !== 'pad') sendConfig(slots[p]);
+            return appCfg;
+        },
+        sensorConfig: function () { return appCfg; },
+        inject: function (p, msg) { deliver(p === 2 ? 2 : 1, msg); },      // diagnostics and tests: as if phone p had sent msg (already validated)
+        sensorStats: function () {
+            var out = {};
+            for (var p = 1; p <= 2; p++) out[p] = slots[p] ? { mode: slots[p].mode, last: slots[p].last || null, stats: JSON.parse(JSON.stringify(slots[p].stats)) } : null;
+            return out;
+        },
         onChange: function (fn) { listeners.push(fn); },
         offChange: function (fn) { var i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); }
     };

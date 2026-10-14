@@ -32,6 +32,8 @@
 //  26. App Store: catalog, New / Popular, search, install, open, uninstall; desktop and Explorer follow
 //  27. TV id, cloud backup and restore after a reinstall, world records
 //  23. Boot screen: black, inline logo, orbit dots, fades out; no logo when opening a game
+//  34. phone controller (the existing virtual pad) as P1 / P2;  35. its sensor modes (moves, metrics, raw, live / debug screens)
+//  Unit tests without a browser (Bluetooth heart-rate bridge, controller protocol, motion engine): node tests/unit-tests.mjs
 //
 //  CHROMIUM_PATH=/path/to/chrome uses an existing Chromium instead of Playwright's download.
 
@@ -898,6 +900,14 @@ async function main() {
         await frame.evaluate(() => MyPC.save('best', 7));
         await page.waitForTimeout(100);
         check(await page.evaluate(() => Store.get('game_app-star-catcher_data', {}).best === 7), 'MyPC.save stores data in the active profile');
+        // MyPC.sensors (phones in a sensor mode): the app says which moves it wants; events come back with the player number
+        await frame.evaluate(() => { window.__sv = []; window.__sm = []; MyPC.sensors.on('action', (e, p) => __sv.push(e.action + '/' + p)); MyPC.sensors.on('metrics', (m) => __sm.push(m.gait)); MyPC.sensors.on('config', (c) => { window.__scfg = c; }); MyPC.sensors.setup({ moves: ['JUMP', 'DUCK', 'NOPE'], metrics: { hz: 1 } }); });
+        await frame.waitForFunction(() => window.__scfg, null, { timeout: 3000 });
+        check(await frame.evaluate(() => JSON.stringify(__scfg.moves) === '["JUMP","DUCK"]' && __scfg.metrics.enabled && MyPC.apiLevel >= 8), 'MyPC.sensors.setup: the phones are asked for the known moves only, with metrics');
+        await page.evaluate(() => { Controllers.inject(2, { type: 'action', action: 'JUMP', timestamp: Date.now(), sequence: 1 }); Controllers.inject(1, { type: 'metrics', gait: 'RUN', cadence: 160, sequence: 2 }); });
+        await frame.waitForFunction(() => __sv.length && __sm.length, null, { timeout: 3000 });
+        check(await frame.evaluate(() => __sv[0] === 'JUMP/2' && __sm[0] === 'RUN'), 'moves and metrics from the phones reach the app with the player number');
+        check(await frame.evaluate(() => MyPC.bluetooth.capabilities().then(() => 'yes', (e) => e.message)) === 'Bluetooth is not allowed for this app.', 'MyPC.bluetooth is refused to an app that is not allowed to use it');
         await page.keyboard.press('Escape');
         const items = await page.evaluate(() => [...document.querySelectorAll('#pause-items button')].map((b) => b.textContent));
         check(await page.evaluate(() => window.GameHost.state()) === 'paused' && items.indexOf('Restart') > 0, 'Back opens My PC\'s pause menu with the app\'s own items (' + items.join(', ') + ')');
@@ -909,6 +919,7 @@ async function main() {
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
         check(await page.evaluate(() => document.querySelectorAll('iframe').length === 0 && document.activeElement.getAttribute('data-game') === 'app-star-catcher'), 'quitting removes the iframe and returns to its desktop icon');
+        check(await page.evaluate(() => Controllers.sensorConfig() === null), 'quitting the app stops its sensor setup (phones go back to the default moves)');
         // the owner changes the config in the installer: the next launch gets it (the saved list still has the old one)
         liveSpeed = 3; liveVersion = '1.0.1';
         await page.focus(icon); await page.keyboard.press('Enter');
@@ -2215,31 +2226,28 @@ async function main() {
             await ph.click('.gc-join > .btn-primary');
             return ph;
         };
-        const press = (ph, sel, down) => ph.evaluate(([s, d]) => {
-            const r = document.querySelector(s).getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
-            document.querySelector('.gc-pad').dispatchEvent(new PointerEvent(d ? 'pointerdown' : 'pointerup', { pointerId: 7, clientX: x, clientY: y, bubbles: true }));
-        }, [sel, down]);
+        // the pad is the virtual pad My PC already has (js/core/virtual-pad.js): its round buttons carry their label
+        const vbtn = (ph, label) => ph.evaluate((l) => { const b = [...document.querySelectorAll('div')].find((d) => d.textContent === l && d.style.borderRadius === '50%' && d.style.display !== 'none'); const r = b.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }, label);
+        const press = async (ph, label, down) => { const [x, y] = await vbtn(ph, label); await ph.mouse.move(x, y); if (down) await ph.mouse.down(); else await ph.mouse.up(); };
         check(await tv.evaluate(() => !Desktop.appById('gamepad')), 'the Game controller app is not on the TV');
         const P1 = await phone(1, 1);
         await tv.waitForFunction(() => Controllers.players()[1], null, { timeout: 40000 });
         check(await P1.evaluate(() => !!Desktop.appById('gamepad') && !!document.getElementById('tb-gamepad')), 'the Game controller app is a system app on the phone (taskbar)');
         await P1.waitForFunction(() => window.GamepadApp && window.GamepadApp.linked(), null, { timeout: 10000 });
-        check(await P1.evaluate(() => document.querySelector('.gc-pad').className === 'gc-pad show' && document.querySelector('.gc-badge').textContent === 'P1'), 'the phone shows the controller as P1');
-        await press(P1, '.gc-ok', true);
+        check(await P1.evaluate(() => VirtualPad.active() && !!document.getElementById('vp-stick') && !document.querySelector('.gc-bar').hidden && document.querySelector('.gc-badge').textContent === 'P1'), 'the phone shows the existing virtual pad (stick, A, B, gear, pause) as P1');
+        await press(P1, 'A', true);
         await tv.waitForFunction(() => Input.isDownDev('keys', 'jump') && Input.isDownDev('keys', 'confirm'), null, { timeout: 3000 });
         check(!(await tv.evaluate(() => Input.isDownDev('keys2', 'jump'))), 'P1 button A = OK / jump on the "keys" device only');
-        await press(P1, '.gc-ok', false);
+        await press(P1, 'A', false);
         await tv.waitForFunction(() => !Input.isDownDev('keys', 'jump'), null, { timeout: 3000 });
         check(true, 'releasing the button releases the action');
-        await P1.evaluate(() => {
-            const r = document.querySelector('.gc-dpad').getBoundingClientRect();
-            document.querySelector('.gc-pad').dispatchEvent(new PointerEvent('pointerdown', { pointerId: 8, clientX: r.right - 4, clientY: r.top + r.height / 2, bubbles: true }));
-        });
+        const st = await P1.evaluate(() => { const r = document.getElementById('vp-stick').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width / 2]; });
+        await P1.mouse.move(st[0], st[1]); await P1.mouse.down(); await P1.mouse.move(st[0] + st[2] * 0.9, st[1], { steps: 3 });
         await tv.waitForFunction(() => Input.isDownDev('keys', 'right') && !Input.isDownDev('keys', 'left'), null, { timeout: 3000 });
-        check(true, 'the D-pad zone gives a direction');
+        check(true, 'pushing the stick to the right gives right');
         const P2 = await phone(2, 2);
         await tv.waitForFunction(() => Controllers.players()[2], null, { timeout: 40000 });
-        await press(P2, '.gc-run', true);
+        await press(P2, 'B', true);
         await tv.waitForFunction(() => Input.isDownDev('keys2', 'run'), null, { timeout: 3000 });
         check(!(await tv.evaluate(() => Input.isDownDev('keys', 'run'))), 'P2 button B = run on the "keys2" device (the second player every game supports)');
         check(db.rooms[code].n === 3, 'the room counts the TV and both phones');
@@ -2262,6 +2270,98 @@ async function main() {
         check(await tv.evaluate(() => Controllers.players()[1] === null), 'turning it off disconnects the phones');
         check(tv.errors.length === 0 && P1.errors.length === 0 && P2.errors.length === 0, 'no page errors ' + tv.errors.concat(P1.errors, P2.errors).join('; '));
         for (const pg of [tv, P1, P2, P3]) await pg.context().close();
+    }
+
+    // ---- 35. phone controller sensor modes: moves, metrics, raw data, live and debug screens
+    console.log('35. phone controller sensor modes (sensor-actions, sensor-raw, protocol v1)');
+    {
+        const db = {};
+        const tv = await newPage(browser, base, db);
+        await tv.goto(base + 'index.html');
+        await tv.waitForFunction(() => window.Controllers && document.querySelector('[data-game]'), null, { timeout: 20000 });
+        await tv.evaluate(() => { Controllers.setOn(true); window.__rem = []; const r = Input.remote; Input.remote = function (p, a, d) { __rem.push(p + ':' + a + ':' + (d ? 1 : 0)); return r.apply(this, arguments); }; });
+        await tv.waitForFunction(() => Controllers.status().s === 'ready', null, { timeout: 15000 });
+        const code = await tv.evaluate(() => Controllers.code());
+        const phone = async (p, modeIdx) => {
+            const ph = await newPage(browser, base, db, { phone: true, viewport: { width: 844, height: 390 } });
+            await ph.goto(base + 'index.html');
+            await ph.waitForFunction(() => window.Win && document.querySelector('[data-game]'), null, { timeout: 20000 });
+            await ph.evaluate(() => Win.open('gamepad'));
+            await ph.fill('.gc-code', code);
+            await ph.click('.gc-join .gc-row:not(.gc-modes) .btn:nth-of-type(' + p + ')');
+            await ph.click('.gc-modes .btn:nth-of-type(' + (modeIdx + 1) + ')');
+            await ph.click('.gc-join > .btn-primary');
+            await ph.waitForFunction(() => window.GamepadApp && GamepadApp.linked() && GamepadApp.config(), null, { timeout: 40000 });
+            return ph;
+        };
+        // synthetic motion, phone in landscape (top to the left): up = +x, right = -y. segments [ms, vertical, lateral, freefall]
+        const feed = (ph, parts) => ph.evaluate((parts) => {
+            let t = (window.__t || 1000);
+            for (const [ms, v, l, free] of parts) for (let i = 0; i < ms / 16.67; i++, t += 16.67) {
+                const lin = free ? [-9.81, 0, 0] : [v, -l, 0];
+                GamepadApp.feed({ t, acceleration: { x: lin[0], y: lin[1], z: lin[2] }, accelerationIncludingGravity: { x: lin[0] + 9.81, y: lin[1], z: lin[2] }, rotationRate: { alpha: 0, beta: 0, gamma: 0 } });
+            }
+            window.__t = t;
+        }, parts);
+        const JUMP = [[1500, 0, 0], [160, -6, 0], [140, 12, 0], [320, 0, 0, true], [80, 22, 0], [1500, 0, 0]];
+        const LEFT = [[1500, 0, 0], [130, 0, -8], [130, 0, 8], [1500, 0, 0]];
+        const P1 = await phone(1, 1);
+        check(await P1.evaluate(() => GamepadApp.mode() === 'sensor-actions' && !VirtualPad.active() && !document.querySelector('.gc-sense').hidden), 'sensor-actions: the live screen shows instead of the pad');
+        check(await P1.evaluate(() => JSON.stringify(GamepadApp.config().moves) === '["LEFT","RIGHT","JUMP","DUCK","DUCK_END"]' && !GamepadApp.config().metrics.enabled), 'with no game asking, the TV sends the default moves and no metrics');
+        check(await tv.evaluate(() => Controllers.modes()[1] === 'sensor-actions'), 'the TV knows player 1 is a motion controller');
+        // no app asked: moves work the TV like buttons
+        await feed(P1, JUMP);
+        await tv.waitForFunction(() => __rem.indexOf('1:ok:1') >= 0 && __rem.indexOf('1:ok:0') >= 0, null, { timeout: 4000 });
+        await feed(P1, LEFT);
+        await tv.waitForFunction(() => __rem.indexOf('1:left:1') >= 0, null, { timeout: 4000 });
+        check(true, 'without a game listening, JUMP presses OK and LEFT presses left on the TV');
+        check(await P1.waitForFunction(() => /JUMP|LEFT/.test(document.querySelector('.gc-last').textContent), null, { timeout: 3000 }).then(() => true, () => false), 'the live screen shows the last move');
+        // a game asks for JUMP only, with metrics twice a second
+        const got = await tv.evaluate(() => { window.__ev = []; Controllers.sensorSetup({ moves: ['JUMP'], metrics: { hz: 2 }, profile: { age: 40, height: 182, weight: 80, phone_position: 'right hand' } }, (p, m) => __ev.push([p, m.type, m.action || m.gait])); return Controllers.sensorConfig().moves; });
+        await P1.waitForFunction(() => JSON.stringify(GamepadApp.config().moves) === '["JUMP"]', null, { timeout: 4000 });
+        check(got.join() === 'JUMP' && await P1.evaluate(() => GamepadApp.config().profile.height === 182 && /game/i.test(document.querySelector('.gc-note').textContent)), 'the game config reaches the phone at once (moves, profile from the game)');
+        await feed(P1, LEFT);
+        await feed(P1, JUMP);
+        await tv.waitForFunction(() => __ev.some((e) => e[1] === 'action'), null, { timeout: 4000 });
+        await tv.waitForFunction(() => __ev.filter((e) => e[1] === 'metrics').length >= 2, null, { timeout: 4000 });
+        const ev = await tv.evaluate(() => __ev);
+        check(ev.filter((e) => e[1] === 'action').map((e) => e[2]).join() === 'JUMP', 'only the move the game asked for is sent (LEFT was not): ' + JSON.stringify(ev.filter((e) => e[1] === 'action')));
+        check(ev.some((e) => e[1] === 'metrics' && e[0] === 1), 'metrics come at the low rate the game asked for');
+        const st = await tv.evaluate(() => Controllers.sensorStats()[1].stats);
+        check(st.actions >= 3 && st.duplicate === 0 && st.invalid === 0, 'TV stats: actions counted, no duplicate or invalid message (' + JSON.stringify(st) + ')');
+        await P1.waitForFunction(() => /[0-9]+ ms/.test(document.querySelector('.gc-line').textContent), null, { timeout: 4000 });
+        check(true, 'acks come back: the phone shows the latency');
+        // a duplicated message (same sequence twice) is dropped by the TV and reported back
+        await P1.evaluate(() => { GamepadApp.send({ type: 'action', action: 'JUMP', timestamp: Date.now(), sequence: 900 }); GamepadApp.send({ type: 'action', action: 'JUMP', timestamp: Date.now(), sequence: 900 }); });
+        await tv.waitForFunction(() => Controllers.sensorStats()[1].stats.duplicate === 1, null, { timeout: 4000 });
+        check(await tv.evaluate(() => __ev.filter((e) => e[1] === 'action').length) === 2, 'a duplicated action reaches the game once');
+        // debug screen
+        await P1.click('.gc-stop .btn:nth-of-type(2)');
+        await P1.waitForTimeout(400);
+        const dbg = await P1.evaluate(() => [...document.querySelectorAll('.gc-pre')].map((p) => p.textContent).join('\n'));
+        check(/acc\+g/.test(dbg) && /JUMP/.test(dbg) && /cooldown|idle/.test(dbg), 'the debug screen shows readings, the classifier states and the events');
+        await P1.click('.gc-debug .btn:nth-of-type(1)');           // record
+        await feed(P1, JUMP);
+        await P1.click('.gc-debug .btn:nth-of-type(1)');           // stop
+        const n0 = await tv.evaluate(() => __ev.filter((e) => e[1] === 'action').length);
+        await P1.click('.gc-debug .btn:nth-of-type(2)');           // replay
+        await P1.waitForFunction(() => GamepadApp.log().some((l) => /replay\s+JUMP/.test(l)), null, { timeout: 8000 });
+        check(await tv.evaluate((n) => __ev.filter((e) => e[1] === 'action').length === n, n0), 'record and replay: the replayed jump is found again and is not sent to the TV');
+        // the game goes away: back to the default moves
+        await tv.evaluate(() => Controllers.sensorSetup(null));
+        await P1.waitForFunction(() => GamepadApp.config().moves.length === 5, null, { timeout: 4000 });
+        check(true, 'when the game stops, the phone gets the default moves again');
+        // sensor-raw on player 2
+        const P2 = await phone(2, 2);
+        await tv.evaluate(() => { window.__raw = []; Controllers.sensorSetup({ moves: [], raw: { hz: 30 } }, (p, m) => { if (m.type === 'raw') __raw.push([p, m.s.length, m.hz]); }); });
+        await P2.waitForFunction(() => GamepadApp.config().raw.hz === 30, null, { timeout: 4000 });
+        await P2.evaluate(() => { const t0 = performance.now(); window.__rawT = setInterval(() => GamepadApp.feed({ acceleration: { x: 1, y: 0, z: 0 }, accelerationIncludingGravity: { x: 10.8, y: 0, z: 0 }, rotationRate: { alpha: 1, beta: 2, gamma: 3 } }), 8); setTimeout(() => clearInterval(window.__rawT), 1000); });
+        await P2.waitForTimeout(1400);
+        const raw = await tv.evaluate(() => __raw);
+        const total = raw.reduce((a, r) => a + r[1], 0);
+        check(raw.length > 0 && raw.every((r) => r[0] === 2 && r[1] <= 12 && r[2] === 30) && total >= 22 && total <= 34, 'sensor-raw: samples arrive in small batches at the asked rate (' + total + ' samples for 1 s at 30 Hz, ' + raw.length + ' messages)');
+        check(tv.errors.length === 0 && P1.errors.length === 0 && P2.errors.length === 0, 'no page errors ' + tv.errors.concat(P1.errors, P2.errors).join('; '));
+        for (const pg of [tv, P1, P2]) await pg.context().close();
     }
 
     await browser.close();
