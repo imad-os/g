@@ -31,6 +31,8 @@
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
     function t(k) { return I18n.t(k); }
     function btn(cls, text, fn) { var b = el('button', 'btn' + (cls ? ' ' + cls : ''), text); b.setAttribute('data-focus', ''); b.onclick = fn; return b; }
+    // the Android app (android-controller/) adds window.MyPCNative: native sensors, QR scanner, link kept with the screen off
+    function native(fn, v) { try { if (window.MyPCNative && typeof window.MyPCNative[fn] === 'function') { window.MyPCNative[fn](v); return true; } } catch (e) {} return false; }
     function name() { return /Android/i.test(navigator.userAgent) ? 'Android' : /iPhone|iPad/i.test(navigator.userAgent) ? 'iPhone' : 'Phone'; }
     function prefs() { var p = saved.prefs || {}; return { profile: SensorProto.profile(p.profile), sensitivity: +p.sensitivity || 1, stride: +p.stride || 1, swap: !!p.swap }; }
     function save() { Store.rawSet(KEY, { cid: cid, code: code, p: player, mode: mode, prefs: saved.prefs || {} }); }
@@ -114,12 +116,12 @@
         Rooms.LIMITS.asksPerMin = 30;                               // it reconnects by itself every time the TV changes page
         run = true; session = SensorProto.session(); cfg = null;
         sess = new Rooms.Session('controller', name(), onEvent);
-        show(true); state(t('gcConnecting'), false); lock(); wake();
+        show(true); state(t('gcConnecting'), false); lock(); wake(); native('active', true);
         if (mode !== 'pad') sensorsOn();                           // the tap on Connect also answers the motion permission prompt (iPhone)
         attempt();
     }
     function stop() {
-        run = false; clearTimeout(retry); clearTimeout(wait); release();
+        run = false; clearTimeout(retry); clearTimeout(wait); release(); native('active', false);
         sensorsOff();
         if (conn) { var c = conn; conn = null; c.close(); }
         if (offerObj) { offerObj.cancel(); offerObj = null; }
@@ -229,6 +231,7 @@
     // the phone's own QR reader (BarcodeDetector, Chrome on Android); elsewhere the camera app opens the link by itself
     function startScan() {
         ui.err.textContent = '';
+        if (native('scanQr')) return;                               // the app's own scanner answers with GamepadApp.scanCode()
         if (!('BarcodeDetector' in window) || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { ui.err.textContent = t('gcScanCamera'); return; }
         var det; try { det = new window.BarcodeDetector({ formats: ['qr_code'] }); } catch (e) { ui.err.textContent = t('gcScanCamera'); return; }
         var box = el('div', 'gc-scanner'), video = el('video', 'gc-video'), close = btn('gc-scanclose', t('cancel'), stopScan);

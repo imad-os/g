@@ -15,6 +15,11 @@ camera app. Typing the code, picking **P1** / **P2** and a mode, then **Connect*
 | **Motion moves** (`sensor-actions`) | The player faces the TV, phone in the right hand. The phone detects moves and sends **only the moves the game asked for**, plus metrics if asked. | `MyPC.sensors` events in the game. With no game listening, moves drive the TV: LEFT / RIGHT = left / right, JUMP = OK, DUCK … DUCK_END = down held. |
 | **Motion data** (`sensor-raw`) | Sends the sensor samples themselves at the rate the game asks for. | `raw` events; the game does its own detection. |
 
+**Android app** (`android-controller/`, `My-PC-Controller.apk`): the same Game controller page in a native shell that
+feeds it native motion samples (200 Hz fused sensors, 100 Hz samples with their own timestamps) instead of
+`devicemotion`, scans the QR code natively, and keeps the link and sensors running with the screen off. Opened with
+`?ctrl=1`; the page talks to it through `window.MyPCNative` (`native()` in `gamepad.js`). See `android-controller/README.md`.
+
 Files: phone side `js/launcher/apps/gamepad.js`; TV side `js/launcher/controllers.js`; protocol checks
 `js/core/sensor-proto.js`; motion detection `js/core/motion.js`; relay to games `js/launcher/game-host.js`;
 game API `MyPC.sensors` in `sdk/mypc-sdk.js` (API level 8). Tests: `node tests/unit-tests.mjs` (protocol, motion engine

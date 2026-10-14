@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">My PC Controller</string>
+    <string name="link_channel">Controller link</string>
+    <string name="link_running">Connected to the TV. Motion keeps working with the screen off.</string>
+    <string name="scan_prompt">Point the camera at the QR code on the TV</string>
+    <string name="scan_bad">This is not a My PC pairing code</string>
+    <string name="offline">No internet connection. My PC Controller needs Wi-Fi to reach the TV.</string>
+    <string name="retry">Try again</string>
+</resources>

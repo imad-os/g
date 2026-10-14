@@ -2,7 +2,9 @@
 //   1. HrBle: Heart Rate Measurement decoding (8 / 16 bit, contact, energy, RR), scan / connect / reconnect with a fake
 //      Tizen Bluetooth stack that behaves like a Garmin Forerunner 55 broadcasting, a Polar H10, a Garmin HRM and a Decathlon strap
 //   2. SensorProto: validation of every phone controller message, sequence numbers (duplicates, stale)
-//   3. MotionEngine: synthetic recordings (still, walking, running in place, jump, duck, side steps) -> the right events only
+//   3. MotionEngine: synthetic recordings (still, walking, running in place, jump, duck, side steps) -> the right events only,
+//      at 60 Hz (browser) and 100 Hz (Android app)
+//   4. Android controller app bridge (android-controller/app/src/main/assets/bridge.js)
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -176,9 +178,10 @@ const P = ctxP.SensorProto, M = ctxP.MotionEngine;
 }
 
 /* ---------------- 3. MotionEngine ---------------- */
-console.log('3. MotionEngine (synthetic recordings, phone in the right hand, landscape)');
-{
-    const HZ = 60, DT = 1000 / HZ, UP = [1, 0, 0], RIGHT = [0, -1, 0], FWD = [0, 0, -1];    // landscape, phone turned left (angle 90)
+// 60 Hz: the browser's devicemotion; 100 Hz: the Android app's native sensors (android-controller/)
+for (const HZ of [60, 100]) {
+    console.log('3. MotionEngine (synthetic recordings, phone in the right hand, landscape, ' + HZ + ' Hz)');
+    const DT = 1000 / HZ, UP = [1, 0, 0], RIGHT = [0, -1, 0], FWD = [0, 0, -1];    // landscape, phone turned left (angle 90)
     let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5);
     // a recording: list of [ms, vertical, lateral, forward, freefall?] segments -> samples
     function rec(parts) {
@@ -249,5 +252,27 @@ console.log('3. MotionEngine (synthetic recordings, phone in the right hand, lan
     check(dbg.diag.fired === 1 && dbg.diag.cooldown >= 1 && dbg.detectors.length === 4, 'a second side step inside the cooldown is counted as a duplicate, not sent (' + JSON.stringify(dbg.diag) + ')');
 }
 
+/* ---------------- 4. Android app bridge ---------------- */
+console.log('4. Android controller app: native motion samples reach the page as devicemotion');
+{
+    let now = 5000; const calls = [], other = [];
+    const ctx = vm.createContext({ JSON, Math, console, performance: { now: () => now } });
+    ctx.window = ctx;
+    ctx.addEventListener = (type, fn) => other.push(type);
+    ctx.removeEventListener = () => {};
+    ctx.MyPCNative = { caps: () => '{"motion":true,"linear":true,"gyro":true}', motion: (on) => calls.push(on) };
+    load('android-controller/app/src/main/assets/bridge.js', ctx);
+    const got = [], fn = (e) => got.push(e);
+    ctx.addEventListener('devicemotion', fn); ctx.addEventListener('devicemotion', fn); ctx.addEventListener('keydown', () => {});
+    check(calls.join() === 'true' && other.join() === 'keydown', 'the first devicemotion listener starts the native sensors; other events are untouched');
+    const sample = (t) => [t, 0.1, 0.2, 0.3, 9.9, 0.2, 0.3, 10, 20, null];
+    ctx.__mypcMotion({ n: 1000, s: [sample(980), sample(990)] });          // arrives 0 ms late: page clock = sensor clock + 4000
+    now = 5040; ctx.__mypcMotion({ n: 1010, s: [sample(1000), sample(1010)] });   // arrives 30 ms late: timing kept
+    check(got.length === 4 && got.map((e) => e.t).join() === '4980,4990,5000,5010', 'samples keep their sensor timing on the page clock (' + got.map((e) => e.t).join() + ')');
+    const e = got[0];
+    check(e.acceleration.x === 0.1 && e.accelerationIncludingGravity.x === 9.9 && e.rotationRate.alpha === 10 && e.rotationRate.gamma === null, 'acceleration, with gravity and rotation rate are filled like a devicemotion event');
+    ctx.removeEventListener('devicemotion', fn);
+    check(calls.join() === 'true,false', 'removing the last listener stops the native sensors');
+}
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall unit checks passed');
 process.exit(failures ? 1 : 0);

@@ -2449,6 +2449,32 @@ async function main() {
         check(true, 'and back to buttons from the motion screen');
         check(Q.errors.length === 0, 'no page errors on the scanning phone ' + Q.errors.join('; '));
         await Q.context().close();
+        await tv.waitForFunction(() => Controllers.players()[1] === null, null, { timeout: 15000 });
+        // the Android app (android-controller/): window.MyPCNative + assets/bridge.js; ?ctrl=1 opens the Game controller,
+        // its own QR scanner answers, native motion samples replace devicemotion, the app is told when the link runs
+        const A = await newPage(browser, base, db, { phone: true, viewport: { width: 844, height: 390 } });
+        await A.addInitScript(() => { window.__nat = []; window.MyPCNative = { caps: () => '{"motion":true,"linear":true,"gyro":true}',
+            motion: (on) => __nat.push('motion:' + on), active: (on) => __nat.push('active:' + on), scanQr: () => __nat.push('scan') }; });
+        await A.addInitScript({ path: path.join(ROOT, 'android-controller/app/src/main/assets/bridge.js') });
+        await A.goto(base + 'index.html?ctrl=1');
+        await A.waitForFunction(() => window.GamepadApp && !!document.querySelector('.gc-scanbtn'), null, { timeout: 20000 });
+        await A.click('.gc-modes .btn:nth-of-type(2)');           // Motion moves
+        await A.click('.gc-scanbtn');
+        check(await A.evaluate(() => __nat.indexOf('scan') >= 0 && !document.querySelector('.gc-scanner')), 'Android app: Scan QR code opens the app\'s own scanner');
+        await A.evaluate((c) => GamepadApp.scanCode('https://imad-os.github.io/g/index.html?pair=' + c), code);   // what the app does with the scan
+        await A.waitForFunction(() => GamepadApp.linked(), null, { timeout: 40000 });
+        check(await A.evaluate(() => __nat.indexOf('active:true') >= 0 && __nat.indexOf('motion:true') >= 0), 'Android app: the scanned code connects; the app keeps the link awake and starts its native sensors (' + await A.evaluate(() => __nat.join()) + ')');
+        const mag = await A.evaluate(() => {
+            const n = performance.now(), s = [];
+            for (let i = 0; i < 20; i++) s.push([1000 + i * 10, 0, 0, 0, 0, 9.81, 0, 1, 2, 3]);
+            __mypcMotion({ n: 1200, s });
+            return GamepadApp.engine().debug().signals.magnitude;
+        });
+        check(Math.abs(mag - 9.81) < 0.05, 'Android app: native samples reach the motion engine (|g| ' + mag + ')');
+        await A.evaluate(() => document.querySelector('.gc-leave2').click());
+        check(await A.evaluate(() => __nat.slice(-2).sort().join() === 'active:false,motion:false'), 'Android app: leaving stops the native sensors and the keep-awake (' + await A.evaluate(() => __nat.join()) + ')');
+        check(A.errors.length === 0, 'no page errors in the Android app ' + A.errors.join('; '));
+        await A.context().close();
         check(tv.errors.length === 0 && P1.errors.length === 0 && P2.errors.length === 0, 'no page errors ' + tv.errors.concat(P1.errors, P2.errors).join('; '));
         for (const pg of [tv, P2]) await pg.context().close();
     }

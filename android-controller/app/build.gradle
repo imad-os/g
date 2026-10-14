@@ -1,0 +1,54 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Release signing: keystore.properties next to settings.gradle (never committed), written by build.ps1 the first time.
+// Keep the keystore: an update installs over the old app only when it is signed with the same key.
+def ksFile = rootProject.file('keystore.properties')
+def ks = new Properties()
+if (ksFile.exists()) ksFile.withInputStream { ks.load(it) }
+
+android {
+    namespace 'us.geekspro.mypc.controller'
+    compileSdk 35
+    buildToolsVersion '35.0.0'
+
+    defaultConfig {
+        applicationId 'us.geekspro.mypc.controller'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    signingConfigs {
+        release {
+            if (ks['storeFile']) {
+                storeFile file(ks['storeFile'])
+                storePassword ks['storePassword']
+                keyAlias ks['keyAlias']
+                keyPassword ks['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig ks['storeFile'] ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'                         // script injected before the page's own scripts
+    implementation('com.journeyapps:zxing-android-embedded:4.3.0') { transitive = false }   // QR scanner screen
+    implementation 'com.google.zxing:core:3.5.3'
+}

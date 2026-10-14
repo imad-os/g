@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Manette My PC</string>
+    <string name="link_channel">Liaison de la manette</string>
+    <string name="link_running">Connecté à la TV. Les mouvements fonctionnent même écran éteint.</string>
+    <string name="scan_prompt">Visez le QR code affiché sur la TV</string>
+    <string name="scan_bad">Ce n\'est pas un code d\'appairage My PC</string>
+    <string name="offline">Pas de connexion internet. La manette My PC a besoin du Wi-Fi pour joindre la TV.</string>
+    <string name="retry">Réessayer</string>
+</resources>

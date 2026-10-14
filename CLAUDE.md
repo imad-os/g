@@ -64,6 +64,9 @@
   **Owner decision: its Buttons mode reuses the existing virtual pad (`VirtualPad`, id `controller`), never a separately drawn pad.**
   Motion modes `sensor-actions` / `sensor-raw`: protocol `js/core/sensor-proto.js`, detection `js/core/motion.js` (moves are data rules,
   right hand only for now), games get them through `MyPC.sensors` (API 8) / `host.sensors`; full spec in `docs/phone-controller.md`.
+  **Android app** `android-controller/` (Java WebView shell of the hosted Game controller, `?ctrl=1`): native sensors / QR / screen-off link
+  through `window.MyPCNative` + `assets/bridge.js`; build with `android-controller/build.ps1` (JDK + SDK in `%USERPROFILE%\.tooling`), commit
+  the rebuilt `My-PC-Controller.apk`; the signing key lives outside the repo (`.tooling\keys`), never commit it.
 - **Heart-rate sensors (TV)**: `js/core/hr-ble.js` (any BLE Heart Rate Service device: Garmin watches broadcasting, Polar, Garmin HRM, Decathlon),
   created per app by `game-host.js` for `hr-monitor` or apps with `"heartRate": true` in their config; SDK `MyPC.bluetooth`.
   Needs the `bluetooth` privileges in `config.xml` (package 1.4.0+), so a new .wgt on the TV. Unit tests: `node tests/unit-tests.mjs` (part of `npm test`).

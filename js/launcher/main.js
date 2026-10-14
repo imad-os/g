@@ -289,6 +289,8 @@ var App = (function () {
             if (pair && /^[a-z0-9]{6,16}$/i.test(pair)) {
                 try { history.replaceState(null, '', page('')); } catch (e) {}
                 setTimeout(function () { Win.open('gamepad', { pair: pair.toLowerCase() }); }, 300);
+            } else if (param('ctrl') === '1') {                   // the Android controller app (android-controller/) opens on it
+                setTimeout(function () { Win.open('gamepad'); }, 300);
             }
             Backup.start();
             World.flush();

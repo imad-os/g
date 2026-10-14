@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- a game controller on the 108 dp adaptive-icon canvas (safe zone: the central 66 dp) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FF3B82F6"
+        android:pathData="M38,38h32c8,0 13,5 15,13l3,13c1.5,6 -2,11 -7,11c-3.5,0 -5.5,-2 -7.5,-5l-3,-4.5h-33l-3,4.5c-2,3 -4,5 -7.5,5c-5,0 -8.5,-5 -7,-11l3,-13c2,-8 7,-13 15,-13z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M37,47h4v5h5v4h-5v5h-4v-5h-5v-4h5z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M69,48m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0M76,55m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+</vector>
