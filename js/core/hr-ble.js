@@ -116,8 +116,17 @@ var HrBle = (function () {
         function reply(id, ok, result, error) { if (id !== null && id !== undefined) emit('result', { requestId: id, ok: !!ok, result: result || {}, error: error || null }); }
         function finish(ok, result, error) { var p = pending; pending = null; clearTimeout(opTimer); opTimer = 0; if (p) reply(p.id, ok, result, error); }
 
+        // Tizen 4.0+ privacy privileges: ask once when the TV says the user has to allow it (no effect where it is not needed)
+        function askPermission() {
+            try {
+                if (!tizen.ppm || typeof tizen.ppm.checkPermission !== 'function') return;
+                var P = 'http://tizen.org/privilege/bluetooth', r = tizen.ppm.checkPermission(P);
+                if (r === 'PPM_ASK' && typeof tizen.ppm.requestPermission === 'function') tizen.ppm.requestPermission(P, function () {}, function () {});
+            } catch (e) {}
+        }
         function adapter() {
             if (!window.tizen || !tizen.bluetooth || typeof tizen.bluetooth.getLEAdapter !== 'function') throw new Error('Bluetooth LE is not available here: open My PC on a Samsung TV (2024 or newer) that supports Bluetooth.');
+            if (!api) askPermission();
             if (!api) api = tizen.bluetooth.getLEAdapter();
             if (!api) throw new Error('No Bluetooth LE adapter is available on this TV.');
             return api;
@@ -381,7 +390,7 @@ var HrBle = (function () {
                     var t = errText(e);
                     if (/no adapter|no bluetooth le adapter/i.test(t)) { r.reasonCode = 'no-adapter'; r.message = 'This TV has no Bluetooth LE adapter.'; }
                     else if (/not.?supported|unsupported|not implemented/i.test(t)) { r.reasonCode = 'unsupported-tv'; r.message = 'This TV firmware does not support Tizen Bluetooth LE.'; }
-                    else if (/permission|privilege|security|denied|not allowed|access/i.test(t)) { r.reasonCode = 'permission-denied'; r.message = 'My PC cannot use Bluetooth: the installed package may lack the Bluetooth privilege.'; }
+                    else if (/permission|privilege|security|denied|not allowed|access/i.test(t)) { r.reasonCode = 'permission-denied'; r.message = 'My PC cannot use Bluetooth: install My PC package 1.4.0 or newer on this TV (the Bluetooth permission is in the package, an online update cannot add it). TV said: ' + t; }
                     else { r.reasonCode = 'adapter-error'; r.message = 'Bluetooth is present but could not start: ' + t; }
                 }
             }

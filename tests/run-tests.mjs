@@ -1493,6 +1493,34 @@ async function main() {
             rec: Scores.list('snake').map((e) => e.n + ' ' + e.s).join(), save: Store.get('game_snake_data', {}).level }));
         check(back.names === 'Ana,Sam' && back.wp === 'night' && back.lang === 'es' && back.apps === 'paint-pad' && back.rec === 'Ana 777' && back.save === 4,
             'profiles, settings, installed apps, records and saves are restored (' + JSON.stringify(back) + ')');
+        // a start where the DUID cannot be read keeps the same id (saved on the TV), so the backup never moves
+        await page.addInitScript(() => { window.webapis.productinfo.getDuid = function () { throw new Error('not ready'); }; });
+        await page.reload();
+        await page.waitForSelector('#desk-icons .dicon');
+        check(await page.evaluate(() => Device.id()) === tv1, 'a start where the DUID cannot be read keeps this TV\'s id');
+        await page.context().close();
+        // TV 3 was backed up under its Tizen id (DUID unreadable then); after a reinstall with the DUID readable it finds that copy
+        page = await newPage(browser, base, db);
+        const tz = `window.tizen.systeminfo.getCapability = function (k) { return k === 'http://tizen.org/system/tizenid' ? 'TIZENID-TEST-0003' : '9.0'; };`;
+        await page.addInitScript(tz);
+        await page.addInitScript(() => { window.webapis.productinfo.getDuid = function () { return ''; }; });
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon');
+        const tv3old = await page.evaluate(() => Device.id());
+        check(await page.evaluate(() => Device.source()) === 'tizen', 'without a DUID the Tizen id is used');
+        await page.evaluate(() => { Profiles.rename('p1', 'Zoe'); });
+        await page.evaluate(() => new Promise((res) => Backup.upload(res)));
+        await page.context().close();
+        page = await newPage(browser, base, db);
+        await page.addInitScript(tz);
+        await page.addInitScript(duid('DUID-TEST-0003'));
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon', { timeout: 10000 });
+        check(await page.evaluate(() => Device.id()) !== tv3old && await page.evaluate(() => Profiles.list().map((p) => p.name).join()) === 'Zoe',
+            'a backup saved under the Tizen id is found after a reinstall and the TV moves to its DUID id');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
         // TV 2: another id, its own record; the world list keeps both, best first
         page = await newPage(browser, base, db);

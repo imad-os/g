@@ -1,8 +1,9 @@
 /* This TV's identity and its cloud backup.
  *
  * Device.id(): "tv-" + a hash of the TV's own unique id (Samsung DUID, from webapis.productinfo; it stays
- * the same after a factory reset). The DUID itself never leaves the TV. Without it (a PC browser, an
- * older package without the productinfo privilege) a random id is kept in storage instead.
+ * the same after a reinstall and a factory reset). The DUID itself never leaves the TV. The id is also kept
+ * in storage, so a run where the DUID cannot be read keeps the same id. Without any hardware id (a PC
+ * browser) a random id is kept in storage instead.
  *
  * Backup: everything My PC keeps on the TV (profiles with their settings and saves, installed apps, records)
  * is copied to Firestore "tvs/<id>" a little after it changes. When My PC starts on a TV with nothing saved
@@ -25,20 +26,38 @@ var Device = (function () {
     }
     function hex(n) { return ('00000000000000' + n.toString(16)).slice(-14); }
 
-    function source() {
-        try { var d = webapis.productinfo.getDuid(); if (d && String(d).length >= 8) return { v: String(d), src: 'duid' }; } catch (e) {}
-        try { var t = tizen.systeminfo.getCapability('http://tizen.org/system/tizenid'); if (t && String(t).length >= 10) return { v: String(t), src: 'tizen' }; } catch (e2) {}
+    function make(v) { return 'tv-' + hex(cyrb53('mypc:' + v, 1)) + hex(cyrb53('mypc:' + v, 2)); }
+
+    // ids from the TV's hardware, best first: the DUID (kept through a factory reset), then the Tizen id
+    function hardware() {
+        var out = [];
+        try { var d = webapis.productinfo.getDuid(); if (d && String(d).length >= 8) out.push({ id: make(String(d)), src: 'duid' }); } catch (e) {}
+        try { var t = tizen.systeminfo.getCapability('http://tizen.org/system/tizenid'); if (t && String(t).length >= 10) out.push({ id: make(String(t)), src: 'tizen' }); } catch (e2) {}
+        return out;
+    }
+
+    // The id is also kept in storage ("arc_dev_tvid"), so a DUID read that fails once (slow start, missing
+    // privilege) never moves this TV's backup to a new document: the saved id stays until the DUID answers.
+    var SAVED = 'arc_dev_tvid';
+    var hw = hardware(), saved = Store.rawGet(SAVED), s;
+    if (hw.length && hw[0].src === 'duid') s = hw[0];
+    else if (saved && saved.id && (saved.src === 'duid' || !hw.length)) s = { id: String(saved.id), src: saved.src || 'saved' };
+    else if (hw.length) s = hw[0];
+    else {
         var r = Store.rawGet('arc_dev_tvrand');
         if (!r) {
             r = '';
             for (var i = 0; i < 4; i++) r += Math.floor(Math.random() * 4294967296).toString(16);
             Store.rawSet('arc_dev_tvrand', r);
         }
-        return { v: r, src: 'random' };
+        s = { id: make(r), src: 'random' };
     }
-
-    var s = source();
-    var id = 'tv-' + hex(cyrb53('mypc:' + s.v, 1)) + hex(cyrb53('mypc:' + s.v, 2));
+    if (!saved || saved.id !== s.id) Store.rawSet(SAVED, { id: s.id, src: s.src });
+    var id = s.id;
+    // where an earlier backup of this TV can be: this id first, then the other hardware ids
+    // (a TV whose DUID could not be read before was saved under its Tizen id)
+    var places = [id];
+    for (var j = 0; j < hw.length; j++) if (places.indexOf(hw[j].id) < 0) places.push(hw[j].id);
 
     function model() {
         try { return String(webapis.productinfo.getRealModel() || webapis.productinfo.getModel() || '').slice(0, 40); } catch (e) {}
@@ -46,7 +65,7 @@ var Device = (function () {
         return navigator.platform ? 'Browser ' + String(navigator.platform).slice(0, 30) : 'Browser';
     }
 
-    return { id: function () { return id; }, source: function () { return s.src; }, model: model };
+    return { id: function () { return id; }, source: function () { return s.src; }, places: function () { return places.slice(); }, model: model };
 })();
 
 var Backup = (function () {
@@ -56,7 +75,7 @@ var Backup = (function () {
     var MAX_BLOB = 800000;
     var DEBOUNCE = 20000, DAILY = 24 * 3600 * 1000;
     // not copied: this TV's identity, caches that come back from the internet, bookkeeping
-    var SKIP = /^arc_dev_(tvrand|backup_|catalog|appstats|world_queue|world_cache|seen_build|touchpad|update_checked|perf_bench|settings_v2|scores_v2)|^arc_p\d+_cloud_apps$/;
+    var SKIP = /^arc_dev_(tvrand|tvid|backup_|catalog|appstats|world_queue|world_cache|seen_build|touchpad|update_checked|perf_bench|settings_v2|scores_v2)|^arc_p\d+_cloud_apps$/;
     var timer = 0, busy = false, enabled = false;
 
     function mine(k) { return k && k.indexOf('arc_') === 0 && !SKIP.test(k); }
@@ -126,20 +145,26 @@ var Backup = (function () {
         if (dirty || Date.now() - last > DAILY) schedule(6000);
     }
 
-    // A fresh My PC: look for this TV's copy. cb(restored)
+    // A fresh My PC: look for this TV's copy (under its id, then under its other hardware ids). cb(restored)
     function restore(cb) {
-        Cloud.get('tvs/' + Device.id(), 4000, function (err, data) {
-            var keys = null;
-            if (!err && data && typeof data.blob === 'string') { try { keys = JSON.parse(data.blob); } catch (e) {} }
-            if (!keys || typeof keys !== 'object') return cb(false);
-            var n = 0;
-            try {
-                // what a fresh start already wrote (default profile...) is replaced by the copy
-                for (var i = localStorage.length - 1; i >= 0; i--) { var k = localStorage.key(i); if (mine(k)) localStorage.removeItem(k); }
-                for (var key in keys) if (mine(key) && typeof keys[key] === 'string') { localStorage.setItem(key, keys[key]); n++; }
-            } catch (e2) {}
-            cb(n > 0);
-        });
+        var places = Device.places(), at = 0;
+        (function next() {
+            if (at >= places.length) return cb(false);
+            Cloud.get('tvs/' + places[at++], 4000, function (err, data) {
+                var keys = null;
+                if (!err && data && typeof data.blob === 'string') { try { keys = JSON.parse(data.blob); } catch (e) {} }
+                if (!keys || typeof keys !== 'object') return next();
+                var n = 0;
+                try {
+                    // what a fresh start already wrote (default profile...) is replaced by the copy
+                    for (var i = localStorage.length - 1; i >= 0; i--) { var k = localStorage.key(i); if (mine(k)) localStorage.removeItem(k); }
+                    for (var key in keys) if (mine(key) && typeof keys[key] === 'string') { localStorage.setItem(key, keys[key]); n++; }
+                } catch (e2) {}
+                // found under an older id: the next upload saves it under this TV's id
+                if (n > 0 && places[at - 1] !== Device.id()) { try { localStorage.setItem(DIRTY, '1'); } catch (e3) {} }
+                cb(n > 0);
+            });
+        })();
     }
 
     Store.onWrite(function (k) {

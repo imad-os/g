@@ -66,7 +66,7 @@
   right hand only for now), games get them through `MyPC.sensors` (API 8) / `host.sensors`; full spec in `docs/phone-controller.md`.
 - **Heart-rate sensors (TV)**: `js/core/hr-ble.js` (any BLE Heart Rate Service device: Garmin watches broadcasting, Polar, Garmin HRM, Decathlon),
   created per app by `game-host.js` for `hr-monitor` or apps with `"heartRate": true` in their config; SDK `MyPC.bluetooth`.
-  Needs the `bluetooth` privilege in `config.xml`, so a new .wgt on the TV. Unit tests: `node tests/unit-tests.mjs` (part of `npm test`).
+  Needs the `bluetooth` privileges in `config.xml` (package 1.4.0+), so a new .wgt on the TV. Unit tests: `node tests/unit-tests.mjs` (part of `npm test`).
 - `sdk/`: `mypc-sdk.js` (protocol `{ mypc: 1, type, data }`), `GUIDE.md` (for building new apps
   in other repos), `example/`.
 - `installer/`: the App Store Manager, a desktop-browser page (Firebase JS SDK from gstatic is OK
