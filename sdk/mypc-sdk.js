@@ -962,6 +962,8 @@ var MyPC = (function () {
         }
         return {
             available: function () { return !!(hosted && hostWin && info && !info.standalone); },
+            /* HR BLE platform support v1: expose non-destructive host capability diagnostics. */
+            capabilities: function () { return request('capabilities'); },
             /* HR BLE test mode v1 preserved; HR BLE device picker v1: scan returns candidates; connect requires the selected id. */
             scan: function () { return request('scan'); },
             connect: function (deviceId) { return request('connect', { deviceId: deviceId }); },

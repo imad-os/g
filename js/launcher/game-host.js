@@ -304,6 +304,51 @@ var GameHost = (function () {
                 emit('scan-complete', { devices: devices, count: devices.length });
                 reply(id, true, { devices: devices });
             }
+            /* HR BLE platform support v1: inspect native Tizen BLE availability without starting a scan. */
+            function capabilities(requestId) {
+                var result = {
+                    hosted: true,
+                    platform: 'unknown',
+                    tizenApiAvailable: false,
+                    nativeBleAvailable: false,
+                    adapterAvailable: false,
+                    reasonCode: 'tizen-api-unavailable',
+                    message: 'Native Tizen Bluetooth is not exposed in this My PC runtime.'
+                };
+                if (!window.tizen || !window.tizen.bluetooth ||
+                    typeof window.tizen.bluetooth.getLEAdapter !== 'function') {
+                    reply(requestId, true, result);
+                    return;
+                }
+                result.platform = 'tizen';
+                result.tizenApiAvailable = true;
+                try {
+                    var probeAdapter = window.tizen.bluetooth.getLEAdapter();
+                    if (!probeAdapter) {
+                        result.reasonCode = 'no-adapter';
+                        result.message = 'The Tizen Bluetooth API exists, but no Bluetooth LE adapter is available.';
+                    } else {
+                        result.nativeBleAvailable = true;
+                        result.adapterAvailable = true;
+                        result.reasonCode = 'available';
+                        result.message = 'The Tizen Bluetooth LE API and adapter are available. A scan will verify sensor access.';
+                    }
+                } catch (error) {
+                    var detail = errorMessage(error);
+                    if (/not.?supported|unsupported|not implemented/i.test(detail)) {
+                        result.reasonCode = 'unsupported-tv';
+                        result.message = 'This device or TV firmware does not support the Tizen Bluetooth LE API.';
+                    } else if (/permission|privilege|security|denied|not allowed|access/i.test(detail)) {
+                        result.reasonCode = 'permission-denied';
+                        result.message = 'My PC cannot access Bluetooth. The installed signed Tizen package may be missing the Bluetooth privilege.';
+                    } else {
+                        result.reasonCode = 'adapter-error';
+                        result.message = 'Tizen Bluetooth is present but could not initialize: ' + detail;
+                    }
+                }
+                reply(requestId, true, result);
+            }
+
             function scan(requestId) {
                 if (testActive) stopTestCore(true);
                 if (pendingRequestId !== null) {
@@ -499,6 +544,7 @@ var GameHost = (function () {
                 adapter = null;
             }
             return {
+                capabilities: capabilities,
                 scan: scan,
                 connect: connect,
                 disconnect: disconnect,
@@ -536,7 +582,9 @@ var GameHost = (function () {
                         if (typeof d.requestId === 'number') ble.reject(d.requestId, 'Bluetooth bridge is not authorized for this app/origin.');
                         break;
                     }
-                    if (d.action === 'scan') {
+                    if (d.action === 'capabilities') {
+                        ble.capabilities(d.requestId);
+                    } else if (d.action === 'scan') {
                         if (state !== 'running') ble.reject(d.requestId, 'The app is not running. Resume it before scanning.');
                         else ble.scan(d.requestId);
                     } else if (d.action === 'connect') {

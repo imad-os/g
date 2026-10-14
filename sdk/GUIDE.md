@@ -516,3 +516,8 @@ await MyPC.bluetooth.connect(results.devices[0].id); // only after user selectio
 
 `MyPC.bluetooth.cancelScan()` stops an active scan. The scan lists only devices that appear to be heart-rate sensors; final compatibility is verified by discovering service `180D` and measurement characteristic `2A37` after connection.
 
+<!-- HR BLE platform support v1 -->
+### Platform capability diagnostics
+
+`MyPC.bluetooth.capabilities()` returns a non-throwing diagnostic result such as `nativeBleAvailable`, `reasonCode`, and `message`. HR Monitor uses it to explain the difference between a browser-only launch, a My PC runtime without Tizen BLE, a missing Bluetooth privilege, an unavailable adapter, and a scan where no compatible heart-rate monitor was found.
+
