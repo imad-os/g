@@ -929,7 +929,7 @@ var MyPC = (function () {
                 try { list[i](payload || {}); } catch (e) { try { console.error('[MyPC BLE] ' + e); } catch (x) {} }
             }
         }
-        function request(action) {
+        function request(action, extra) {
             if (!hosted || !hostWin || !info || info.standalone) {
                 return Promise.reject(new Error('The My PC native Bluetooth bridge is only available inside My PC.'));
             }
@@ -941,7 +941,9 @@ var MyPC = (function () {
                     reject(new Error('My PC Bluetooth request timed out.'));
                 }, 35000);
                 pending[id] = { resolve: resolve, reject: reject, timer: timer };
-                post('ble', { action: action, requestId: id });
+                var payload = { action: action, requestId: id };
+                if (extra && typeof extra === 'object') Object.keys(extra).forEach(function (key) { payload[key] = extra[key]; });
+                post('ble', payload);
             });
         }
         function receive(d) {
@@ -960,8 +962,10 @@ var MyPC = (function () {
         }
         return {
             available: function () { return !!(hosted && hostWin && info && !info.standalone); },
-            /* HR BLE test mode v1: test samples share the normal event channel. */
-            connect: function () { return request('connect'); },
+            /* HR BLE test mode v1 preserved; HR BLE device picker v1: scan returns candidates; connect requires the selected id. */
+            scan: function () { return request('scan'); },
+            connect: function (deviceId) { return request('connect', { deviceId: deviceId }); },
+            cancelScan: function () { return request('cancel-scan'); },
             disconnect: function () { return request('disconnect'); },
             startTest: function () { return request('start-test'); },
             stopTest: function () { return request('stop-test'); },
@@ -980,7 +984,7 @@ var MyPC = (function () {
 
     var pub = {
         version: VERSION,
-        apiLevel: 6,                     // 3 added MyPC.multiplayer, 4 adds MyPC.pad and the pad option of init() (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: 7,                     // 3 added MyPC.multiplayer, 4 adds MyPC.pad and the pad option of init() (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,

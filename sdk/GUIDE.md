@@ -501,3 +501,18 @@ MyPC.bluetooth.stopTest();  // stops the stream
 
 Test samples are synthetic (not physiological measurements) and are marked `source: 'simulation'`. Starting test mode disconnects any native sensor; starting a real BLE connection or closing the app stops test mode so sources are never mixed.
 
+<!-- HR BLE device picker v1 -->
+### Bluetooth device selection
+
+`MyPC.bluetooth.scan()` scans for nearby BLE devices advertising the standard Heart Rate service (`180D`) or carrying a recognizable heart-rate monitor name. It resolves with `{ devices: [{ id, name, address, type }] }` after a 10-second scan. The UI can also subscribe to `device-found` events for live list updates. The user must select a result before `MyPC.bluetooth.connect(deviceId)` will attempt a connection; the host no longer connects automatically to the first match.
+
+```javascript
+MyPC.bluetooth.on('device-found', function (event) {
+    console.log(event.device.name, event.device.address);
+});
+var results = await MyPC.bluetooth.scan();
+await MyPC.bluetooth.connect(results.devices[0].id); // only after user selection
+```
+
+`MyPC.bluetooth.cancelScan()` stops an active scan. The scan lists only devices that appear to be heart-rate sensors; final compatibility is verified by discovering service `180D` and measurement characteristic `2A37` after connection.
+
