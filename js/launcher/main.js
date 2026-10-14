@@ -7,8 +7,21 @@ var App = (function () {
     function $(id) { return document.getElementById(id); }
 
     /* ---------- screen fit: the UI is laid out at 1920x1080 and scaled to the window ---------- */
+    // the size of what is visible now. Phones report the old size for a moment after a rotation, so refit() checks again.
+    function viewSize() {
+        var v = window.visualViewport, d = document.documentElement;
+        var w = (v && v.width) || d.clientWidth || window.innerWidth || 1920, h = (v && v.height) || d.clientHeight || window.innerHeight || 1080;
+        return [Math.round(w), Math.round(h)];
+    }
+    var fitTimers = [];
+    function refit() {
+        fit();
+        for (var i = 0; i < fitTimers.length; i++) clearTimeout(fitTimers[i]);
+        fitTimers = [setTimeout(fit, 100), setTimeout(fit, 300), setTimeout(fit, 700)];
+    }
     function fit() {
-        var w = window.innerWidth || 1920, h = window.innerHeight || 1080;
+        var vs = viewSize(), w = vs[0], h = vs[1];
+        if (window.scrollX || window.scrollY) window.scrollTo(0, 0);         // a rotation can leave the page scrolled
         var s = Math.min(w / 1920, h / 1080), st = $('stage');
         var tr = Math.abs(s - 1) < 0.01 ? '' : 'scale(' + s + ')';
         st.style.webkitTransform = tr;
@@ -213,7 +226,10 @@ var App = (function () {
 
     function start() {
         fit();
-        window.addEventListener('resize', fit);
+        window.addEventListener('resize', refit);
+        window.addEventListener('orientationchange', refit);
+        if (window.visualViewport) window.visualViewport.addEventListener('resize', refit);
+        if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', refit);
         I18n.apply();
         A11y.init();
         if (Perf.profile().tier !== 'low') document.documentElement.className += ' hi';

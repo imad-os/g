@@ -2195,6 +2195,9 @@ async function main() {
         await W.setViewportSize({ width: 844, height: 390 });
         await W.waitForFunction(() => document.getElementById('turn-cover').hidden === true, null, { timeout: 3000 });
         check(true, 'phone on its side: the cover goes away');
+        await W.waitForTimeout(800);
+        const fitR = await W.evaluate(() => { const r = document.getElementById('stage').getBoundingClientRect(); return [r.top, r.bottom, r.left, r.right, innerWidth, innerHeight]; });
+        check(fitR[0] >= -1 && fitR[1] <= fitR[5] + 1 && fitR[2] >= -1 && fitR[3] <= fitR[4] + 1 && (fitR[1] - fitR[0] > fitR[5] - 2 || fitR[3] - fitR[2] > fitR[4] - 2), 'after turning the phone from upright to sideways the whole screen fits, nothing cut at the bottom (' + fitR.map(Math.round) + ')');
         const sw = await W.waitForFunction(() => navigator.serviceWorker.getRegistration().then((r) => !!r), null, { timeout: 8000 }).then(() => true, () => false);
         check(sw, 'the service worker registers');
         check(W.errors.length === 0, 'no page errors ' + W.errors.join('; '));
