@@ -114,17 +114,16 @@ var Desktop = (function () {
         box.appendChild(button('dicon', 'app', appById('browser'), true));
         box.appendChild(button('dicon', 'app', appById('store'), true));
         if (appById('gamepad')) box.appendChild(button('dicon', 'app', appById('gamepad'), true));   // phones and tablets only
-        if (wantsApk()) box.appendChild(apkButton());
+        box.appendChild(apkButton());
         for (i = 0; i < games.length; i++) box.appendChild(button('dicon', 'game', games[i], true));
         for (i = 0; i < installed.length; i++) box.appendChild(button('dicon', 'game', installed[i], true));
         box.appendChild(button('dicon', 'app', appById('scores'), true));
     }
 
-    // Get the app: on an Android phone, a shortcut to the latest My PC APK (android-controller/); not on the TV or other phones.
-    // In the browser it downloads the file; inside the app (window.MyPCNative) it is "Update the app" and opens the phone's
+    // Get the app: on every device (owner decision), a shortcut to the latest My PC APK (android-controller/).
+    // In a browser it downloads the file; inside the app (window.MyPCNative) it is "Update the app" and opens the phone's
     // browser on an http:// link (the app hands every link that is not https My PC to the browser, which downloads it)
     var APK = 'android-controller/My-PC-Controller.apk';
-    function wantsApk() { return !window.tizen && (!!window.MyPCNative || /Android/i.test(navigator.userAgent)); }
     function apkUrl() {
         var b = (typeof AppBoot !== 'undefined' && AppBoot.base && AppBoot.base()) || '';
         if (!/^https?:/.test(b)) b = location.href.split(/[?#]/)[0].replace(/[^/]*$/, '');
@@ -134,9 +133,10 @@ var Desktop = (function () {
         var inApp = !!window.MyPCNative, b = button('dicon', 'app', { id: 'getapp', icon: 'getapp', label: inApp ? 'getAppUpdate' : 'getApp' }, true);
         b.onclick = function () {
             closeStart(true);
-            if (inApp) { location.href = apkUrl().replace(/^https:/, 'http:'); App.toast(I18n.t('getAppToast')); return; }
+            // a link clicked inside this tap (a user gesture): the app is always asked about it and hands it to the browser
             var a = el('a');
-            a.href = apkUrl(); a.setAttribute('download', 'My-PC.apk'); a.rel = 'noopener';
+            a.href = inApp ? apkUrl().replace(/^https:/, 'http:') : apkUrl(); a.rel = 'noopener';
+            if (!inApp) a.setAttribute('download', 'My-PC.apk');
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             App.toast(I18n.t('getAppToast'));
         };
