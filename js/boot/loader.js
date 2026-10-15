@@ -196,7 +196,12 @@
 
     function start() {
         state.localBase = packagedBase();
-        get('app-manifest.json', 0, function (err, text) {
+        // My PC opened from its web site (a browser, the Android app): this site IS the hosted copy. Read its manifest fresh
+        // and load its files with the build in the address, so the browser's cache (10 min on GitHub Pages) never mixes an
+        // old file into a new build. (The github.io address redirects to the custom domain without a CORS header, so asking
+        // it from here always failed and an older saved build could start.) TVs (file:) are not concerned.
+        var web = location.protocol === 'https:' && !lsGet(LS_REMOTE_BASE);
+        get(web ? 'app-manifest.json?t=' + Date.now() : 'app-manifest.json', 0, function (err, text) {
             var local = parse(text);
             if (!isValid(local)) { log('bundled manifest unreadable: ' + err); return; }
             state.localManifest = local;
@@ -206,6 +211,8 @@
                 state.reason = 'forced';
                 return boot(local, '');
             }
+
+            if (web) { state.reason = 'current'; return boot(local, state.localBase); }
 
             var base = remoteBase();
             if (base === state.localBase) { state.reason = 'current'; return boot(local, ''); }   // PC browser on the hosted site itself
