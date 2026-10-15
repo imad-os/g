@@ -85,8 +85,30 @@ var Input = (function () {
         for (var i = 0; i < padListeners.length; i++) padListeners[i]();
     }
 
+    // A text field being typed in (the phone's own keyboard, or a PC keyboard): its keys are typing, not actions
+    // (B, Backspace = Back, W A S D...). Enter, Esc or the TV's Back leave the field; then keys are actions again.
+    var NOT_TEXT = { checkbox: 1, radio: 1, button: 1, submit: 1, reset: 1, range: 1, file: 1, color: 1, image: 1 };
+    function textField(el) {
+        if (!el || !el.tagName) return null;
+        var tag = el.tagName;
+        if (tag === 'TEXTAREA' || el.isContentEditable || (tag === 'INPUT' && !NOT_TEXT[(el.type || '').toLowerCase()])) return el.disabled || el.readOnly ? null : el;
+        return null;
+    }
+    function typing(e, down) {
+        var f = textField(e.target);
+        if (!f || f !== document.activeElement) return false;
+        var code = e.keyCode;
+        if (!down) return !keyHeld[code];             // a key held from before the field took focus still gets its release
+        if (code === 13 || code === 27 || code === 10009) {
+            if (code !== 13 && e.preventDefault) e.preventDefault();
+            setTimeout(function () { if (document.activeElement === f) f.blur(); }, 0);     // after the field's own Enter handler
+        }
+        return true;
+    }
+
     function onKey(e, down) {
         var code = e.keyCode, acts = KEYMAP[code], i, dev = KEYS2[code] ? 'keys2' : 'keys';
+        if (typing(e, down)) return;
         if (down && isKeyboardKey(code)) { used('keyboard'); setDevice('keyboard'); }
         if (!acts) return;
         if (code === 9 && e.shiftKey) acts = ['tabBack'];
@@ -290,6 +312,13 @@ var Input = (function () {
         document.addEventListener('keydown', function (e) { onKey(e, true); });
         document.addEventListener('keyup', function (e) { onKey(e, false); });
         window.addEventListener('blur', releaseAll);
+        // the phone's keyboard closed (its hide key, Android Back) without leaving the field: leave it, so B and Back act again
+        var vv = window.visualViewport, vw = vv ? vv.width : 0, vh = vv ? vv.height : 0;
+        if (vv) vv.addEventListener('resize', function () {
+            var a = textField(document.activeElement);
+            if (a && Math.abs(vv.width - vw) < 2 && vv.height - vh > 120) a.blur();
+            vw = vv.width; vh = vv.height;
+        });
         // mouse / Magic Remote pointer: a real movement or click counts as "mouse used"
         document.addEventListener('mousemove', function (e) { if (e.movementX || e.movementY) { used('mouse'); setDevice('mouse'); } });
         document.addEventListener('mousedown', function () { used('mouse'); setDevice('mouse'); });

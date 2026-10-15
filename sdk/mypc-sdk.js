@@ -152,6 +152,9 @@ var MyPC = (function () {
 
     function forwardKey(e, isDown) {
         if (!hosted || !info) return;
+        // typing in the app's own text field: keys stay in the field (Esc / the TV's Back still reach My PC)
+        var t = e.target, tag = t && t.tagName;
+        if ((tag === 'TEXTAREA' || (t && t.isContentEditable) || (tag === 'INPUT' && !/^(checkbox|radio|button|submit|reset|range|file|color|image)$/i.test(t.type || ''))) && e.keyCode !== 27 && e.keyCode !== 10009) return;
         if (KEYS[e.keyCode] || e.keyCode === 10009 || e.keyCode >= 400) { e.preventDefault(); post('key', { keyCode: e.keyCode, down: isDown, repeat: !!e.repeat }); }
     }
 

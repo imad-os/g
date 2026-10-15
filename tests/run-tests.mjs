@@ -2286,6 +2286,29 @@ async function main() {
         await W.context().close();
     }
 
+    // ---- 33b. typing in a text field: the phone's keyboard types, B / Backspace are not Back until the field is left
+    console.log('33b. text fields keep their keys while typing');
+    {
+        const ph = await newPage(browser, base, {}, { phone: true, viewport: { width: 844, height: 390 } });
+        await ph.goto(base + 'index.html');
+        await ph.waitForFunction(() => window.Win && document.querySelector('[data-game]'), null, { timeout: 20000 });
+        await ph.evaluate(() => Win.open('gamepad'));
+        await ph.fill('.gc-code', '');
+        await ph.focus('.gc-code');
+        await ph.keyboard.type('bwasdzx');
+        await ph.keyboard.press('Backspace');
+        const st = await ph.evaluate(() => ({ v: document.querySelector('.gc-code').value, open: Win.isOpen(), f: document.activeElement === document.querySelector('.gc-code') }));
+        check(st.v.toLowerCase() === 'bwasdz' && st.open && st.f, 'B, W A S D, Z, X type into the field and Backspace erases, nothing goes back (' + st.v + ')');
+        await ph.keyboard.press('Escape');
+        await ph.waitForFunction(() => document.activeElement !== document.querySelector('.gc-code'), null, { timeout: 2000 });
+        check(await ph.evaluate(() => Win.isOpen()), 'Esc (the keyboard closing) leaves the field without going back');
+        await ph.keyboard.press('Backspace');
+        await ph.waitForFunction(() => !Win.isOpen(), null, { timeout: 2000 });
+        check(true, 'out of the field, Backspace is Back again');
+        check(ph.errors.length === 0, 'no page errors ' + ph.errors.join('; '));
+        await ph.context().close();
+    }
+
     // ---- 34. phone controller: P1 / P2 from a phone, reconnecting when the TV changes page
     console.log('34. phone controller (Game controller app, Controllers, Input.remote)');
     {
