@@ -80,6 +80,10 @@
   Needs the `bluetooth` privileges in `config.xml` (package 1.4.0+), so a new .wgt on the TV. Unit tests: `node tests/unit-tests.mjs` (part of `npm test`).
 - `sdk/`: `mypc-sdk.js` (protocol `{ mypc: 1, type, data }`), `GUIDE.md` (for building new apps
   in other repos), `example/`.
+  **`sdk/GUIDE.md` is the one source of truth for app makers**: every change to the SDK, the protocol, the controller,
+  multiplayer, sensors, the manifest or the rules for apps MUST update it in the same commit (and `docs/phone-controller.md`
+  for sensors). `docs/ai-build-prompt.md` is the short prompt the owner gives an AI by URL; it only links to the guide, so
+  keep facts out of it (change it only when its links or the steps change).
 - `installer/`: the App Store Manager, a desktop-browser page (Firebase JS SDK from gstatic is OK
   there, never in the TV app). Also shows TV statistics and world records.
 - `firebase/`: rules and owner setup steps (`SETUP.md`). After a rules change the owner must publish

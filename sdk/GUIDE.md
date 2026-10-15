@@ -136,6 +136,13 @@ After `onPause` the game **MUST NOT** move or make sound until `onResume`.
 }
 ```
 
+**Profiles and player accounts belong to My PC.** It has user profiles and player accounts and syncs them to the cloud
+itself. Your app only sees `info.profile` and keeps progress with `MyPC.save` / `MyPC.load`, which are already per
+profile and backed up. **Never** build your own login, accounts, cloud saves, name entry for scores, Firebase or backend.
+
+Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors) and hide the feature
+when it is missing.
+
 ### App config: `MyPC.app_config`
 
 Settings that the **owner changes without touching the code**: difficulty, a server address, a
@@ -342,6 +349,15 @@ Chromium 108, Tizen 9 = Chromium 120). It also runs in current desktop browsers.
 - **No allocation per frame:** pools for bullets, particles and enemies; no `new` and no array or
   object literals inside the loop. TVs have little RAM and garbage-collection pauses show as
   stutter.
+  Also no closures, string building or `forEach` / `map` / `filter` in update and draw.
+- **Low-end TVs come first** (weak CPU and GPU): draw at a fixed logical size on one canvas,
+  cache static layers in an offscreen canvas, avoid `shadowBlur`, canvas filters and per-frame
+  gradients. On `info.quality.tier === 'low'`: fewer particles, no screen shake, lower internal
+  resolution.
+- **DOM apps:** few elements, animate only `transform` and `opacity`, no layout reads in loops,
+  no DOM writes when nothing changed, no big `box-shadow` on full-screen layers.
+- **Free everything in `onDestroy`:** loops, every timer, listeners, audio, WebGL contexts,
+  `MyPC.sensors.stop()`, multiplayer sessions.
 - Canvas 2D or WebGL (WebGL 2 is available on Tizen 8+). Keep textures small.
 - Audio: one `AudioContext`, created in `onStart` (not before), **closed in `onDestroy`**. Prefer
   short sounds or synthesized sounds (oscillators). Big MP3s are slow to decode on TVs.
