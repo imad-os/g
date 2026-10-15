@@ -114,9 +114,31 @@ var Desktop = (function () {
         box.appendChild(button('dicon', 'app', appById('browser'), true));
         box.appendChild(button('dicon', 'app', appById('store'), true));
         if (appById('gamepad')) box.appendChild(button('dicon', 'app', appById('gamepad'), true));   // phones and tablets only
+        if (wantsApk()) box.appendChild(apkButton());
         for (i = 0; i < games.length; i++) box.appendChild(button('dicon', 'game', games[i], true));
         for (i = 0; i < installed.length; i++) box.appendChild(button('dicon', 'game', installed[i], true));
         box.appendChild(button('dicon', 'app', appById('scores'), true));
+    }
+
+    // Get the app: on an Android phone's browser, a shortcut that downloads the latest My PC APK (android-controller/);
+    // not on the TV, not on other phones, not inside the app itself (window.MyPCNative)
+    var APK = 'android-controller/My-PC-Controller.apk';
+    function wantsApk() { return !window.tizen && !window.MyPCNative && /Android/i.test(navigator.userAgent); }
+    function apkUrl() {
+        var b = (typeof AppBoot !== 'undefined' && AppBoot.base && AppBoot.base()) || '';
+        if (!/^https?:/.test(b)) b = location.href.split(/[?#]/)[0].replace(/[^/]*$/, '');
+        return b + APK + '?b=' + (typeof AppBoot !== 'undefined' && AppBoot.build ? AppBoot.build() : '');      // the latest, not a cached copy
+    }
+    function apkButton() {
+        var b = button('dicon', 'app', { id: 'getapp', icon: 'getapp', label: 'getApp' }, true);
+        b.onclick = function () {
+            closeStart(true);
+            var a = el('a');
+            a.href = apkUrl(); a.setAttribute('download', 'My-PC.apk'); a.rel = 'noopener';
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            App.toast(I18n.t('getAppToast'));
+        };
+        return b;
     }
 
     /* ---------------- taskbar ---------------- */

@@ -2628,6 +2628,20 @@ async function main() {
             btn: document.querySelector('.tb-btn').getBoundingClientRect().height, apps: document.querySelector('.tb-apps').getBoundingClientRect().right, tray: document.querySelector('.tray').getBoundingClientRect().left }));
         check(look.compact && look.btn >= 50 && look.apps < look.tray, 'phone: taskbar buttons big enough for a finger (' + Math.round(look.btn) + ' px), not over the clock');
         check(look.pad, 'phone: the Game controller has a desktop shortcut');
+        check(await H.evaluate(() => !document.querySelector('[data-app="getapp"]')), 'inside the Android app there is no "Get the app" shortcut');
+        // an Android phone's browser: "Get the app" downloads the latest APK
+        const G = await newPage(browser, base, db, { phone: true, viewport: { width: 844, height: 390 } });
+        await G.addInitScript(() => {
+            Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36' });
+            window.__dl = []; HTMLAnchorElement.prototype.click = function () { __dl.push([this.href, this.getAttribute('download')]); };
+        });
+        await G.goto(base + 'index.html');
+        await G.waitForSelector('#desk-icons [data-app="getapp"]', { timeout: 20000 });
+        await G.evaluate(() => document.querySelector('[data-app="getapp"]').click());
+        const dl = await G.evaluate(() => __dl[0] || []);
+        check(/android-controller\/My-PC-Controller\.apk\?b=\d+$/.test(dl[0] || '') && dl[1] === 'My-PC.apk', 'Android browser: "Get the app" downloads the latest APK (' + dl.join(' ') + ')');
+        check(G.errors.length === 0, 'no page errors with Get the app ' + G.errors.join('; '));
+        await G.context().close();
         await H.evaluate(() => Input.systemBack());
         await H.waitForFunction(() => !document.getElementById('dialog-backdrop').hidden, null, { timeout: 4000 });
         await H.evaluate(() => document.getElementById('dialog-yes').click());

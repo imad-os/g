@@ -62,6 +62,9 @@ var Icons = (function () {
         clock: '<circle cx="24" cy="24" r="19" fill="#c06cf0"/><path d="M24 12v13l8 5" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>',
         shield: '<path d="M24 4l17 6v12c0 11-7 18-17 22C14 40 7 33 7 22V10z" fill="#3fb6a8"/><path d="M16 24l6 6 11-12" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>',
         info: '<circle cx="24" cy="24" r="19" fill="#5b8def"/><rect x="21.5" y="20" width="5" height="15" rx="2.5" fill="#fff"/><circle cx="24" cy="13.5" r="3" fill="#fff"/>',
+        // a phone with a download arrow: Get the app (the Android APK)
+        getapp: '<rect x="13" y="4" width="22" height="40" rx="5" fill="#4cd97b"/><rect x="16" y="9" width="16" height="27" rx="2" fill="#173a26"/>' +
+                '<path d="M24 13v13M18.5 21l5.5 5.5 5.5-5.5" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>',
         controller: '<path d="M14 15h20a10 10 0 0 1 9.6 12.8l-2.2 7.5a5 5 0 0 1-8.6 1.7L29 32H19l-3.8 5a5 5 0 0 1-8.6-1.7l-2.2-7.5A10 10 0 0 1 14 15z" fill="#4cd97b"/>',
         plus: '<path d="M24 10v28M10 24h28" stroke="#fff" stroke-width="4" stroke-linecap="round"/>',
         // App Store: a shopping bag with four coloured tiles (original art)
