@@ -11,21 +11,43 @@ camera app. Typing the code, picking **P1** / **P2** and a mode, then **Connect*
 
 | Mode | What the phone does | What the TV / game gets |
 |---|---|---|
-| **Buttons** (`pad`) | The virtual pad My PC already draws over games (`js/core/virtual-pad.js`): stick, A, B, pause, and the gear to add C / ☰, resize and move everything (saved on the phone as `vpad:controller`). | The same actions as the TV remote: player 1 = device `keys`, player 2 = `keys2`. |
+| **Buttons** (`pad`) | The virtual pad My PC already draws over games (`js/core/virtual-pad.js`): stick, **A B X Y where a Nintendo controller has them** (A right, B bottom, X top, Y left), pause, and the gear to hide buttons, resize and move everything (saved on the phone as `vpad:controller`). | The same actions as the TV remote: player 1 = device `keys`, player 2 = `keys2`. A = OK / jump, B = run + back (`cancel`, like a gamepad's B), X = `menu`, Y = run. |
 | **Motion moves** (`sensor-actions`) | The player faces the TV, phone in the right hand. The phone detects moves and sends **only the moves the game asked for**, plus metrics if asked. | `MyPC.sensors` events in the game. With no game listening, moves drive the TV: LEFT / RIGHT = left / right, JUMP = OK, DUCK … DUCK_END = down held. |
-| **Motion data** (`sensor-raw`) | Sends the sensor samples themselves at the rate the game asks for. On the My PC screens (no game asked for sensor events) it is a **pointer** instead, like a TV magic remote: see below. | `raw` events; the game does its own detection. On the My PC screens: the TV pointer. |
+| **Motion data** (`sensor-raw`) | Sends the sensor samples themselves at the rate the game asks for. | `raw` events; the game does its own detection. |
+| **Pointer** (`pointer`) | A TV pointer like a magic remote, on the My PC screens: see below. | The pointer moves; A = OK on what it points at, B = back. Nothing on a game's page. |
 
-**Pointer (Motion data on the My PC screens).** The phone shows the same virtual pad as Buttons mode (layout saved as
-`vpad:pointer`): **A** = OK, **B** = back, the stick = arrows, and a **Center** button in the bar. Turning the phone moves
-a pointer on the TV; whatever item it is on gets the focus (white ring), and A opens it. The phone can be held like a
-remote (screen up, top edge to the TV) or like a game (screen to the player, back to the TV): `js/core/aim.js` reads
-"up" from gravity, so turning left / right and tilting up / down always mean the same. The pointer stops at the screen
-edges (turning back re-aligns it), hides after 5 s without movement or when an arrow is pressed (then A is the usual OK
-on the focused item), and comes back in the centre; **Center** puts it there at once. The phone's **Sensitivity**
-setting scales it. A hand held still (under 0.8 deg/s) does not move it. Phones with no gyroscope cannot point (the bar
-says so). TV side: `js/launcher/pointer.js` (one small layer moved with a transform, at most once per frame; the item
-under it looked up 10 times a second; nothing runs while it is hidden). Never on a game's page: as soon as an app calls
-`MyPC.sensors.setup`, phones get `pointer: false` and send raw samples again.
+**Pointer mode.** Point the phone at the TV and turn it: a pointer moves on the TV and whatever item it is on gets the
+focus (white ring); **A** opens it, **B** is back. The phone screen has no stick: big **A** and **B** (Nintendo places),
+**Center** (pointer back to the middle), **Calibrate**, and the tuning settings, kept on the phone (`arc_dev_ctrlphone`
+`.ptr`): **Smoothness** 1 to 10 (default 5), **Speed** 30 to 300 % (100 %), **Steady zone** 0 to 6 deg/s (1.5: how much
+small shaking is ignored), **Swap left and right**, **Swap up and down**, **Default settings**.
+
+How `js/core/aim.js` keeps it steady and accurate, for every sensor sample:
+1. **Gyroscope offset**: learnt while the phone is held still (under 2.5 deg/s for half a second, no shake) and removed,
+   so the pointer does not drift.
+2. **"Up"** comes from the accelerometer (gravity), kept by the gyroscope between samples (complementary filter). While
+   the phone shakes (accelerometer more than 2.2 m/s² away from 1 g) gravity is not used, so a shake does not tilt the axes.
+3. **Axes from the grip**: held like a remote (screen up) the phone points with the top of the screen's picture (it
+   follows the landscape / portrait orientation); held like a camera (screen to the player) it points with its back.
+   Turning around "up" = left / right, turning around the horizontal axis across the pointing direction = up / down.
+   A twist of the wrist around the pointing direction does not move the pointer, and moving the phone without turning it
+   (a shake, a step) does not either: only rotation counts.
+4. **Steady zone**: speeds are scaled by v² / (v² + steady²): tremor (about 1 deg/s) almost disappears, slow intended
+   moves (4 deg/s and more) go through.
+5. **Smoothing** (a "1 euro" filter on the position): strong while slow (precise), light while fast (little lag),
+   stronger for a moment after a shake. The pointer always ends exactly where the phone points.
+6. **Click**: pressing A stops the pointer where it is shown and ignores the movement for 250 ms, so the press does not
+   move it.
+
+**Calibrate**: "Point at the middle of the TV and hold still" (learns the offset, centres the pointer), "turn the phone
+slowly to the right", "tilt it slowly up". A direction that came out reversed is swapped (the two Swap settings). Too
+little movement: it says so and changes nothing.
+
+On the TV, `js/launcher/pointer.js`: one small layer moved with a transform at most once per frame; the item under it
+looked up 10 times a second (it gets the focus without scrolling); a little acceleration (quick turns go further); it
+stops at the screen edges (turning back re-aligns it), hides after 5 s without movement or when an arrow is pressed and
+comes back in the centre. Nothing runs while it is hidden. The phone sends 50 small messages a second at most, only while
+moving. On a game's page the config says `pointer: false` and the phone sends nothing.
 
 **Android app** (`android-controller/`, `My-PC-Controller.apk`): the same Game controller page in a native shell that
 feeds it native motion samples (200 Hz fused sensors, 100 Hz samples with their own timestamps) instead of
@@ -55,7 +77,7 @@ MyPC.sensors.on('action', function (ev, player) {   // { type: 'action', action:
 });
 MyPC.sensors.on('metrics', function (m, player) {}); // { gait: 'RUN', cadence: 162, speed_kmh: 8.4, pace_sec_per_km: 428, distance_m: 325.6, steps }
 MyPC.sensors.on('raw', function (r, player) {});     // { hz, s: [[dt, ax, ay, az, gx, gy, gz, ra, rb, rg], ...] }
-MyPC.sensors.on('players', function (modes) {});     // { 1: 'sensor-actions', 2: null } when phones come and go
+MyPC.sensors.on('players', function (modes) {});     // { 1: 'sensor-actions', 2: null } when phones come and go ('pad', 'sensor-actions', 'sensor-raw', 'pointer')
 MyPC.sensors.on('config', function (cfg) {});        // what the phones were actually sent (unknown moves removed)
 MyPC.sensors.stop();
 ```
@@ -66,8 +88,8 @@ MyPC.sensors.stop();
 - Moves the phone cannot detect (not built in, not in `define`) are dropped from the config; check `config`.
 - Actions arrive in order and only once (the TV drops duplicates and anything older than 3 seconds).
 - Built-in games (same-origin iframe) use `host.sensors.setup(cfg, function (type, player, msg) {})` and `host.sensors.stop()`.
-- A phone in Motion data mode is the My PC pointer until your app calls `setup` (with `raw`); after that it sends you its
-  samples. Your app never receives pointer messages.
+- A phone in Pointer mode is only for the My PC screens: your app never receives pointer messages (its A / B arrive as the
+  usual actions).
 
 ## Protocol (version 1)
 
@@ -92,8 +114,7 @@ of app `controller` in Firestore; no sensor data ever goes through Firebase. Eve
   "metrics": { "enabled": true, "hz": 1 }, "raw": { "hz": 30 }, "pointer": false }
 ```
 
-`pointer` is true only when the TV sends it with no app asking for sensors (the My PC screens); a game's own setup always
-sends false.
+`pointer` is true only for a phone in Pointer mode while the TV shows the My PC screens (never on a game's page).
 
 `now` lets the TV turn phone timestamps into its own clock (`offset = tv_now - now`), so stale actions can be found even
 when the two clocks differ. Older phones without `proto` / `mode` are treated as `pad`.
@@ -113,10 +134,10 @@ when the two clocks differ. Older phones without `proto` / `mode` are treated as
   "s": [[33, 0.12, -0.40, 0.03, 9.93, -0.40, 0.31, 1.5, -0.4, 0.2]] }
 //       dt ms, acceleration x y z (m/s², no gravity; null if the phone has none),
 //       with gravity x y z, rotation rate alpha beta gamma (deg/s)
-// phone -> TV: sensor-raw mode while config.pointer: the pointer, about 40 messages a second at most, only while moving
+// phone -> TV: pointer mode while config.pointer: 50 messages a second at most, only while moving
 { "t": "pm", "x": -125, "y": 30 }    // turned by x, y hundredths of a degree since the last one (right / down positive, 90 at most)
 { "t": "pc" }                        // Center: the pointer back in the middle
-// pad mode (unchanged; also the pointer's A / B / stick)
+// pad mode (also the pointer's A / B); a: left right up down ok b run cancel menu pause (b = run + cancel)
 { "t": "k", "a": "ok", "d": 1 }
 ```
 

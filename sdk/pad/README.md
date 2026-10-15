@@ -52,7 +52,7 @@ VirtualPad.init({
 
 | Option | Default | What |
 |---|---|---|
-| `buttons` | A (13) and B (88) | the buttons shown at first: `{ label, key, action? }` |
+| `buttons` | A (13) and B (88) | the buttons shown at first: `{ label, key, action?, place?, color? }`; `place` = `'right'`, `'bottom'`, `'top'` or `'left'` puts the face buttons in a diamond like a Nintendo controller (A right, B bottom, X top, Y left) |
 | `catalog` | `buttons` | every button the player may add in the settings panel |
 | `id` | `'default'` | name under which the player's layout is saved (`localStorage`, key `vpad:<id>`) |
 | `scale` | `{}` | starting size multipliers `{ stick, btn }`, e.g. `{ stick: 1.35, btn: 1.25 }` for a pure controller |

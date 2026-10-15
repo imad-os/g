@@ -141,7 +141,7 @@ var Input = (function () {
 
     // Touch controls (js/launcher/touchpad.js): the pad's actions as a device of its own, 'touch'.
     // 'ok' is confirm + jump like the remote's OK; 'menu' and 'pause' are taps (the Start button).
-    var TOUCH = { left: ['left'], right: ['right'], up: ['up'], down: ['down'], ok: ['confirm', 'jump'], run: ['run'], cancel: ['cancel'] };
+    var TOUCH = { left: ['left'], right: ['right'], up: ['up'], down: ['down'], ok: ['confirm', 'jump'], run: ['run'], cancel: ['cancel'], b: ['run', 'cancel'] };   // b: like a gamepad's B
     var touchHeld = {};             // pad action -> true
     function touch(action, down) {
         var acts = TOUCH[action], i;

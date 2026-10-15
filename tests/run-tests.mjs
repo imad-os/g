@@ -2430,7 +2430,13 @@ async function main() {
         await tv.waitForFunction(() => Controllers.players()[2], null, { timeout: 40000 });
         await press(P2, 'B', true);
         await tv.waitForFunction(() => Input.isDownDev('keys2', 'run'), null, { timeout: 3000 });
-        check(!(await tv.evaluate(() => Input.isDownDev('keys', 'run'))), 'P2 button B = run on the "keys2" device (the second player every game supports)');
+        check(!(await tv.evaluate(() => Input.isDownDev('keys', 'run'))) && await tv.evaluate(() => Input.isDownDev('keys2', 'cancel')), 'P2 button B = run and back (like a gamepad\'s B) on the "keys2" device (the second player every game supports)');
+        await press(P2, 'B', false);
+        await press(P2, 'Y', true);
+        await tv.waitForFunction(() => Input.isDownDev('keys2', 'run') && !Input.isDownDev('keys2', 'cancel'), null, { timeout: 3000 });
+        await press(P2, 'Y', false);
+        const dia = await P2.evaluate(() => { const c = {}; for (const l of ['A', 'B', 'X', 'Y']) { const d = [...document.querySelectorAll('div')].find((e) => e.textContent === l && e.style.borderRadius === '50%'); const r = d.getBoundingClientRect(); c[l] = [r.left + r.width / 2, r.top + r.height / 2]; } return c; });
+        check(dia.A[0] > dia.X[0] && dia.Y[0] < dia.X[0] && dia.X[1] < dia.A[1] && dia.B[1] > dia.A[1] && Math.abs(dia.X[0] - dia.B[0]) < 2 && Math.abs(dia.A[1] - dia.Y[1]) < 2, 'A B X Y in the Nintendo diamond: A right, B bottom, X top, Y left; Y = run (' + JSON.stringify(dia) + ')');
         check(db.rooms[code].n === 3, 'the room counts the TV and both phones');
         // a third phone cannot take a player that is taken, and unknown phones are refused once pairing is closed
         await tv.evaluate(() => Controllers.pair(0));
@@ -2455,14 +2461,14 @@ async function main() {
         await P1.click('.gc-go');
         await P1.waitForFunction(() => VirtualPad.active(), null, { timeout: 5000 });
         await P1.evaluate(() => { [...document.querySelectorAll('div')].find((d) => d.textContent === '⚙').click(); });
-        await P1.evaluate(() => { [...document.querySelectorAll('div')].find((d) => d.textContent === 'C' && d.style.borderRadius !== '50%').click(); [...document.querySelectorAll('div')].find((d) => d.textContent === 'Close').click(); });
+        await P1.evaluate(() => { [...document.querySelectorAll('div')].find((d) => d.textContent === 'Y' && d.style.borderRadius !== '50%').click(); [...document.querySelectorAll('div')].find((d) => d.textContent === 'Close').click(); });
         await P1.evaluate(() => Win.close());
         await P1.reload();
         await P1.waitForFunction(() => window.Win && document.querySelector('[data-game]'), null, { timeout: 20000 });
         await P1.evaluate(() => Win.open('gamepad'));
         await P1.click('.gc-go');
         await P1.waitForFunction(() => VirtualPad.active(), null, { timeout: 5000 });
-        check(await P1.evaluate(() => [...document.querySelectorAll('div')].some((d) => d.textContent === 'C' && d.style.borderRadius === '50%' && d.style.display === 'flex') && !!Store.rawGet('arc_dev_vpad:controller')), 'the pad settings are kept after closing the app and reloading (no setting up again)');
+        check(await P1.evaluate(() => [...document.querySelectorAll('div')].some((d) => d.textContent === 'Y' && d.style.borderRadius === '50%' && d.style.display === 'none') && [...document.querySelectorAll('div')].some((d) => d.textContent === 'X' && d.style.borderRadius === '50%' && d.style.display === 'flex') && !!Store.rawGet('arc_dev_vpad:controller')), 'the pad settings are kept after closing the app and reloading (no setting up again; Y hidden here)');
         check(tv.errors.length === 0 && P1.errors.length === 0 && P2.errors.length === 0, 'no page errors ' + tv.errors.concat(P1.errors, P2.errors).join('; '));
         for (const pg of [tv, P1, P2, P3]) await pg.context().close();
     }
@@ -2555,35 +2561,63 @@ async function main() {
         const raw = await tv.evaluate(() => __raw);
         const total = raw.reduce((a, r) => a + r[1], 0);
         check(raw.length > 0 && raw.every((r) => r[0] === 2 && r[1] <= 12 && r[2] === 30) && total >= 22 && total <= 34, 'sensor-raw: samples arrive in small batches at the asked rate (' + total + ' samples for 1 s at 30 Hz, ' + raw.length + ' messages)');
-        // the app goes away: on the My PC screens a Motion data phone is a pointer (like a TV magic remote)
+        // the app goes away: a Motion data phone stays raw (it never points); Pointer is its own mode
         await tv.evaluate(() => Controllers.sensorSetup(null));
-        await P2.waitForFunction(() => GamepadApp.pointing() && VirtualPad.active(), null, { timeout: 4000 });
-        check(await P2.evaluate(() => document.querySelector('.gc-sense').hidden && !document.querySelector('.gc-center').hidden && document.querySelectorAll('.gc-bar').length === 1),
-            'pointer: with no app asking, Motion data shows the same virtual pad (A, B, stick) and a Center button');
-        const turn = (ph, alpha, beta, ms) => ph.evaluate(([alpha, beta, ms]) => new Promise((done) => { const t0 = performance.now(); const id = setInterval(() => {
-            GamepadApp.feed({ acceleration: { x: 0, y: 0, z: 0 }, accelerationIncludingGravity: { x: 0, y: 0, z: 9.81 }, rotationRate: { alpha, beta, gamma: 0 } });
-            if (performance.now() - t0 > ms) { clearInterval(id); done(); } }, 10); }), [alpha, beta, ms]);
-        await tv.evaluate(() => { window.__pm = 0; window.__tvRaw = __raw.length; });
+        await P2.waitForFunction(() => GamepadApp.config().raw && !GamepadApp.config().pointer && !GamepadApp.pointing(), null, { timeout: 4000 });
+        check(await P2.evaluate(() => !document.querySelector('.gc-sense').hidden && !VirtualPad.active()), 'Motion data stays raw data on the My PC screens (no pointer)');
+        // switch P2 to Pointer: its own screen, no stick, settings, big A and B
+        await P2.click('.gc-stop .gc-modebtn');
+        await P2.click('.gc-modepick .btn:nth-of-type(4)');
+        await P2.waitForFunction(() => GamepadApp.mode() === 'pointer' && GamepadApp.linked() && GamepadApp.pointing(), null, { timeout: 40000 });
+        await tv.waitForFunction(() => Controllers.modes()[2] === 'pointer', null, { timeout: 10000 });
+        check(await P2.evaluate(() => !document.querySelector('.gc-ptr').hidden && document.querySelector('.gc-sense').hidden && !VirtualPad.active() && !document.getElementById('vp-stick')
+            && document.querySelectorAll('.gc-ptr .gc-step').length === 6 && document.querySelectorAll('.gc-ptr input[type=checkbox]').length === 2 && !!document.querySelector('.gc-pa') && !!document.querySelector('.gc-pb')),
+            'Pointer mode: its own screen with smoothness / speed / steady zone, swap left-right / up-down, Calibrate, Center, big A and B; no stick');
+        check(await P2.evaluate(() => { const a = document.querySelector('.gc-pa').getBoundingClientRect(), b = document.querySelector('.gc-pb').getBoundingClientRect(); return a.left > b.left && a.top < b.top; }), 'A sits right of B and higher, as on a Nintendo controller');
+        // held like a remote (screen up): alpha = turning left; tilt = turning the top of the screen's picture up, which is a
+        // rotation around the device x axis in portrait and around y in landscape
+        const turn = (ph, alpha, tilt, ms) => ph.evaluate(([alpha, tilt, ms]) => new Promise((done) => { const t0 = performance.now(); const a = ((screen.orientation ? screen.orientation.angle : 0) / 90) & 3;
+            const beta = a === 0 ? tilt : a === 2 ? -tilt : 0, gamma = a === 1 ? -tilt : a === 3 ? tilt : 0; const id = setInterval(() => {
+            GamepadApp.feed({ acceleration: { x: 0, y: 0, z: 0 }, accelerationIncludingGravity: { x: 0, y: 0, z: 9.81 }, rotationRate: { alpha, beta, gamma } });
+            if (performance.now() - t0 > ms) { clearInterval(id); done(); } }, 10); }), [alpha, tilt, ms]);
+        await tv.evaluate(() => { window.__tvRaw = __raw.length; });
+        await turn(P2, 0, 0, 300);
         await turn(P2, 40, 0, 500);                               // held like a remote, turned left 20 degrees
+        await turn(P2, 0, 0, 400);
         await tv.waitForFunction(() => Pointer.visible() && Pointer.pos().x < innerWidth / 2 - 100, null, { timeout: 4000 });
         const pt = await tv.evaluate(() => ({ p: Pointer.pos(), w: innerWidth, h: innerHeight, raw: __raw.length - __tvRaw, el: getComputedStyle(document.querySelector('.ptr')).transform }));
         check(Math.abs(pt.p.y - pt.h / 2) < 3 && pt.raw === 0 && /matrix/.test(pt.el), 'pointer: turning the phone left moves the TV pointer left only, drawn with a transform, no raw samples sent (' + JSON.stringify(pt.p) + ')');
-        await P2.click('.gc-center');
+        await P2.click('.gc-pcenter');
         await tv.waitForFunction(() => Math.abs(Pointer.pos().x - Math.round(innerWidth / 2)) < 2, null, { timeout: 4000 });
         check(true, 'pointer: Center puts it back in the middle of the screen');
         await turn(P2, 0, 30, 400);                               // tilt up: the pointer goes up over the desktop and focuses what it is on
+        await turn(P2, 0, 0, 400);
         await tv.waitForFunction(() => Pointer.pos().y < innerHeight / 2 - 50, null, { timeout: 4000 });
         await tv.waitForTimeout(250);
         check(await tv.evaluate(() => { const p = Pointer.pos(), e = document.elementFromPoint(p.x, p.y), f = e && e.closest('[data-focus]'); return !f || document.activeElement === f; }), 'pointer: the item under it gets the focus');
-        await P2.evaluate(() => GamepadApp.send({ t: 'k', a: 'left', d: 1 }));
-        await tv.waitForFunction(() => !Pointer.visible(), null, { timeout: 4000 });
-        await P2.evaluate(() => GamepadApp.send({ t: 'k', a: 'left', d: 0 }));
-        check(true, 'pointer: an arrow from the stick hides it (back to the focus ring)');
-        check(await tv.evaluate(() => { const s = Controllers.sensorStats()[2].stats; return s.invalid === 0; }), 'pointer messages are valid on the TV');
-        // a game asks for raw samples again: the phone goes back to the Motion data screen
-        await tv.evaluate(() => Controllers.sensorSetup({ moves: [], raw: { hz: 30 } }, () => {}));
-        await P2.waitForFunction(() => !GamepadApp.pointing() && !VirtualPad.active() && !document.querySelector('.gc-sense').hidden, null, { timeout: 4000 });
-        check(await tv.evaluate(() => !Pointer.visible()), 'pointer: an app asking for sensor data stops the pointer and gets the samples again');
+        await tv.evaluate(() => { __rem.length = 0; window.__pr = 0; const p = Pointer.press; Pointer.press = function () { __pr++; return p.apply(this, arguments); }; });
+        const pos0 = await tv.evaluate(() => Pointer.pos());
+        await P2.locator('.gc-pa').dispatchEvent('pointerdown');
+        await turn(P2, 60, 0, 150);                               // the hand moves while pressing
+        await P2.locator('.gc-pa').dispatchEvent('pointerup');
+        await P2.locator('.gc-pb').dispatchEvent('pointerdown'); await P2.locator('.gc-pb').dispatchEvent('pointerup');
+        await tv.waitForFunction(() => __rem.indexOf('2:b:0') >= 0, null, { timeout: 4000 });
+        const pos1 = await tv.evaluate(() => Pointer.pos());
+        check(await tv.evaluate(() => __pr === 1 && (__rem.indexOf('2:ok:1') >= 0 || !document.elementFromPoint(Pointer.pos().x, Pointer.pos().y).closest('[data-focus]')) && __rem.indexOf('2:b:1') >= 0) && Math.abs(pos1.x - pos0.x) < 3 && Math.abs(pos1.y - pos0.y) < 3, 'pointer: A is OK on what it points at, B is back; the pointer holds still while A is pressed (' + JSON.stringify([pos0, pos1]) + ')');
+        check(await tv.evaluate(() => Controllers.sensorStats()[2].stats.invalid === 0), 'pointer messages are valid on the TV');
+        // the settings: kept on the phone
+        await P2.evaluate(() => [...document.querySelectorAll('.gc-ptr .gc-step')][1].click());     // smoothness +
+        check(await P2.evaluate(() => Store.rawGet('arc_dev_ctrlphone').ptr.smooth === 6 && GamepadApp.aim().options().smooth === 6 && document.querySelector('.gc-pval').textContent === '6'), 'pointer settings apply at once, show their value and are kept on the phone');
+        // calibration: hold still, then turn "right" and tilt "up"; this phone's directions come out reversed, so both get swapped
+        await P2.evaluate(() => GamepadApp.calibrate());
+        await turn(P2, 0, 0, 900);
+        await P2.waitForFunction(() => /right/i.test(document.querySelector('.gc-ptr .gc-tcue').textContent), null, { timeout: 4000 });
+        await turn(P2, 15, 0, 2500);                              // the player turns right, the sensors say left
+        await P2.waitForFunction(() => /up/i.test(document.querySelector('.gc-ptr .gc-tcue').textContent), null, { timeout: 4000 });
+        await turn(P2, 0, -15, 2500);                             // the player tilts up, the sensors say down
+        await P2.waitForFunction(() => /Calibrated/.test(document.querySelector('.gc-ptr .gc-tcue').textContent), null, { timeout: 4000 });
+        check(await P2.evaluate(() => { const o = GamepadApp.aim().options(); return o.swapX && o.swapY && document.querySelectorAll('.gc-ptr input:checked').length === 2; }), 'Calibrate finds reversed directions and swaps them (left / right and up / down)');
+        check(P2.errors.length === 0, 'no page errors on the pointer phone ' + P2.errors.join('; '));
         // pairing by QR code: the phone camera opens My PC with ?pair=<code>; the Game controller opens and connects by itself
         await P1.context().close();
         await tv.waitForFunction(() => Controllers.players()[1] === null, null, { timeout: 15000 });

@@ -69,12 +69,14 @@
   (Settings > Devices > Phone controller). Signalling = a `rooms` doc with app `controller` and a fixed code kept in `arc_dev_ctrl`, link = NetLink;
   P1 = Input device `keys`, P2 = `keys2` (`Input.remote`). The phone reconnects by itself when the TV changes page. Separate from the in-game touch pad.
   Pairing is a QR code (own page Settings > Devices > Phone controller, `js/core/qr.js`, link `?pair=<code>` opens the Game controller and connects).
-  **Owner decision: its Buttons mode reuses the existing virtual pad (`VirtualPad`, id `controller`), never a separately drawn pad.**
+  **Owner decision: its Buttons mode reuses the existing virtual pad (`VirtualPad`, id `controller`), never a separately drawn pad;**
+  **A B X Y in the Nintendo places** (pad button option `place`: A right = ok, B bottom = `b` (run + cancel), X top = menu, Y left = run).
   Motion modes `sensor-actions` / `sensor-raw`: protocol `js/core/sensor-proto.js`, detection `js/core/motion.js` (moves are data rules,
   right hand only for now), games get them through `MyPC.sensors` (API 8) / `host.sensors`; full spec in `docs/phone-controller.md`.
-  **Pointer**: on the My PC screens (no app asked for sensors, config `pointer: true`) a Motion data phone is a magic-remote style pointer:
-  `js/core/aim.js` (gyro -> `{ t: 'pm', x, y }` deltas, any grip) on the phone, `js/launcher/pointer.js` on the TV (focuses what it is on;
-  A = OK). Phone UI = the same `VirtualPad` (id `pointer`) + a Center button.
+  **Pointer mode** (`pointer`, owner decision: separate from Motion data, which stays raw): magic-remote style pointer on the My PC screens
+  (config `pointer: true`, never on a game's page). `js/core/aim.js` on the phone (gyro bias learning, gravity by complementary filter,
+  grip from the screen orientation, steady zone, 1 euro smoothing, click hold) -> `{ t: 'pm', x, y }`; `js/launcher/pointer.js` on the TV.
+  Phone screen: no stick, big A / B, Center, Calibrate (finds reversed directions), smoothness / speed / steady zone / swaps (`.ptr`).
   **Android app** `android-controller/` (APK "My PC": Java WebView shell of the hosted My PC, opens the desktop like any app; old 1.x APKs open `?ctrl=1`): phone Back = TV Back (`Input.systemBack`), exit = `MyPCNative.exit`; native sensors / QR / screen-off link
   through `window.MyPCNative` + `assets/bridge.js`; build with `android-controller/build.ps1` (JDK + SDK in `%USERPROFILE%\.tooling`), commit
   the rebuilt `My-PC-Controller.apk`; the signing key lives outside the repo (`.tooling\keys`), never commit it.

@@ -9,14 +9,14 @@
  *   TV -> phone  { type: 'ack', sequence, duplicate?, stale? }                           for every action (latency, duplicates)
  *   phone -> TV  { type: 'metrics', gait, cadence, speed_kmh, pace_sec_per_km, distance_m, steps, timestamp, sequence }  only if asked, at metrics.hz
  *   phone -> TV  { type: 'raw', timestamp, sequence, hz, s: [[dt, ax, ay, az, gx, gy, gz, ra, rb, rg], ...] }   sensor-raw mode only
- *   phone -> TV  { t: 'pm', x, y } | { t: 'pc' }      sensor-raw mode while config.pointer: the phone points at the TV (pointer
+ *   phone -> TV  { t: 'pm', x, y } | { t: 'pc' }      pointer mode while config.pointer: the phone points at the TV (pointer
  *                                                     moved by x, y hundredths of a degree; 'pc' = back to the centre)
  * Every message is checked with the functions below; anything else is dropped. */
 var SensorProto = (function () {
     'use strict';
 
     var VERSION = 1;
-    var MODES = ['pad', 'sensor-actions', 'sensor-raw'];
+    var MODES = ['pad', 'sensor-actions', 'sensor-raw', 'pointer'];
     var POSITIONS = ['waist', 'left arm', 'right arm', 'left hand', 'right hand'];
     var READY_POSITIONS = ['right hand'];                 // the others are accepted and fall back to right hand for now
     var GAITS = ['IDLE', 'WALK', 'RUN'];
@@ -82,7 +82,7 @@ var SensorProto = (function () {
         out.metrics = { enabled: !!(m && m.enabled !== false), hz: num(m && m.hz, 0.2, 5, 1) };
         var raw = c.raw && typeof c.raw === 'object' ? c.raw : null;
         out.raw = { hz: Math.round(num(raw && raw.hz, 5, 100, 30)) };
-        out.pointer = c.pointer === true;           // set by the TV only (no app asked for sensors): Motion data phones point
+        out.pointer = c.pointer === true;           // set by the TV only, for Pointer phones on the My PC screens
         return out;
     }
     function isEndOf(n, def, builtins) {

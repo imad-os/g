@@ -177,31 +177,60 @@ const P = ctxP.SensorProto, M = ctxP.MotionEngine;
     check(tr.check(500, Date.now() - 10000, 0) === 'stale' && tr.check(501, Date.now() - 100, 0) === 'ok', 'an action older than 3 s (on the TV clock) is stale');
 }
 
-/* ---------------- 2b. Aim: the phone as a pointer (Motion data mode on the My PC screens) ---------------- */
-console.log('2b. Aim (pointer from the gyroscope, any grip)');
+/* ---------------- 2b. Aim: the phone as a pointer (Pointer mode) ---------------- */
+console.log('2b. Aim (pointer: gyroscope + accelerometer, any grip, steady zone, smoothing, calibration)');
 load('js/core/aim.js', ctxP);
 {
     const A = ctxP.Aim;
-    check(P.config({ pointer: true }).pointer === true && P.config({}).pointer === false, 'config.pointer is only on when the TV says so');
+    check(P.config({ pointer: true }).pointer === true && P.config({}).pointer === false && P.MODES.indexOf('pointer') >= 0 && P.hello({ t: 'hi', mode: 'pointer' }).mode === 'pointer', 'Pointer is its own mode; config.pointer is only on when the TV says so');
     check(P.aim({ t: 'pm', x: 120.4, y: -30 }).x === 120 && P.aim({ t: 'pc' }).t === 'pc' && !P.aim({ t: 'pm', x: 'a', y: 0 }) && !P.aim({ t: 'pm', x: 20000, y: 0 }), 'pointer messages are validated (whole hundredths of a degree, 90 degrees at most)');
-    // run(g, w): 1 s at 100 Hz with gravity g (device axes) and rotation rate w = [alpha (z), beta (x), gamma (y)] deg/s
-    const run = (g, w, ms = 1000) => { const a = A.create(); let x = 0, y = 0; for (let t = 0; t <= ms; t += 10) { a.feed({ t, gx: g[0], gy: g[1], gz: g[2], ra: w[0], rb: w[1], rg: w[2] }); const d = a.take(1); if (d) { x += d[0]; y += d[1]; } } return [x / 100, y / 100]; };
-    const near = (v, want) => Math.abs(v - want) < 0.6;
-    // held like a remote: screen up, top edge to the TV (gravity +z)
-    let d = run([0, 0, 9.81], [20, 0, 0]);
-    check(near(d[0], -20) && near(d[1], 0), 'remote grip: turning left 20 degrees moves the pointer left only (' + d + ')');
-    d = run([0, 0, 9.81], [0, 10, 0]);
-    check(near(d[0], 0) && near(d[1], -10), 'remote grip: tilting the top up moves the pointer up (' + d + ')');
-    // held like a game, landscape, screen to the player, top edge to the left (gravity +x)
-    d = run([9.81, 0, 0], [0, -15, 0]);
-    check(near(d[0], 15) && near(d[1], 0), 'landscape grip: turning right moves the pointer right (' + d + ')');
-    d = run([9.81, 0, 0], [0, 0, 12]);
-    check(Math.abs(d[0]) < 0.6 && Math.abs(Math.abs(d[1]) - 12) < 0.6, 'landscape grip: tilting the phone moves the pointer up / down (' + d + ')');
-    d = run([0, 0, 9.81], [0.5, 0.3, 0.2]);
-    check(d[0] === 0 && d[1] === 0, 'a hand holding still (gyro noise) does not move the pointer');
-    check(run([0, 0, 9.81], [null, null, null])[0] === 0, 'no gyroscope: no movement');
-    const g2 = A.create(); g2.feed({ t: 0, gx: 0, gy: 0, gz: 9.81, ra: 0, rb: 0, rg: 0 }); g2.feed({ t: 100, gx: 0, gy: 0, gz: 9.81, ra: 10, rb: 0, rg: 0 });
-    check(g2.take(2)[0] === -200 && g2.take(2) === null, 'the sensitivity multiplies the movement and nothing is sent twice');
+    let seed = 3; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5);
+    // a recording at 100 Hz: segments [ms, gravity [x,y,z], rotation [alpha (z), beta (x), gamma (y)] deg/s, noise?]; 300 ms still first
+    const run = (g0, parts, opt = {}, angle = 0, a = A.create(opt)) => {
+        let x = 0, y = 0, t = 0;
+        const seg = [[300, g0, [0, 0, 0]], ...parts, [700, g0, [0, 0, 0]]];
+        for (const [ms, g, w, noise] of seg) for (let k = 0; k < ms; k += 10, t += 10) {
+            const n = noise ? [rnd() * noise, rnd() * noise, rnd() * noise] : [0, 0, 0];
+            a.feed({ t, gx: g[0], gy: g[1], gz: g[2], ra: w[0] === null ? null : w[0] + n[0], rb: w[1] === null ? null : w[1] + n[1], rg: w[2] === null ? null : w[2] + n[2], angle });
+            const d = a.take(1); if (d) { x += d[0]; y += d[1]; }
+        }
+        return [x / 100, y / 100];
+    };
+    const near = (v, want, tol = 1) => Math.abs(v - want) < tol;
+    const FLAT = [0, 0, 9.81], SIDE = [9.81, 0, 0];
+    let d = run(FLAT, [[1000, FLAT, [20, 0, 0]]]);
+    check(near(d[0], -20) && near(d[1], 0, 0.3), 'held like a remote (screen up): turning left 20 degrees moves the pointer left 20 degrees, not up or down (' + d + ')');
+    d = run(FLAT, [[1000, FLAT, [0, 10, 0]]]);
+    check(near(d[0], 0, 0.3) && near(d[1], -10), 'remote grip: tilting the top up moves the pointer up (' + d + ')');
+    d = run(FLAT, [[1000, FLAT, [0, 0, -10]]], {}, 90);
+    check(near(d[0], 0, 0.3) && near(d[1], -10), 'remote grip with the screen in landscape: the top of the picture points at the TV, tilting it up moves the pointer up (' + d + ')');
+    d = run(SIDE, [[1000, SIDE, [0, -15, 0]]], {}, 90);
+    check(near(d[0], 15) && near(d[1], 0, 0.3), 'held like a game (screen to the player): turning right moves the pointer right (' + d + ')');
+    d = run(FLAT, [[1000, FLAT, [0, 0, 30]]]);
+    check(near(d[0], 0, 0.3) && near(d[1], 0, 0.3), 'a twist of the wrist around the pointing axis does not move the pointer (' + d + ')');
+    d = run(FLAT, [[2000, FLAT, [0, 0, 0], 2.5]]);
+    check(near(d[0], 0, 0.4) && near(d[1], 0, 0.4), 'hand tremor (noise up to 1.25 deg/s) stays in the steady zone (' + d + ')');
+    d = run(FLAT, [[1500, FLAT, [4, 0, 0]]]);
+    check(d[0] < -4, 'a slow, intended turn (4 deg/s) still moves it (' + d + ')');
+    const shake = []; for (let k = 0; k < 60; k++) shake.push([10, [rnd() * 30, rnd() * 30, 9.81 + rnd() * 30], [0, 0, 0]]);
+    d = run(FLAT, shake.concat([[1000, FLAT, [20, 0, 0]]]));
+    check(near(d[0], -20) && near(d[1], 0, 0.3), 'shaking the phone (accelerometer only) does not move the pointer or tilt its axes (' + d + ')');
+    const b = A.create(); run(FLAT, [[6000, FLAT, [0.9, 0, 0]]], {}, 0, b);      // a gyroscope that reads 0.9 deg/s at rest
+    d = run(FLAT, [[3000, FLAT, [0.9, 0, 0]]], { steady: 0 }, 0, b);
+    check(near(d[0], 0, 0.6), 'the gyroscope offset is learnt while still: no drift afterwards, even with no steady zone (' + d + ')');
+    d = run(FLAT, [[1000, FLAT, [20, 0, 0]]], { swapX: true, swapY: true });
+    check(near(d[0], 20), 'swap left and right (calibration result) reverses the movement (' + d + ')');
+    check(run(FLAT, [[1000, FLAT, [null, null, null]]])[0] === 0, 'no gyroscope: no movement');
+    const h = A.create(); run(FLAT, [], {}, 0, h); h.hold(650); d = run(FLAT, [[300, FLAT, [40, 0, 0]]], {}, 0, h);      // run() starts with 300 ms still
+    check(Math.abs(d[0]) < 1, 'right after a click the pointer holds still (' + d + ')');
+    const c = A.create(); run(FLAT, [[1000, FLAT, [-20, 0, 0]]], { swapX: true }, 0, c);
+    check(near(c.turned().x, 20), 'turned() reports the real turn before swapping (calibration reads it): ' + c.turned().x.toFixed(1));
+    const sm = (lvl) => { const a = A.create({ smooth: lvl }); let x = 0, t = 0, out = []; for (; t < 300; t += 10) a.feed({ t, gx: 0, gy: 0, gz: 9.81, ra: 0, rb: 0, rg: 0 }); for (let k = 0; k < 10; k++, t += 10) { a.feed({ t, gx: 0, gy: 0, gz: 9.81, ra: -30, rb: 0, rg: 0 }); const d = a.take(1); if (d) x += d[0]; } return x; };
+    check(sm(10) < sm(1), 'more smoothness = a softer start (' + sm(1) + ' vs ' + sm(10) + ' hundredths in the first 100 ms)');
+    const g2 = A.create(); run(FLAT, [[100, FLAT, [-20, 0, 0]]], {}, 0, g2);
+    const g3 = A.create(); let tot2 = 0, tot1 = 0;
+    { let t = 0; for (; t < 300; t += 10) g3.feed({ t, gx: 0, gy: 0, gz: 9.81, ra: 0, rb: 0, rg: 0 }); for (; t < 1300; t += 10) g3.feed({ t, gx: 0, gy: 0, gz: 9.81, ra: -20, rb: 0, rg: 0 }); for (; t < 2000; t += 10) g3.feed({ t, gx: 0, gy: 0, gz: 9.81, ra: 0, rb: 0, rg: 0 }); tot2 = g3.take(2)[0]; }
+    check(near(tot2 / 100, 40, 2) && g3.take(2) === null, 'the speed setting multiplies the movement and nothing is sent twice (' + tot2 / 100 + ')');
 }
 
 /* ---------------- 3. MotionEngine ---------------- */

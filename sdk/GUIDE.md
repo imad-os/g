@@ -47,7 +47,7 @@ this guide and the SDK fresh before every task.
   **holding Start + Select together for 1 s** on a gamepad (Switch **+** and **-**, Xbox Menu + View,
   PlayStation Options + Share). You get `onPause` / `onResume` / `onDestroy`. Nothing else opens it
   while your app runs: a keyboard's **Esc / Backspace**, gamepad **B** and the phone controller's **B**
-  come to your app (`cancel` / `run`). Start or Select alone is `menu`, sent to apps that init with
+  come to your app (`cancel` / `run`); the phone controller's **X** is `menu`, **Y** is `run`. Start or Select alone is `menu`, sent to apps that init with
   `ownMenu: true` (on a gamepad it does nothing in other apps).
 - **Standalone mode:** opened directly in a browser (not inside My PC), the SDK acts as the host:
   the keyboard sends actions, Esc or P pauses, and saves go to `localStorage`. You can develop and
@@ -374,7 +374,7 @@ Actions: `left right up down` (directions), `jump` and `confirm` (OK / Enter / S
   Backspace reach you as `cancel` (use it as your own "back": close a sub-menu, leave a screen).
 - `menu`: gamepad Start or Select pressed alone (sent when let go). Sent only to apps that init with
   `ownMenu: true` (open your own menu on it, and close it on `menu` or `cancel`); on a gamepad other
-  apps get nothing (the touch pad's and phone controller's &#9776; open My PC's pause menu for them).
+  apps get nothing (the touch pad's &#9776; and the phone controller's X open My PC's pause menu for them).
   **Holding Start + Select together for 1 s** always opens My PC's pause menu, so players can still quit.
   The TV remote has no Start: give your menu another way in too (e.g. an on-screen button with OK).
 
@@ -542,9 +542,11 @@ the World records.
 Players can use a phone as a controller (My PC > **Game controller** on the phone). Besides **Buttons** (the virtual pad;
 your app just gets the usual actions) the phone has two motion modes: **Motion moves** (the phone, in the player's right
 hand, detects moves such as `LEFT` `RIGHT` `JUMP` `DUCK` `DUCK_END` and sends only the ones you ask for, plus running
-metrics if you want them) and **Motion data** (raw sensor samples at the rate you ask for). On the My PC screens a
-Motion data phone is a magic-remote style pointer for the TV; it starts sending your app samples as soon as you call
-`setup` with `raw`, and your app never sees the pointer.
+metrics if you want them) and **Motion data** (raw sensor samples at the rate you ask for). A fourth mode, **Pointer**,
+is a magic-remote style pointer for the My PC screens only: your app never sees it (its A / B buttons arrive as the
+usual actions), and `players` may report `'pointer'` for such a phone. **Buttons** has A B X Y where a Nintendo
+controller has them (A right, B bottom, X top, Y left): A = OK / `jump`, B = `run` + `cancel` (like a gamepad's B),
+X = `menu`, Y = `run`.
 
 ```js
 MyPC.init({ onInit: function () {
