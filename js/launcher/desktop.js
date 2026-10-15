@@ -120,19 +120,21 @@ var Desktop = (function () {
         box.appendChild(button('dicon', 'app', appById('scores'), true));
     }
 
-    // Get the app: on an Android phone's browser, a shortcut that downloads the latest My PC APK (android-controller/);
-    // not on the TV, not on other phones, not inside the app itself (window.MyPCNative)
+    // Get the app: on an Android phone, a shortcut to the latest My PC APK (android-controller/); not on the TV or other phones.
+    // In the browser it downloads the file; inside the app (window.MyPCNative) it is "Update the app" and opens the phone's
+    // browser on an http:// link (the app hands every link that is not https My PC to the browser, which downloads it)
     var APK = 'android-controller/My-PC-Controller.apk';
-    function wantsApk() { return !window.tizen && !window.MyPCNative && /Android/i.test(navigator.userAgent); }
+    function wantsApk() { return !window.tizen && (!!window.MyPCNative || /Android/i.test(navigator.userAgent)); }
     function apkUrl() {
         var b = (typeof AppBoot !== 'undefined' && AppBoot.base && AppBoot.base()) || '';
         if (!/^https?:/.test(b)) b = location.href.split(/[?#]/)[0].replace(/[^/]*$/, '');
         return b + APK + '?b=' + (typeof AppBoot !== 'undefined' && AppBoot.build ? AppBoot.build() : '');      // the latest, not a cached copy
     }
     function apkButton() {
-        var b = button('dicon', 'app', { id: 'getapp', icon: 'getapp', label: 'getApp' }, true);
+        var inApp = !!window.MyPCNative, b = button('dicon', 'app', { id: 'getapp', icon: 'getapp', label: inApp ? 'getAppUpdate' : 'getApp' }, true);
         b.onclick = function () {
             closeStart(true);
+            if (inApp) { location.href = apkUrl().replace(/^https:/, 'http:'); App.toast(I18n.t('getAppToast')); return; }
             var a = el('a');
             a.href = apkUrl(); a.setAttribute('download', 'My-PC.apk'); a.rel = 'noopener';
             document.body.appendChild(a); a.click(); document.body.removeChild(a);

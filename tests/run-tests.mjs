@@ -2628,7 +2628,7 @@ async function main() {
             btn: document.querySelector('.tb-btn').getBoundingClientRect().height, apps: document.querySelector('.tb-apps').getBoundingClientRect().right, tray: document.querySelector('.tray').getBoundingClientRect().left }));
         check(look.compact && look.btn >= 50 && look.apps < look.tray, 'phone: taskbar buttons big enough for a finger (' + Math.round(look.btn) + ' px), not over the clock');
         check(look.pad, 'phone: the Game controller has a desktop shortcut');
-        check(await H.evaluate(() => !document.querySelector('[data-app="getapp"]')), 'inside the Android app there is no "Get the app" shortcut');
+        check(await H.evaluate(() => { const b = document.querySelector('[data-app="getapp"]'); return !!b && b.textContent === I18n.t('getAppUpdate'); }), 'inside the Android app the shortcut is "Update the app"');
         // an Android phone's browser: "Get the app" downloads the latest APK
         const G = await newPage(browser, base, db, { phone: true, viewport: { width: 844, height: 390 } });
         await G.addInitScript(() => {

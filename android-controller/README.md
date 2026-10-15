@@ -9,7 +9,8 @@ Protocol and modes: [docs/phone-controller.md](../docs/phone-controller.md).
 **Install:** download [`My-PC-Controller.apk`](My-PC-Controller.apk) on the phone (it is also served by the hosted
 copy at `https://pc.geekspro.us/android-controller/My-PC-Controller.apk`), open it, and allow "Install unknown apps" for
 the browser or file manager when Android asks. Android 8.0 or newer. On an Android phone, My PC opened in the browser has a
-**Get the app** desktop icon that downloads this file (`apkButton()` in `js/launcher/desktop.js`; hidden on the TV and inside the app).
+**Get the app** desktop icon that downloads this file (`apkButton()` in `js/launcher/desktop.js`; hidden on the TV). Inside the app the same icon is **Update the app**: it opens the
+phone's browser on an http:// link, which downloads the latest APK.
 
 ## How it is built
 
