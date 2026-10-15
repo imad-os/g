@@ -23,6 +23,9 @@ var Updater = (function () {
     function remoteBase() {
         var b = null;
         try { b = localStorage.getItem('boot_remote_base'); } catch (e) {}     // same override as the loader (staging, tests)
+        // My PC opened from the web (a browser, the Android app): its own site. imad-os.github.io/g answers with a redirect
+        // to the custom domain that carries no CORS header, so a check from another https origin always failed ('network')
+        if (!b && location.protocol === 'https:') b = location.href.split(/[?#]/)[0].replace(/[^/]*$/, '');
         b = b || REMOTE_DEFAULT;
         return b.charAt(b.length - 1) === '/' ? b : b + '/';
     }
