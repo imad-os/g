@@ -546,7 +546,10 @@ metrics if you want them) and **Motion data** (raw sensor samples at the rate yo
 is a magic-remote style pointer for the My PC screens only: your app never sees it (its A / B buttons arrive as the
 usual actions), and `players` may report `'pointer'` for such a phone. **Buttons** has A B X Y where a Nintendo
 controller has them (A right, B bottom, X top, Y left): A = OK / `jump`, B = `run` + `cancel` (like a gamepad's B),
-X = `menu`, Y = `run`.
+X = `menu`, Y = `run`. How strong each move must be (per move, harder while running) and the repeat guard (one move,
+not two, for a step and its bounce back) are set by the player on the TV (Settings > Devices > Phone controller >
+Motion moves) and apply to your app too; your own `define` rules still win for the moves they name. Actions may carry
+`gait` (`IDLE`, `WALK`, `RUN`).
 
 ```js
 MyPC.init({ onInit: function () {

@@ -77,6 +77,9 @@
   (config `pointer: true`, never on a game's page). `js/core/aim.js` on the phone (gyro bias learning, gravity by complementary filter,
   grip from the screen orientation, steady zone, 1 euro smoothing, click hold) -> `{ t: 'pm', x, y }`; `js/launcher/pointer.js` on the TV.
   Phone screen: no stick, big A / B, Center, Calibrate (finds reversed directions), smoothness / speed / steady zone / swaps (`.ptr`).
+  **Motion moves tuning on the TV** (Settings > Devices > Phone controller > Motion moves, `arc_dev_ctrltune`): per-move limits, harder
+  while running, repeat guard; sent to phones as config `tune`, live test via `Controllers.monitor`. Phone settings use − / + buttons;
+  the Game controller root stops `touchmove` so VirtualPad's document-wide blocking does not stop scrolling.
   **Android app** `android-controller/` (APK "My PC": Java WebView shell of the hosted My PC, opens the desktop like any app; old 1.x APKs open `?ctrl=1`): phone Back = TV Back (`Input.systemBack`), exit = `MyPCNative.exit`; native sensors / QR / screen-off link
   through `window.MyPCNative` + `assets/bridge.js`; build with `android-controller/build.ps1` (JDK + SDK in `%USERPROFILE%\.tooling`), commit
   the rebuilt `My-PC-Controller.apk`; the signing key lives outside the repo (`.tooling\keys`), never commit it.

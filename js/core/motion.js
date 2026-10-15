@@ -10,7 +10,12 @@
  *   var m = MotionEngine.create({ moves, define, profile, sensitivity, strideScale, onAction(name, info), onStep(step) })
  *   m.feed({ t, ax, ay, az, gx, gy, gz, ra, rb, rg, angle })   t ms; a* = acceleration without gravity (m/s², null when the
  *                     phone has none), g* = with gravity, r* = rotation rate (deg/s), angle = screen orientation angle
- *   m.configure({ moves, define, profile, sensitivity, strideScale })   m.calibrate()   m.reset()
+ *   m.configure({ moves, define, profile, sensitivity, strideScale, scales, runScale, guardMs })   m.calibrate()   m.reset()
+ *     scales   { LEFT: 1.2, JUMP: 1.5 } each move's limit times this (higher = the move must be stronger), from the TV's
+ *              Motion moves screen (Settings > Devices > Phone controller)
+ *     runScale how much harder every move is while running (default 1.3: running jolts the phone)
+ *     guardMs  repeat guard: after a move, any other move is held back this long (a step to the right and the rebound
+ *              back to the left, a landing after a jump, are one move, not two); DUCK_END is never held back
  *   m.metrics() -> { gait, cadence, speed_kmh, pace_sec_per_km, distance_m, steps, confidence }
  *   m.debug()   -> { signals, detectors: [{ name, state, level, confidence, last }], diag, steps, calibrated }
  *   m.signals() -> the live signals (no copy)
@@ -55,14 +60,20 @@ var MotionEngine = (function () {
         var sig = {}, hist = { v: [], l: [], f: [] }, ffSince = 0, landedAt = 0;
         var vv = 0, vd = 0, lv = 0;
         var steps = [], stepArm = false, stepPeak = 0, avgPeak = 2.5, lastStep = 0, totalSteps = 0, dist = 0, gait = 'IDLE', cadence = 0, gaitConf = 0;
-        var diag = { fired: 0, cooldown: 0, lockout: 0, gait: 0, cancelled: 0, ended: 0, timeouts: 0 };
+        var diag = { fired: 0, cooldown: 0, lockout: 0, guard: 0, gait: 0, cancelled: 0, ended: 0, timeouts: 0 };
 
         function configure(c) {
             c = c || {};
             if (c.profile) o.profile = c.profile;
             if (!o.profile) o.profile = { height: 170, phone_position: 'right hand' };
-            if (c.sensitivity !== undefined) o.sens = Math.max(0.5, Math.min(2, +c.sensitivity || 1));
+            if (c.sensitivity !== undefined) o.sens = Math.max(0.25, Math.min(4, +c.sensitivity || 1));
             if (o.sens === undefined) o.sens = 1;
+            if (c.scales !== undefined) { o.scales = {}; for (var sk in (c.scales || {})) if (c.scales.hasOwnProperty(sk) && +c.scales[sk] > 0) o.scales[sk] = Math.max(0.3, Math.min(4, +c.scales[sk])); }
+            if (!o.scales) o.scales = {};
+            if (c.runScale !== undefined) o.run = Math.max(1, Math.min(3, +c.runScale || RUN_SCALE));
+            if (o.run === undefined) o.run = RUN_SCALE;
+            if (c.guardMs !== undefined) o.guard = Math.max(0, Math.min(2000, +c.guardMs || 0));
+            if (o.guard === undefined) o.guard = 0;
             if (c.strideScale !== undefined) o.stride = Math.max(0.6, Math.min(1.6, +c.strideScale || 1));
             if (o.stride === undefined) o.stride = 1;
             if (c.onAction) o.onAction = c.onAction;
@@ -85,7 +96,8 @@ var MotionEngine = (function () {
         }
         configure(opt);
 
-        function factor(r) { return (gait === 'RUN' ? RUN_SCALE : 1) / o.sens; }
+        function factor(name) { return (gait === 'RUN' ? o.run : 1) / o.sens * (o.scales[name] || 1); }
+        var guardT = 0, guardBy = '';
         function test(r, f) {               // is the rule's condition true now? also returns how far along (0..1+)
             var v = sig[r.signal];
             if (v === undefined || v === null) return { on: false, level: 0 };
@@ -100,7 +112,7 @@ var MotionEngine = (function () {
 
         function detect(t) {
             for (var i = 0; i < order.length; i++) {
-                var name = order[i], R = rules[name], r = R.r, d = det[name], f = factor(r), c;
+                var name = order[i], R = rules[name], r = R.r, d = det[name], f = factor(name), c;
                 // a move that is held (DUCK) waits for its end
                 if (d.state === 'active') {
                     var e = r.end, ce = test(e, f);
@@ -128,6 +140,7 @@ var MotionEngine = (function () {
                 if (r.group && groups[r.group] && t < groups[r.group].until && groups[r.group].by !== name) { diag.lockout++; continue; }
                 if (r.gait && r.gait.indexOf(gait) < 0) { diag.gait++; continue; }
                 if (r.unless && recent(r.unless, t)) { diag.lockout++; continue; }
+                if (o.guard && guardT && t - guardT < o.guard && guardBy !== name) { diag.guard++; continue; }
                 var conf = Math.max(0.3, Math.min(1, 0.5 + 0.5 * (d.peak - 1)));
                 if (r.defer_ms) { d.state = 'defer'; d.deferAt = t + r.defer_ms; d.deferConf = conf; continue; }
                 fire(name, R, d, t, conf);
@@ -144,7 +157,8 @@ var MotionEngine = (function () {
             d.until = t + (r.cooldown_ms || 0);
             d.state = r.end ? 'active' : 'cooldown';
             if (r.group) groups[r.group] = { until: t + (r.cooldown_ms || 0), by: name };
-            emit(name, t, conf, {});
+            guardT = t; guardBy = name;
+            emit(name, t, conf, { gait: gait });
         }
 
         function stepDetect(t) {
@@ -249,7 +263,7 @@ var MotionEngine = (function () {
             calibrate: function (cb) { calib = { t0: 0, n: 0, moved: 0, sum: [0, 0, 0], cb: function (ok) { calibOk = ok; if (cb) cb(ok); } }; },
             calibrating: function () { return !!calib; },
             reset: function () {
-                steps = []; totalSteps = 0; dist = 0; gait = 'IDLE'; cadence = 0; lastStep = 0; vv = vd = lv = 0; groups = {};
+                steps = []; totalSteps = 0; dist = 0; gait = 'IDLE'; cadence = 0; lastStep = 0; vv = vd = lv = 0; groups = {}; guardT = 0; guardBy = '';
                 for (var k in diag) diag[k] = 0;
                 for (k in det) det[k] = { state: 'idle', since: 0, peak: 0, fired: 0, until: 0, edge: false, level: 0, conf: 0, last: 0, endSince: 0, deferAt: 0, deferConf: 0 };
             },

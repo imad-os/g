@@ -4,8 +4,9 @@
  * 4 KB and 100 messages a second at most each way). The pad mode keeps its short { t: 'k' } messages; the sensor modes add:
  *   phone -> TV  { t: 'hi', p, cid, name, proto: 1, mode, session, caps, now }          once, when the link opens
  *   TV -> phone  { t: 'ok', p, proto: 1, session }                                       then a config at once
- *   TV -> phone  { type: 'config', v: 1, session, sequence, timestamp, moves, define?, profile, metrics, raw }
- *   phone -> TV  { type: 'action', action, timestamp, sequence, confidence? }            only moves the config asked for
+ *   TV -> phone  { type: 'config', v: 1, session, sequence, timestamp, moves, define?, profile, metrics, raw, pointer, tune }
+ *                tune = the TV's Motion moves settings { sensitivity, scales: { MOVE: x }, run_scale, guard_ms } (TUNE_DEF)
+ *   phone -> TV  { type: 'action', action, timestamp, sequence, confidence?, gait? }     only moves the config asked for
  *   TV -> phone  { type: 'ack', sequence, duplicate?, stale? }                           for every action (latency, duplicates)
  *   phone -> TV  { type: 'metrics', gait, cadence, speed_kmh, pace_sec_per_km, distance_m, steps, timestamp, sequence }  only if asked, at metrics.hz
  *   phone -> TV  { type: 'raw', timestamp, sequence, hz, s: [[dt, ax, ay, az, gx, gy, gz, ra, rb, rg], ...] }   sensor-raw mode only
@@ -24,6 +25,9 @@ var SensorProto = (function () {
     var NAME = /^[A-Z][A-Z0-9_]{0,23}$/;
     var SIGNALS = ['vertical', 'lateral', 'forward', 'magnitude', 'v_vel', 'v_disp', 'l_vel', 'freefall', 'pitch', 'roll', 'rot'];
     var MAX_MOVES = 16, RAW_MAX = 12, SEQ_WINDOW = 64, STALE_MS = 3000;
+    // the TV's Motion moves settings (Settings > Devices > Phone controller > Motion moves), sent to every phone in a motion mode
+    var TUNE_DEF = { sensitivity: 1, scales: { LEFT: 1, RIGHT: 1, JUMP: 1, DUCK: 1 }, run_scale: 1.3, guard_ms: 500 };
+    var TUNE_LIM = { sensitivity: [0.5, 2], scale: [0.5, 2.5], run_scale: [1, 2.5], guard_ms: [0, 1500] };
 
     function isNum(v) { return typeof v === 'number' && isFinite(v); }
     function num(v, lo, hi, def) { v = +v; return isFinite(v) && v >= lo && v <= hi ? v : def; }
@@ -82,7 +86,18 @@ var SensorProto = (function () {
         out.metrics = { enabled: !!(m && m.enabled !== false), hz: num(m && m.hz, 0.2, 5, 1) };
         var raw = c.raw && typeof c.raw === 'object' ? c.raw : null;
         out.raw = { hz: Math.round(num(raw && raw.hz, 5, 100, 30)) };
-        out.pointer = c.pointer === true;           // set by the TV only, for Pointer phones on the My PC screens
+        out.pointer = c.pointer === true;
+        out.tune = tune(c.tune);           // set by the TV only, for Pointer phones on the My PC screens
+        return out;
+    }
+    function tune(t) {
+        t = t && typeof t === 'object' ? t : {};
+        function num(v, lo, hi, def) { v = +v; return isFinite(v) && v > 0 || (lo === 0 && v === 0) ? Math.max(lo, Math.min(hi, v)) : def; }   // clamped
+        var L = TUNE_LIM, out = { sensitivity: num(t.sensitivity, L.sensitivity[0], L.sensitivity[1], TUNE_DEF.sensitivity), scales: {},
+                                  run_scale: num(t.run_scale, L.run_scale[0], L.run_scale[1], TUNE_DEF.run_scale), guard_ms: Math.round(num(t.guard_ms, L.guard_ms[0], L.guard_ms[1], TUNE_DEF.guard_ms)) };
+        var sc = t.scales && typeof t.scales === 'object' ? t.scales : {}, k, n = 0;
+        for (k in TUNE_DEF.scales) out.scales[k] = num(sc[k], L.scale[0], L.scale[1], 1);
+        for (k in sc) if (sc.hasOwnProperty(k) && NAME.test(k) && out.scales[k] === undefined && n++ < MAX_MOVES) { var v = num(sc[k], L.scale[0], L.scale[1], 0); if (v) out.scales[k] = v; }
         return out;
     }
     function isEndOf(n, def, builtins) {
@@ -101,6 +116,7 @@ var SensorProto = (function () {
         if (!m || m.type !== 'action' || typeof m.action !== 'string' || !NAME.test(m.action) || !isNum(m.sequence) || m.sequence < 0 || !isNum(m.timestamp)) return null;
         var o = { type: 'action', action: m.action, timestamp: m.timestamp, sequence: Math.floor(m.sequence) };
         if (isNum(m.confidence)) o.confidence = Math.max(0, Math.min(1, m.confidence));
+        if (GAITS.indexOf(m.gait) >= 0) o.gait = m.gait;
         return o;
     }
     function metrics(m) {
@@ -144,7 +160,7 @@ var SensorProto = (function () {
         };
     }
 
-    var api = { VERSION: VERSION, MODES: MODES, POSITIONS: POSITIONS, READY_POSITIONS: READY_POSITIONS, GAITS: GAITS, DEFAULT_MOVES: DEFAULT_MOVES, SIGNALS: SIGNALS, STALE_MS: STALE_MS,
+    var api = { VERSION: VERSION, MODES: MODES, TUNE_DEF: TUNE_DEF, TUNE_LIM: TUNE_LIM, tune: tune, POSITIONS: POSITIONS, READY_POSITIONS: READY_POSITIONS, GAITS: GAITS, DEFAULT_MOVES: DEFAULT_MOVES, SIGNALS: SIGNALS, STALE_MS: STALE_MS,
                 session: session, rule: rule, profile: profile, config: config, hello: hello, action: action, metrics: metrics, raw: raw, aim: aim, ack: ack, tracker: tracker };
     return api;
 })();

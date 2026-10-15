@@ -33,6 +33,7 @@
     function rowsFor(id) {
         var out = [], i, lines;
         if (sub === 'phonectrl' && id === 'devices') { phoneRows(out); return out; }
+        if (sub === 'motionmoves' && id === 'devices') { movesRows(out); return out; }
         if (sub === 'padtest' && id === 'devices') {
             var pl = Input.pads();
             if (pl.length) out.push({ kind: 'padtest', pad: pl[0].index }); else out.push({ kind: 'text', value: t('devNoPad') });
@@ -199,7 +200,74 @@
         for (n = 1; n <= 2; n++) out.push({ kind: 'info', label: t('ctrlPlayer') + ' ' + n, value: pl[n] || t('ctrlFree') });
         out.push({ kind: 'action', label: t('ctrlPair'), desc: t('ctrlPairDesc'), run: function () { Controllers.pair(); App.toast(t('ctrlPairing')); } });
         out.push({ kind: 'action', label: t('ctrlNew'), run: function () { Controllers.newCode(); var f = renderMain(1); if (f) Focus.focus(f); } });
+        out.push({ kind: 'action', label: t('ctrlMoves'), desc: t('ctrlMovesDesc'), run: function () { sub = 'motionmoves'; var f = renderMain(1); if (f) Focus.focus(f); } });
         out.push({ kind: 'action', label: t('ctrlForget'), danger: true, run: function () { Controllers.forget(); App.toast(t('ctrlForgot')); } });
+    }
+
+    // Motion moves (phones in "Motion moves" mode): how strong each move must be, harder while running, the repeat guard.
+    // Saved on this TV and sent to the phones at once (Controllers.setTune). The live test below shows what the phones
+    // detect, with the gait, so a move that fires by itself (a JUMP while running) can be tuned away; meanwhile the moves
+    // do not press buttons here.
+    var monLog = [], monEl = null;
+    function movesRows(out) {
+        var L = SensorProto.TUNE_LIM;
+        Controllers.monitor(onMove);
+        function set(fn) { var x = Controllers.tune(); fn(x); Controllers.setTune(x); }
+        function step(v, d, lim, k) { return Math.max(lim[0], Math.min(lim[1], Math.round((v + d * k) * 100) / 100)); }
+        function times(v) { return v.toFixed(1) + '\u00D7'; }
+        out.push({ kind: 'action', label: t('back'), run: function () { leaveSub(); } });
+        out.push({ kind: 'text', value: t('mvHelp') });
+        out.push({ kind: 'select', label: t('mvSens'), desc: t('mvSensDesc'), value: function () { return times(Controllers.tune().sensitivity); },
+                   adjust: function (d) { set(function (x) { x.sensitivity = step(x.sensitivity, d, L.sensitivity, 0.1); }); } });
+        [['mvSide', ['LEFT', 'RIGHT']], ['mvJump', ['JUMP']], ['mvDuck', ['DUCK']]].forEach(function (m) {
+            out.push({ kind: 'select', label: t(m[0]), desc: t('mvLimitDesc'), value: function () { return times(Controllers.tune().scales[m[1][0]]); },
+                       adjust: function (d) { set(function (x) { m[1].forEach(function (k) { x.scales[k] = step(x.scales[k], d, L.scale, 0.1); }); }); } });
+        });
+        out.push({ kind: 'select', label: t('mvRun'), desc: t('mvRunDesc'), value: function () { return times(Controllers.tune().run_scale); },
+                   adjust: function (d) { set(function (x) { x.run_scale = step(x.run_scale, d, L.run_scale, 0.1); }); } });
+        out.push({ kind: 'select', label: t('mvGuard'), desc: t('mvGuardDesc'), value: function () { return Controllers.tune().guard_ms + ' ms'; },
+                   adjust: function (d) { set(function (x) { x.guard_ms = step(x.guard_ms, d, L.guard_ms, 100); }); } });
+        out.push({ kind: 'motionlog' });
+        out.push({ kind: 'action', label: t('mvReset'), run: function () { Controllers.setTune(null); var c = Focus.current(), idx = c ? c.getAttribute('data-row') : null; var f = renderMain(idx === null ? 1 : +idx); if (f) Focus.focus(f); App.toast(t('mvReset')); } });
+    }
+    function onMove(p, m) {
+        if (!m || m.type !== 'action') return;
+        var d = new Date();
+        monLog.unshift({ p: p, a: m.action, c: m.confidence, g: m.gait || '', at: ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2), t: Date.now() });
+        if (monLog.length > 8) monLog.pop();
+        paintMoves();
+        A11y.announce(m.action);
+    }
+    function moveTip() {
+        var a = monLog[0], b = monLog[1];
+        if (!a) return '';
+        if (a.a === 'JUMP' && a.g === 'RUN') return t('mvTipJumpRun');
+        if (b && a.a !== b.a && /^(LEFT|RIGHT)$/.test(a.a) && /^(LEFT|RIGHT)$/.test(b.a) && a.t - b.t < 1200) return t('mvTipSide');
+        return '';
+    }
+    function paintMoves() {
+        if (!monEl || !monEl.parentNode) return;
+        var list = monEl.querySelector('.set-mv-list'), tip = monEl.querySelector('.set-mv-tip'), i;
+        list.innerHTML = '';
+        if (!monLog.length) list.appendChild(el('div', 'set-row-desc', t('mvNone')));
+        for (i = 0; i < monLog.length; i++) {
+            var x = monLog[i], line = el('div', 'set-mv' + (i === 0 ? ' new' : ''));
+            line.appendChild(el('span', 'set-mv-a', x.a));
+            line.appendChild(el('span', 'set-row-desc', 'P' + x.p + (x.c !== undefined ? ' \u00B7 ' + Math.round(x.c * 100) + '%' : '') + (x.g ? ' \u00B7 ' + t('gait' + x.g) : '') + ' \u00B7 ' + x.at));
+            list.appendChild(line);
+        }
+        tip.textContent = moveTip();
+    }
+    function motionCard() {
+        var c = el('div', 'set-padtest set-mvlog');
+        c.setAttribute('role', 'status'); c.setAttribute('aria-live', 'polite');
+        c.appendChild(el('div', 'set-row-name', t('mvTest')));
+        c.appendChild(el('div', 'set-row-desc', t('mvTestHelp')));
+        c.appendChild(el('div', 'set-mv-tip'));
+        c.appendChild(el('div', 'set-mv-list'));
+        monEl = c;
+        setTimeout(paintMoves, 0);
+        return c;
     }
 
     // My PC account of the active profile (js/core/accounts.js): make one, password, sign-in on a phone
@@ -221,7 +289,12 @@
             title: t('usePhone'), help: t('usePhoneHelp'), codeLabel: t('username') });
     }
 
-    function leaveSub() { sub = null; var f = renderMain(0); if (f) Focus.focus(f); }
+    function leaveSub() {
+        var back = sub === 'motionmoves' ? 'phonectrl' : null;
+        if (sub === 'motionmoves') { Controllers.monitor(null); monEl = null; }
+        sub = back;
+        var f = renderMain(back ? 1 : 0); if (f) Focus.focus(f);
+    }
     // the phone controller opens its room in the background: show what happens (status, players) as it changes
     function onCtrl() {
         if (!main || page !== 'devices' || (sub && sub !== 'phonectrl')) return;
@@ -318,6 +391,7 @@
             if (r.kind === 'status') { main.appendChild(statusCard(r)); continue; }
             if (r.kind === 'padtest') { main.appendChild(padTestCard(r)); continue; }
             if (r.kind === 'qr') { main.appendChild(qrCard(r)); continue; }
+            if (r.kind === 'motionlog') { main.appendChild(motionCard()); continue; }
             b = el('button', 'set-row' + (r.kind === 'text' ? ' set-text' : '') + (r.danger ? ' set-danger' : '') + (r.primary ? ' set-primary' : ''));
             b.setAttribute('data-focus', '');
             b.setAttribute('data-row', i);
@@ -496,7 +570,7 @@
             renderMain();
             return navBtn();
         },
-        close: function () { Updater.offChange(onUpdater); Input.offDevices(onDevices); Controllers.offChange(onCtrl); sub = null; Updater.cancel(); stopPadTest(); body = nav = main = null; rows = []; },
+        close: function () { Updater.offChange(onUpdater); Input.offDevices(onDevices); Controllers.offChange(onCtrl); Controllers.monitor(null); monEl = null; sub = null; Updater.cancel(); stopPadTest(); body = nav = main = null; rows = []; },
         refresh: function () { if (nav) { renderNav(); renderMain(); } },
         action: action,
         back: back

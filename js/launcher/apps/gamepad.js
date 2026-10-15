@@ -174,10 +174,17 @@
     function applyCfg() {
         if (!eng) return;
         var p = prefs(), c = cfg || SensorProto.config({ moves: SensorProto.DEFAULT_MOVES }, MotionEngine.MOVES);
-        eng.configure({ moves: c.moves, define: defines(c), profile: c.profile || p.profile, sensitivity: p.sensitivity, strideScale: p.stride });
+        eng.configure(tuned(c, p, { moves: c.moves, define: defines(c), profile: c.profile || p.profile, strideScale: p.stride }));
         clearInterval(metricsTimer); metricsTimer = 0;
         if (mode === 'sensor-actions' && c.metrics.enabled) metricsTimer = setInterval(sendMetrics, Math.round(1000 / c.metrics.hz));
         if (ui.profileFrom) ui.profileFrom.textContent = c.profile ? t('gcProfileGame') : '';
+    }
+    // the TV's Motion moves settings (config.tune: limits per move, harder while running, repeat guard); this phone's own
+    // Sensitivity multiplies the TV's
+    function tuned(c, p, o) {
+        var tu = c.tune || SensorProto.tune(null);
+        o.sensitivity = p.sensitivity * tu.sensitivity; o.scales = tu.scales; o.runScale = tu.run_scale; o.guardMs = tu.guard_ms;
+        return o;
     }
     // this player's trained limits for the built-in moves, then the game's own rules (a game's rule for the same move wins)
     function defines(c) {
@@ -225,7 +232,7 @@
         lastAction = { name: name, at: Date.now(), conf: info.confidence };
         if (trainer) { note('train', name); flash(); return; }                      // training: shown, never sent
         if (!c || c.moves.indexOf(name) < 0) { note('local', name); flash(); return; }     // not asked for by the game: shown, not sent
-        var m = { type: 'action', action: name, timestamp: Date.now(), sequence: ++seq, confidence: info.confidence };
+        var m = { type: 'action', action: name, timestamp: Date.now(), sequence: ++seq, confidence: info.confidence, gait: info.gait };
         if (send(m)) { acks[m.sequence] = performance.now(); note('sent', name + ' #' + m.sequence + ' ' + Math.round(info.confidence * 100) + '%'); }
         else note('offline', name);
         if (navigator.vibrate) { try { navigator.vibrate(15); } catch (e) {} }
@@ -528,8 +535,8 @@
         if (!(r instanceof Array) || !r.length) return;
         stopRecord(); stopReplay();
         var p = prefs(), c = cfg || SensorProto.config({}, MotionEngine.MOVES), i = 0, t0 = performance.now(), base = r[0].t;
-        var e = MotionEngine.create({ moves: c.moves, define: defines(c), profile: c.profile || p.profile, sensitivity: p.sensitivity, strideScale: p.stride,
-                                      onAction: function (n, info) { note('replay', n + ' ' + Math.round(info.confidence * 100) + '% @' + Math.round(info.t - base) + ' ms'); } });
+        var e = MotionEngine.create(tuned(c, p, { moves: c.moves, define: defines(c), profile: c.profile || p.profile, strideScale: p.stride,
+                                      onAction: function (n, info) { note('replay', n + ' ' + Math.round(info.confidence * 100) + '% @' + Math.round(info.t - base) + ' ms'); } }));
         replay = { timer: setInterval(function () {
             var now = performance.now() - t0;
             while (i < r.length && r[i].t - base <= now) e.feed(r[i++]);
@@ -599,7 +606,7 @@
             var dg = d.diag, pending = 0, now = performance.now();
             for (var k in acks) if (now - acks[k] > 2000) pending++;
             ui.dDiag.textContent = t('gcDiagSent') + ' ' + dg.fired + '   ' + t('gcDiagAck') + ' ' + diag.acked + '   ' + t('gcDiagRtt') + ' ' + (rtt || '—') + ' ms\n' +
-                t('gcDiagDup') + ' ' + dg.cooldown + '   ' + t('gcDiagLock') + ' ' + dg.lockout + '   ' + t('gcDiagGait') + ' ' + dg.gait + '   ' + t('gcDiagCancel') + ' ' + dg.cancelled + '\n' +
+                t('gcDiagDup') + ' ' + dg.cooldown + '   ' + t('gcDiagLock') + ' ' + dg.lockout + '   ' + t('gcDiagGuard') + ' ' + (dg.guard || 0) + '   ' + t('gcDiagGait') + ' ' + dg.gait + '   ' + t('gcDiagCancel') + ' ' + dg.cancelled + '\n' +
                 t('gcDiagTvDup') + ' ' + diag.tvDuplicate + '   ' + t('gcDiagTvStale') + ' ' + diag.tvStale + '   ' + t('gcDiagLost') + ' ' + pending + '   ' + t('gcDiagTimeout') + ' ' + dg.timeouts;
         }
         ui.dLog.textContent = log.slice(0, 18).join('\n') || '—';
@@ -617,26 +624,35 @@
             x.stroke();
         });
     }
+    // every value has − and + buttons (no number fields: the phone keyboard and scrolling fought with them)
     function settingsPanel() {
-        var box = el('div', 'gc-settings'), p = prefs();
+        var box = el('div', 'gc-settings');
         box.hidden = true;
-        function row(label, ctl) { var r = el('label', 'gc-srow'); r.appendChild(el('span', '', label)); r.appendChild(ctl); box.appendChild(r); return ctl; }
-        function numIn(v, min, max, fn) { var i = el('input', 'gc-num'); i.type = 'number'; i.min = min; i.max = max; i.value = v; i.setAttribute('data-focus', ''); i.onchange = function () { setPrefs(function (q) { fn(q, +i.value); }); }; return i; }
+        function clamp(v, lo, hi, r) { return Math.max(lo, Math.min(hi, Math.round(v / r) * r)); }
+        function stepper(label, show, fn) {
+            var r = el('div', 'gc-srow'), v = el('span', 'gc-pval');
+            r.appendChild(el('span', 'gc-grow', label));
+            r.appendChild(btn('gc-step', '−', function () { setPrefs(function (q) { fn(q, -1); }); paintSettings(); }));
+            r.appendChild(v);
+            r.appendChild(btn('gc-step', '+', function () { setPrefs(function (q) { fn(q, 1); }); paintSettings(); }));
+            box.appendChild(r);
+            ui.sVals.push(function () { v.textContent = show(prefs()); });
+        }
+        ui.sVals = [];
         ui.profileFrom = el('div', 'gc-note'); box.appendChild(ui.profileFrom);
-        row(t('gcAge'), numIn(p.profile.age, 4, 110, function (q, v) { q.profile.age = v; }));
-        row(t('gcHeight') + ' (cm)', numIn(p.profile.height, 80, 250, function (q, v) { q.profile.height = v; }));
-        row(t('gcWeight') + ' (kg)', numIn(p.profile.weight, 15, 300, function (q, v) { q.profile.weight = v; }));
-        var sel = el('select', 'gc-num'); sel.setAttribute('data-focus', '');
-        SensorProto.POSITIONS.forEach(function (pos) { var o = el('option', '', t('pos_' + pos.replace(' ', '_')) + (SensorProto.READY_POSITIONS.indexOf(pos) < 0 ? ' (' + t('gcSoon') + ')' : '')); o.value = pos; sel.appendChild(o); });
-        sel.value = p.profile.phone_position;
-        sel.onchange = function () { setPrefs(function (q) { q.profile.phone_position = sel.value; }); };
-        row(t('gcPosition'), sel);
-        row(t('gcSensitivity') + ' (0.5–2)', numIn(p.sensitivity, 0.5, 2, function (q, v) { q.sensitivity = Math.max(0.5, Math.min(2, v || 1)); })).step = 0.1;
-        row(t('gcStride') + ' (0.6–1.6)', numIn(p.stride, 0.6, 1.6, function (q, v) { q.stride = Math.max(0.6, Math.min(1.6, v || 1)); })).step = 0.05;
-        var sw = el('input'); sw.type = 'checkbox'; sw.checked = p.swap; sw.setAttribute('data-focus', ''); sw.onchange = function () { setPrefs(function (q) { q.swap = sw.checked; }); };
-        row(t('gcSwap'), sw);
+        box.appendChild(el('div', 'gc-note gc-tvnote', t('gcTvTune')));
+        stepper(t('gcAge'), function (p) { return p.profile.age; }, function (q, d) { q.profile.age = clamp(q.profile.age + d, 4, 110, 1); });
+        stepper(t('gcHeight') + ' (cm)', function (p) { return Math.round(p.profile.height); }, function (q, d) { q.profile.height = clamp(q.profile.height + d * 5, 80, 250, 1); });
+        stepper(t('gcWeight') + ' (kg)', function (p) { return Math.round(p.profile.weight); }, function (q, d) { q.profile.weight = clamp(q.profile.weight + d * 5, 15, 300, 1); });
+        stepper(t('gcPosition'), function (p) { var pos = p.profile.phone_position; return t('pos_' + pos.replace(' ', '_')) + (SensorProto.READY_POSITIONS.indexOf(pos) < 0 ? ' (' + t('gcSoon') + ')' : ''); },
+                function (q, d) { var L = SensorProto.POSITIONS, i = L.indexOf(q.profile.phone_position); q.profile.phone_position = L[(i + d + L.length) % L.length]; });
+        stepper(t('gcSensitivity'), function (p) { return p.sensitivity.toFixed(1) + '×'; }, function (q, d) { q.sensitivity = clamp(q.sensitivity + d * 0.1, 0.5, 2, 0.1); });
+        stepper(t('gcStride'), function (p) { return p.stride.toFixed(2) + '×'; }, function (q, d) { q.stride = clamp(q.stride + d * 0.05, 0.6, 1.6, 0.05); });
+        var sw = el('input'); sw.type = 'checkbox'; sw.checked = prefs().swap; sw.setAttribute('data-focus', ''); sw.onchange = function () { setPrefs(function (q) { q.swap = sw.checked; }); };
+        var r = el('label', 'gc-srow'); r.appendChild(el('span', 'gc-grow', t('gcSwap'))); r.appendChild(sw); box.appendChild(r);
         return box;
     }
+    function paintSettings() { (ui.sVals || []).forEach(function (f) { f(); }); }
     function buildSense() {
         var s = el('div', 'gc-sense'), top = el('div', 'gc-stop');
         s.hidden = true;
@@ -664,7 +680,7 @@
             note('calib', t('gcHoldStill')); ui.calib.textContent = t('gcHoldStill');
             eng.calibrate(function (ok) { ui.calib.textContent = t('gcRecal'); note('calib', ok ? t('gcCalibrated') : t('gcCalibFail')); if (typeof App !== 'undefined' && App.toast) App.toast(ok ? t('gcCalibrated') : t('gcCalibFail')); });
         });
-        var setB = btn('', t('gcSettings'), function () { showSettings = !showSettings; ui.settings.hidden = !showSettings; });
+        var setB = btn('', t('gcSettings'), function () { showSettings = !showSettings; ui.settings.hidden = !showSettings; paintSettings(); if (showSettings) ui.settings.scrollIntoView({ block: 'nearest' }); });
         acts.appendChild(ui.startBtn); acts.appendChild(ui.calib); acts.appendChild(setB);
         ui.live.appendChild(acts);
         ui.settings = settingsPanel(); ui.live.appendChild(ui.settings);
@@ -699,6 +715,9 @@
     }
     function build(body) {
         root = el('div', 'gc');
+        // lists and settings scroll with a finger: the virtual pad (Buttons mode, or the shell's touch pad) cancels every
+        // touchmove that reaches the document, so they stop here
+        root.addEventListener('touchmove', function (e) { e.stopPropagation(); }, { passive: true });
         ui.join = el('div', 'gc-join');
         ui.join.appendChild(el('h2', 'gc-title', t('gamepad')));
         ui.join.appendChild(el('p', 'gc-help', t('gcHelpQr')));

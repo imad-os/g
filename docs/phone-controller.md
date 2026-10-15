@@ -111,10 +111,12 @@ of app `controller` in Firestore; no sensor data ever goes through Firebase. Eve
 { "type": "config", "v": 1, "session": "9f3a1c2e4b5d6e7f", "sequence": 3, "timestamp": 1791830000020,
   "moves": ["LEFT", "RIGHT", "JUMP"], "define": { },
   "profile": { "age": 30, "height": 175, "weight": 70, "phone_position": "right hand" },   // or null
-  "metrics": { "enabled": true, "hz": 1 }, "raw": { "hz": 30 }, "pointer": false }
+  "metrics": { "enabled": true, "hz": 1 }, "raw": { "hz": 30 }, "pointer": false,
+  "tune": { "sensitivity": 1, "scales": { "LEFT": 1, "RIGHT": 1, "JUMP": 1.4, "DUCK": 1 }, "run_scale": 1.3, "guard_ms": 500 } }
 ```
 
 `pointer` is true only for a phone in Pointer mode while the TV shows the My PC screens (never on a game's page).
+`tune` is the TV's **Motion moves** settings (below), in every config, defaults when never set.
 
 `now` lets the TV turn phone timestamps into its own clock (`offset = tv_now - now`), so stale actions can be found even
 when the two clocks differ. Older phones without `proto` / `mode` are treated as `pad`.
@@ -123,7 +125,7 @@ when the two clocks differ. Older phones without `proto` / `mode` are treated as
 
 ```js
 // phone -> TV: a move, only if it is in config.moves
-{ "type": "action", "action": "LEFT", "timestamp": 1791830000000, "sequence": 42, "confidence": 0.82 }
+{ "type": "action", "action": "LEFT", "timestamp": 1791830000000, "sequence": 42, "confidence": 0.82, "gait": "WALK" }   // gait: optional
 // TV -> phone: every action is acknowledged (latency, duplicates)
 { "type": "ack", "sequence": 42 }                       // or "duplicate": true / "stale": true
 // phone -> TV: telemetry, only when config.metrics.enabled, at config.metrics.hz
@@ -176,7 +178,29 @@ sensor fusion: **up** is the gravity vector; **right** is the screen's right edg
 
 A hop to the side is airborne too: JUMP is not fired within 600 ms of LEFT / RIGHT, and LEFT / RIGHT are not fired within 450 ms of JUMP nor 250 ms after landing (rule option `unless: { moves, within_ms, landed_ms }`).
 
-While running every threshold is 30 % higher. **Sensitivity** (Settings, 0.5 to 2) lowers or raises all of them.
+While running every threshold is higher (**Harder while running**, 1.3 times by default). **Sensitivity** lowers or raises
+all of them: the TV's times the phone's own (Settings on the phone, 0.5 to 2).
+
+**Repeat guard** (500 ms by default): after a move, any other move is held back this long, so a step to the right and the
+body swinging back to the left, or a jump and its landing, give one move, not two (`DUCK_END` is never held back). The
+phone's Debug screen counts what it held back.
+
+### Motion moves on the TV (Settings > Devices > Phone controller > Motion moves)
+
+Set once on the TV (`arc_dev_ctrltune`, `Controllers.setTune`), sent in every config (`tune`), used by every phone at
+once, in My PC and in games. Rows (‹ › on the remote change a value, OK raises it):
+
+| Setting | Range (default) | What |
+|---|---|---|
+| Sensitivity | 0.5 to 2 (1) | all moves |
+| Step left / right limit, Jump limit, Duck limit | 0.5 to 2.5 times (1) | how strong that move must be; higher = harder (`scales`) |
+| Harder while running | 1 to 2.5 times (1.3) | every limit while the player runs (`run_scale`) |
+| Repeat guard | 0 to 1500 ms (500) | see above (`guard_ms`) |
+
+**Live test**: while the page is open the moves of every Motion moves phone are listed there (player, confidence, the
+gait it came in, time) instead of pressing buttons, with a hint when something looks wrong: a JUMP while running (raise
+the Jump limit or Harder while running), LEFT and RIGHT close together (raise the Repeat guard or the Step limit).
+**Default move settings** resets them. Each player's own training (the phone's Train tab) still applies on top.
 
 ### Defining a move
 
@@ -211,7 +235,9 @@ Each fired move carries a `confidence` (0.3 to 1: how far past its threshold the
 **Live** (sensor modes): gait (with confidence), pace, speed, cadence, steps, distance, last move (flashes), connection
 state with latency, sensor indicators (motion permission, data flowing, gyroscope, linear acceleration),
 **Start / Stop controller**, **Recalibrate** (stand still for a second facing the TV: re-reads gravity in your grip and
-clears the drift), **Settings** (age, height, weight, phone position, sensitivity, stride length, swap left and right).
+clears the drift), **Settings** (age, height, weight, phone position, sensitivity, stride length: each with − and +
+buttons; swap left and right). The screens scroll with a finger (the virtual pad's page-wide swipe blocking stops at the
+Game controller).
 In Motion data mode the tiles show the rate, samples sent and the live readings.
 
 **Train**: for LEFT, RIGHT, JUMP and DUCK, **Record 5** asks for the move five times (get ready, Go!, 1.6 s recorded each). `js/core/motion-train.js` measures each repetition and sets the move's limit between this player's weakest repetition (70 % of it at least) and the strongest of the other moves (moves of the same group, LEFT / RIGHT, are not compared: they already block each other); limits stay within 0.4 to 2.5 times the built-in ones. Each move shows its limit and whether it is clear of the others. The result is kept on the phone (`arc_dev_ctrltrain`) and used as rules for the built-in moves; a game's own rule for the same move wins.

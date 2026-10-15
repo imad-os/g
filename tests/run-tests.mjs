@@ -2516,6 +2516,32 @@ async function main() {
         await feed(P1, LEFT);
         await tv.waitForFunction(() => __rem.indexOf('1:left:1') >= 0, null, { timeout: 4000 });
         check(true, 'without a game listening, JUMP presses OK and LEFT presses left on the TV');
+        // Settings > Devices > Phone controller > Motion moves on the TV: the limits go to the phones at once; live test
+        await tv.evaluate(() => { Win.open('settings', 'devices'); [...document.querySelectorAll('.set-row')].find((r) => /Phone controller/.test(r.textContent)).click(); });
+        await tv.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Motion moves/.test(r.textContent)).click());
+        await tv.waitForSelector('.set-mvlog', { timeout: 3000 });
+        await tv.evaluate(() => [...document.querySelectorAll('.set-row')].find((x) => /Jump limit/.test(x.textContent)).click());
+        await P1.waitForFunction(() => GamepadApp.config().tune.scales.JUMP > 1.05, null, { timeout: 4000 });
+        check(await tv.evaluate(() => Controllers.tune().scales.JUMP === 1.1 && /1\.1\u00D7/.test([...document.querySelectorAll('.set-row')].find((x) => /Jump limit/.test(x.textContent)).textContent)),
+            'Motion moves on the TV: OK on Jump limit raises it (\u2039 \u203A on the remote), saved on the TV and sent to the phone at once');
+        await tv.evaluate(() => { __rem.length = 0; });
+        await feed(P1, JUMP);
+        await tv.waitForFunction(() => /JUMP/.test(document.querySelector('.set-mv-list').textContent), null, { timeout: 4000 });
+        check(await tv.evaluate(() => __rem.filter((x) => /:1$/.test(x)).length === 0 && /Standing|Walking|Running/.test(document.querySelector('.set-mv-list').textContent)), 'its live test lists what the phone detects, with the gait, and the moves press no buttons meanwhile');
+        await tv.evaluate(() => [...document.querySelectorAll('.set-row')].find((x) => /Default move settings/.test(x.textContent)).click());
+        await P1.waitForFunction(() => GamepadApp.config().tune.scales.JUMP === 1, null, { timeout: 4000 });
+        await tv.evaluate(() => Win.close());
+        await feed(P1, JUMP);
+        await tv.waitForFunction(() => __rem.indexOf('1:ok:1') >= 0, null, { timeout: 4000 });
+        check(true, 'Default move settings resets them; once the page is closed the moves press buttons again');
+        // the phone's own settings: − / + buttons, no number fields, and they scroll with a finger even after the pad was used
+        await P1.evaluate(() => [...document.querySelectorAll('.gc-live .btn')].find((b) => /Settings/.test(b.textContent)).click());
+        check(await P1.evaluate(() => !document.querySelector('.gc-settings input[type=number]') && !document.querySelector('.gc-settings select') && document.querySelectorAll('.gc-settings .gc-step').length === 12 && /Motion moves/.test(document.querySelector('.gc-tvnote').textContent)),
+            'phone settings: every value has \u2212 / + buttons (no number fields), and it says the move limits are set on the TV');
+        await P1.evaluate(() => [...document.querySelectorAll('.gc-settings .gc-step')][9].click());     // Sensitivity +
+        check(await P1.evaluate(() => Math.abs(Store.rawGet('arc_dev_ctrlphone').prefs.sensitivity - 1.1) < 1e-6 && /1\.1/.test(document.querySelectorAll('.gc-settings .gc-pval')[4].textContent)), 'a + press changes the value, shows it and keeps it');
+        check(await P1.evaluate(() => { VirtualPad.init({ force: true }); VirtualPad.hide(); const e = new TouchEvent('touchmove', { bubbles: true, cancelable: true }); document.querySelector('.gc-settings').dispatchEvent(e); return !e.defaultPrevented; }),
+            'swiping the settings is not cancelled by the virtual pad (they scroll on Android)');
         check(await P1.waitForFunction(() => /JUMP|LEFT/.test(document.querySelector('.gc-last').textContent), null, { timeout: 3000 }).then(() => true, () => false), 'the live screen shows the last move');
         // a game asks for JUMP only, with metrics twice a second
         const got = await tv.evaluate(() => { window.__ev = []; Controllers.sensorSetup({ moves: ['JUMP'], metrics: { hz: 2 }, profile: { age: 40, height: 182, weight: 80, phone_position: 'right hand' } }, (p, m) => __ev.push([p, m.type, m.action || m.gait])); return Controllers.sensorConfig().moves; });
@@ -2607,7 +2633,7 @@ async function main() {
         check(await tv.evaluate(() => Controllers.sensorStats()[2].stats.invalid === 0), 'pointer messages are valid on the TV');
         // the settings: kept on the phone
         await P2.evaluate(() => [...document.querySelectorAll('.gc-ptr .gc-step')][1].click());     // smoothness +
-        check(await P2.evaluate(() => Store.rawGet('arc_dev_ctrlphone').ptr.smooth === 6 && GamepadApp.aim().options().smooth === 6 && document.querySelector('.gc-pval').textContent === '6'), 'pointer settings apply at once, show their value and are kept on the phone');
+        check(await P2.evaluate(() => Store.rawGet('arc_dev_ctrlphone').ptr.smooth === 6 && GamepadApp.aim().options().smooth === 6 && document.querySelector('.gc-ptr .gc-pval').textContent === '6'), 'pointer settings apply at once, show their value and are kept on the phone');
         // calibration: hold still, then turn "right" and tilt "up"; this phone's directions come out reversed, so both get swapped
         await P2.evaluate(() => GamepadApp.calibrate());
         await turn(P2, 0, 0, 900);

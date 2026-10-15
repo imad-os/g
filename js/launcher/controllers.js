@@ -18,17 +18,20 @@
  * Pad buttons: A = ok, B = 'b' (run + cancel, like a gamepad's B), X = menu, Y = run (Nintendo layout on the phone).
  *   Controllers.start()  (every page, does nothing while off)   .on() .setOn(v) .code() .newCode() .pair() .forget()
  *   .players() -> { 1: name|null, 2: name|null }   .modes() -> { 1: mode|null, 2: mode|null }   .pairing() -> seconds left   .onChange(fn)
- *   .sensorSetup(cfg, listener(player, msg)) | .sensorSetup(null)   (game-host.js, for the running app)   .sensorStats() */
+ *   .sensorSetup(cfg, listener(player, msg)) | .sensorSetup(null)   (game-host.js, for the running app)   .sensorStats()
+ *   .tune() / .setTune(t)   the Motion moves settings of this TV (arc_dev_ctrltune; Settings > Devices > Phone controller >
+ *                           Motion moves), sent to every motion phone in its config and used there at once
+ *   .monitor(fn(player, msg)) | .monitor(null)   that screen's live test: the moves arrive there and do not press buttons */
 var Controllers = (function () {
     'use strict';
 
-    var KEY = 'arc_dev_ctrl', APP = 'controller', MAX_PHONES = 8, PAIR_MS = 300000, HELLO_MS = 4000;
+    var KEY = 'arc_dev_ctrl', TUNE_KEY = 'arc_dev_ctrltune', APP = 'controller', MAX_PHONES = 8, PAIR_MS = 300000, HELLO_MS = 4000;
     var ACTIONS = { left: 1, right: 1, up: 1, down: 1, ok: 1, run: 1, cancel: 1, b: 1, menu: 1, pause: 1 };
     var DIRS = { left: 1, right: 1, up: 1, down: 1 };
     var ALPHA = 'abcdefghjkmnpqrstuvwxyz23456789';
     var status = { s: 'off', err: '' };
     var sess = null, slots = { 1: null, 2: null }, pairUntil = 0, listeners = [], timer = 0, started = false;
-    var appCfg = null, appListener = null, cfgSeq = 0;
+    var appCfg = null, appListener = null, cfgSeq = 0, monitorFn = null;
     var FALLBACK = { LEFT: 'left', RIGHT: 'right', JUMP: 'ok', DUCK: 'down', DUCK_END: 'down' };
 
     function cfg() {
@@ -110,6 +113,7 @@ var Controllers = (function () {
         var c = JSON.parse(JSON.stringify(currentCfg()));
         c.session = slot.session; c.sequence = ++cfgSeq; c.timestamp = Date.now();
         c.pointer = slot.mode === 'pointer' && Pointer.allowed();          // never on a game's page
+        c.tune = tune();
         slot.cfg = c;
         slot.conn.send(c);
     }
@@ -138,6 +142,7 @@ var Controllers = (function () {
     // to the running app when it asked for sensor events; otherwise moves drive the menus and games like buttons
     function deliver(p, msg) {
         if (appCfg && appListener) { try { appListener(p, msg); } catch (e) {} return; }
+        if (monitorFn) { try { monitorFn(p, msg); } catch (e) {} return; }     // the Motion moves screen's live test
         if (msg.type !== 'action' || !FALLBACK[msg.action]) return;
         var a = FALLBACK[msg.action];
         if (msg.action === 'DUCK') return Input.remote(p, a, true);
@@ -173,6 +178,9 @@ var Controllers = (function () {
     }
     function schedule(ms) { clearTimeout(timer); timer = setTimeout(open, ms); }
 
+    function tune() { return SensorProto.tune(Store.rawGet(TUNE_KEY)); }
+    function resend() { for (var p = 1; p <= 2; p++) if (slots[p] && slots[p].mode !== 'pad') sendConfig(slots[p]); }
+
     function closePhones() { for (var p = 1; p <= 2; p++) if (slots[p]) { var s = slots[p]; slots[p] = null; Input.releaseRemote(p); s.conn.close(); } }
 
     return {
@@ -205,10 +213,13 @@ var Controllers = (function () {
         sensorSetup: function (cfg, listener) {
             appCfg = cfg ? SensorProto.config(cfg, typeof MotionEngine !== 'undefined' ? MotionEngine.MOVES : null) : null;
             appListener = appCfg ? listener || null : null;
-            for (var p = 1; p <= 2; p++) if (slots[p] && slots[p].mode !== 'pad') sendConfig(slots[p]);
+            resend();
             return appCfg;
         },
         sensorConfig: function () { return appCfg; },
+        tune: tune,
+        setTune: function (t) { Store.rawSet(TUNE_KEY, t ? SensorProto.tune(t) : null); resend(); changed(); return tune(); },
+        monitor: function (fn) { monitorFn = typeof fn === 'function' ? fn : null; },
         inject: function (p, msg) { deliver(p === 2 ? 2 : 1, msg); },      // diagnostics and tests: as if phone p had sent msg (already validated)
         sensorStats: function () {
             var out = {};

@@ -183,6 +183,10 @@ load('js/core/aim.js', ctxP);
 {
     const A = ctxP.Aim;
     check(P.config({ pointer: true }).pointer === true && P.config({}).pointer === false && P.MODES.indexOf('pointer') >= 0 && P.hello({ t: 'hi', mode: 'pointer' }).mode === 'pointer', 'Pointer is its own mode; config.pointer is only on when the TV says so');
+    const tu = P.tune({ sensitivity: 9, scales: { JUMP: 1.5, LEFT: 'x', SPIN: 2, bad: 3 }, run_scale: 2, guard_ms: 99999 });
+    check(tu.sensitivity === 2 && tu.scales.JUMP === 1.5 && tu.scales.LEFT === 1 && tu.scales.SPIN === 2 && tu.scales.bad === undefined && tu.run_scale === 2 && tu.guard_ms === 1500 && P.config({}).tune.guard_ms === 500,
+        'the TV\'s move settings (tune) are validated and always sent, with defaults');
+    check(P.action({ type: 'action', action: 'JUMP', timestamp: 1, sequence: 1, gait: 'RUN' }).gait === 'RUN' && P.action({ type: 'action', action: 'JUMP', timestamp: 1, sequence: 1, gait: 'FLY' }).gait === undefined, 'an action may say the gait it came in');
     check(P.aim({ t: 'pm', x: 120.4, y: -30 }).x === 120 && P.aim({ t: 'pc' }).t === 'pc' && !P.aim({ t: 'pm', x: 'a', y: 0 }) && !P.aim({ t: 'pm', x: 20000, y: 0 }), 'pointer messages are validated (whole hundredths of a degree, 90 degrees at most)');
     let seed = 3; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5);
     // a recording at 100 Hz: segments [ms, gravity [x,y,z], rotation [alpha (z), beta (x), gamma (y)] deg/s, noise?]; 300 ms still first
@@ -288,6 +292,16 @@ for (const HZ of [60, 100]) {
     check(r.at.length === 2 && r.at[1][1] - r.at[0][1] > 900, 'DUCK_END comes when the player stands up, not at the bottom of the squat (' + (r.at[1] && r.at[1][1] - r.at[0][1]) + ' ms)');
     r = run(rec([still, ...left, still, ...right, still]));
     check(r.acts.join() === 'LEFT,RIGHT', 'a step left then a step right: LEFT, RIGHT, no rebound (' + r.acts.join(',') + ')');
+    // repeat guard (the TV's Motion moves screen): a step right and a quick step left 600 ms later
+    const quick = [still, ...right, { ms: 340 }, ...left, still];
+    r = run(rec(quick), { guardMs: 0 });
+    const rg = run(rec(quick), { guardMs: 1000 });
+    check(r.acts.join() === 'RIGHT,LEFT' && rg.acts.join() === 'RIGHT' && rg.m.debug().diag.guard === 1, 'repeat guard: a move right after another is held back (' + r.acts.join(',') + ' -> ' + rg.acts.join(',') + ')');
+    r = run(rec([still, ...left, still, ...right, still]), { guardMs: 1000 });
+    check(r.acts.join() === 'LEFT,RIGHT', 'the repeat guard does not hold back moves that are far apart');
+    r = run(rec([still, ...left, still]), { scales: { LEFT: 2.5 } });
+    const r3 = run(rec([still, ...left, still]), { scales: { RIGHT: 2.5 } });
+    check(r.acts.length === 0 && r3.acts.join() === 'LEFT', 'a move\'s limit (scales) makes only that move harder');
     const hopRight = [{ ms: 140, l: 8, v: 10 }, { ms: 300, free: true }, { ms: 120, l: -8, v: 18 }, { ms: 150, v: -3 }];
     r = run(rec([still, ...hopRight, still]));
     check(r.acts.join() === 'RIGHT', 'a hop to the right (airborne too) is RIGHT only, not JUMP (' + r.acts.join(',') + ')');
