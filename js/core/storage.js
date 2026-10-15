@@ -77,7 +77,7 @@ var Store = (function () {
 /* Player profiles on this TV: each one has its own saves, scores and last played game. */
 var Profiles = (function () {
     'use strict';
-    var KEY = 'arc_profiles', MAX = 8, NAME_MAX = 12;
+    var KEY = 'arc_profiles', MAX = 8, NAME_MAX = 16;
     var COLORS = ['#ffd23f', '#4cd97b', '#4fb9e8', '#ff5d73', '#c158e0', '#ff9f43', '#36d6c3', '#f2f4ff'];
 
     function list() {
@@ -120,6 +120,24 @@ var Profiles = (function () {
         }
         Store.rawSet(KEY, l);
     }
+    function edit(id, fn) {
+        var l = list();
+        for (var i = 0; i < l.length; i++) if (l[i].id === id) fn(l[i]);
+        Store.rawSet(KEY, l);
+    }
+    // A My PC account (js/core/accounts.js): the username, and whether signing in asks for the password
+    function setAccount(id, user) { edit(id, function (p) { if (user) p.user = String(user).slice(0, 16); else { delete p.user; delete p.ask; } }); }
+    function setAsk(id, on) { edit(id, function (p) { if (on && p.user) p.ask = true; else delete p.ask; }); }
+    // name, colour and picture from the account's cloud copy
+    function setMeta(id, d) {
+        edit(id, function (p) {
+            if (d.name) p.name = cleanName(d.name);
+            if (/^#[0-9a-f]{6}$/i.test(d.color || '')) p.color = d.color;
+            delete p.av; delete p.photo;
+            if (d.av) p.av = String(d.av).slice(0, 20);
+            else if (d.photo) p.photo = String(d.photo).slice(0, 30000);
+        });
+    }
     // Deletes a profile and all its data. The last profile cannot be deleted.
     function remove(id) {
         var l = list(), out = [];
@@ -137,5 +155,6 @@ var Profiles = (function () {
     // make sure the active profile exists
     if (!find(Store.profile())) Store.setProfile(list()[0].id);
 
-    return { MAX: MAX, NAME_MAX: NAME_MAX, list: list, current: current, create: create, rename: rename, setPicture: setPicture, remove: remove, use: use, name: name };
+    return { MAX: MAX, NAME_MAX: NAME_MAX, list: list, find: find, current: current, create: create, rename: rename, setPicture: setPicture,
+        setAccount: setAccount, setAsk: setAsk, setMeta: setMeta, remove: remove, use: use, name: name };
 })();

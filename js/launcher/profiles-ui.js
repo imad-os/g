@@ -43,13 +43,18 @@ var ProfilesUI = (function () {
             b.appendChild(avatar(p, 'avatar avatar-big'));
             b.appendChild(el('span', 'pcard-name', nameOf(p)));
             if (p.id === cur.id) b.appendChild(el('span', 'pcard-tag', I18n.t('active')));
-            b.setAttribute('aria-label', nameOf(p) + (p.id === cur.id ? '. ' + I18n.t('active') : '. ' + I18n.t('switchHint')));
+            if (p.user) b.appendChild(el('span', 'pcard-user', '@' + p.user + (p.ask ? '  •  ' + I18n.t('pwLocked') : '')));
+            b.setAttribute('aria-label', nameOf(p) + (p.user ? '. ' + I18n.t('acctOf').replace('%s', p.user) : '') + (p.ask ? '. ' + I18n.t('pwLocked') : '') +
+                (p.id === cur.id ? '. ' + I18n.t('active') : '. ' + I18n.t('switchHint')));
             b.onclick = (function (id) { return function () { pick(id); }; })(p.id);
             box.appendChild(b);
             if (p.id === cur.id) target = b;
         }
-        $('profile-new').hidden = l.length >= Profiles.MAX;
+        $('profile-new').hidden = $('profile-signin').hidden = l.length >= Profiles.MAX;
         $('profile-delete').hidden = l.length < 2;
+        // locked (the start asks for the password): only choosing a profile, or signing in
+        $('profile-picture').hidden = $('profile-rename').hidden = locked;
+        if (locked) $('profile-delete').hidden = true;
         return target;
     }
 
@@ -61,6 +66,7 @@ var ProfilesUI = (function () {
     }
 
     function close() {
+        if (locked) return gate();
         pickerOpen = false;
         $('profiles-picker').hidden = true; $('profiles-main').hidden = false;
         $('profiles').hidden = true;
@@ -71,8 +77,15 @@ var ProfilesUI = (function () {
     function changed() { renderButton(); if (onChange) onChange(); }
 
     function pick(id) {
+        if (Accounts.asks(id) && !(id === Profiles.current().id && !locked)) {
+            return askPassword(id, function () {
+                if (id === Profiles.current().id) { locked = false; close(); return; }
+                locked = false; close(); Welcome.switchUser(id);
+            });
+        }
+        locked = false;
         close();
-        if (id !== Profiles.current().id) Welcome.switchUser(id);
+        if (id !== Profiles.current().id) { Accounts.unlock(id); Welcome.switchUser(id); }
     }
 
     function refocus(id) {
@@ -81,14 +94,118 @@ var ProfilesUI = (function () {
         Focus.set($('profiles'), t);
     }
 
-    function create() {
-        openNamer(I18n.t('newProfile'), '', function (name) {
-            var p = Profiles.create(name);
-            if (!p) return;
-            close();
-            Welcome.switchUser(p.id);
+    /* ---------------- accounts: new, sign in, password (js/core/accounts.js) ---------------- */
+
+    function t(k) { return I18n.t(k); }
+    function errText(err) {
+        return t({ taken: 'userTaken', wrong: 'wrongLogin', weak: 'pwWeak', invalid: 'userBad', many: 'tooMany', offline: 'needNet', full: 'profilesFull' }[err] || 'acctFail');
+    }
+
+    function askUser(title, text, cb, onCancel) {
+        Keyboard.open({ title: title, text: text || '', max: 16, mode: 'user', hint: t('userHint'), ok: t('next') }, function (u) {
+            u = Accounts.clean(u);
+            if (!Accounts.validName(u)) { App.toast(t('userBad')); return askUser(title, u, cb, onCancel); }
+            cb(u);
+        }, onCancel);
+    }
+    function askPw(title, hint, cb, onCancel, ok) {
+        Keyboard.open({ title: title, text: '', max: 40, mode: 'password', hint: hint, ok: ok || t('next') }, cb, onCancel);
+    }
+    // a new password, typed twice
+    function newPw(title, cb, onCancel) {
+        askPw(title, t('pwHint'), function (pw) {
+            if (pw.length < 6) { App.toast(t('pwWeak')); return newPw(title, cb, onCancel); }
+            askPw(t('pwAgain'), t('pwAgainHint'), function (pw2) {
+                if (pw2 !== pw) { App.toast(t('pwMismatch')); return newPw(title, cb, onCancel); }
+                cb(pw);
+            }, onCancel, t('save'));
+        }, onCancel);
+    }
+
+    // A new account. pid null: a new profile (it becomes active); pid: this local profile becomes the account.
+    function newAccount(pid, done) {
+        var title = pid ? t('makeAccount') : t('newProfile');
+        function back() { if (done) done(false); }
+        askUser(title + ': ' + t('username'), '', function (user) {
+            newPw(t('password'), function (pw) { send(user, pw); }, back);
+        }, back);
+        function send(user, pw) {
+            App.toast(t('acctWorking'));
+            Accounts.signUp(user, pw, pid, function (err, id) {
+                if (err === 'taken') {
+                    App.toast(t('userTaken'));
+                    // the password is kept: only the username is typed again
+                    return askUser(title + ': ' + t('username'), user, function (u2) { send(u2, pw); }, back);
+                }
+                if (err) { App.toast(errText(err)); return back(); }
+                Accounts.unlock(id);
+                if (pid) { App.toast(t('acctCreated')); if (done) done(true); return; }
+                locked = false;
+                close();
+                Welcome.switchUser(id);
+            });
+        }
+    }
+
+    // an account made on another TV or phone: it is added here with its progress
+    function signIn(prefill) {
+        askUser(t('signInAcct') + ': ' + t('username'), prefill || '', function (user) {
+            (function tryPw() {
+                askPw(t('password') + ' (' + user + ')', '', function (pw) {
+                    App.toast(t('acctWorking'));
+                    Accounts.signIn(user, pw, function (err, id) {
+                        if (err === 'wrong') { App.toast(t('wrongLogin')); return tryPw(); }
+                        if (err) return App.toast(errText(err));
+                        Accounts.unlock(id);
+                        locked = false;
+                        close();
+                        Welcome.switchUser(id, true);
+                    });
+                }, null, t('signInAcct'));
+            })();
         });
     }
+
+    // the password of a profile before it is used. cb() when it is right
+    function askPassword(id, cb, onCancel) {
+        var p = Profiles.find(id);
+        askPw(t('password') + ' (' + nameOf(p) + ')', '', function (pw) {
+            Accounts.check(id, pw, function (ok, err) {
+                if (!ok) {
+                    App.toast(err && err !== 'wrong' ? errText(err) : t('wrongPw'));
+                    return askPassword(id, cb, onCancel);
+                }
+                Accounts.unlock(id);
+                cb();
+            });
+        }, onCancel, t('signInAcct'));
+    }
+
+    function changePassword(id, done) {
+        askPw(t('pwOld'), '', function (old) {
+            newPw(t('pwNew'), function (pw) {
+                App.toast(t('acctWorking'));
+                Accounts.changePassword(id, old, pw, function (err) {
+                    App.toast(err ? (err === 'wrong' ? t('wrongPw') : errText(err)) : t('pwChanged'));
+                    if (done) done(!err);
+                });
+            });
+        });
+    }
+
+    // My PC starts on a profile that asks for its password: nothing else until it is typed (Back: other profiles)
+    var locked = false;
+    function gate() {
+        var cur = Profiles.current();
+        if (!Accounts.asks(cur.id) || Accounts.unlocked(cur.id)) { locked = false; return false; }
+        locked = true;
+        if ($('profiles').hidden) open();
+        else Focus.set($('profiles'), renderList());
+        askPassword(cur.id, function () { locked = false; close(); }, function () { Focus.set($('profiles'), renderList()); });
+        return true;
+    }
+
+    function create() { newAccount(null); }
 
     function rename() {
         var p = Profiles.current();
@@ -102,7 +219,8 @@ var ProfilesUI = (function () {
     function del() {
         var p = Profiles.current();
         if (Profiles.list().length < 2) return;
-        App.confirm(I18n.t('deleteTitle'), I18n.t('deleteText').replace('%s', nameOf(p)), function () {
+        App.confirm(I18n.t('deleteTitle'), I18n.t('deleteText').replace('%s', nameOf(p)) + (p.user ? ' ' + I18n.t('deleteAcctText') : ''), function () {
+            Accounts.forget(p.id);
             Profiles.remove(p.id);
             close();
             Welcome.switchUser(Profiles.current().id, true);     // the deleted one was active: sign in as another
@@ -226,6 +344,7 @@ var ProfilesUI = (function () {
         onChange = changeCb;
         $('btn-profile').onclick = open;
         $('profile-new').onclick = create;
+        $('profile-signin').onclick = function () { signIn(''); };
         $('profile-rename').onclick = rename;
         $('profile-picture').onclick = function () { openPicker(false); };
         $('pic-web').onclick = photoFromAddress;
@@ -238,6 +357,8 @@ var ProfilesUI = (function () {
 
     return {
         init: init, open: open, openPicker: openPicker, close: close, renderButton: renderButton,
-        screenOpen: screenOpen, screenAction: screenAction, nameOf: nameOf, avatar: avatar
+        screenOpen: screenOpen, screenAction: screenAction, nameOf: nameOf, avatar: avatar,
+        gate: gate, newAccount: newAccount, signIn: function (u) { if ($('profiles').hidden) open(); signIn(u); },
+        askPassword: askPassword, changePassword: changePassword
     };
 })();

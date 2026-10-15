@@ -48,6 +48,7 @@
         <div id="profiles-list" class="profiles-list" role="list"></div>
         <div class="profiles-buttons">
             <button id="profile-new" class="btn btn-primary" data-focus data-i18n="newProfile">New profile</button>
+            <button id="profile-signin" class="btn" data-focus data-i18n="signInAcct">Sign in</button>
             <button id="profile-picture" class="btn" data-focus data-i18n="profilePicture">Profile picture</button>
             <button id="profile-rename" class="btn" data-focus data-i18n="renameProfile">Rename</button>
             <button id="profile-delete" class="btn" data-focus data-i18n="deleteProfile">Delete profile</button>
@@ -70,6 +71,7 @@
     <div id="namer" class="backdrop namer" hidden>
         <div class="dialog namer-box" role="dialog" aria-modal="true" aria-labelledby="namer-title">
             <h2 id="namer-title" class="dialog-title"></h2>
+            <p id="namer-hint" class="profiles-hint namer-hint" hidden></p>
             <div id="namer-text" class="namer-text" aria-live="polite"></div>
             <div id="namer-keys" class="namer-keys"></div>
         </div>

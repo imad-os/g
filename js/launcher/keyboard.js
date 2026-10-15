@@ -1,20 +1,27 @@
 /* On-screen keyboard for the remote (a PC keyboard can type too), used for profile names,
- * web addresses and calendar notes.
- *   Keyboard.open({ title, text, max, mode: 'name' | 'url' | 'text' }, function (value) {...})
- * 'name' capitalises each word, 'url' adds . / : - _ and keeps lower case, 'text' is free text. */
+ * usernames, passwords, web addresses and calendar notes.
+ *   Keyboard.open({ title, text, max, mode, hint, placeholder, ok }, function (value) {...}, onCancel)
+ * 'name' capitalises each word, 'url' adds . / : - _ and keeps lower case, 'text' is free text,
+ * 'user' is a username (lower case letters, digits, _ and .), 'password' hides what is typed (a Show key,
+ * a Shift key for capitals, a few symbols) and Voice Guide says only how many characters there are. */
 var Keyboard = (function () {
     'use strict';
 
     var LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'.split('');
     var URL_EXTRA = ['.', '/', ':', '-', '_', '?', '=', '&', '.com'];
     var TEXT_EXTRA = ['.', ',', '!', '?', '-', ':'];
-    var cb = null, text = '', opts = null, isOpen = false;
+    var USER_EXTRA = ['_', '.'];
+    var PASS_EXTRA = ['.', '-', '_', '@', '!', '?', '#', '$', '*'];
+    var cb = null, cancelCb = null, text = '', opts = null, isOpen = false, caps = false, shown = false;
 
     function $(id) { return document.getElementById(id); }
 
     function draw() {
-        $('namer-text').textContent = text || (opts.placeholder || ' ');
+        var secret = opts.mode === 'password' && !shown, t = text;
+        if (secret) t = new Array(text.length + 1).join('•');
+        $('namer-text').textContent = t || (opts.placeholder || ' ');
         $('namer-text').className = 'namer-text' + (text ? '' : ' namer-empty') + (opts.mode === 'name' ? '' : ' namer-left');
+        if (secret) $('namer-text').removeAttribute('aria-live'); else $('namer-text').setAttribute('aria-live', 'polite');
     }
 
     function key(box, label, cls, fn, aria) {
@@ -28,31 +35,54 @@ var Keyboard = (function () {
         return b;
     }
 
-    function open(o, done) {
+    // letter keys follow the Shift key (password)
+    function relabel() {
+        var ks = $('namer-keys').querySelectorAll('[data-ch]');
+        for (var i = 0; i < ks.length; i++) {
+            var c = ks[i].getAttribute('data-ch');
+            ks[i].textContent = caps ? c.toUpperCase() : c;
+        }
+    }
+
+    function open(o, done, onCancel) {
         opts = o || {};
         opts.max = opts.max || 12;
         opts.mode = opts.mode || 'name';
         cb = done;
+        cancelCb = onCancel || null;
         text = opts.text || '';
+        caps = false; shown = false;
         $('namer-title').textContent = opts.title || '';
-        var box = $('namer-keys'), i;
+        $('namer-hint').textContent = opts.hint || '';
+        $('namer-hint').hidden = !opts.hint;
+        var box = $('namer-keys'), i, m = opts.mode;
         box.innerHTML = '';
-        var lower = opts.mode !== 'name';
+        var lower = m !== 'name';
         for (i = 0; i < LETTERS.length; i++) {
             var c = lower ? LETTERS[i].toLowerCase() : LETTERS[i];
-            key(box, c, '', (function (ch) { return function () { type(ch); }; })(c));
+            var b = key(box, c, '', (function (ch) { return function () { type(m === 'password' && caps ? ch.toUpperCase() : ch); }; })(c));
+            if (m === 'password' && /[a-z]/.test(c)) b.setAttribute('data-ch', c);
         }
-        var extra = opts.mode === 'url' ? URL_EXTRA : opts.mode === 'text' ? TEXT_EXTRA : [];
+        var extra = m === 'url' ? URL_EXTRA : m === 'text' ? TEXT_EXTRA : m === 'user' ? USER_EXTRA : m === 'password' ? PASS_EXTRA : [];
         for (i = 0; i < extra.length; i++) key(box, extra[i], extra[i].length > 1 ? 'key-mid' : '', (function (ch) { return function () { type(ch); }; })(extra[i]));
-        if (opts.mode !== 'url') key(box, I18n.t('space'), 'key-wide', function () { type(' '); });
+        if (m === 'password') {
+            key(box, '⇧', 'key-mid', function () { caps = !caps; relabel(); A11y.announce(I18n.t(caps ? 'capsOn' : 'capsOff')); }, I18n.t('capsKey'));
+            key(box, I18n.t('showPw'), 'key-wide', function () { shown = !shown; this.textContent = I18n.t(shown ? 'hidePw' : 'showPw'); draw(); if (shown) A11y.announce(text); });
+        }
+        if (m === 'name' || m === 'text') key(box, I18n.t('space'), 'key-wide', function () { type(' '); });
         key(box, '⌫', 'key-wide', erase, I18n.t('erase'));
-        key(box, I18n.t('cancel'), 'key-wide', close);
+        key(box, I18n.t('cancel'), 'key-wide', cancel);
         key(box, opts.ok || I18n.t('save'), 'key-wide btn-primary', submit);
         draw();
         isOpen = true;
         $('namer').hidden = false;
         Focus.push($('namer'), box.firstChild);
-        A11y.announce((opts.title || '') + '. ' + I18n.t('namerHint'));
+        A11y.announce((opts.title || '') + '. ' + (opts.hint ? opts.hint + '. ' : '') + I18n.t('namerHint'));
+    }
+
+    function say(c) {
+        if (opts.mode === 'password' && !shown) A11y.announce(I18n.t('pwCount').replace('%n', text.length));
+        else A11y.announce(c === ' ' ? I18n.t('space') : c);
     }
 
     function type(c) {
@@ -64,26 +94,35 @@ var Keyboard = (function () {
             else if (!text || prev === ' ') return;
         } else if (opts.mode === 'text' && c.length === 1 && /[a-z]/i.test(c)) {
             c = !text || /[.!?]\s$/.test(text.slice(-2)) ? c.toUpperCase() : c.toLowerCase();
+        } else if (opts.mode === 'user') {
+            c = c.toLowerCase();
+            if (!/^[a-z0-9_.]$/.test(c)) return;
+        } else if (opts.mode === 'password') {
+            if (c === ' ') return;
         } else if (c === ' ' && (!text || prev === ' ')) return;
         text += c;
         draw();
-        A11y.announce(c === ' ' ? I18n.t('space') : c);
+        say(c);
     }
-    function erase() { text = text.slice(0, -1); draw(); A11y.announce(text || I18n.t('erase')); }
+    function erase() { text = text.slice(0, -1); draw(); if (opts.mode === 'password' && !shown) say(''); else A11y.announce(text || I18n.t('erase')); }
 
     function submit() {
-        var v = text.replace(/^\s+|\s+$/g, '');
+        var v = opts.mode === 'password' ? text : text.replace(/^\s+|\s+$/g, '');
         if (!v) { A11y.announce(I18n.t('namerHint')); return; }
         var f = cb;
-        close();
+        close(true);
         if (f) f(v);
     }
 
-    function close() {
+    function cancel() { var f = cancelCb; close(true); if (f) f(); }
+
+    function close(quiet) {
         if (!isOpen) return;
         isOpen = false;
         $('namer').hidden = true;
         cb = null;
+        if (quiet !== true) cancelCb = null;
+        text = '';
         Focus.pop();
     }
 
@@ -99,14 +138,14 @@ var Keyboard = (function () {
             if (k === 8) erase();
             else if (ch === ' ') type(' ');
             else if (opts.mode === 'name' && !/[a-z0-9]/i.test(ch)) return;
-            else type(opts.mode === 'url' ? ch.toLowerCase() : ch);
+            else type(opts.mode === 'url' || opts.mode === 'user' ? ch.toLowerCase() : ch);
         }
     }
 
     function action(a, repeat) {
         if (a === 'left' || a === 'right' || a === 'up' || a === 'down') Focus.move(a);
         else if (a === 'confirm' && !repeat) { var c = Focus.current(); if (c) c.click(); }
-        else if ((a === 'back' || a === 'cancel') && !repeat) close();
+        else if ((a === 'back' || a === 'cancel') && !repeat) cancel();
     }
 
     window.addEventListener('keydown', onRawKey, true);

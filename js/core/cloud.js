@@ -48,12 +48,14 @@ var Cloud = (function () {
     function toFields(o) { var f = {}; for (var k in o) if (o[k] !== undefined) f[k] = toValue(o[k]); return f; }
 
     // cb(err, json, status): err is null, 'notfound', 'conflict', 'network' or 'http <n>'
-    function request(method, url, body, timeout, cb) {
+    // token: a signed-in player's Firebase ID token (js/core/accounts.js), sent as Authorization
+    function request(method, url, body, timeout, cb, token) {
         var x = new XMLHttpRequest(), done = false;
         function end(err, json, st) { if (done) return; done = true; cb(err, json, st); }
         try { x.open(method, url + (url.indexOf('?') < 0 ? '?' : '&') + 'key=' + CFG.apiKey, true); } catch (e) { return end('network', null, 0); }
         x.timeout = timeout || TIMEOUT;
         if (body) x.setRequestHeader('Content-Type', 'application/json');
+        if (token) x.setRequestHeader('Authorization', 'Bearer ' + token);
         x.onload = function () {
             var r = null;
             try { r = JSON.parse(x.responseText); } catch (e) {}
@@ -66,21 +68,21 @@ var Cloud = (function () {
         try { x.send(body ? JSON.stringify(body) : null); } catch (e) { end('network', null, 0); }
     }
 
-    // path like "tvs/tv-123": cb(err, data, updateTime)
-    function get(path, timeout, cb) {
+    // path like "tvs/tv-123": cb(err, data, updateTime). token: only for a player's own document
+    function get(path, timeout, cb, token) {
         request('GET', ROOT + '/' + path, null, timeout, function (err, r) {
             if (err || !r) return cb(err || 'json', null, null);
             cb(null, fromFields(r.fields || {}), r.updateTime || null);
-        });
+        }, token);
     }
     // writes the whole document. pre: { updateTime } or { exists: false } (optimistic lock), or null
-    function patch(path, data, pre, timeout, cb) {
+    function patch(path, data, pre, timeout, cb, token) {
         var q = '';
         if (pre && pre.updateTime) q = '?currentDocument.updateTime=' + encodeURIComponent(pre.updateTime);
         else if (pre && pre.exists === false) q = '?currentDocument.exists=false';
         request('PATCH', ROOT + '/' + path + q, { fields: toFields(data) }, timeout, function (err, r) {
             cb(err, r ? r.updateTime : null);
-        });
+        }, token);
     }
     // several documents at once: cb(err, { path: { data, updateTime } | null })
     function batchGet(paths, timeout, cb) {
@@ -241,6 +243,7 @@ var Cloud = (function () {
         install: install, uninstall: uninstall, isInstalled: isInstalled, installedIds: installedIds,
         onChange: function (fn) { listeners.push(fn); },
         stats: stats, statsCached: statsCached, count: count,
+        key: CFG.apiKey, request: request,
         get: get, patch: patch, patchMask: patchMask, query: query, now: function () { return Date.now() + (offset || 0); }, synced: function () { return offset !== null; }, remove: remove, removeKeep: removeKeep, batchGet: batchGet, commit: commit, toFields: toFields, fromFields: fromFields
     };
 })();

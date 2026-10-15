@@ -66,6 +66,7 @@
             }
         } else if (id === 'accounts') {
             out.push({ kind: 'profile' });
+            accountRows(out);
             out.push({ kind: 'action', label: t('profilePicture'), desc: t('pictureHint'), run: function () { ProfilesUI.openPicker(true); } });
             out.push({ kind: 'action', label: t('manageProfiles'), desc: t('profilesHint'), run: function () { ProfilesUI.open(); } });
         } else if (id === 'sound') {
@@ -121,7 +122,7 @@
         card.appendChild(ProfilesUI.avatar(p, 'avatar avatar-mid'));
         var tx = el('div', 'set-user-text');
         tx.appendChild(el('div', 'set-user-name', ProfilesUI.nameOf(p)));
-        tx.appendChild(el('div', 'set-user-sub', t('localAccount')));
+        tx.appendChild(el('div', 'set-user-sub', p.user ? '@' + p.user : t('localAccount')));
         card.appendChild(tx);
         nav.appendChild(card);
         for (var i = 0; i < PAGES.length; i++) {
@@ -201,6 +202,25 @@
         out.push({ kind: 'action', label: t('ctrlForget'), danger: true, run: function () { Controllers.forget(); App.toast(t('ctrlForgot')); } });
     }
 
+    // My PC account of the active profile (js/core/accounts.js): make one, password, sign-in on a phone
+    function accountRows(out) {
+        var p = Profiles.current(), id = p.id;
+        function again() { if (Win.current() === 'settings' && page === 'accounts') { var f = renderMain(1); if (f) Focus.focus(f); } }
+        if (!p.user) {
+            out.push({ kind: 'action', primary: true, label: t('makeAccount'), desc: t('makeAccountDesc'), run: function () { ProfilesUI.newAccount(id, again); } });
+            return;
+        }
+        if (!Accounts.signedIn(id)) {
+            out.push({ kind: 'action', primary: true, label: t('signInAgain'), desc: t('signInAgainDesc'), run: function () {
+                ProfilesUI.askPassword(id, function () { App.toast(t('acctSignedIn')); Accounts.pull(id, 5000, function (changed) { if (changed) Welcome.switchUser(id, true); else again(); }); });
+            } });
+        }
+        out.push({ kind: 'toggle', label: t('askPw'), desc: t('askPwDesc'), get: function () { return Accounts.asks(id); }, set: function (v) { Profiles.setAsk(id, v); if (v) Accounts.unlock(id); } });
+        out.push({ kind: 'action', label: t('changePw'), run: function () { ProfilesUI.changePassword(id, again); } });
+        out.push({ kind: 'qr', url: Controllers.pairUrl().replace(/\?.*$/, '?signin=' + encodeURIComponent(p.user)), code: p.user,
+            title: t('usePhone'), help: t('usePhoneHelp'), codeLabel: t('username') });
+    }
+
     function leaveSub() { sub = null; var f = renderMain(0); if (f) Focus.focus(f); }
     // the phone controller opens its room in the background: show what happens (status, players) as it changes
     function onCtrl() {
@@ -212,10 +232,11 @@
     function qrCard(r) {
         var card = el('div', 'set-qr'), box = el('div', 'set-qr-img'), txt = el('div', 'set-qr-txt');
         box.innerHTML = QR.svg(r.url, { quiet: 3 });
-        card.setAttribute('aria-label', t('ctrlScan') + ' ' + t('ctrlCode') + ' ' + r.code);
-        txt.appendChild(el('div', 'set-row-name', t('ctrlScan')));
-        txt.appendChild(el('div', 'set-row-desc', t('ctrlScanHelp')));
-        txt.appendChild(el('div', 'set-qr-code', t('ctrlCode') + ': ' + r.code));
+        var title = r.title || t('ctrlScan'), code = r.codeLabel || t('ctrlCode');
+        card.setAttribute('aria-label', title + ' ' + code + ' ' + r.code);
+        txt.appendChild(el('div', 'set-row-name', title));
+        txt.appendChild(el('div', 'set-row-desc', r.help || t('ctrlScanHelp')));
+        txt.appendChild(el('div', 'set-qr-code', code + ': ' + r.code));
         card.appendChild(box); card.appendChild(txt);
         return card;
     }
@@ -359,7 +380,7 @@
         var p = Profiles.current(), c = el('div', 'set-card');
         c.appendChild(ProfilesUI.avatar(p, 'avatar avatar-big'));
         c.appendChild(el('div', 'set-card-name', ProfilesUI.nameOf(p)));
-        c.appendChild(el('div', 'set-row-desc', t('localAccount') + ' · ' + Profiles.list().length + ' ' + t('profiles').toLowerCase()));
+        c.appendChild(el('div', 'set-row-desc', (p.user ? t('acctOf').replace('%s', p.user) : t('localAccount')) + ' · ' + Profiles.list().length + ' ' + t('profiles').toLowerCase()));
         return c;
     }
 

@@ -115,9 +115,50 @@ function fsPlain(v) {
     if ('mapValue' in v) { const o = {}; for (const k in v.mapValue.fields || {}) o[k] = fsPlain(v.mapValue.fields[k]); return o; }
     return null;
 }
+// Firebase Authentication (REST) for player accounts: signUp, signInWithPassword, update (password), token refresh.
+// db.auth = { 'name@players.mypc.app': { uid, pw, rts: [valid refresh tokens] } }; a password change revokes the others.
+async function fakeAuth(ctx, db) {
+    db.auth = db.auth || {}; db._u = db._u || 0;
+    const json = (r, status, o) => r.fulfill({ status, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(o) });
+    const fail = (r, m) => json(r, 400, { error: { code: 400, message: m } });
+    const issue = (u) => { const rt = 'rt-' + u.uid + '-' + (++db._u); u.rts.push(rt); return { localId: u.uid, idToken: 'id-' + u.uid + '-' + db._u, refreshToken: rt, expiresIn: '3600' }; };
+    const byUid = (uid) => Object.values(db.auth).find((u) => u.uid === uid);
+    await ctx.route('https://identitytoolkit.googleapis.com/**', async (r) => {
+        if (db.down) return r.abort('internetdisconnected');
+        const op = new URL(r.request().url()).pathname.split('accounts:')[1], b = JSON.parse(r.request().postData() || '{}');
+        db.authLog = db.authLog || []; db.authLog.push(op + ' ' + (b.email || ''));
+        if (op === 'signUp') {
+            if (db.auth[b.email]) return fail(r, 'EMAIL_EXISTS');
+            if (!b.password || b.password.length < 6) return fail(r, 'WEAK_PASSWORD : Password should be at least 6 characters');
+            const u = db.auth[b.email] = { uid: 'uid' + (++db._u), pw: b.password, rts: [] };
+            return json(r, 200, issue(u));
+        }
+        if (op === 'signInWithPassword') {
+            const u = db.auth[b.email];
+            if (!u || u.pw !== b.password) return fail(r, 'INVALID_LOGIN_CREDENTIALS');
+            return json(r, 200, issue(u));
+        }
+        if (op === 'update') {
+            const u = byUid(String(b.idToken).split('-')[1]);
+            if (!u) return fail(r, 'INVALID_ID_TOKEN');
+            u.pw = b.password; u.rts = [];
+            return json(r, 200, issue(u));
+        }
+        fail(r, 'OPERATION_NOT_ALLOWED');
+    });
+    await ctx.route('https://securetoken.googleapis.com/**', async (r) => {
+        if (db.down) return r.abort('internetdisconnected');
+        const b = JSON.parse(r.request().postData() || '{}'), u = byUid(String(b.refresh_token).split('-')[1]);
+        db.authLog = db.authLog || []; db.authLog.push('refresh');
+        if (!u || u.rts.indexOf(b.refresh_token) < 0) return fail(r, 'TOKEN_EXPIRED');
+        json(r, 200, { id_token: 'id-' + u.uid + '-' + (++db._u), refresh_token: b.refresh_token, expires_in: '3600', user_id: u.uid });
+    });
+}
+
 async function fakeFirestore(ctx, db) {
-    for (const c of ['apps', 'appstats', 'tvs', 'records']) db[c] = db[c] || {};
+    for (const c of ['apps', 'appstats', 'tvs', 'records', 'players']) db[c] = db[c] || {};
     db._t = db._t || {}; db.log = db.log || []; db._n = db._n || 0;
+    await fakeAuth(ctx, db);
     await ctx.route('https://firestore.googleapis.com/**', async (r) => {
         if (db.down) return r.abort('internetdisconnected');
         const req = r.request(), u = new URL(req.url()), method = req.method();
@@ -126,6 +167,12 @@ async function fakeFirestore(ctx, db) {
         const stamp = (k) => db._t[k] || (db._t[k] = '2026-01-01T00:00:0' + (db._n++ % 10) + '.' + String(db._n).padStart(6, '0') + 'Z');
         const out = (col, id) => ({ name: FS_DB + '/' + col + '/' + id, fields: fsFields(db[col][id]), updateTime: stamp(col + '/' + id), createTime: '2026-01-01T00:00:00Z' });
         db.log.push(method + ' ' + p);
+        // a player's own document: only with that account's ID token (firebase/firestore.rules)
+        if (p.indexOf('/players/') === 0) {
+            const tok = (req.headers()['authorization'] || '').replace('Bearer ', ''), uid = p.split('/')[2];
+            db.playerAuth = db.playerAuth || []; db.playerAuth.push(tok);
+            if (tok.split('-')[1] !== uid) return json(403, { error: { code: 403, status: 'PERMISSION_DENIED' } });
+        }
         const body = req.postData() ? JSON.parse(req.postData()) : null;
         if (p === ':batchGet') return json(200, body.documents.map((n) => { const [col, id] = n.slice(FS_DB.length + 1).split('/'); return db[col] && db[col][id] ? { found: out(col, id) } : { missing: n }; }));
         if (p === ':commit') {
@@ -688,17 +735,24 @@ async function main() {
         await page.focus('#btn-profile'); await page.keyboard.press('Enter');
         check(await page.evaluate(() => !document.getElementById('profiles').hidden), 'the profile button in Start opens the Profiles screen');
         await page.focus('#profile-new'); await page.keyboard.press('Enter');
-        // remote: OK on the focused "A" key, then a PC keyboard types the rest
+        // remote: OK on the focused "a" key, then a PC keyboard types the rest (a username: lower case)
         await page.keyboard.press('Enter');
-        await page.keyboard.type('na');
-        check(await page.textContent('#namer-text') === 'Ana', 'on-screen keyboard and PC keys type a name');
-        await page.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
-        check(await page.evaluate(() => !!document.querySelector('.welcome') && /Ana/.test(document.querySelector('.welcome').textContent)), 'creating a profile shows the sign-in screen with the new user');
+        await page.keyboard.type('nA');
+        check(await page.textContent('#namer-text') === 'ana', 'on-screen keyboard and PC keys type a username');
+        const okKey = () => page.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
+        await okKey();
+        await page.keyboard.type('secret1');
+        check(await page.textContent('#namer-text') === '•••••••', 'the password is hidden while it is typed');
+        await okKey();
+        await page.keyboard.type('secret1');
+        await okKey();
+        await page.waitForSelector('.welcome', { timeout: 5000 }).catch(() => {});
+        check(await page.evaluate(() => !!document.querySelector('.welcome') && /ana/.test(document.querySelector('.welcome').textContent)), 'creating a profile shows the sign-in screen with the new user');
         await signedIn(page);
-        check(await page.evaluate(() => Store.profile() === 'p2' && Profiles.current().name === 'Ana'), 'a new profile is created and becomes active');
+        check(await page.evaluate(() => Store.profile() === 'p2' && Profiles.current().name === 'ana' && Profiles.current().user === 'ana'), 'a new profile is an account named after its username, and becomes active');
         check(await page.evaluate(() => Scores.list('snake').length === 1 && Store.get('vol_music') !== 7), 'records are shared by every profile, settings are not');
         await page.keyboard.press('Escape');
-        check(/Ana/.test(await page.textContent('#btn-profile')), 'home shows the active profile');
+        check(/ana/.test(await page.textContent('#btn-profile')), 'home shows the active profile');
         await page.reload();
         await page.waitForFunction(() => { const b = document.getElementById('profile-name'); return b && b.textContent; });
         check(await page.evaluate(() => Store.profile()) === 'p2', 'the active profile is remembered');
@@ -2496,6 +2550,101 @@ async function main() {
         await A.context().close();
         check(tv.errors.length === 0 && P1.errors.length === 0 && P2.errors.length === 0, 'no page errors ' + tv.errors.concat(P1.errors, P2.errors).join('; '));
         for (const pg of [tv, P2]) await pg.context().close();
+    }
+
+    console.log('36. player accounts: unique username + password, per-profile cloud copy, phone sign-in, password lock');
+    {
+        const db = {};
+        const tv = await newPage(browser, base, db);
+        await routeHosted(tv, { offline: true });
+        await tv.goto(base + 'index.html');
+        await tv.waitForSelector('#desk-icons .dicon');
+        check(await tv.evaluate(() => Accounts._sha256('abc')) === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad', 'SHA-256 of "abc" is the standard value');
+        const okKey = (pg) => pg.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
+        const typeIn = async (pg, txt) => { await pg.waitForFunction(() => window.ProfilesUI && Keyboard.isOpen()); await pg.keyboard.type(txt); await okKey(pg); };
+        const toast = (pg) => pg.evaluate(() => document.getElementById('toast').hidden ? '' : document.getElementById('toast').textContent);
+        // a local profile becomes an account (Settings > Accounts)
+        await tv.evaluate(() => { Store.set('game_snake_lvl', 5); Win.open('settings'); });
+        await tv.evaluate(() => document.querySelector('[data-page="accounts"]').click());
+        const makeRow = await tv.evaluate(() => { const b = [...document.querySelectorAll('.set-row')].find((x) => /Create an account/.test(x.textContent)); if (b) b.click(); return !!b; });
+        check(makeRow, 'Settings > Accounts offers "Create an account for this profile" on a local profile');
+        await typeIn(tv, 'Imad12');
+        check(await tv.evaluate(() => document.getElementById('namer-title').textContent) === 'Password', 'the username is lower case and the password comes next');
+        await typeIn(tv, 'short');
+        check(/at least 6/.test(await toast(tv)), 'a password under 6 characters is refused: ' + await toast(tv));
+        await typeIn(tv, 'Secret#1'); await typeIn(tv, 'Secret#2');
+        check(/not the same/.test(await toast(tv)), 'two different passwords are refused');
+        await typeIn(tv, 'Secret#1'); await typeIn(tv, 'Secret#1');
+        await tv.waitForFunction(() => !!Profiles.current().user, null, { timeout: 5000 }).catch(() => {});
+        const uid = db.auth['imad12@players.mypc.app'] && db.auth['imad12@players.mypc.app'].uid;
+        await tv.waitForFunction(() => true);
+        await tv.waitForTimeout(300);
+        check(!!uid && await tv.evaluate(() => Profiles.current().id === 'p1' && Profiles.current().user === 'imad12'), 'the account imad12 is created in Firebase Authentication and linked to this profile');
+        check(!!db.players[uid] && JSON.parse(db.players[uid].blob).game_snake_lvl === '5' && db.players[uid].user === 'imad12', 'the profile\'s saves are in players/<uid>');
+        check(db.playerAuth.every((t) => t.indexOf('id-' + uid) === 0), 'players/<uid> is only reached with that account\'s token');
+        const ls = await tv.evaluate(() => Object.keys(localStorage).map((k) => k + '=' + localStorage.getItem(k)).join('\n'));
+        check(ls.indexOf('Secret#1') < 0 && JSON.stringify(db.players[uid]).indexOf('Secret#1') < 0, 'the password is stored nowhere in plain text');
+        check(await tv.evaluate(() => !Object.keys(Backup.snapshot()).some((k) => /acct/.test(k)) && Backup.snapshot().arc_profiles.indexOf('imad12') > 0), 'the TV backup has the username but not the account\'s token or check code');
+        check(await tv.evaluate(() => /Account imad12/.test(document.querySelector('.set-card').textContent) && !!document.querySelector('.set-qr svg')), 'Settings shows the account and a "Use on your phone" QR code');
+        await tv.evaluate(() => Win.close());
+        // the same username can't be taken twice
+        await tv.evaluate(() => ProfilesUI.open());
+        await tv.focus('#profile-new'); await tv.keyboard.press('Enter');
+        await typeIn(tv, 'imad12'); await typeIn(tv, 'other99'); await typeIn(tv, 'other99');
+        await tv.waitForFunction(() => /already exists/.test(document.getElementById('toast').textContent), null, { timeout: 5000 }).catch(() => {});
+        check(/Username already exists/.test(await toast(tv)) && await tv.evaluate(() => Keyboard.isOpen() && document.getElementById('namer-text').textContent === 'imad12'), 'a taken username shows "Username already exists" and asks for another one');
+        await tv.evaluate(() => Keyboard.close());
+        await tv.evaluate(() => ProfilesUI.close());
+        check(await tv.evaluate(() => Profiles.list().length) === 1, 'no profile is added for a taken username');
+
+        // a phone signs in to the same account and continues
+        const ph = await newPage(browser, base, db, { phone: true });
+        await routeHosted(ph, { offline: true });
+        await ph.goto(base + 'index.html?signin=imad12');
+        await ph.waitForFunction(() => window.ProfilesUI && Keyboard.isOpen && Keyboard.isOpen(), null, { timeout: 15000 }).catch(() => {});
+        check(await ph.evaluate(() => document.getElementById('namer-text').textContent) === 'imad12', 'the "Use on phone" link opens Sign in with the username filled in');
+        await okKey(ph);
+        await typeIn(ph, 'wrong11');
+        await ph.waitForFunction(() => /Wrong username or password/.test(document.getElementById('toast').textContent), null, { timeout: 5000 }).catch(() => {});
+        check(/Wrong username or password/.test(await toast(ph)), 'a wrong password is refused on the phone');
+        await typeIn(ph, 'Secret#1');
+        await signedIn(ph);
+        check(await ph.evaluate(() => Profiles.current().user === 'imad12' && Store.get('game_snake_lvl') === 5), 'on the phone the profile comes with its progress (level 5)');
+        await ph.evaluate(() => Store.set('game_snake_lvl', 9));
+        await ph.evaluate(() => new Promise((res) => Accounts.upload(Store.profile(), res)));
+        check(JSON.parse(db.players[uid].blob).game_snake_lvl === '9', 'progress made on the phone goes to the account');
+        // the TV starts again: the newer copy comes back
+        await tv.reload();
+        await signedIn(tv);
+        check(await tv.evaluate(() => Store.get('game_snake_lvl')) === 9 && db.authLog.includes('refresh'), 'the TV picks up the phone\'s progress at the next start (token refreshed)');
+
+        // "Ask for the password": the start shows the password screen first
+        await tv.evaluate(() => { Profiles.setAsk('p1', true); sessionStorage.clear(); });
+        await tv.reload();
+        await tv.waitForFunction(() => window.ProfilesUI && Keyboard.isOpen(), null, { timeout: 15000 }).catch(() => {});
+        check(await tv.evaluate(() => Keyboard.isOpen() && /Password/.test(document.getElementById('namer-title').textContent) && !document.getElementById('profiles').hidden), 'with "Ask for the password" on, My PC starts on the password screen');
+        await tv.keyboard.press('Escape');
+        check(await tv.evaluate(() => !Keyboard.isOpen() && !document.getElementById('profiles').hidden && document.getElementById('profile-rename').hidden), 'Back shows the profiles (nothing else) while locked');
+        await tv.focus('#profiles-close'); await tv.keyboard.press('Enter');
+        check(await tv.evaluate(() => Keyboard.isOpen()), 'closing the profiles asks for the password again');
+        db.down = true;                                      // offline: the check code on the TV is enough
+        await typeIn(tv, 'nope123');
+        await tv.waitForFunction(() => /Wrong password/.test(document.getElementById('toast').textContent) && Keyboard.isOpen(), null, { timeout: 5000 }).catch(() => {});
+        check(await tv.evaluate(() => Keyboard.isOpen()), 'a wrong password keeps the screen');
+        await typeIn(tv, 'Secret#1');
+        check(await tv.evaluate(() => !Keyboard.isOpen() && document.getElementById('profiles').hidden), 'the right password opens the desktop, also offline');
+        db.down = false;
+
+        // change the password on the TV: the phone has to sign in again
+        const changed = await tv.evaluate(() => new Promise((res) => Accounts.changePassword('p1', 'Secret#1', 'Newpass9', res)));
+        check(changed === null && db.auth['imad12@players.mypc.app'].pw === 'Newpass9', 'the password can be changed');
+        await ph.reload();
+        await signedIn(ph);
+        check(await ph.evaluate(() => !Accounts.signedIn(Store.profile())), 'the phone is signed out after a password change somewhere else');
+        const again = await ph.evaluate(() => new Promise((res) => Accounts.check(Store.profile(), 'Newpass9', (ok) => res(ok && Accounts.signedIn(Store.profile())))));
+        check(again, 'the new password signs it in again');
+        check(tv.errors.length === 0 && ph.errors.length === 0, 'no page errors ' + tv.errors.concat(ph.errors).join('; '));
+        await tv.context().close(); await ph.context().close();
     }
 
     await browser.close();

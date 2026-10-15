@@ -174,6 +174,19 @@ service cloud.firestore {
       }
     }
 
+    // Player accounts (js/core/accounts.js): a profile signed in with Firebase Authentication (username@players.mypc.app
+    // + password). Only that account reads or writes its own copy: settings, saves and picture of the profile.
+    function validPlayer(d) {
+      return d.keys().hasOnly(['user', 'name', 'color', 'av', 'photo', 'blob', 'size', 'at', 'from'])
+          && shortText(d.user, 16) && shortText(d.name, 24) && shortText(d.color, 9)
+          && (!('av' in d) || shortText(d.av, 20)) && (!('photo' in d) || shortText(d.photo, 30000))
+          && shortText(d.from, 48) && d.blob is string && d.blob.size() <= 900000 && d.size is int && d.at is int;
+    }
+    match /players/{uid} {
+      allow get, delete: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid && validPlayer(request.resource.data);
+    }
+
     // Admin list: each admin can only check their own entry; managed in the console only.
     match /admins/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;

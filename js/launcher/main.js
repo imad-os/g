@@ -264,6 +264,14 @@ var App = (function () {
                 desktop();
             });
         }
+        // a profile that is a My PC account: bring its progress from the other TV or phone first (not when a game closes)
+        var cur = Profiles.current().id;
+        if (!param('from') && !param('synced') && Accounts.signedIn(cur)) {
+            return Accounts.pull(cur, 2500, function (changed) {
+                if (changed) return location.replace(page('?synced=1'));
+                desktop();
+            });
+        }
         desktop();
     }
 
@@ -284,6 +292,12 @@ var App = (function () {
             I18n.apply();
             AppBoot.ready();
             Welcome.afterBoot();
+            // a profile that asks for its password (Settings > Accounts), or "Use on phone" (?signin=<username>)
+            var signin = param('signin');
+            if (!ProfilesUI.gate() && signin && Accounts.validName(Accounts.clean(signin))) {
+                try { history.replaceState(null, '', page('')); } catch (e0) {}
+                setTimeout(function () { ProfilesUI.signIn(Accounts.clean(signin)); }, 300);
+            }
             // a TV's pairing QR code was scanned with the phone camera: straight to the Game controller, connecting
             var pair = param('pair');
             if (pair && /^[a-z0-9]{6,16}$/i.test(pair)) {
@@ -293,6 +307,7 @@ var App = (function () {
                 setTimeout(function () { Win.open('gamepad'); }, 300);
             }
             Backup.start();
+            Accounts.start();
             World.flush();
             // One-time device benchmark while the menu is idle.
             setTimeout(function () {

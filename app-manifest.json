@@ -1,6 +1,6 @@
 {
-  "build": 42,
-  "version": "2.15.4",
+  "build": 43,
+  "version": "2.16.0",
   "shell": 1,
   "css": [
     "css/launcher.css"
@@ -19,6 +19,7 @@
     "js/core/qr.js",
     "js/core/virtual-pad.js",
     "js/core/backup.js",
+    "js/core/accounts.js",
     "js/core/world.js",
     "js/core/i18n.js",
     "js/core/a11y.js",

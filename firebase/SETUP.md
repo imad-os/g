@@ -11,8 +11,12 @@ My PC uses one Firestore database for:
 - **`rooms`** (with `rooms/<id>/reqs`): lobbies for multiplayer apps (`MyPC.multiplayer` in the SDK). Written only by the My PC
   shell for the running app; short-lived documents (see **Rooms** below).
 
-TVs never sign in. They read `apps`, `appstats`, `records` and their own `tvs` document, and the rules
-let them write only small, checked things (+1 on a counter, their own backup, a top-10 list).
+- **`players`**: one document per **player account** (`players/<Firebase user id>`): the settings, saves and
+  picture of a profile that has a username and password, so it opens on any TV or phone (see **3c**).
+
+TVs themselves never sign in. They read `apps`, `appstats`, `records` and their own `tvs` document, and the rules
+let them write only small, checked things (+1 on a counter, their own backup, a top-10 list). Only a
+player account signs in, and it reaches only its own `players` document.
 
 Quick start (once):
 1. Firestore: create the database and publish `firebase/firestore.rules` (step 1). **Publish it
@@ -100,6 +104,20 @@ The admin page writes these for you. This is the format, which the rules enforce
 TVs read the list with a plain request (no SDK):
 `GET https://firestore.googleapis.com/v1/projects/tvgames-f984d/databases/(default)/documents/games?key=<apiKey>`
 
+## 3c. Player accounts (`players` collection)
+A profile can be a **My PC account**: a unique username and a password (Profiles > New profile, Profiles >
+Sign in, Settings > Accounts > Create an account for this profile). It is a normal Firebase Authentication
+user with the e-mail `<username>@players.mypc.app` (no mail is ever sent; the username is unique because the
+e-mail is), so it needs **Email/Password** enabled (step 2, already on for the App Store Manager).
+- Firebase checks and stores the password (hashed). The TV keeps the refresh token and a salted, iterated
+  SHA-256 check code of the password (for "Ask for the password" offline) in `arc_dev_acct`, which is never
+  copied to the `tvs` backup.
+- `players/<uid>`: `{ user, name, color, av?, photo?, blob, size, at, from }`. `blob` holds the profile's
+  own keys (settings and saves, ≤ 900 KB). Only the signed-in account can read, write or delete it.
+- **After this update, publish `firestore.rules` again** (it adds `players`).
+- Player accounts are **Authentication → Users** like the admins, but they are not in `admins`, so the
+  App Store Manager gives them nothing. To remove an account, delete the user there and its `players` doc.
+
 ## 5. API key restrictions (Google Cloud console → APIs & Services → Credentials)
 - Restrict the key to the APIs it needs: **Cloud Firestore API**, **Identity Toolkit API** and
   **Token Service API** (the App Store Manager's sign-in uses all three).
@@ -116,6 +134,7 @@ In the Firestore **Rules** tab → *Rules Playground*:
 - An unauthenticated `get` on `/apps/x` → allowed; an unauthenticated `create` → denied.
 - An unauthenticated `list` on `/tvs` → denied; `get` on `/tvs/tv-…` → allowed.
 - An unauthenticated `update` on `/appstats/x` that adds 2 → denied; adding 1 → allowed.
+- An unauthenticated `get` on `/players/x` → denied; authenticated as user `x` → allowed, as another user → denied.
 
 ## 4. Rooms (`MyPC.multiplayer`): index and TTL (once)
 Apps and games can offer local multiplayer without their own backend (`sdk/GUIDE.md`, "Multiplayer"). The shell writes

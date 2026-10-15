@@ -70,8 +70,14 @@ var Welcome = (function () {
 
     function afterBoot() {
         var fromSwitch = /[?&]user=1/.test(location.search), up = updated(), p = Profiles.current();
-        var restored = /[?&]restored=1/.test(location.search);
-        if (restored) {
+        var restored = /[?&]restored=1/.test(location.search), synced = /[?&]synced=1/.test(location.search);
+        if (synced) {
+            // the account's progress came from another TV or phone (js/core/accounts.js)
+            blocking = true;
+            build('user', p, I18n.t('syncedTitle'), I18n.t('syncedSub'));
+            timer = setTimeout(function () { close(); }, 1800);
+            restored = true;
+        } else if (restored) {
             blocking = true;
             build('update', p, I18n.t('restoredTitle'), I18n.t('restoredSub'));
             timer = setTimeout(function () { close(); }, 3500);

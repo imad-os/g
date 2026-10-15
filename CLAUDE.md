@@ -9,7 +9,7 @@
 - The app is called **My PC** (formerly "Arcade"): a dark, Windows 11 style desktop for the TV.
 - Apps and games are **published** from a computer with the **App Store Manager** (`installer/`,
   Firebase sign-in, admins only) into the store catalog (Firestore `apps`). Each TV installs what its
-  users pick in the **App Store** app. The TV never signs in.
+  users pick in the **App Store** app. The TV itself never signs in (only player accounts do, below).
 - **Cloud backup:** each TV is identified by a hash of its DUID (`Device.id()`); profiles, settings,
   saves, installed apps and records go to Firestore `tvs/<id>` and come back after a reinstall or a
   reset. World records in `records/<game>`. Users can turn both off (Settings > Privacy & security);
@@ -35,6 +35,11 @@
   profiles, `game-host.js` (bundled games in a same-origin iframe; installed apps in a sandboxed
   cross-origin iframe through the SDK protocol), `main.js` (router: the only place handling Back).
 - **Profiles are users:** every profile has its own settings (language, clock, background, volumes, graphics, saves: `arc_<profile>_*`); only hardware facts and the top-10 records are TV-wide (`arc_dev_*`). Switching profile goes through `js/launcher/welcome.js` (sign-in screen, then the app restarts as that profile). Records are saved automatically under the profile name (no initials screen). A profile's picture (`av` drawn avatar from `js/launcher/avatars.js`, or `photo`) lives in `arc_profiles` and is backed up with it. `Welcome.afterBoot()` also shows "My PC is up to date" once per new build.
+- **Player accounts** (owner decision): a profile is created with a **unique username** (plain, like `imad12`, not tied to a TV) and a
+  **required password**; Profiles > **Sign in** adds an existing account to a TV or phone with its progress. Per profile switch "Ask for the
+  password" (Settings > Accounts). `js/core/accounts.js` = Firebase Auth REST (`<username>@players.mypc.app`), cloud copy Firestore
+  `players/<uid>` (only that account), secrets in `arc_dev_acct` (never in the TV backup), newest copy wins (pulled at start, pushed
+  after changes). Old local profiles keep working; Settings > Accounts > "Create an account for this profile" turns one into an account.
 - `js/core/`: storage (per-profile keys `arc_<profile>_*`, TV-wide `arc_dev_*`), i18n (en, fr,
   es, ar + RTL), input, focus, perf, scores, `cloud.js` (Firestore REST: store catalog, installed list
   `arc_dev_installed`, counters), `backup.js` (Device id, backup/restore), `world.js` (world records).
