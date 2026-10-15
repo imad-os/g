@@ -309,3 +309,9 @@ The skill always fetches the latest `sdk/GUIDE.md` first (`sdk/plugin/skills/myp
 On phones and tablets My PC draws a customizable virtual pad above every app and game (`js/launcher/touchpad.js`); apps need no touch
 code. Per app: `"touch"` in `mypc-app.json`, `MyPC.init({ pad })`, `MyPC.pad` (see "Touch controls" in `sdk/GUIDE.md`). The pad library
 (`sdk/pad/`, from `github.com/imad-os/g_rpg`) is copied by `node tools/sync-pad.mjs` into `js/core/virtual-pad.js` and the SDK.
+
+## AI prompt for a new game or app
+
+Give any AI this one link when you start a new My PC game or app (it always points to the latest `sdk/GUIDE.md`):
+
+https://raw.githubusercontent.com/imad-os/g/main/docs/ai-build-prompt.md
