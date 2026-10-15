@@ -12,6 +12,9 @@
  * moves ({ type: 'action' }, acknowledged with { type: 'ack' }), metrics when asked, raw samples in sensor-raw mode.
  * Duplicated or stale actions (sequence numbers, timestamps on the TV clock) are dropped. While no app asked for sensor
  * events, moves work the menus and the games: LEFT / RIGHT = left / right, JUMP = OK (jump), DUCK..DUCK_END = down held.
+ * Pointer: on the My PC screens (no app asked for sensor events) the config says pointer: true and a phone in Motion data mode
+ * points at the TV instead of sending samples: { t: 'pm', x, y } moves the pointer (js/launcher/pointer.js), { t: 'pc' } centres
+ * it; its A button (OK) acts on what the pointer is on, its stick hides the pointer and moves the focus as usual.
  *   Controllers.start()  (every page, does nothing while off)   .on() .setOn(v) .code() .newCode() .pair() .forget()
  *   .players() -> { 1: name|null, 2: name|null }   .modes() -> { 1: mode|null, 2: mode|null }   .pairing() -> seconds left   .onChange(fn)
  *   .sensorSetup(cfg, listener(player, msg)) | .sensorSetup(null)   (game-host.js, for the running app)   .sensorStats() */
@@ -20,6 +23,7 @@ var Controllers = (function () {
 
     var KEY = 'arc_dev_ctrl', APP = 'controller', MAX_PHONES = 8, PAIR_MS = 300000, HELLO_MS = 4000;
     var ACTIONS = { left: 1, right: 1, up: 1, down: 1, ok: 1, run: 1, cancel: 1, menu: 1, pause: 1 };
+    var DIRS = { left: 1, right: 1, up: 1, down: 1 };
     var ALPHA = 'abcdefghjkmnpqrstuvwxyz23456789';
     var status = { s: 'off', err: '' };
     var sess = null, slots = { 1: null, 2: null }, pairUntil = 0, listeners = [], timer = 0, started = false;
@@ -47,6 +51,7 @@ var Controllers = (function () {
         if (slots[p] !== slot) return;
         slots[p] = null;
         Input.releaseRemote(p);
+        if (slot.cfg && slot.cfg.pointer) Pointer.hide();
         say(I18n.t('ctrlGone').replace('%s', slot.name).replace('%n', p));
         report();
     }
@@ -79,14 +84,27 @@ var Controllers = (function () {
                 report();
                 return;
             }
-            if (m.t === 'k') { if (typeof m.a === 'string' && ACTIONS.hasOwnProperty(m.a)) Input.remote(slot.p, m.a, m.d === 1); return; }
+            if (m.t === 'k') {
+                if (typeof m.a !== 'string' || !ACTIONS.hasOwnProperty(m.a)) return;
+                if (m.d === 1 && Pointer.visible()) {
+                    if (m.a === 'ok' && Pointer.press()) return;              // clicked something that is not a focusable item
+                    if (DIRS[m.a]) Pointer.hide();                            // arrows: back to the focus ring, like the remote
+                }
+                Input.remote(slot.p, m.a, m.d === 1);
+                return;
+            }
+            if (m.t === 'pm' || m.t === 'pc') {
+                var a = slot.mode === 'sensor-raw' && slot.cfg && slot.cfg.pointer ? SensorProto.aim(m) : null;
+                if (!a) slot.stats.invalid++; else if (a.t === 'pc') Pointer.center(); else Pointer.move(a.x, a.y);
+                return;
+            }
             if (slot.mode !== 'pad') sensorMessage(slot, m);
         });
         conn.onClose(function () { clearTimeout(t); if (slot) drop(slot.p, slot); });
     }
 
     /* ---------- sensor modes ---------- */
-    function currentCfg() { return appCfg || SensorProto.config({ moves: SensorProto.DEFAULT_MOVES, metrics: { enabled: false } }); }
+    function currentCfg() { return appCfg || SensorProto.config({ moves: SensorProto.DEFAULT_MOVES, metrics: { enabled: false }, pointer: Pointer.allowed() }); }
     function sendConfig(slot) {
         var c = JSON.parse(JSON.stringify(currentCfg()));
         c.session = slot.session; c.sequence = ++cfgSeq; c.timestamp = Date.now();
@@ -184,6 +202,7 @@ var Controllers = (function () {
         // the running app asks for sensor events (MyPC.sensors.setup); null when it closes. Returns the config phones get.
         sensorSetup: function (cfg, listener) {
             appCfg = cfg ? SensorProto.config(cfg, typeof MotionEngine !== 'undefined' ? MotionEngine.MOVES : null) : null;
+            if (appCfg) { appCfg.pointer = false; Pointer.hide(); }               // the app gets the samples, the pointer stops
             appListener = appCfg ? listener || null : null;
             for (var p = 1; p <= 2; p++) if (slots[p] && slots[p].mode !== 'pad') sendConfig(slots[p]);
             return appCfg;

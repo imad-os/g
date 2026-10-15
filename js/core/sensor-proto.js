@@ -9,6 +9,8 @@
  *   TV -> phone  { type: 'ack', sequence, duplicate?, stale? }                           for every action (latency, duplicates)
  *   phone -> TV  { type: 'metrics', gait, cadence, speed_kmh, pace_sec_per_km, distance_m, steps, timestamp, sequence }  only if asked, at metrics.hz
  *   phone -> TV  { type: 'raw', timestamp, sequence, hz, s: [[dt, ax, ay, az, gx, gy, gz, ra, rb, rg], ...] }   sensor-raw mode only
+ *   phone -> TV  { t: 'pm', x, y } | { t: 'pc' }      sensor-raw mode while config.pointer: the phone points at the TV (pointer
+ *                                                     moved by x, y hundredths of a degree; 'pc' = back to the centre)
  * Every message is checked with the functions below; anything else is dropped. */
 var SensorProto = (function () {
     'use strict';
@@ -80,6 +82,7 @@ var SensorProto = (function () {
         out.metrics = { enabled: !!(m && m.enabled !== false), hz: num(m && m.hz, 0.2, 5, 1) };
         var raw = c.raw && typeof c.raw === 'object' ? c.raw : null;
         out.raw = { hz: Math.round(num(raw && raw.hz, 5, 100, 30)) };
+        out.pointer = c.pointer === true;           // set by the TV only (no app asked for sensors): Motion data phones point
         return out;
     }
     function isEndOf(n, def, builtins) {
@@ -115,6 +118,13 @@ var SensorProto = (function () {
         }
         return { type: 'raw', timestamp: num(m.timestamp, 0, 1e15, 0), sequence: Math.floor(m.sequence), hz: Math.round(num(m.hz, 1, 100, 30)), s: m.s };
     }
+    // the pointer: how far the phone turned since its last message (hundredths of a degree, 90 degrees at most)
+    function aim(m) {
+        if (!m) return null;
+        if (m.t === 'pc') return { t: 'pc' };
+        if (m.t !== 'pm' || !isNum(m.x) || !isNum(m.y) || Math.abs(m.x) > 9000 || Math.abs(m.y) > 9000) return null;
+        return { t: 'pm', x: Math.round(m.x), y: Math.round(m.y) };
+    }
     function ack(m) { return m && m.type === 'ack' && isNum(m.sequence) ? { type: 'ack', sequence: m.sequence, duplicate: !!m.duplicate, stale: !!m.stale } : null; }
 
     // sequence numbers per stream: 'ok' | 'duplicate' (seen already) | 'stale' (older than the window or too old a timestamp)
@@ -135,7 +145,7 @@ var SensorProto = (function () {
     }
 
     var api = { VERSION: VERSION, MODES: MODES, POSITIONS: POSITIONS, READY_POSITIONS: READY_POSITIONS, GAITS: GAITS, DEFAULT_MOVES: DEFAULT_MOVES, SIGNALS: SIGNALS, STALE_MS: STALE_MS,
-                session: session, rule: rule, profile: profile, config: config, hello: hello, action: action, metrics: metrics, raw: raw, ack: ack, tracker: tracker };
+                session: session, rule: rule, profile: profile, config: config, hello: hello, action: action, metrics: metrics, raw: raw, aim: aim, ack: ack, tracker: tracker };
     return api;
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = SensorProto;

@@ -69,6 +69,9 @@
   **Owner decision: its Buttons mode reuses the existing virtual pad (`VirtualPad`, id `controller`), never a separately drawn pad.**
   Motion modes `sensor-actions` / `sensor-raw`: protocol `js/core/sensor-proto.js`, detection `js/core/motion.js` (moves are data rules,
   right hand only for now), games get them through `MyPC.sensors` (API 8) / `host.sensors`; full spec in `docs/phone-controller.md`.
+  **Pointer**: on the My PC screens (no app asked for sensors, config `pointer: true`) a Motion data phone is a magic-remote style pointer:
+  `js/core/aim.js` (gyro -> `{ t: 'pm', x, y }` deltas, any grip) on the phone, `js/launcher/pointer.js` on the TV (focuses what it is on;
+  A = OK). Phone UI = the same `VirtualPad` (id `pointer`) + a Center button.
   **Android app** `android-controller/` (Java WebView shell of the hosted Game controller, `?ctrl=1`): native sensors / QR / screen-off link
   through `window.MyPCNative` + `assets/bridge.js`; build with `android-controller/build.ps1` (JDK + SDK in `%USERPROFILE%\.tooling`), commit
   the rebuilt `My-PC-Controller.apk`; the signing key lives outside the repo (`.tooling\keys`), never commit it.

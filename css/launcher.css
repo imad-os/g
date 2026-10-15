@@ -587,6 +587,9 @@ svg { display: block; width: 100%; height: 100%; }
 .gc-dot.ok { background: #4d4; }
 .gc-badge { padding: calc(4px * var(--k, 1)) calc(12px * var(--k, 1)); border-radius: calc(999px * var(--k, 1)); background: #5b63ff; }
 .gc-leave, .gc-leave2 { font-size: calc(14px * var(--k, 1)); padding: calc(6px * var(--k, 1)) calc(12px * var(--k, 1)); min-height: 0; }
+/* the TV pointer of a phone in Motion data mode (js/launcher/pointer.js): one small layer, moved with a transform */
+.ptr { position: fixed; left: 0; top: 0; z-index: 2147483000; display: none; pointer-events: none; will-change: transform; }
+.ptr svg { display: block; }
 /* sensor modes: live and debug screens */
 .gc-sense { position: fixed; inset: 0; z-index: 50; background: #101226; color: #fff; display: flex; flex-direction: column; padding: calc(calc(6px * var(--k, 1)) + env(safe-area-inset-top)) calc(calc(10px * var(--k, 1)) + env(safe-area-inset-right)) calc(8px * var(--k, 1)) calc(calc(10px * var(--k, 1)) + env(safe-area-inset-left)); overflow: hidden; }
 .gc-stop { display: flex; gap: calc(8px * var(--k, 1)); align-items: center; font-weight: 700; font-size: calc(15px * var(--k, 1)); flex: none; }

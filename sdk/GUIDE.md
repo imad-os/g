@@ -467,7 +467,9 @@ the World records.
 Players can use a phone as a controller (My PC > **Game controller** on the phone). Besides **Buttons** (the virtual pad;
 your app just gets the usual actions) the phone has two motion modes: **Motion moves** (the phone, in the player's right
 hand, detects moves such as `LEFT` `RIGHT` `JUMP` `DUCK` `DUCK_END` and sends only the ones you ask for, plus running
-metrics if you want them) and **Motion data** (raw sensor samples at the rate you ask for).
+metrics if you want them) and **Motion data** (raw sensor samples at the rate you ask for). On the My PC screens a
+Motion data phone is a magic-remote style pointer for the TV; it starts sending your app samples as soon as you call
+`setup` with `raw`, and your app never sees the pointer.
 
 ```js
 MyPC.init({ onInit: function () {

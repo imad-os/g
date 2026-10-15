@@ -1,5 +1,5 @@
 {
-  "build": 44,
+  "build": 45,
   "version": "2.16.0",
   "shell": 1,
   "css": [
@@ -15,6 +15,7 @@
     "js/core/sensor-proto.js",
     "js/core/motion.js",
     "js/core/motion-train.js",
+    "js/core/aim.js",
     "js/core/hr-ble.js",
     "js/core/qr.js",
     "js/core/virtual-pad.js",
@@ -44,6 +45,7 @@
     "js/launcher/avatars.js",
     "js/launcher/profiles-ui.js",
     "js/launcher/multiplayer.js",
+    "js/launcher/pointer.js",
     "js/launcher/controllers.js",
     "js/launcher/touchpad.js",
     "js/launcher/welcome.js",

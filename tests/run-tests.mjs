@@ -2506,6 +2506,35 @@ async function main() {
         const raw = await tv.evaluate(() => __raw);
         const total = raw.reduce((a, r) => a + r[1], 0);
         check(raw.length > 0 && raw.every((r) => r[0] === 2 && r[1] <= 12 && r[2] === 30) && total >= 22 && total <= 34, 'sensor-raw: samples arrive in small batches at the asked rate (' + total + ' samples for 1 s at 30 Hz, ' + raw.length + ' messages)');
+        // the app goes away: on the My PC screens a Motion data phone is a pointer (like a TV magic remote)
+        await tv.evaluate(() => Controllers.sensorSetup(null));
+        await P2.waitForFunction(() => GamepadApp.pointing() && VirtualPad.active(), null, { timeout: 4000 });
+        check(await P2.evaluate(() => document.querySelector('.gc-sense').hidden && !document.querySelector('.gc-center').hidden && document.querySelectorAll('.gc-bar').length === 1),
+            'pointer: with no app asking, Motion data shows the same virtual pad (A, B, stick) and a Center button');
+        const turn = (ph, alpha, beta, ms) => ph.evaluate(([alpha, beta, ms]) => new Promise((done) => { const t0 = performance.now(); const id = setInterval(() => {
+            GamepadApp.feed({ acceleration: { x: 0, y: 0, z: 0 }, accelerationIncludingGravity: { x: 0, y: 0, z: 9.81 }, rotationRate: { alpha, beta, gamma: 0 } });
+            if (performance.now() - t0 > ms) { clearInterval(id); done(); } }, 10); }), [alpha, beta, ms]);
+        await tv.evaluate(() => { window.__pm = 0; window.__tvRaw = __raw.length; });
+        await turn(P2, 40, 0, 500);                               // held like a remote, turned left 20 degrees
+        await tv.waitForFunction(() => Pointer.visible() && Pointer.pos().x < innerWidth / 2 - 100, null, { timeout: 4000 });
+        const pt = await tv.evaluate(() => ({ p: Pointer.pos(), w: innerWidth, h: innerHeight, raw: __raw.length - __tvRaw, el: getComputedStyle(document.querySelector('.ptr')).transform }));
+        check(Math.abs(pt.p.y - pt.h / 2) < 3 && pt.raw === 0 && /matrix/.test(pt.el), 'pointer: turning the phone left moves the TV pointer left only, drawn with a transform, no raw samples sent (' + JSON.stringify(pt.p) + ')');
+        await P2.click('.gc-center');
+        await tv.waitForFunction(() => Math.abs(Pointer.pos().x - Math.round(innerWidth / 2)) < 2, null, { timeout: 4000 });
+        check(true, 'pointer: Center puts it back in the middle of the screen');
+        await turn(P2, 0, 30, 400);                               // tilt up: the pointer goes up over the desktop and focuses what it is on
+        await tv.waitForFunction(() => Pointer.pos().y < innerHeight / 2 - 50, null, { timeout: 4000 });
+        await tv.waitForTimeout(250);
+        check(await tv.evaluate(() => { const p = Pointer.pos(), e = document.elementFromPoint(p.x, p.y), f = e && e.closest('[data-focus]'); return !f || document.activeElement === f; }), 'pointer: the item under it gets the focus');
+        await P2.evaluate(() => GamepadApp.send({ t: 'k', a: 'left', d: 1 }));
+        await tv.waitForFunction(() => !Pointer.visible(), null, { timeout: 4000 });
+        await P2.evaluate(() => GamepadApp.send({ t: 'k', a: 'left', d: 0 }));
+        check(true, 'pointer: an arrow from the stick hides it (back to the focus ring)');
+        check(await tv.evaluate(() => { const s = Controllers.sensorStats()[2].stats; return s.invalid === 0; }), 'pointer messages are valid on the TV');
+        // a game asks for raw samples again: the phone goes back to the Motion data screen
+        await tv.evaluate(() => Controllers.sensorSetup({ moves: [], raw: { hz: 30 } }, () => {}));
+        await P2.waitForFunction(() => !GamepadApp.pointing() && !VirtualPad.active() && !document.querySelector('.gc-sense').hidden, null, { timeout: 4000 });
+        check(await tv.evaluate(() => !Pointer.visible()), 'pointer: an app asking for sensor data stops the pointer and gets the samples again');
         // pairing by QR code: the phone camera opens My PC with ?pair=<code>; the Game controller opens and connects by itself
         await P1.context().close();
         await tv.waitForFunction(() => Controllers.players()[1] === null, null, { timeout: 15000 });

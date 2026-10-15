@@ -177,6 +177,33 @@ const P = ctxP.SensorProto, M = ctxP.MotionEngine;
     check(tr.check(500, Date.now() - 10000, 0) === 'stale' && tr.check(501, Date.now() - 100, 0) === 'ok', 'an action older than 3 s (on the TV clock) is stale');
 }
 
+/* ---------------- 2b. Aim: the phone as a pointer (Motion data mode on the My PC screens) ---------------- */
+console.log('2b. Aim (pointer from the gyroscope, any grip)');
+load('js/core/aim.js', ctxP);
+{
+    const A = ctxP.Aim;
+    check(P.config({ pointer: true }).pointer === true && P.config({}).pointer === false, 'config.pointer is only on when the TV says so');
+    check(P.aim({ t: 'pm', x: 120.4, y: -30 }).x === 120 && P.aim({ t: 'pc' }).t === 'pc' && !P.aim({ t: 'pm', x: 'a', y: 0 }) && !P.aim({ t: 'pm', x: 20000, y: 0 }), 'pointer messages are validated (whole hundredths of a degree, 90 degrees at most)');
+    // run(g, w): 1 s at 100 Hz with gravity g (device axes) and rotation rate w = [alpha (z), beta (x), gamma (y)] deg/s
+    const run = (g, w, ms = 1000) => { const a = A.create(); let x = 0, y = 0; for (let t = 0; t <= ms; t += 10) { a.feed({ t, gx: g[0], gy: g[1], gz: g[2], ra: w[0], rb: w[1], rg: w[2] }); const d = a.take(1); if (d) { x += d[0]; y += d[1]; } } return [x / 100, y / 100]; };
+    const near = (v, want) => Math.abs(v - want) < 0.6;
+    // held like a remote: screen up, top edge to the TV (gravity +z)
+    let d = run([0, 0, 9.81], [20, 0, 0]);
+    check(near(d[0], -20) && near(d[1], 0), 'remote grip: turning left 20 degrees moves the pointer left only (' + d + ')');
+    d = run([0, 0, 9.81], [0, 10, 0]);
+    check(near(d[0], 0) && near(d[1], -10), 'remote grip: tilting the top up moves the pointer up (' + d + ')');
+    // held like a game, landscape, screen to the player, top edge to the left (gravity +x)
+    d = run([9.81, 0, 0], [0, -15, 0]);
+    check(near(d[0], 15) && near(d[1], 0), 'landscape grip: turning right moves the pointer right (' + d + ')');
+    d = run([9.81, 0, 0], [0, 0, 12]);
+    check(Math.abs(d[0]) < 0.6 && Math.abs(Math.abs(d[1]) - 12) < 0.6, 'landscape grip: tilting the phone moves the pointer up / down (' + d + ')');
+    d = run([0, 0, 9.81], [0.5, 0.3, 0.2]);
+    check(d[0] === 0 && d[1] === 0, 'a hand holding still (gyro noise) does not move the pointer');
+    check(run([0, 0, 9.81], [null, null, null])[0] === 0, 'no gyroscope: no movement');
+    const g2 = A.create(); g2.feed({ t: 0, gx: 0, gy: 0, gz: 9.81, ra: 0, rb: 0, rg: 0 }); g2.feed({ t: 100, gx: 0, gy: 0, gz: 9.81, ra: 10, rb: 0, rg: 0 });
+    check(g2.take(2)[0] === -200 && g2.take(2) === null, 'the sensitivity multiplies the movement and nothing is sent twice');
+}
+
 /* ---------------- 3. MotionEngine ---------------- */
 // 60 Hz: the browser's devicemotion; 100 Hz: the Android app's native sensors (android-controller/)
 for (const HZ of [60, 100]) {

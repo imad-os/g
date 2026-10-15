@@ -9,7 +9,10 @@
  *                   defines) found by js/core/motion.js; only the moves the TV's config asks for are sent, plus metrics when asked.
  *                   Live screen (gait, pace, speed, cadence, steps, distance, last move, link and sensor state, start / stop,
  *                   recalibrate, settings) and Debug screen (readings, steps, classifier states, events, diagnostics, record / replay)
- *   sensor-raw      the sensor samples themselves, batched at the rate the game asks for; the game does its own detection
+ *   sensor-raw      the sensor samples themselves, batched at the rate the game asks for; the game does its own detection.
+ *                   On the My PC screens (no game asked, config.pointer) it is a pointer instead, like a TV "magic remote":
+ *                   the phone turns, the TV pointer moves (js/core/aim.js -> { t: 'pm', x, y }); the virtual pad shows A (OK
+ *                   on what the pointer is on), B (back) and the stick; Center puts the pointer back in the middle ({ t: 'pc' })
  * Protocol: js/core/sensor-proto.js, docs/phone-controller.md. Separate from the touch pad that the shell draws over games. */
 (function () {
     'use strict';
@@ -30,6 +33,9 @@
     // Train tab (js/core/motion-train.js): each move done TRAIN_REPS times; this player's limits are kept on the phone
     var TRAIN_KEY = 'arc_dev_ctrltrain', TRAIN_MOVES = ['LEFT', 'RIGHT', 'JUMP', 'DUCK'], TRAIN_REPS = 5;
     var trained = null, trainer = null, trainBuf = [];
+    // pointer (sensor-raw on the My PC screens): the same virtual pad, A = OK, B = back
+    var POINTER = { buttons: [{ label: 'A', key: 13, action: 'ok' }, { label: 'B', key: 8, action: 'cancel' }] };
+    var aim = null, aimLast = 0, aimGain = 1, padId = '';
 
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
     function t(k) { return I18n.t(k); }
@@ -48,13 +54,20 @@
     }
     function pick(p) { player = p; ui.p1.className = 'btn' + (p === 1 ? ' btn-primary' : ''); ui.p2.className = 'btn' + (p === 2 ? ' btn-primary' : ''); if (ui.badge) ui.badge.textContent = 'P' + p; if (ui.sBadge) ui.sBadge.textContent = 'P' + p; }
     function pickMode(m) { mode = MODES.indexOf(m) >= 0 ? m : 'pad'; for (var i = 0; i < MODES.length; i++) ui['m' + i].className = 'btn' + (MODES[i] === mode ? ' btn-primary' : ''); }
+    function pointing() { return mode === 'sensor-raw' && !!(cfg && cfg.pointer); }
     function show(on) {
         inPad = on; ui.join.hidden = on;
-        ui.bar.hidden = ui.padBg.hidden = !(on && mode === 'pad');
-        ui.sense.hidden = !(on && mode !== 'pad');
-        if (on && mode === 'pad') VirtualPad.init({ storage: PAD_STORE, id: 'controller', force: true, scale: { stick: 1.35, btn: 1.25 }, buttons: PAD.buttons, catalog: PAD.catalog, onAction: padAction });
-        else if (VirtualPad.active()) VirtualPad.hide();
-        if (on && mode !== 'pad') { ui.modeName.textContent = t(mode === 'sensor-raw' ? 'gcModeRaw' : 'gcModeActions'); setTab('live'); }
+        var padUi = on && (mode === 'pad' || pointing()), id = mode === 'pad' ? 'controller' : 'pointer';
+        ui.bar.hidden = ui.padBg.hidden = !padUi;
+        ui.center.hidden = !(on && pointing());
+        ui.sense.hidden = !(on && !padUi);
+        if (VirtualPad.active() && (!padUi || padId !== id)) VirtualPad.hide();
+        if (padUi) {
+            padId = id;
+            if (id === 'controller') VirtualPad.init({ storage: PAD_STORE, id: id, force: true, scale: { stick: 1.35, btn: 1.25 }, buttons: PAD.buttons, catalog: PAD.catalog, onAction: padAction });
+            else VirtualPad.init({ storage: PAD_STORE, id: id, force: true, pause: false, scale: { stick: 1.2, btn: 1.4 }, buttons: POINTER.buttons, catalog: PAD.catalog, onAction: padAction });
+        }
+        if (on && !padUi) { ui.modeName.textContent = t(mode === 'sensor-raw' ? 'gcModeRaw' : 'gcModeActions'); setTab('live'); }
         if (!on && ui.go) Focus.focus(ui.go);
     }
 
@@ -101,7 +114,10 @@
                 if (m.why === 'busy' && fromQr && !triedOther) { triedOther = true; stop(); pick(player === 1 ? 2 : 1); start(); return; }   // scanned: take the free player
                 stop(); ui.err.textContent = m.why === 'busy' ? t('gcBusy') : t('gcLocked');
             }
-            else if (m.type === 'config') { var v = SensorProto.config(m, MotionEngine.MOVES); if (v) { cfg = v; applyCfg(); note('config', v.moves.join(' ') || '—'); } }
+            else if (m.type === 'config') {
+                var v = SensorProto.config(m, MotionEngine.MOVES), was = pointing();
+                if (v) { cfg = v; applyCfg(); note('config', (v.pointer ? 'pointer ' : '') + (v.moves.join(' ') || '—')); if (run && inPad && pointing() !== was) { if (aim) aim.reset(); show(true); } }
+            }
             else if (m.type === 'ack') onAck(SensorProto.ack(m));
         });
         c.onClose(function () {
@@ -151,7 +167,7 @@
         if (!eng) return;
         var p = prefs(), c = cfg || SensorProto.config({ moves: SensorProto.DEFAULT_MOVES }, MotionEngine.MOVES);
         eng.configure({ moves: c.moves, define: defines(c), profile: c.profile || p.profile, sensitivity: p.sensitivity, strideScale: p.stride });
-        clearInterval(metricsTimer); metricsTimer = 0;
+        clearInterval(metricsTimer); metricsTimer = 0; aimGain = p.sensitivity;
         if (mode === 'sensor-actions' && c.metrics.enabled) metricsTimer = setInterval(sendMetrics, Math.round(1000 / c.metrics.hz));
         if (ui.profileFrom) ui.profileFrom.textContent = c.profile ? t('gcProfileGame') : '';
     }
@@ -190,7 +206,7 @@
         lastSample = now; lastRaw = s;
         if (trainer) { trainBuf.push(s); if (trainBuf.length > 400) trainBuf.shift(); }      // the move trainer's last seconds
         if (recording && rec.length < REC_MAX) rec.push(s); else if (recording) stopRecord();
-        if (mode === 'sensor-raw') return rawPush(s, now);
+        if (mode === 'sensor-raw') return pointing() ? aimPush(s, now) : rawPush(s, now);
         eng.feed(s);
         if (tab === 'debug') { var sg = eng.debug().signals; plot.push([sg.vertical || 0, sg.lateral || 0]); if (plot.length > 240) plot.shift(); }
     }
@@ -232,6 +248,17 @@
         if (!rawBuf.length) return;
         var b = rawBuf; rawBuf = [];
         if (send({ type: 'raw', timestamp: Date.now(), sequence: ++seq, hz: cfg ? cfg.raw.hz : 30, s: b })) rawSent += b.length;
+    }
+
+    // pointer: how far the phone turned, at most 40 small messages a second and only while it moves
+    function aimPush(s, now) {
+        if (s.ra === null) { if (linked && ui.state) ui.state.textContent = t('gcNoGyro'); return; }
+        if (!aim) aim = Aim.create();
+        aim.feed(s);
+        if (now - aimLast < 25) return;
+        aimLast = now;
+        var d = aim.take(aimGain);
+        if (d) send({ t: 'pm', x: d[0], y: d[1] });
     }
 
     /* ---------- pairing by QR code: the TV shows <My PC address>?pair=<code> (Settings > Devices > Phone controller) ---------- */
@@ -288,7 +315,7 @@
     function closeModes() {
         if (ui.modes && ui.modes.parentNode) ui.modes.parentNode.removeChild(ui.modes);
         ui.modes = null;
-        if (inPad && mode === 'pad' && !VirtualPad.active()) show(true);
+        if (inPad && (mode === 'pad' || pointing()) && !VirtualPad.active()) show(true);
     }
     function switchMode(m) {
         if (m === mode) return;
@@ -589,13 +616,16 @@
         ui.join.appendChild(ui.err);
         root.appendChild(ui.join);
 
-        // pad mode: the virtual pad covers the screen (over a plain background); this small bar sits above it (top right)
+        // pad mode: the virtual pad covers the screen (over a plain background); this small bar sits above it (bottom centre;
+        // its buttons stay right of the middle: the left half is the pad's floating stick zone)
         ui.padBg = el('div', 'gc-padbg'); ui.padBg.hidden = true; root.appendChild(ui.padBg);
         ui.bar = el('div', 'gc-bar');
         ui.dot = el('span', 'gc-dot'); ui.badge = el('span', 'gc-badge', 'P1'); ui.state = el('span', 'gc-state');
         ui.bar.appendChild(ui.dot); ui.bar.appendChild(ui.badge); ui.bar.appendChild(ui.state);
         ui.bar.appendChild(btn('gc-leave gc-modebtn', t('gcMode'), openModes));
         ui.bar.appendChild(btn('gc-leave', t('gcLeave'), function () { stop(); }));
+        ui.center = btn('gc-leave gc-center', t('gcCenter'), function () { if (aim) aim.reset(); send({ t: 'pc' }); });
+        ui.bar.appendChild(ui.center);
         ui.bar.hidden = true;
         root.appendChild(ui.bar);
         ui.sense = buildSense();
@@ -610,7 +640,7 @@
             saved = Store.rawGet(KEY) || {};
             cid = typeof saved.cid === 'string' && /^[a-z0-9]{6,24}$/.test(saved.cid) ? saved.cid : '';
             if (!cid) for (var i = 0; i < 12; i++) cid += 'abcdefghijklmnopqrstuvwxyz0123456789'.charAt(Math.floor(Math.random() * 36));
-            want = {}; sent = {}; ui = {}; inPad = false; log = []; plot = []; seq = 0; acks = {}; rtt = 0; lastAction = null; rawSent = 0; rawLast = 0; cfg = null; perm = 'unknown';
+            want = {}; sent = {}; ui = {}; inPad = false; aim = null; aimLast = 0; padId = ''; log = []; plot = []; seq = 0; acks = {}; rtt = 0; lastAction = null; rawSent = 0; rawLast = 0; cfg = null; perm = 'unknown';
             diag = { acked: 0, tvDuplicate: 0, tvStale: 0, unacked: 0 };
             build(body);
             readable(); window.addEventListener('resize', readable); setTimeout(readable, 350);
@@ -621,7 +651,7 @@
             document.addEventListener('visibilitychange', onVis);
             fromQr = false; triedOther = false;
             if (arg && typeof arg.pair === 'string' && codeFrom(arg.pair)) setTimeout(function () { if (root) pairWith(codeFrom(arg.pair)); }, 0);
-            window.GamepadApp = { scanCode: function (text) { var c = codeFrom(text); if (c) pairWith(c); return c; }, linked: function () { return linked; }, send: function (m) { return send(m); }, running: function () { return run; }, mode: function () { return mode; },
+            window.GamepadApp = { scanCode: function (text) { var c = codeFrom(text); if (c) pairWith(c); return c; }, linked: function () { return linked; }, send: function (m) { return send(m); }, running: function () { return run; }, mode: function () { return mode; }, pointing: pointing,
                                   engine: function () { return eng; }, feed: function (s) { onMotion(s); }, config: function () { return cfg; }, log: function () { return log.slice(); } };
             return ui.code;
         },
