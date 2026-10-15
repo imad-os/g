@@ -142,7 +142,7 @@ After `onPause` the game **MUST NOT** move or make sound until `onResume`.
 itself. Your app only sees `info.profile` and keeps progress with `MyPC.save` / `MyPC.load`, which are already per
 profile and backed up. **Never** build your own login, accounts, cloud saves, name entry for scores, Firebase or backend.
 
-Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors) and hide the feature
+Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad) and hide the feature
 when it is missing.
 
 ### App config: `MyPC.app_config`
@@ -304,6 +304,60 @@ Rules for app authors:
 | `MyPC.exit()` | close the app and go back to the desktop |
 
 ## 5. Input
+
+### Game controllers come first (MUST)
+
+Design every game for a **game controller first** (Xbox, PlayStation, Switch Pro, 8BitDo, any Bluetooth or USB pad), then
+make sure it still works with the other inputs. Players should never have to fight the button mapping:
+
+- **Read every button with `MyPC.gamepad`** (API level 9), not only the few mapped actions below. All buttons, analog
+  triggers and both sticks reach your app, with no limit on the number of buttons. Give every button a sensible job
+  (for example A jump, B attack / back, X and Y abilities, LB / RB switch weapon or page, LT / RT analog brake and speed,
+  the right stick the camera or aim, Start your own menu), and show the controls on screen with the button names.
+- **Support up to 4 controllers** at once: `dev` (`'pad0'`..`'pad3'`) tells them apart, so local multiplayer is one
+  hero per `dev`.
+- The left stick and the D-pad also arrive as `left right up down`, A as `confirm` + `jump`: menus can stay on `onInput`.
+- Reserved for My PC: holding **Start + Select** together for 1 s (its pause menu) and the **Home / Guide** button.
+  You still receive their button events, but don't give them an essential job of their own.
+- Never call `navigator.getGamepads()` or listen to `gamepadconnected` yourself: on the TV your page has no focus and gets
+  nothing. The SDK does it for you (also standalone, where it reads the pads itself, so you can test with a pad on a PC).
+- Physical controllers only: the TV remote, the keyboard, the touch pad and the phone controller send actions
+  (`onInput`), so the game must also be playable with `left right up down` + `confirm` (see the rules below).
+
+```js
+// every change of every button: index, pressed, value (0..1, analog triggers), dev 'pad0'..'pad3', name
+MyPC.gamepad.on('button', function (i, pressed, value, dev, name) {
+    if (name === 'X' && pressed) castSpell(dev);
+});
+// sticks moved: axes[0], axes[1] = left stick x / y, axes[2], axes[3] = right stick x / y (-1..1)
+MyPC.gamepad.on('axes', function (axes, dev) {});       // `axes` is the SDK's own array: read it now, don't keep it
+MyPC.gamepad.on('pads', function (list) {});            // [{ dev: 'pad0', name: 'Xbox Wireless Controller', standard: true, buttons: 17, axes: 4 }]
+
+// or read the state in your fixed-step update (no allocation):
+MyPC.gamepad.pressed(2, 'pad0');   // X held on the first pad (without dev: on any pad)
+MyPC.gamepad.value(7);             // RT, 0..1 (the highest value of all pads)
+MyPC.gamepad.axis(2, 'pad0');      // right stick x; apply your own dead zone (about 0.15)
+MyPC.gamepad.name(3);              // 'Y'
+MyPC.gamepad.pads();               // the connected controllers
+```
+
+Button indices follow the W3C **standard** layout (by position, whatever is printed on the pad):
+
+| Index | Name | Xbox | PlayStation | Switch |
+|---|---|---|---|---|
+| 0 / 1 / 2 / 3 | `A` `B` `X` `Y` | A B X Y | Cross Circle Square Triangle | B A Y X |
+| 4 / 5 | `LB` `RB` | LB RB | L1 R1 | L R |
+| 6 / 7 | `LT` `RT` (analog) | LT RT | L2 R2 | ZL ZR |
+| 8 / 9 | `Select` `Start` | View Menu | Share/Create Options | − + |
+| 10 / 11 | `L3` `R3` | stick clicks | L3 R3 | stick clicks |
+| 12 / 13 / 14 / 15 | `Up` `Down` `Left` `Right` | D-pad | D-pad | D-pad |
+| 16 | `Home` (My PC's) | Xbox | PS | Home |
+| 17 and up | `Button17`... | extra buttons (Share, paddles, touchpad click) | | Capture |
+
+A pad that is not in the standard layout (`standard: false`) names every button `Button<i>`: let players see which
+button does what, and keep the defaults on the standard indices.
+
+### Actions (`onInput`)
 
 Actions: `left right up down` (directions), `jump` and `confirm` (OK / Enter / Space / gamepad A),
 `run` (gamepad B/X, Shift, X: also "fire"), `cancel`, `pause`.
@@ -469,7 +523,8 @@ the World records.
 - [ ] `MyPC.init()` called once; `MyPC.ready()` called once after loading
 - [ ] `onPause` stops the loop and sound; `onResume` restarts them; `onDestroy` stops everything
       and closes the `AudioContext`
-- [ ] input only through the SDK (`onInput` / `MyPC.isDown`), playable with arrows + OK only
+- [ ] **game controller first**: every button, trigger and both sticks used through `MyPC.gamepad`, controls shown on screen, up to 4 pads by `dev`
+- [ ] input only through the SDK (`onInput` / `MyPC.isDown` / `MyPC.gamepad`), still playable with arrows + OK only
 - [ ] no `keydown` listeners of your own (Esc reaches you as `cancel`; the remote's Back is never yours)
 - [ ] fills the window at any 16:9 size, readable text, obvious focus
 - [ ] runs on Chromium 108 (Tizen 8, 2024 TVs): no CSS nesting, nothing newer than Chrome 108; no allocation in the game loop

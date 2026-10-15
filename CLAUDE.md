@@ -40,6 +40,9 @@
   password" (Settings > Accounts). `js/core/accounts.js` = Firebase Auth REST (`<username>@players.mypc.app`), cloud copy Firestore
   `players/<uid>` (only that account), secrets in `arc_dev_acct` (never in the TV backup), newest copy wins (pulled at start, pushed
   after changes). Old local profiles keep working; Settings > Accounts > "Create an account for this profile" turns one into an account.
+- **Game controllers first** (owner decision): apps must use every controller button. `Input.onPadRaw` reports every button / axis
+  change; `game-host.js` forwards it to installed apps (`gp` messages, only while running) as `MyPC.gamepad` (API 9; standalone the
+  SDK polls the pads itself and maps them to actions like `Input`).
 - `js/core/`: storage (per-profile keys `arc_<profile>_*`, TV-wide `arc_dev_*`), i18n (en, fr,
   es, ar + RTL), input, focus, perf, scores, `cloud.js` (Firestore REST: store catalog, installed list
   `arc_dev_installed`, counters), `backup.js` (Device id, backup/restore), `world.js` (world records).

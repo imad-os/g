@@ -24,7 +24,7 @@ If anything here disagrees with the guide, the guide wins.
 
 ## Essentials (the guide has the details)
 
-- `mypc-app.json`, the lifecycle (start / pause / resume / quit), TV remote input only (arrows, OK, Back).
+- `mypc-app.json`, the lifecycle (start / pause / resume / quit), **game controller first** (every button through `MyPC.gamepad`), still playable with the TV remote (arrows, OK).
 - 1920x1080 TV screen; must run smoothly on a 1 GB RAM TV (no allocation per frame, free everything on quit).
 - Strings in English, French, Spanish and Arabic (right-to-left).
 - Own menu in the game: `ownMenu: true` so the gamepad Start button opens it.

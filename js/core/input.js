@@ -222,6 +222,7 @@ var Input = (function () {
             if (!p || !p.connected) continue;
             var dev = 'pad' + p.index, now = {}, any = false;
             var prev = padNow[dev] || (padNow[dev] = {}), rep = padRepeatAt[dev] || (padRepeatAt[dev] = {});
+            if (rawFn) rawPad(dev, p);
             for (j = 0; j < PAD_BUTTONS.length; j++) {
                 b = p.buttons[PAD_BUTTONS[j][0]];
                 if (b && (b.pressed || b.value > 0.5)) {
@@ -264,6 +265,25 @@ var Input = (function () {
         }
     }
 
+    // Every button and axis of every pad, unmapped, for installed apps (MyPC.gamepad): only changes are reported.
+    // rawFn('b', dev, index, pressed, value) | rawFn('a', dev, axes) | rawFn('lost', dev). No allocation once a pad is known.
+    var rawFn = null, rawPrev = {};         // 'padN' -> { v: Float32Array (button values), p: Uint8Array (pressed), a: Float32Array (axes) }
+    function rawPad(dev, p) {
+        var nb = p.buttons.length, na = p.axes.length, r = rawPrev[dev], j, b, v, pr, moved = false;
+        if (!r || r.v.length < nb || r.a.length < na) r = rawPrev[dev] = { v: new Float32Array(Math.max(nb, 17)), p: new Uint8Array(Math.max(nb, 17)), a: new Float32Array(Math.max(na, 4)) };
+        for (j = 0; j < nb; j++) {
+            b = p.buttons[j];
+            if (!b) continue;
+            v = b.value || (b.pressed ? 1 : 0); pr = b.pressed || v > 0.5 ? 1 : 0;
+            if (pr !== r.p[j] || Math.abs(v - r.v[j]) >= 0.05 || (v === 0 && r.v[j] !== 0)) { r.p[j] = pr; r.v[j] = v; rawFn('b', dev, j, !!pr, v); }
+        }
+        for (j = 0; j < na; j++) {
+            v = p.axes[j] || 0;
+            if (Math.abs(v - r.a[j]) >= 0.02 || (v === 0 && r.a[j] !== 0)) { r.a[j] = v; moved = true; }
+        }
+        if (moved) rawFn('a', dev, p.axes);
+    }
+
     function selfLoop() {
         rafId = 0;
         if (externalPoll || !pads) return;
@@ -287,6 +307,7 @@ var Input = (function () {
             if (live[d]) continue;
             releasePad(d, false);
             delete padNow[d]; delete padSup[d]; delete startBtn[d];
+            if (rawPrev[d]) { delete rawPrev[d]; if (rawFn) rawFn('lost', d); }
             if (+d.slice(3) === activePad || (evt && evt.gamepad && 'pad' + evt.gamepad.index === d)) activePad = -1;
             emit('padLost', true, false, d);
         }
@@ -385,6 +406,7 @@ var Input = (function () {
         device: function () { return device; },
         padCount: function () { return pads; },
         pads: padList,
+        onPadRaw: function (fn) { rawFn = fn || null; rawPrev = {}; },      // every button / axis change (installed apps' MyPC.gamepad)
         seen: function () { return { remote: !!window.tizen, keyboard: seen.keyboard, mouse: seen.mouse }; },
         onDevice: function (fn) { deviceListeners.push(fn); },
         onDevices: function (fn) { padListeners.push(fn); },        // a controller came or went, or a keyboard / mouse was used

@@ -938,6 +938,15 @@ async function main() {
         // the list always answers with config speed 1 (what the TV has saved); the single-app request, made right
         // before an app opens, answers with the live value: that tells "read again before opening" from "from the list"
         // installed on this TV from the App Store (the store itself is tested in section 26)
+        // a game controller on the TV (top page only): MyPC.gamepad must see every button, not only the mapped actions
+        await page.addInitScript(() => {
+            if (window.top !== window) return;
+            const b = []; for (let k = 0; k < 18; k++) b.push({ pressed: false, value: 0 });
+            window.__pads = [];
+            navigator.getGamepads = () => window.__pads;
+            window.__plug = () => { window.__pads = [{ index: 0, id: 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)', connected: true, mapping: 'standard', buttons: b, axes: [0, 0, 0, 0] }]; window.dispatchEvent(new Event('gamepadconnected')); };
+            window.__gp = (i, v) => { b[i].value = v; b[i].pressed = v > 0.5; };
+        });
         await page.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'star-catcher', at: 1 }, { id: 'hidden-one', at: 1 }])); });
         await page.context().route('https://firestore.googleapis.com/**', (r) => {
             if (!firestoreUp) return r.abort('internetdisconnected');
@@ -979,6 +988,28 @@ async function main() {
         await page.evaluate(() => { Controllers.inject(2, { type: 'action', action: 'JUMP', timestamp: Date.now(), sequence: 1 }); Controllers.inject(1, { type: 'metrics', gait: 'RUN', cadence: 160, sequence: 2 }); });
         await frame.waitForFunction(() => __sv.length && __sm.length, null, { timeout: 3000 });
         check(await frame.evaluate(() => __sv[0] === 'JUMP/2' && __sm[0] === 'RUN'), 'moves and metrics from the phones reach the app with the player number');
+        // MyPC.gamepad: every button (LB, X, Y, an analog RT, a button past the standard 17) and the right stick, unmapped
+        await frame.evaluate(() => { window.__gb = []; window.__gpads = null; MyPC.gamepad.on('button', (i, p, v, dev, name) => __gb.push(name + ':' + (p ? 1 : 0) + ':' + v + ':' + dev)); MyPC.gamepad.on('pads', (l) => { __gpads = l; }); });
+        await page.evaluate(() => window.__plug());
+        await frame.waitForFunction(() => __gpads && __gpads.length === 1, null, { timeout: 4000 }).catch(() => {});
+        check(await frame.evaluate(() => __gpads && __gpads[0].dev === 'pad0' && __gpads[0].name === 'Xbox Wireless Controller' && __gpads[0].standard && __gpads[0].buttons === 18 && MyPC.apiLevel >= 9),
+            'MyPC.gamepad lists the connected controller (name, standard mapping, its 18 buttons)');
+        for (const [i, v] of [[4, 1], [2, 1], [3, 1], [7, 0.6], [17, 1]]) { await page.evaluate(([x, y]) => window.__gp(x, y), [i, v]); await page.waitForTimeout(60); }
+        await page.evaluate(() => { window.__pads[0].axes[2] = 0.8; });
+        await frame.waitForFunction(() => __gb.length >= 5 && MyPC.gamepad.axis(2) > 0.7, null, { timeout: 3000 }).catch(() => {});
+        check(await frame.evaluate(() => ['LB:1:1:pad0', 'X:1:1:pad0', 'Y:1:1:pad0', 'RT:1:0.6:pad0', 'Button17:1:1:pad0'].every((e) => __gb.indexOf(e) >= 0) &&
+            MyPC.gamepad.pressed(4) && MyPC.gamepad.pressed(3, 'pad0') && MyPC.gamepad.value(7) > 0.59 && MyPC.gamepad.axis(2, 'pad0') > 0.7),
+            'every controller button reaches the app with its name and analog value (LB, X, Y, RT 0.6, a 18th button), and the right stick (' + await frame.evaluate(() => __gb.join(' ')) + ')');
+        await tvBack(page);
+        await page.waitForTimeout(150);
+        await frame.evaluate(() => { __gb.length = 0; });
+        await page.evaluate(() => window.__gp(5, 1));
+        await page.waitForTimeout(200);
+        check(await frame.evaluate(() => !MyPC.gamepad.pressed(4) && !MyPC.gamepad.pressed(7) && __gb.length === 0), 'under My PC\'s pause menu the app gets no button and held buttons are let go');
+        await page.evaluate(() => { for (const i of [2, 3, 4, 5, 7, 17]) window.__gp(i, 0); window.__pads[0].axes[2] = 0; });
+        await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[0].click(); });
+        await page.waitForFunction(() => window.GameHost.state() === 'running');
+        await page.waitForTimeout(150);
         check(await frame.evaluate(() => MyPC.bluetooth.capabilities().then(() => 'yes', (e) => e.message)) === 'Bluetooth is not allowed for this app.', 'MyPC.bluetooth is refused to an app that is not allowed to use it');
         await tvBack(page);
         const items = await page.evaluate(() => [...document.querySelectorAll('#pause-items button')].map((b) => b.textContent));

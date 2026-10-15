@@ -146,6 +146,20 @@ var GameHost = (function () {
         function bleAllowed() { return id === 'hr-monitor' || !!(game.remote.config && game.remote.config.heartRate === true); }
         // heart-rate sensors over Bluetooth LE (js/core/hr-ble.js), only for apps allowed to use them (bleAllowed)
         var ble = HrBle.create(function (kind, m) { send('ble-event', m); });
+        // MyPC.gamepad: every button and axis of every controller, unmapped (only while the app runs, not under My PC's menus)
+        var padsSent = '';
+        function rawPad(kind, dev, i, pressed, v) {
+            if (kind === 'lost') { send('gp', { e: 'lost', d: dev }); return; }
+            if (state !== 'running') return;
+            if (kind === 'b') send('gp', { e: 'b', d: dev, i: i, p: pressed, v: Math.round(v * 1000) / 1000 });
+            else send('gp', { e: 'a', d: dev, a: Array.prototype.slice.call(i) });
+        }
+        function padsChanged() {
+            var list = Input.pads(), out = [], k;
+            for (k = 0; k < list.length; k++) out.push({ d: 'pad' + list[k].index, name: list[k].name, standard: list[k].standard, buttons: list[k].buttons, axes: list[k].axes });
+            var j = JSON.stringify(out);
+            if (j !== padsSent) { padsSent = j; send('gp', { e: 'pads', list: out }); }
+        }
 
         function onMsg(e) {
             if (!iframe || e.source !== iframe.contentWindow) return;     // only our app's frame
@@ -165,6 +179,8 @@ var GameHost = (function () {
                         config: game.remote.config || {},
                         mp: typeof Multiplayer !== 'undefined' && typeof Rooms !== 'undefined' && NetLink.supported() ? 1 : 0   // MyPC.multiplayer is supported
                     });
+                    padsSent = ''; padsChanged();
+                    Input.onPadRaw(rawPad); Input.offDevices(padsChanged); Input.onDevices(padsChanged);
                     break;
                 case 'ble':
                     // MyPC.bluetooth: the HR Monitor app, or an app the App Store Manager allowed ("heartRate": true in its config)
@@ -226,7 +242,7 @@ var GameHost = (function () {
             start: function () { send('start'); },
             pause: function () { send('pause'); },
             resume: function () { send('resume'); },
-            destroy: function () { ble.destroy(); if (mp) { mp.destroy(); mp = null; } send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
+            destroy: function () { Input.onPadRaw(null); Input.offDevices(padsChanged); ble.destroy(); if (mp) { mp.destroy(); mp = null; } send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
             menuItems: function () { return items; },
             onMenu: function (mid) { send('menu', { id: String(mid).slice(4) }); },
             onAction: function (a, pressed, repeat, dev) { send('input', { action: a, pressed: pressed, repeat: repeat, dev: dev }); }

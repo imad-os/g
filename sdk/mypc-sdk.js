@@ -20,6 +20,7 @@
  * Esc / P = pause, so the app can be developed and tested anywhere.
  *
  * Input actions: left right up down jump run confirm cancel pause menu
+ *   Every controller button, trigger and stick: MyPC.gamepad (API 9). Game controllers come first: use all of them.
  *   'menu' = gamepad Start or Select pressed alone; only sent to apps that init with { ownMenu: true }.
  *   Only the TV remote's Back, or holding Start + Select together 1 s, opens My PC's menu; Esc / Backspace are 'cancel'.
  * Written in ES5 so it loads anywhere; My PC itself supports Samsung TVs from 2024 (Tizen 8+).
@@ -76,11 +77,11 @@ var MyPC = (function () {
                 call('onInit', info);
                 break;
             case 'start': if (!started) { started = true; call('onStart'); } break;
-            case 'pause': releaseAll(); call('onPause'); break;
+            case 'pause': releaseAll(); gamepad._release(); call('onPause'); break;
             case 'resume': call('onResume'); break;
             case 'destroy':
                 if (destroyed) return;
-                destroyed = true; releaseAll();
+                destroyed = true; releaseAll(); gamepad._stop();
                 call('onDestroy');
                 break;
             case 'input': setInput(d.action, !!d.pressed, d.repeat, d.dev); break;
@@ -90,6 +91,7 @@ var MyPC = (function () {
             case 'pad': pad._message(d); break;
             case 'ble-event': bluetooth._message(d); break;
             case 'sensors': sensors._message(d); break;
+            case 'gp': gamepad._message(d); break;
         }
     }
 
@@ -114,7 +116,7 @@ var MyPC = (function () {
     function togglePause() {
         if (!started) return;
         standalonePaused = !standalonePaused;
-        if (standalonePaused) { held = {}; releaseAll(); call('onPause'); } else call('onResume');
+        if (standalonePaused) { held = {}; releaseAll(); gamepad._release(); call('onPause'); } else call('onResume');
     }
 
     function goStandalone() {
@@ -129,6 +131,7 @@ var MyPC = (function () {
         window.addEventListener('blur', function () { held = {}; releaseAll(); });
         multiplayer._enable('local');
         call('onInit', info);
+        gamepad._standalone();
         if (handlers.pad) pad.init(plainObject(handlers.pad) ? handlers.pad : {});       // MyPC.init({ pad: true }): the pad on a phone, standalone
     }
 
@@ -1061,13 +1064,125 @@ var MyPC = (function () {
         };
     })();
 
+    /* ---------------- MyPC.gamepad: every button and axis of every controller (API level 9) ----------------
+     * Game controllers come first in My PC: read ALL their buttons here, not only the mapped actions.
+     *   MyPC.gamepad.on('button', function (index, pressed, value, dev, name) {})   // every change of every button (triggers: value 0..1)
+     *   MyPC.gamepad.on('axes', function (axes, dev) {})                             // sticks moved (axes: the SDK's own array, read it now, don't keep it)
+     *   MyPC.gamepad.on('pads', function (list) {})                                  // [{ dev: 'pad0', name, standard, buttons, axes }] connected / gone
+     *   MyPC.gamepad.pressed(i, dev?)  value(i, dev?)  axis(i, dev?)  pads()  name(i, dev?)
+     * dev is 'pad0'..'pad3' (the same as onInput's dev); without it: any pad (pressed), the highest value, the last pad used (axis).
+     * Inside My PC the shell reads the pads and sends only changes, and nothing while its own menus are open. Standalone the SDK
+     * reads navigator.getGamepads() itself (and maps the standard buttons to actions too, like My PC does). */
+    var gamepad = (function () {
+        var NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'Select', 'Start', 'L3', 'R3', 'Up', 'Down', 'Left', 'Right', 'Home'];
+        var st = {}, list = [], last = '', listeners = { button: [], axes: [], pads: [] }, raf = 0, startAt = {};
+        function pad(dev) {
+            return st[dev] || (st[dev] = { v: new Float32Array(32), p: new Uint8Array(32), a: new Float32Array(8), standard: true });
+        }
+        function emit(name, a, b, c, d, e) {
+            var l = listeners[name];
+            for (var i = 0; i < l.length; i++) { try { l[i](a, b, c, d, e); } catch (x) { try { console.error('[MyPC gamepad] ' + x); } catch (y) {} } }
+        }
+        function nameOf(i, dev) { var s = st[dev || last]; return (!s || s.standard) && NAMES[i] ? NAMES[i] : 'Button' + i; }
+        function button(dev, i, pressed, v) {
+            if (i < 0 || i >= 32) return;
+            var s = pad(dev);
+            s.p[i] = pressed ? 1 : 0; s.v[i] = v; last = dev;
+            emit('button', i, !!pressed, v, dev, nameOf(i, dev));
+        }
+        function axes(dev, a) {
+            var s = pad(dev), n = Math.min(8, a.length);
+            for (var i = 0; i < n; i++) s.a[i] = +a[i] || 0;
+            last = dev;
+            emit('axes', s.a, dev);
+        }
+        function release() {                                   // My PC's menu opened, the app lost focus: every held button is let go
+            for (var dev in st) { var s = st[dev]; for (var i = 0; i < 32; i++) if (s.p[i] || s.v[i]) button(dev, i, false, 0); for (i = 0; i < 8; i++) s.a[i] = 0; }
+        }
+        function setPads(l) {
+            list = []; var keep = {};
+            for (var i = 0; l && i < l.length; i++) { var o = l[i]; list.push({ dev: o.d, name: o.name, standard: !!o.standard, buttons: o.buttons, axes: o.axes }); pad(o.d).standard = !!o.standard; keep[o.d] = 1; }
+            for (var d in st) if (!keep[d]) delete st[d];
+            emit('pads', list.slice());
+        }
+        // standalone: read the pads ourselves, like My PC's input module (same mapping)
+        var MAP = [[0, ['jump', 'confirm']], [1, ['run', 'cancel']], [2, ['run']], [3, ['run']], [12, ['up']], [13, ['down']], [14, ['left']], [15, ['right']]];
+        var actNow = {};
+        function poll() {
+            raf = 0;
+            var ps; try { ps = navigator.getGamepads ? navigator.getGamepads() : []; } catch (e) { ps = []; }
+            var any = false, i, j, p, dev, s, b, v, pr, moved, now, k, acts, t = Date.now();
+            for (i = 0; i < ps.length; i++) {
+                p = ps[i]; if (!p || !p.connected) continue;
+                any = true; dev = 'pad' + p.index; s = pad(dev); s.standard = p.mapping === 'standard';
+                for (j = 0; j < p.buttons.length && j < 32; j++) {
+                    b = p.buttons[j]; v = b.value || (b.pressed ? 1 : 0); pr = b.pressed || v > 0.5 ? 1 : 0;
+                    if (pr !== s.p[j] || Math.abs(v - s.v[j]) >= 0.05 || (v === 0 && s.v[j] !== 0)) {
+                        if (j === 8 || j === 9) {                  // Start / Select: the app's menu (ownMenu), else pause, when let go
+                            if (pr) startAt[dev] = t;
+                            else if (startAt[dev]) { startAt[dev] = 0; if (handlers.ownMenu && !standalonePaused) { setInput('menu', true, false, dev); setInput('menu', false, false, dev); } else togglePause(); }
+                        }
+                        if (!standalonePaused || !pr) button(dev, j, pr, v);
+                    }
+                }
+                moved = false;
+                for (j = 0; j < p.axes.length && j < 8; j++) { v = p.axes[j] || 0; if (Math.abs(v - s.a[j]) >= 0.02 || (v === 0 && s.a[j] !== 0)) { s.a[j] = v; moved = true; } }
+                if (moved && !standalonePaused) emit('axes', s.a, dev);
+                now = actNow[dev] || (actNow[dev] = {});
+                if (standalonePaused || uiBlock) { for (k in now) if (now[k]) { now[k] = false; setInput(k, false, false, dev); } continue; }
+                var want = {};
+                for (j = 0; j < MAP.length; j++) { if (s.p[MAP[j][0]]) { acts = MAP[j][1]; for (k = 0; k < acts.length; k++) want[acts[k]] = true; } }
+                if (s.a[0] < -0.5) want.left = true; if (s.a[0] > 0.5) want.right = true; if (s.a[1] < -0.5) want.up = true; if (s.a[1] > 0.5) want.down = true;
+                for (k in want) if (!now[k]) { now[k] = true; setInput(k, true, false, dev); }
+                for (k in now) if (now[k] && !want[k]) { now[k] = false; setInput(k, false, false, dev); }
+            }
+            if (any && !destroyed) raf = requestAnimationFrame(poll);
+        }
+        function standalonePads() {
+            var ps; try { ps = navigator.getGamepads ? navigator.getGamepads() : []; } catch (e) { ps = []; }
+            var l = [];
+            for (var i = 0; i < ps.length; i++) if (ps[i] && ps[i].connected) l.push({ d: 'pad' + ps[i].index, name: ps[i].id, standard: ps[i].mapping === 'standard', buttons: ps[i].buttons.length, axes: ps[i].axes.length });
+            setPads(l);
+            if (!raf && l.length && !destroyed) raf = requestAnimationFrame(poll);
+        }
+        return {
+            supported: true,
+            on: function (name, fn) {
+                if (typeof fn !== 'function' || !listeners[name]) return function () {};
+                listeners[name].push(fn);
+                return function () { var l = listeners[name], i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); };
+            },
+            pressed: function (i, dev) { if (dev) return !!(st[dev] && st[dev].p[i]); for (var d in st) if (st[d].p[i]) return true; return false; },
+            value: function (i, dev) { if (dev) return st[dev] ? st[dev].v[i] || 0 : 0; var m = 0; for (var d in st) if (st[d].v[i] > m) m = st[d].v[i]; return m; },
+            axis: function (i, dev) { var s = st[dev || last]; return s ? s.a[i] || 0 : 0; },
+            pads: function () { return list.slice(); },
+            name: nameOf,
+            _message: function (d) {
+                if (!d) return;
+                if (d.e === 'b') button(String(d.d), +d.i, !!d.p, +d.v || 0);
+                else if (d.e === 'a' && d.a) axes(String(d.d), d.a);
+                else if (d.e === 'pads') setPads(d.list);
+                else if (d.e === 'lost') { delete st[d.d]; }
+            },
+            _release: release,
+            _standalone: function () {
+                if (!navigator.getGamepads) return;
+                window.addEventListener('gamepadconnected', standalonePads);
+                window.addEventListener('gamepaddisconnected', standalonePads);
+                standalonePads();
+            },
+            _stop: function () { if (raf) cancelAnimationFrame(raf); raf = 0; }
+        };
+    })();
+
     var pub = {
         version: VERSION,
-        apiLevel: 8,                     // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: 9,                     // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,
         sensors: sensors,
+        gamepad: gamepad,
         // The app's settings object, set in the installer and read before the app opens. Read it in
         // onInit (or later). Always an object ({} when none). Standalone, test it with ?app_config={"a":1}.
         app_config: {},
