@@ -2618,6 +2618,22 @@ async function main() {
         check(await A.evaluate(() => __nat.slice(-2).sort().join() === 'active:false,motion:false'), 'Android app: leaving stops the native sensors and the keep-awake (' + await A.evaluate(() => __nat.join()) + ')');
         check(A.errors.length === 0, 'no page errors in the Android app ' + A.errors.join('; '));
         await A.context().close();
+        // the Android app opens My PC itself: phone-sized taskbar and icons, a Game controller shortcut, the phone's Back is the
+        // TV remote's Back (exit asks first, then the app closes)
+        const H = await newPage(browser, base, db, { phone: true, viewport: { width: 844, height: 390 } });
+        await H.addInitScript(() => { window.__nat = []; window.MyPCNative = { caps: () => '{"motion":true}', motion: () => {}, active: () => {}, exit: () => __nat.push('exit') }; });
+        await H.goto(base + 'index.html');
+        await H.waitForSelector('#desk-icons .dicon', { timeout: 20000 });
+        const look = await H.evaluate(() => ({ compact: document.documentElement.classList.contains('compact'), pad: !!document.querySelector('#desk-icons [data-app="gamepad"]'),
+            btn: document.querySelector('.tb-btn').getBoundingClientRect().height, apps: document.querySelector('.tb-apps').getBoundingClientRect().right, tray: document.querySelector('.tray').getBoundingClientRect().left }));
+        check(look.compact && look.btn >= 50 && look.apps < look.tray, 'phone: taskbar buttons big enough for a finger (' + Math.round(look.btn) + ' px), not over the clock');
+        check(look.pad, 'phone: the Game controller has a desktop shortcut');
+        await H.evaluate(() => Input.systemBack());
+        await H.waitForFunction(() => !document.getElementById('dialog-backdrop').hidden, null, { timeout: 4000 });
+        await H.evaluate(() => document.getElementById('dialog-yes').click());
+        check(await H.evaluate(() => __nat.join()) === 'exit', 'Android app: Back on the desktop asks to exit, Yes closes the app');
+        check(H.errors.length === 0, 'no page errors in My PC on the phone ' + H.errors.join('; '));
+        await H.context().close();
         check(tv.errors.length === 0 && P1.errors.length === 0 && P2.errors.length === 0, 'no page errors ' + tv.errors.concat(P1.errors, P2.errors).join('; '));
         for (const pg of [tv, P2]) await pg.context().close();
     }

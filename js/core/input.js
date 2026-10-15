@@ -169,6 +169,14 @@ var Input = (function () {
         held[action] = down;
         for (i = 0; i < acts.length; i++) { bump(dev, acts[i], down ? 1 : -1); emit(acts[i], down, false, dev); }
     }
+    // the phone's own Back button (the Android app, android-controller/): the same as the TV remote's Back, without
+    // switching the input device (the touch pad stays); a text field being typed in is left first
+    function systemBack() {
+        var f = textField(document.activeElement);
+        if (f) { f.blur(); return; }
+        backTv = true;
+        emit('back', true, false, 'touch'); emit('back', false, false, 'touch');
+    }
     function releaseRemote(player) { var h = remoteHeld[player === 2 ? 2 : 1]; for (var a in h) if (h[a]) remote(player, a, false); }
 
     // Pad buttons released by releaseAll() while still held stay "suppressed" until the player lets
@@ -365,6 +373,7 @@ var Input = (function () {
         remote: remote,                      // a phone controller's actions: remote(player 1|2, action, down)
         releaseRemote: releaseRemote,
         touch: touch,                        // the touch pad's actions (left right up down ok run cancel menu pause)
+        systemBack: systemBack,              // the phone's Back button in the Android app: like the TV remote's Back
         setHandler: function (fn) { handler = fn; },
         isDown: isDown,
         isDownDev: isDownDev,

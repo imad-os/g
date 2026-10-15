@@ -72,7 +72,7 @@
   **Pointer**: on the My PC screens (no app asked for sensors, config `pointer: true`) a Motion data phone is a magic-remote style pointer:
   `js/core/aim.js` (gyro -> `{ t: 'pm', x, y }` deltas, any grip) on the phone, `js/launcher/pointer.js` on the TV (focuses what it is on;
   A = OK). Phone UI = the same `VirtualPad` (id `pointer`) + a Center button.
-  **Android app** `android-controller/` (Java WebView shell of the hosted Game controller, `?ctrl=1`): native sensors / QR / screen-off link
+  **Android app** `android-controller/` (APK "My PC": Java WebView shell of the hosted My PC, opens the desktop like any app; old 1.x APKs open `?ctrl=1`): phone Back = TV Back (`Input.systemBack`), exit = `MyPCNative.exit`; native sensors / QR / screen-off link
   through `window.MyPCNative` + `assets/bridge.js`; build with `android-controller/build.ps1` (JDK + SDK in `%USERPROFILE%\.tooling`), commit
   the rebuilt `My-PC-Controller.apk`; the signing key lives outside the repo (`.tooling\keys`), never commit it.
 - **Heart-rate sensors (TV)**: `js/core/hr-ble.js` (any BLE Heart Rate Service device: Garmin watches broadcasting, Polar, Garmin HRM, Decathlon),

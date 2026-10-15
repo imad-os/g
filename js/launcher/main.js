@@ -26,6 +26,8 @@ var App = (function () {
         var tr = Math.abs(s - 1) < 0.01 ? '' : 'scale(' + s + ')';
         st.style.webkitTransform = tr;
         st.style.transform = tr;
+        // a phone shows the 1920x1080 screen at about a third of its size: bigger taskbar and desktop icons (css .compact)
+        document.documentElement.classList.toggle('compact', !window.tizen && s < 0.6);
         st.style.left = Math.max(0, (w - 1920 * s) / 2) + 'px';
         st.style.top = Math.max(0, (h - 1080 * s) / 2) + 'px';
     }
@@ -89,6 +91,7 @@ var App = (function () {
 
     function exitApp() {
         try { tizen.application.getCurrentApplication().exit(); return; } catch (e) {}
+        try { if (window.MyPCNative && window.MyPCNative.exit) { window.MyPCNative.exit(); return; } } catch (e1) {}   // the Android app
         try { window.close(); } catch (e2) {}
     }
 

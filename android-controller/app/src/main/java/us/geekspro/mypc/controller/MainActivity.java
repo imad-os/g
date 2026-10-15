@@ -41,12 +41,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * My PC Controller: the Game controller of My PC (js/launcher/apps/gamepad.js, the hosted copy) in a full-screen WebView,
- * so pairing, the WebRTC link, the pad and the motion engine stay exactly the ones the TV side was built and tested with.
- * The app adds what a browser tab does badly (assets/bridge.js + Bridge):
+ * My PC for Android: the hosted My PC (the same desktop, games, apps and Game controller as on the TV, updated online) in a
+ * full-screen WebView, so pairing, the WebRTC link, the pad and the motion engine stay exactly the ones the TV side was built
+ * and tested with. The app adds what a browser tab does badly (assets/bridge.js + Bridge):
  *   native motion sensors (SensorHub: 200 Hz fused sensors, real timestamps) instead of devicemotion,
  *   a native QR scanner for the TV's pairing code,
- *   screen kept on, and a foreground service + wake lock so the link survives with the screen off.
+ *   screen kept on (while a controller is connected or a game is open), and a foreground service + wake lock so the link
+ *   survives with the screen off; the phone's Back is the TV remote's Back (Input.systemBack), exit closes the app.
  */
 public final class MainActivity extends Activity {
     // the hosted My PC (GitHub Pages; imad-os.github.io/g redirects to the custom domain)
@@ -57,7 +58,7 @@ public final class MainActivity extends Activity {
     private WebView web;
     private SensorHub hub;
     private String bridgeJs;
-    private boolean active, motion;
+    private boolean active, motion, playing;
 
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     @Override protected void onCreate(Bundle state) {
@@ -75,7 +76,7 @@ public final class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setTextZoom(100);                                      // the page sizes its own text for phones
-        s.setUserAgentString(s.getUserAgentString() + " MyPCController/1");
+        s.setUserAgentString(s.getUserAgentString() + " MyPCApp/2");
         web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);   // stays important with the screen off
         web.addJavascriptInterface(new Bridge(this), "MyPCNative");
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT))
@@ -100,12 +101,19 @@ public final class MainActivity extends Activity {
     void setActive(boolean on) {
         if (on == active) return;
         active = on;
-        if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        screenOn();
         LinkService.set(this, on);
         web.removeCallbacks(pump);
         if (on) web.postDelayed(pump, PUMP_MS);
     }
+
+    // the screen stays on while a controller is connected or a game / app is open (index.html?play=<id>)
+    private void screenOn() {
+        if (active || playing) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+
+    void exitApp() { finishAndRemoveTask(); }
 
     // With the screen off the WebView counts as hidden and its timers slow down, so the link's once-a-second ping could
     // come too late and the TV would drop the phone (5 s of silence). While connected the app runs the ping itself.
@@ -163,7 +171,7 @@ public final class MainActivity extends Activity {
     private String startUrl(Intent i) {
         Uri u = i != null ? i.getData() : null;
         if (u != null && u.getQueryParameter("pair") != null) return pairUrl(u.toString());
-        return HOME + "?ctrl=1";
+        return HOME;                                             // My PC itself, opened like any app
     }
 
     private static String pairUrl(String text) {
@@ -190,6 +198,8 @@ public final class MainActivity extends Activity {
         @Override public void onPageStarted(WebView v, String url, android.graphics.Bitmap icon) {
             setMotion(false);                                    // a new page starts with no listeners
             setActive(false);
+            playing = isOurs(url) && Uri.parse(url).getQueryParameter("play") != null;
+            screenOn();
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) && isOurs(url)) v.evaluateJavascript(bridgeJs, null);
         }
 
@@ -216,14 +226,13 @@ public final class MainActivity extends Activity {
         return "https".equals(u.getScheme()) && HOSTS.contains(u.getHost());
     }
 
-    /* ---------- Back: inside the controller it acts like the TV remote's Back; on the join screen it leaves ---------- */
+    /* ---------- Back: the TV remote's Back (My PC asks before it exits); the app leaves only when My PC is not there ---------- */
 
     @Override public boolean onKeyDown(int code, KeyEvent e) {
         if (code != KeyEvent.KEYCODE_BACK) return super.onKeyDown(code, e);
-        web.evaluateJavascript("!!(window.GamepadApp&&GamepadApp.running())", v -> {
-            if ("true".equals(v)) web.evaluateJavascript("(function(){var o={key:'Escape',code:'Escape',keyCode:27,which:27,bubbles:true};"
-                    + "document.dispatchEvent(new KeyboardEvent('keydown',o));document.dispatchEvent(new KeyboardEvent('keyup',o));})()", null);
-            else moveTaskToBack(true);
+        if (e.getRepeatCount() > 0) return true;
+        web.evaluateJavascript("window.Input&&Input.systemBack?(Input.systemBack(),1):0", v -> {
+            if (!"1".equals(v)) moveTaskToBack(true);         // still loading, or the offline page
         });
         return true;
     }

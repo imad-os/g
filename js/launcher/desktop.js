@@ -113,6 +113,7 @@ var Desktop = (function () {
         box.appendChild(button('dicon', 'app', appById('explorer'), true));
         box.appendChild(button('dicon', 'app', appById('browser'), true));
         box.appendChild(button('dicon', 'app', appById('store'), true));
+        if (appById('gamepad')) box.appendChild(button('dicon', 'app', appById('gamepad'), true));   // phones and tablets only
         for (i = 0; i < games.length; i++) box.appendChild(button('dicon', 'game', games[i], true));
         for (i = 0; i < installed.length; i++) box.appendChild(button('dicon', 'game', installed[i], true));
         box.appendChild(button('dicon', 'app', appById('scores'), true));

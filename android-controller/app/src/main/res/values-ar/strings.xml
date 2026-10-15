@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">وحدة تحكم My PC</string>
+    <string name="app_name">My PC</string>
     <string name="link_channel">اتصال وحدة التحكم</string>
     <string name="link_running">متصل بالتلفاز. تبقى الحركات تعمل والشاشة مطفأة.</string>
     <string name="scan_prompt">وجّه الكاميرا نحو رمز QR على التلفاز</string>
     <string name="scan_bad">هذا ليس رمز اقتران My PC</string>
-    <string name="offline">لا يوجد اتصال بالإنترنت. تحتاج وحدة التحكم My PC إلى Wi-Fi للوصول إلى التلفاز.</string>
+    <string name="offline">لا يوجد اتصال بالإنترنت. يحتاج My PC إلى Wi-Fi للبدء.</string>
     <string name="scan_error">تعذر فتح قارئ رمز QR</string>
     <string name="scan_no_camera">تحتاج وحدة التحكم My PC إلى الكاميرا لقراءة رمز QR على التلفاز</string>
     <string name="retry">إعادة المحاولة</string>

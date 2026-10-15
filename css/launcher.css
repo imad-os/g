@@ -91,6 +91,25 @@ svg { display: block; width: 100%; height: 100%; }
 /* build number, like a desktop watermark (easy to check that an online update arrived) */
 .tray-ver { position: absolute; right: 24px; bottom: 104px; font-size: 22px; color: rgba(255, 255, 255, 0.55); white-space: nowrap; }
 [dir="rtl"] .tray-ver { right: auto; left: 24px; }
+/* phones (html.compact, main.js fit(): the 1920x1080 screen shown at under 60 %): a taskbar and desktop icons big enough for a finger */
+.compact .taskbar { height: 176px; }
+.compact .tb-apps { top: 10px; }
+.compact .tb-btn { width: 148px; height: 156px; margin: 0 3px; padding: 26px 22px; border-radius: 22px; }
+.compact .tb-btn .ic { width: 104px; height: 104px; }
+.compact .tray { top: 10px; height: 156px; }
+.compact #tray-net, .compact #tray-vol, .compact #tray-date { display: none; }
+.compact .tray-ic { width: 56px; height: 56px; }
+.compact .tray-clock { height: 156px; font-size: 46px; padding: 0 22px; }
+.compact .tray-ver { bottom: 186px; font-size: 28px; }
+.compact .start { bottom: 188px; }
+.compact .toast { bottom: 200px; }
+.compact .desk-icons { height: 856px; }
+.compact .dicon { width: 252px; height: 270px; padding-top: 18px; border-radius: 22px; }
+.compact .dicon .ic { width: 150px; height: 150px; margin-bottom: 12px; border-radius: 30px; }
+.compact .dicon .ic-app { border-radius: 0; }
+.compact .dicon .lbl { font-size: 34px; max-height: 82px; }
+.compact .dicon .dot { top: 14px; right: 46px; width: 30px; height: 30px; border-radius: 15px; }
+.compact[dir="rtl"] .dicon .dot { right: auto; left: 46px; }
 
 /* ---------- Start menu ---------- */
 .start { position: absolute; left: 50%; bottom: 108px; width: 1200px; height: 790px; margin-left: -600px; padding: 40px 48px 0;
