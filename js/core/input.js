@@ -1,8 +1,9 @@
 /* Single input module: TV remote, keyboard and W3C gamepads -> actions.
  *
  * Actions: left right up down jump run pause menu back confirm cancel runToggle
- *   Gamepad Start / Select (Switch +/-, Xbox Menu/View, PlayStation Options/Share): a short press is
- *   'menu' (the game's own menu), holding it HOLD_MS is 'pause' (My PC's menu, works in every game).
+ *   Gamepad Start / Select (Switch +/-, Xbox Menu/View, PlayStation Options/Share): pressing one is 'menu'
+ *   (the game's own menu); holding both together HOLD_MS is 'pause' (My PC's menu, works in every game).
+ *   Back: in a game only the TV remote's Back (tvBack() is true) opens My PC's menu; Esc / Backspace go to the game.
  *   pageUp pageDown guide tab tabBack   (desktop and apps only: games never receive these)
  * Every action carries the device that produced it, so games can tell players apart:
  *   'keys'  TV remote, or arrows + Enter/Space/Z/X/Shift on a keyboard
@@ -45,8 +46,9 @@ var Input = (function () {
         // 8 / 9 (Select / Start): short press = 'menu', hold = 'pause' (see poll)
         [12, ['up']], [13, ['down']], [14, ['left']], [15, ['right']]
     ];
-    var REPEAT_DELAY = 380, REPEAT_RATE = 130, HOLD_MS = 700;
-    var startBtn = {};              // 'padN' -> { at: time pressed, fired: hold already sent, sup: released by releaseAll }
+    var REPEAT_DELAY = 380, REPEAT_RATE = 130, HOLD_MS = 1000;
+    var startBtn = {};              // 'padN' -> { at: first pressed, both: both held since, combo: both were held, fired: hold sent, sup: released by releaseAll }
+    var backTv = false;             // the last Back came from the TV remote (keyCode 10009), not from a keyboard
 
     var handler = null;
     var keyHeld = {};               // keyCode -> true
@@ -112,6 +114,7 @@ var Input = (function () {
         if (down && isKeyboardKey(code)) { used('keyboard'); setDevice('keyboard'); }
         if (!acts) return;
         if (code === 9 && e.shiftKey) acts = ['tabBack'];
+        if (down && acts[0] === 'back') backTv = code === 10009;
         if (e.preventDefault) e.preventDefault();   // also stops the native click on Enter
         if (code >= 400 || code === 19) setDevice('remote');
         else if (!window.tizen) setDevice('keyboard');
@@ -219,14 +222,19 @@ var Input = (function () {
                     any = true;
                 }
             }
-            // Start / Select: decided when let go (short = game menu) or after HOLD_MS (My PC menu)
-            var sb = p.buttons[9], sl = p.buttons[8], st = startBtn[dev] || (startBtn[dev] = { at: 0, fired: false, sup: false });
-            if ((sb && (sb.pressed || sb.value > 0.5)) || (sl && (sl.pressed || sl.value > 0.5))) {
+            // Start / Select: one of them = the game's menu (sent when let go); both held HOLD_MS = My PC's menu
+            var sb = p.buttons[9], sl = p.buttons[8], st = startBtn[dev] || (startBtn[dev] = { at: 0, both: 0, combo: false, fired: false, sup: false });
+            var sDown = !!(sb && (sb.pressed || sb.value > 0.5)), lDown = !!(sl && (sl.pressed || sl.value > 0.5));
+            if (sDown || lDown) {
                 any = true;
-                if (!st.at) { st.at = t; st.fired = false; st.sup = false; }
-                else if (!st.fired && !st.sup && t - st.at >= HOLD_MS) { st.fired = true; emit('pause', true, false, dev); emit('pause', false, false, dev); }
+                if (!st.at) { st.at = t; st.both = 0; st.combo = false; st.fired = false; st.sup = false; }
+                if (sDown && lDown) {
+                    st.combo = true;
+                    if (!st.both) st.both = t;
+                    else if (!st.fired && !st.sup && t - st.both >= HOLD_MS) { st.fired = true; emit('pause', true, false, dev); emit('pause', false, false, dev); }
+                } else st.both = 0;
             } else if (st.at) {
-                if (!st.fired && !st.sup) { emit('menu', true, false, dev); emit('menu', false, false, dev); }
+                if (!st.combo && !st.sup) { emit('menu', true, false, dev); emit('menu', false, false, dev); }
                 st.at = 0;
             }
             var ax = p.axes[0] || 0, ay = p.axes[1] || 0;
@@ -361,6 +369,7 @@ var Input = (function () {
         isDown: isDown,
         isDownDev: isDownDev,
         lastDevice: function () { return lastDev; },
+        tvBack: function () { return backTv; },          // the last Back pressed was the TV remote's (not Esc / Backspace)
         poll: poll,
         setExternalPoll: function (on) { externalPoll = on; if (!on) ensureLoop(); },
         releaseAll: releaseAll,

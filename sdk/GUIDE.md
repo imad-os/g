@@ -43,10 +43,12 @@ this guide and the SDK fresh before every task.
   player quits, the iframe is **destroyed**, which frees all its memory.
 - **My PC owns the input.** Your page never receives focus on the TV. My PC sends you
   **actions** (`left`, `jump`...), not keys. Never read `keydown` yourself; use the SDK.
-- **Back is My PC's.** It opens the pause menu (Resume, your own menu items, Quit). You get
-  `onPause` / `onResume` / `onDestroy`. On a gamepad, **holding Start** (Switch **+**, Xbox Menu,
-  PlayStation Options) does the same. A **short press of Start** opens My PC's menu too, unless your
-  app has its own menu: then init with `ownMenu: true` and you receive the `menu` action instead.
+- **My PC's pause menu** (Resume, your own menu items, Quit) opens with **the TV remote's Back** or by
+  **holding Start + Select together for 1 s** on a gamepad (Switch **+** and **-**, Xbox Menu + View,
+  PlayStation Options + Share). You get `onPause` / `onResume` / `onDestroy`. Nothing else opens it
+  while your app runs: a keyboard's **Esc / Backspace**, gamepad **B** and the phone controller's **B**
+  come to your app (`cancel` / `run`). Start or Select alone is `menu`, sent to apps that init with
+  `ownMenu: true` (on a gamepad it does nothing in other apps).
 - **Standalone mode:** opened directly in a browser (not inside My PC), the SDK acts as the host:
   the keyboard sends actions, Esc or P pauses, and saves go to `localStorage`. You can develop and
   test with any browser, no TV needed.
@@ -314,10 +316,12 @@ Actions: `left right up down` (directions), `jump` and `confirm` (OK / Enter / S
   or `'pad0'`..`'pad3'`. Use it for local multiplayer (one hero per device).
 - **Every action MUST be reachable with the TV remote alone:** arrows + OK. Don't rely on
   `run`/`cancel` (the remote has no such buttons), and never require a mouse, touch or text typing.
-- Back / Esc always belongs to My PC (pause menu). Never use it for in-game actions.
-- `menu`: gamepad Start (or Select), short press. Sent only to apps that init with `ownMenu: true`
-  (open your own menu on it, and close it on `menu` or `cancel`); for other apps it opens My PC's
-  pause menu. Holding Start for 0.7 s always opens My PC's pause menu, so players can still quit.
+- The TV remote's Back always belongs to My PC (pause menu); you never receive it. A keyboard's Esc and
+  Backspace reach you as `cancel` (use it as your own "back": close a sub-menu, leave a screen).
+- `menu`: gamepad Start or Select pressed alone (sent when let go). Sent only to apps that init with
+  `ownMenu: true` (open your own menu on it, and close it on `menu` or `cancel`); on a gamepad other
+  apps get nothing (the touch pad's and phone controller's &#9776; open My PC's pause menu for them).
+  **Holding Start + Select together for 1 s** always opens My PC's pause menu, so players can still quit.
   The TV remote has no Start: give your menu another way in too (e.g. an on-screen button with OK).
 
 ## 6. Screen
@@ -466,7 +470,7 @@ the World records.
 - [ ] `onPause` stops the loop and sound; `onResume` restarts them; `onDestroy` stops everything
       and closes the `AudioContext`
 - [ ] input only through the SDK (`onInput` / `MyPC.isDown`), playable with arrows + OK only
-- [ ] no `keydown` listeners of your own, no use of Back/Esc
+- [ ] no `keydown` listeners of your own (Esc reaches you as `cancel`; the remote's Back is never yours)
 - [ ] fills the window at any 16:9 size, readable text, obvious focus
 - [ ] runs on Chromium 108 (Tizen 8, 2024 TVs): no CSS nesting, nothing newer than Chrome 108; no allocation in the game loop
 - [ ] saves through `MyPC.save/load`; scores through `MyPC.submitScore` (games with points)

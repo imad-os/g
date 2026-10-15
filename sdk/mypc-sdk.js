@@ -20,8 +20,8 @@
  * Esc / P = pause, so the app can be developed and tested anywhere.
  *
  * Input actions: left right up down jump run confirm cancel pause menu
- *   'menu' = gamepad Start, short press; only sent to apps that init with { ownMenu: true }
- *   (otherwise it opens My PC's pause menu). Holding Start, or the remote's Back, always opens My PC's menu.
+ *   'menu' = gamepad Start or Select pressed alone; only sent to apps that init with { ownMenu: true }.
+ *   Only the TV remote's Back, or holding Start + Select together 1 s, opens My PC's menu; Esc / Backspace are 'cancel'.
  * Written in ES5 so it loads anywhere; My PC itself supports Samsung TVs from 2024 (Tizen 8+).
  */
 var MyPC = (function () {

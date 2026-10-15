@@ -254,6 +254,11 @@ async function newPage(browser, base, db, opts) {
     return page;
 }
 
+// the TV remote's Back (keyCode 10009): in a game only this one opens My PC\'s menu (Esc goes to the game)
+async function tvBack(page) {
+    await page.evaluate(() => { const k = (d) => Input.onKey({ keyCode: 10009, repeat: false, preventDefault() {} }, d); k(true); k(false); });
+}
+
 async function playable(page, id = 'blocks') {
     await page.waitForSelector(`[data-game="${id}"]`, { timeout: 15000 });
     await page.focus(`[data-game="${id}"]`);
@@ -262,12 +267,16 @@ async function playable(page, id = 'blocks') {
     await page.keyboard.press('Enter');          // start
     await page.waitForTimeout(300);
     const running = await page.evaluate(() => document.querySelector('iframe').contentWindow.GameAPI._isRunning());
-    await page.keyboard.press('Escape');         // pause
+    await page.keyboard.press('Escape');         // a keyboard's Esc goes to the game: no My PC menu
+    await page.keyboard.press('Backspace');
+    await page.waitForTimeout(100);
+    const stays = await page.evaluate(() => window.GameHost.state()) === 'running';
+    await tvBack(page);         // pause
     await page.waitForTimeout(100);
     const paused = await page.evaluate(() => window.GameHost.state());
     await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
     const idle = await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle', null, { timeout: 15000 }).then(() => true, () => false);   // the desktop page loads again
-    return running && paused === 'paused' && idle;
+    return running && stays && paused === 'paused' && idle;
 }
 
 async function main() {
@@ -451,7 +460,7 @@ async function main() {
         check(list.every((e) => e.n === 'Player 1' && e.p === 'p1') && !(await page.evaluate(() => !!document.getElementById('entry'))), 'records are saved automatically under the profile name, no initials screen (' + list.map((e) => e.n).join(', ') + ')');
         for (let i = 0; i < 12; i++) await page.evaluate((v) => Scores.add('snake', 'ZZZ', v), 1000 + i);
         check(await page.evaluate(() => Scores.list('snake').length) === 10, 'table keeps only the top 10');
-        await page.keyboard.press('Escape');
+        await tvBack(page);
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
         await page.focus('[data-app="scores"]'); await page.keyboard.press('Enter');
@@ -499,7 +508,7 @@ async function main() {
         };
         // keyboard: arrows = P1, WASD = P2
         await openJumper();
-        await page.keyboard.press('Escape');
+        await tvBack(page);
         await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
         await page.keyboard.press('KeyF');
         await page.waitForTimeout(100);
@@ -521,7 +530,7 @@ async function main() {
         await page.waitForFunction(() => Scores.list('jumper').length >= 2, null, { timeout: 8000 });
         const top = await page.evaluate(() => Scores.list('jumper').map((e) => e.n + ' ' + e.s).join(', '));
         check(top === 'Player 1 4321, Player 2 1234', 'game over: both players are recorded automatically (' + top + ')');
-        await page.keyboard.press('Escape');
+        await tvBack(page);
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
 
@@ -533,8 +542,15 @@ async function main() {
         await page.waitForURL(/play=jumper/);
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running' && window.Input.padCount() === 2, null, { timeout: 8000 });
         await page.waitForTimeout(300);
+        const combo = async (i, ms) => { await page.evaluate((i) => { window.__press(i, 8, true); window.__press(i, 9, true); }, i); await page.waitForTimeout(ms);
+            await page.evaluate((i) => { window.__press(i, 8, false); window.__press(i, 9, false); }, i); await page.waitForTimeout(150); };
         await tap(0, 9);
-        check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'gamepad Start opens the pause menu and it stays open');
+        await tap(0, 1);
+        check(await page.evaluate(() => window.GameHost.state()) === 'running', 'in a game without its own menu, Start alone and B do not open My PC\'s menu');
+        await combo(0, 400);
+        check(await page.evaluate(() => window.GameHost.state()) === 'running', 'a short Start + Select does not open it either');
+        await combo(0, 1300);
+        check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'holding Start + Select (Switch + and -) opens My PC\'s menu and it stays open');
         await tap(0, 13);
         check(/Two players/.test(await page.evaluate(() => document.activeElement.textContent)), 'gamepad D-pad moves through the pause menu');
         await tap(0, 0);
@@ -550,16 +566,18 @@ async function main() {
         await page.evaluate(() => window.__press(0, 15, true)); await page.waitForTimeout(600); await page.evaluate(() => window.__press(0, 15, false));
         d = await dbg();
         check(d.x - x1 > 20, 'gamepad 1 moves player 1');
-        // Start: a short press goes to a game that has its own menu; holding it opens My PC's menu
+        // Start: a press goes to a game that has its own menu; holding Start + Select opens My PC\'s menu
         await page.evaluate(G2 => { const api = eval(G2).GameAPI; api.ownMenu = true; window.__menuSeen = 0;
             const on = api.onAction; api.onAction = function (a, p, r, dv) { if (a === 'menu' && p) window.__menuSeen++; return on.apply(this, arguments); }; }, G);
         await tap(0, 9);
         await page.waitForTimeout(100);
-        check(await page.evaluate(() => window.GameHost.state() === 'running' && window.__menuSeen === 1), 'a short press of Start goes to the game\'s own menu');
-        await page.evaluate(() => window.__press(0, 9, true)); await page.waitForTimeout(900);
-        check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'holding Start (Switch +) opens My PC\'s menu, even in a game with its own menu');
-        await page.evaluate(() => window.__press(0, 9, false)); await page.waitForTimeout(200);
-        check(await page.evaluate(() => window.GameHost.state() === 'paused' && window.__menuSeen === 1), 'letting go after the hold sends nothing more');
+        check(await page.evaluate(() => window.GameHost.state() === 'running' && window.__menuSeen === 1), 'a press of Start goes to the game\'s own menu');
+        await page.evaluate(() => window.__press(0, 9, true)); await page.waitForTimeout(1300); await page.evaluate(() => window.__press(0, 9, false)); await page.waitForTimeout(150);
+        check(await page.evaluate(() => window.GameHost.state() === 'running' && window.__menuSeen === 2), 'holding Start alone is still the game\'s menu');
+        await page.evaluate(() => { window.__press(0, 8, true); window.__press(0, 9, true); }); await page.waitForTimeout(1300);
+        check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'holding Start + Select opens My PC\'s menu, even in a game with its own menu');
+        await page.evaluate(() => { window.__press(0, 8, false); window.__press(0, 9, false); }); await page.waitForTimeout(200);
+        check(await page.evaluate(() => window.GameHost.state() === 'paused' && window.__menuSeen === 2), 'letting go after the hold sends nothing more');
         await tap(0, 9);
         check(await page.evaluate(() => window.GameHost.state()) === 'running', 'Start closes My PC\'s menu again');
         await page.evaluate(() => { window.__pads[1].connected = false; window.dispatchEvent(new Event('gamepaddisconnected')); });
@@ -657,7 +675,7 @@ async function main() {
         await page.waitForTimeout(300);
         const G = 'document.querySelector("iframe").contentWindow';
         const dbg = () => page.evaluate(G + '.JumperDebug()');
-        await page.keyboard.press('Escape');
+        await tvBack(page);
         await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
         await page.keyboard.press('KeyF');
         await page.waitForTimeout(100);
@@ -680,7 +698,7 @@ async function main() {
         d = await dbg();
         check(ok && d.lives === 3 && !d.twoP, 'player 2 leaving while player 1 is down restarts the stage (no freeze)');
         // back to two players: P1 loses the last life and sits out, P2 plays on; then P2 falls
-        await page.keyboard.press('Escape');
+        await tvBack(page);
         await page.evaluate(() => [...document.querySelectorAll('#pause-items button')].filter((b) => /Two players/.test(b.textContent))[0].click());
         await page.keyboard.press('KeyF');
         await page.waitForTimeout(300);
@@ -710,7 +728,7 @@ async function main() {
         await page.focus('[data-game="snake"]'); await page.keyboard.press('Enter');
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running');
         check(await page.evaluate(() => [...document.querySelectorAll('#desk-icons img')].every((i) => !i.getAttribute('src'))), 'covers are released while a game runs');
-        await page.keyboard.press('Escape');
+        await tvBack(page);
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
         await page.waitForFunction(() => [...document.querySelectorAll('#desk-icons img')].every((i) => i.complete), null, { timeout: 5000 }).catch(() => {});
@@ -809,7 +827,7 @@ async function main() {
         check(end.state === 'over' && end.pieces[end.winner].every((v) => v === 71), 'a 4-player CPU game ends with a winner (' + ['yellow', 'blue', 'red', 'green'][end.winner] + ')');
         await rule('.turbo(1)');
         // a person plays: OK rolls, a single legal move plays by itself
-        await page.keyboard.press('Escape');
+        await tvBack(page);
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[1].click(); });   // New game
         await page.waitForFunction(G + '.ParchisDebug().state === "setup"');
         // setup with the remote: Players 4 -> 2, Yellow CPU -> Person, then Start game
@@ -821,7 +839,7 @@ async function main() {
         await page.keyboard.press('Enter');
         await page.waitForFunction(G + '.ParchisDebug().pieces[0].indexOf(0) >= 0', null, { timeout: 5000 }).catch(() => {});
         check((await page.evaluate(G + '.ParchisDebug()')).pieces[0].indexOf(0) >= 0, 'OK rolls; a 5 brings a piece out');
-        await page.keyboard.press('Escape');
+        await tvBack(page);
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
         await page.focus('[data-app="scores"]'); await page.keyboard.press('Enter');
@@ -874,7 +892,7 @@ async function main() {
         await key('Enter');
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 8000 });
         check(await page.evaluate(() => document.getElementById('window').hidden && Win.current() === null), 'opening a game from File Explorer closes the app first');
-        await key('Escape');
+        await tvBack(page);
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
         check(await page.evaluate(() => !document.getElementById('desktop').hidden && document.activeElement.getAttribute('data-game') === 'jumper'), 'quitting the game returns to the desktop');
@@ -962,14 +980,14 @@ async function main() {
         await frame.waitForFunction(() => __sv.length && __sm.length, null, { timeout: 3000 });
         check(await frame.evaluate(() => __sv[0] === 'JUMP/2' && __sm[0] === 'RUN'), 'moves and metrics from the phones reach the app with the player number');
         check(await frame.evaluate(() => MyPC.bluetooth.capabilities().then(() => 'yes', (e) => e.message)) === 'Bluetooth is not allowed for this app.', 'MyPC.bluetooth is refused to an app that is not allowed to use it');
-        await page.keyboard.press('Escape');
+        await tvBack(page);
         const items = await page.evaluate(() => [...document.querySelectorAll('#pause-items button')].map((b) => b.textContent));
         check(await page.evaluate(() => window.GameHost.state()) === 'paused' && items.indexOf('Restart') > 0, 'Back opens My PC\'s pause menu with the app\'s own items (' + items.join(', ') + ')');
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[0].click(); });
         await frame.evaluate(() => MyPC.submitScore(321));
         await page.waitForFunction(() => Scores.list('app-star-catcher').length === 1, null, { timeout: 4000 }).catch(() => {});
         check(await page.evaluate(() => Scores.list('app-star-catcher')[0].s === 321 && window.GameHost.state() === 'paused' || window.GameHost.state() === 'running'), 'MyPC.submitScore saves the record for the profile by itself, no initials screen');
-        await page.keyboard.press('Escape');
+        await tvBack(page);
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
         check(await page.evaluate(() => document.querySelectorAll('iframe').length === 0 && document.activeElement.getAttribute('data-game') === 'app-star-catcher'), 'quitting removes the iframe and returns to its desktop icon');
@@ -2732,7 +2750,7 @@ async function cycle(page, id, warm) {
         api.destroy();
         return { audio: ctx ? ctx.state : 'closed', running: api._isRunning() };
     });
-    await page.keyboard.press('Escape');
+    await tvBack(page);
     await Promise.all([page.waitForURL(new RegExp('from=' + id)), page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); })]);
     await page.waitForSelector(`#desk-icons [data-game="${id}"]`);
     r.noDesktop = noDesktop;

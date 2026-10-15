@@ -35,8 +35,8 @@ var I18n = (function () {
             controlsText: [
                 'Remote: arrows move, OK jumps or confirms, hold OK to jump higher, Back pauses.',
                 'Red key: run on or off (for remote-only play). Play/Pause key: pause.',
-                'Gamepad: D-pad or left stick to move, A to jump, B or X to run or fire, Start or Select to pause.',
-                'Keyboard: arrows, Space or Z to jump, Shift or X to run, Esc to pause.',
+                'Gamepad: D-pad or left stick to move, A to jump, B or X to run or fire, hold Start + Select together to pause.',
+                'Keyboard: arrows, Space or Z to jump, Shift or X to run, P to pause.',
                 'Super Jumper for two: open the pause menu, choose Two players, then player 2 presses OK or A on their own controller (another gamepad, the remote, or W A S D + F on a keyboard).',
                 'Channel Up / Down (also PageUp / PageDown, or LB / RB on a gamepad): scroll a page in the browser. Guide (or F6): opens Start, and goes to the browser toolbar.',
                 'Mouse and keyboard: click anything, use the mouse wheel in lists, Tab and Shift+Tab to move between buttons, and the Windows key for Start.'
@@ -128,8 +128,8 @@ var I18n = (function () {
             controlsText: [
                 'Télécommande : flèches pour bouger, OK pour sauter ou valider, maintenir OK pour sauter plus haut, Retour pour la pause.',
                 'Touche rouge : course activée ou non. Touche Lecture/Pause : pause.',
-                'Manette : croix ou stick gauche pour bouger, A pour sauter, B ou X pour courir ou tirer, Start ou Select pour la pause.',
-                'Clavier : flèches, Espace ou Z pour sauter, Maj ou X pour courir, Échap pour la pause.',
+                'Manette : croix ou stick gauche pour bouger, A pour sauter, B ou X pour courir ou tirer, maintenir Start + Select ensemble pour la pause.',
+                'Clavier : flèches, Espace ou Z pour sauter, Maj ou X pour courir, P pour la pause.',
                 'Super Jumper à deux : ouvrez le menu pause, choisissez Deux joueurs, puis le joueur 2 appuie sur OK ou A sur sa propre manette (une autre manette, la télécommande, ou W A S D + F sur un clavier).',
                 'Chaîne + / − (ou PageUp / PageDown, ou LB / RB sur une manette) : faire défiler une page dans le navigateur. Guide (ou F6) : ouvre Démarrer et va à la barre du navigateur.',
                 'Souris et clavier : cliquez sur tout, utilisez la molette dans les listes, Tab et Maj+Tab pour passer d\'un bouton à l\'autre, et la touche Windows pour Démarrer.'
@@ -221,8 +221,8 @@ var I18n = (function () {
             controlsText: [
                 'Mando a distancia: flechas para moverse, OK para saltar o confirmar, mantén OK para saltar más, Atrás para pausar.',
                 'Tecla roja: correr sí o no. Tecla Reproducir/Pausa: pausa.',
-                'Mando: cruceta o stick izquierdo para moverse, A para saltar, B o X para correr o disparar, Start o Select para pausar.',
-                'Teclado: flechas, Espacio o Z para saltar, Mayús o X para correr, Esc para pausar.',
+                'Mando: cruceta o stick izquierdo para moverse, A para saltar, B o X para correr o disparar, mantén Start + Select a la vez para pausar.',
+                'Teclado: flechas, Espacio o Z para saltar, Mayús o X para correr, P para pausar.',
                 'Super Jumper para dos: abre el menú de pausa, elige Dos jugadores y el jugador 2 pulsa OK o A en su propio mando (otro mando, el mando a distancia, o W A S D + F en un teclado).',
                 'Canal + / − (o RePág / AvPág, o LB / RB en un mando): desplazar una página en el navegador. Guía (o F6): abre Inicio y va a la barra del navegador.',
                 'Ratón y teclado: haz clic en todo, usa la rueda en las listas, Tab y Mayús+Tab para moverte entre botones, y la tecla Windows para Inicio.'
@@ -314,8 +314,8 @@ var I18n = (function () {
             controlsText: [
                 'جهاز التحكم: الأسهم للتحرك، OK للقفز أو التأكيد، اضغط مطولاً على OK لقفزة أعلى، رجوع للإيقاف المؤقت.',
                 'الزر الأحمر: تشغيل أو إيقاف الركض. زر تشغيل/إيقاف: إيقاف مؤقت.',
-                'وحدة التحكم: الأسهم أو العصا اليسرى للتحرك، A للقفز، B أو X للركض أو الإطلاق، Start أو Select للإيقاف المؤقت.',
-                'لوحة المفاتيح: الأسهم، المسافة أو Z للقفز، Shift أو X للركض، Esc للإيقاف المؤقت.',
+                'وحدة التحكم: الأسهم أو العصا اليسرى للتحرك، A للقفز، B أو X للركض أو الإطلاق، اضغط مطولاً على Start وSelect معاً للإيقاف المؤقت.',
+                'لوحة المفاتيح: الأسهم، المسافة أو Z للقفز، Shift أو X للركض، P للإيقاف المؤقت.',
                 'سوبر جمبر للاعبَين: افتح قائمة الإيقاف واختر لاعبان، ثم يضغط اللاعب 2 على OK أو A في وحدة التحكم الخاصة به (وحدة تحكم أخرى، أو جهاز التحكم، أو W A S D و F على لوحة المفاتيح).',
                 'القناة + / − (أو PageUp / PageDown، أو LB / RB في وحدة التحكم): تمرير صفحة في المتصفح. Guide (أو F6): يفتح ابدأ وينتقل إلى شريط المتصفح.',
                 'الفأرة ولوحة المفاتيح: انقر على أي شيء، استخدم العجلة في القوائم، Tab وShift+Tab للتنقل بين الأزرار، ومفتاح Windows لقائمة ابدأ.'

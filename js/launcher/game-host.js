@@ -489,11 +489,17 @@ var GameHost = (function () {
             // Guide = the Start key of this PC: opens the pause menu. Page keys and Tab belong to the desktop, not to games.
             if (action === 'guide') { if (pressed && !repeat) openPause(); return; }
             if (action === 'pageUp' || action === 'pageDown' || action === 'tab' || action === 'tabBack') return;
-            if (pressed && !repeat && (action === 'back' || action === 'pause')) return openPause();
-            // gamepad Start, short press: the game's own menu when it has one, else My PC's menu
-            if (action === 'menu') {
+            if (action === 'pause') { if (pressed && !repeat) openPause(); return; }
+            // My PC's menu: only the TV remote's Back. A keyboard's Esc / Backspace go to the game as its Back ('cancel').
+            if (action === 'back') {
+                if (Input.tvBack()) { if (pressed && !repeat) openPause(); return; }
+                action = 'cancel';
+            }
+            // gamepad Start or Select: the game's own menu when it has one, else nothing (holding both opens My PC's
+            // menu); the touch pad's and a phone controller's menu button still open My PC's menu (no other way there).
+            else if (action === 'menu') {
                 if (!pressed || repeat) return;
-                if (!(api && api.ownMenu)) return openPause();
+                if (!(api && api.ownMenu)) { if (String(dev).slice(0, 3) !== 'pad') openPause(); return; }
                 try { api.onAction('menu', true, false, dev); api.onAction('menu', false, false, dev); } catch (e) {}
                 return;
             }
