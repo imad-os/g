@@ -72,7 +72,8 @@
   **Owner decision: its Buttons mode reuses the existing virtual pad (`VirtualPad`, id `controller`), never a separately drawn pad;**
   **A B X Y in the Nintendo places** (pad button option `place`: A right = ok, B bottom = `b` (run + cancel), X top = menu, Y left = run); a **Home** button (pad option `home`, `{ t: 'k', a: 'home' }`: pause menu on Quit in a game, closes the open app on the desktop).
   **Phone settings** (Game controller > Settings, `arc_dev_ctrlphone.opt`): Auto rotate, Stay awake, Background (native in the APK 2.1.0+ via
-  `MyPCNative.settings`, hidden in a browser when it can't) and GamePad (pad option `dpad`: a D-pad in place of the stick).
+  `MyPCNative.settings`, hidden in a browser when it can't) and GamePad (pad option `dpad`: a D-pad in place of the stick); Disconnect / Forget TV; a paired TV is reconnected by itself
+  when the Game controller opens (`paired`); it opens on Connect, never auto-focusing the code box.
   Motion modes `sensor-actions` / `sensor-raw`: protocol `js/core/sensor-proto.js`, detection `js/core/motion.js` (moves are data rules,
   right hand only for now), games get them through `MyPC.sensors` (API 8) / `host.sensors`; full spec in `docs/phone-controller.md`.
   **Pointer mode** (`pointer`, owner decision: separate from Motion data, which stays raw): magic-remote style pointer on the My PC screens

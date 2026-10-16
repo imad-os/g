@@ -235,7 +235,10 @@ Each fired move carries a `confidence` (0.3 to 1: how far past its threshold the
 **Settings** (button on the join screen, top right over the pad, in the top bar of the other modes; kept on the phone in
 `arc_dev_ctrlphone.opt`): **Auto rotate** (off: the screen stays on the landscape side it is on when the phone is
 flipped), **Stay awake** (the screen stays on while connected), **Background** (the link stays up with the screen off or
-the app in the background: foreground service + wake locks) and **GamePad** (a D-pad in place of the stick). The first
+the app in the background: foreground service + wake locks) and **GamePad** (a D-pad in place of the stick), plus
+**Disconnect** (while connected) and **Forget TV**. Once a phone has connected to a TV it remembers it
+(`arc_dev_ctrlphone.paired`) and connects to it by itself whenever the Game controller opens, until Forget TV. The Game
+controller opens with **Connect** focused, not the code box (no phone keyboard popping up). The first
 three are on by default and done natively by the Android app (`MyPCNative.settings(json)`, app 2.1.0, `version()` 3,
 kept by the app in its own preferences and applied from its start). In a browser, Auto rotate uses the Screen
 Orientation API (only in full screen) and Stay awake the Wake Lock API; the settings a phone cannot do are not shown.

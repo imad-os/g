@@ -6,5 +6,4 @@
 
 # zxing-android-embedded is used through its plain Activity API (IntentIntegrator); its ActivityResult helpers are unused
 -dontwarn androidx.activity.**
--dontwarn androidx.core.**
 -dontwarn androidx.fragment.**

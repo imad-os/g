@@ -17,8 +17,8 @@ android {
         applicationId 'us.geekspro.mypc.controller'
         minSdk 26
         targetSdk 35
-        versionCode 4
-        versionName '2.1.0'
+        versionCode 5
+        versionName '2.2.0'
     }
 
     signingConfigs {
@@ -49,6 +49,7 @@ android {
 
 dependencies {
     implementation 'androidx.webkit:webkit:1.12.1'                         // script injected before the page's own scripts
+    implementation 'androidx.core:core:1.13.1'                             // the QR scanner screen needs it (CaptureManager: ContextCompat / ActivityCompat); without it the camera never opened
     implementation('com.journeyapps:zxing-android-embedded:4.3.0') { transitive = false }   // QR scanner screen
     implementation 'com.google.zxing:core:3.5.3'
 }

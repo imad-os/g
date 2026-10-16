@@ -54,7 +54,7 @@
     function native(fn, v) { try { if (window.MyPCNative && typeof window.MyPCNative[fn] === 'function') { window.MyPCNative[fn](v); return true; } } catch (e) {} return false; }
     function name() { return /Android/i.test(navigator.userAgent) ? 'Android' : /iPhone|iPad/i.test(navigator.userAgent) ? 'iPhone' : 'Phone'; }
     function prefs() { var p = saved.prefs || {}; return { profile: SensorProto.profile(p.profile), sensitivity: +p.sensitivity || 1, stride: +p.stride || 1, swap: !!p.swap }; }
-    function save() { Store.rawSet(KEY, { cid: cid, code: code, p: player, mode: mode, prefs: saved.prefs || {}, ptr: saved.ptr || {}, opt: saved.opt || {} }); }
+    function save() { Store.rawSet(KEY, { cid: cid, code: code, p: player, mode: mode, prefs: saved.prefs || {}, ptr: saved.ptr || {}, opt: saved.opt || {}, paired: !!saved.paired }); }
     function opts() { var o = saved.opt || {}, r = {}; for (var k in OPT_DEF) r[k] = typeof o[k] === 'boolean' ? o[k] : OPT_DEF[k]; return r; }
     function nativeV() { try { return window.MyPCNative && typeof MyPCNative.version === 'function' ? +MyPCNative.version() || 0 : 0; } catch (e) { return 0; } }
     // which settings this phone can honour: the app (3+) all of them; an older app none but GamePad (it keeps the screen on,
@@ -146,7 +146,7 @@
         conn = c;
         c.onMessage(function (m) {
             if (!m || typeof m !== 'object') return;
-            if (m.t === 'ok') { linked = true; if (typeof m.session === 'string') session = m.session; save(); pick(m.p === 2 ? 2 : 1); state(t('gcOn'), true); }
+            if (m.t === 'ok') { linked = true; saved.paired = true; if (typeof m.session === 'string') session = m.session; save(); pick(m.p === 2 ? 2 : 1); state(t('gcOn'), true); }
             else if (m.t === 'no') {
                 if (m.why === 'busy' && fromQr && !triedOther) { triedOther = true; stop(); pick(player === 1 ? 2 : 1); start(); return; }   // scanned: take the free player
                 stop(); ui.err.textContent = m.why === 'busy' ? t('gcBusy') : t('gcLocked');
@@ -477,10 +477,21 @@
             if (!first) first = c;
         });
         box.appendChild(el('div', 'gc-line', t('gcPhoneSaved')));
+        // the TV this phone connects to by itself: Disconnect (for now) and Forget TV (no more connecting by itself)
+        var tvRow = el('div', 'gc-row');
+        if (run) tvRow.appendChild(btn('gc-disc', t('gcDisconnect'), function () { closeModes(); stop(); }));
+        if (saved.paired || code) tvRow.appendChild(btn('gc-forget', t('gcForget') + (code ? ' ' + code.toUpperCase() : ''), forget));
+        if (tvRow.firstChild) box.appendChild(tvRow);
         var cl = btn('btn-primary', t('close'), closeModes);
         box.appendChild(cl);
         root.appendChild(box); ui.modes = box;
         Focus.focus(first || cl);
+    }
+    function forget() {
+        closeModes(); stop();
+        saved.paired = false; code = ''; session = ''; ui.code.value = ''; save();
+        if (typeof App !== 'undefined' && App.toast) App.toast(t('gcForgotten'));
+        Focus.focus(ui.code);
     }
     function switchMode(m) {
         if (m === mode) return;
@@ -841,9 +852,10 @@
             document.addEventListener('visibilitychange', onVis);
             fromQr = false; triedOther = false;
             if (arg && typeof arg.pair === 'string' && codeFrom(arg.pair)) setTimeout(function () { if (root) pairWith(codeFrom(arg.pair)); }, 0);
+            else if (saved.paired && codeFrom(saved.code || '')) setTimeout(function () { if (root && !run) start(); }, 0);   // the TV it was paired with: connects by itself
             window.GamepadApp = { scanCode: function (text) { var c = codeFrom(text); if (c) pairWith(c); return c; }, linked: function () { return linked; }, send: function (m) { return send(m); }, running: function () { return run; }, mode: function () { return mode; }, pointing: pointing, aim: function () { return aim; }, calibrate: calibrate,
                                   engine: function () { return eng; }, feed: function (s) { onMotion(s); }, config: function () { return cfg; }, log: function () { return log.slice(); } };
-            return ui.code;
+            return ui.go;                                          // Connect, not the code box (no phone keyboard popping up)
         },
         back: function () { if (ui.modes) { closeModes(); return true; } if (scan) { stopScan(); return true; } if (!inPad) return false; stop(); return true; },
         close: function () {

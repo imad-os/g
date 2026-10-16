@@ -2491,17 +2491,24 @@ async function main() {
         // the pad layout is kept: show C from the gear panel, leave, open the app again
         await P1.evaluate(() => Win.close());
         await P1.evaluate(() => Win.open('gamepad'));
-        await P1.click('.gc-go');
-        await P1.waitForFunction(() => VirtualPad.active(), null, { timeout: 5000 });
+        await P1.waitForFunction(() => VirtualPad.active() && GamepadApp.running(), null, { timeout: 5000 });
+        check(true, 'a phone that was paired connects to its TV by itself when the Game controller opens');
         await P1.evaluate(() => { [...document.querySelectorAll('div')].find((d) => d.textContent === '⚙').click(); });
         await P1.evaluate(() => { [...document.querySelectorAll('div')].find((d) => d.textContent === 'Y' && d.style.borderRadius !== '50%').click(); [...document.querySelectorAll('div')].find((d) => d.textContent === 'Close').click(); });
         await P1.evaluate(() => Win.close());
         await P1.reload();
         await P1.waitForFunction(() => window.Win && document.querySelector('[data-game]'), null, { timeout: 20000 });
         await P1.evaluate(() => Win.open('gamepad'));
-        await P1.click('.gc-go');
         await P1.waitForFunction(() => VirtualPad.active(), null, { timeout: 5000 });
         check(await P1.evaluate(() => [...document.querySelectorAll('div')].some((d) => d.textContent === 'Y' && d.style.borderRadius === '50%' && d.style.display === 'none') && [...document.querySelectorAll('div')].some((d) => d.textContent === 'X' && d.style.borderRadius === '50%' && d.style.display === 'flex') && !!Store.rawGet('arc_dev_vpad:controller')), 'the pad settings are kept after closing the app and reloading (no setting up again; Y hidden here)');
+        // Settings: Disconnect / Forget TV; a phone with no TV opens on Connect (not the code box: no keyboard popping up)
+        await P1.click('.gc-setbtn');
+        check(await P1.evaluate(() => !!document.querySelector('.gc-phoneset .gc-disc') && /^Forget TV/.test(document.querySelector('.gc-phoneset .gc-forget').textContent)), 'Settings has Disconnect and Forget TV while connected');
+        await P1.click('.gc-phoneset .gc-forget');
+        check(await P1.evaluate(() => !GamepadApp.running() && !Store.rawGet('arc_dev_ctrlphone').paired && !Store.rawGet('arc_dev_ctrlphone').code && document.querySelector('.gc-code').value === ''), 'Forget TV disconnects and forgets the code');
+        await P1.evaluate(() => { Win.close(); Win.open('gamepad'); });
+        await P1.waitForTimeout(300);
+        check(await P1.evaluate(() => !GamepadApp.running() && document.activeElement === document.querySelector('.gc-go')), 'a forgotten TV is not connected again; the Game controller opens with Connect focused');
         check(tv.errors.length === 0 && P1.errors.length === 0 && P2.errors.length === 0, 'no page errors ' + tv.errors.concat(P1.errors, P2.errors).join('; '));
         for (const pg of [tv, P1, P2, P3]) await pg.context().close();
     }
