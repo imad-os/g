@@ -2450,7 +2450,7 @@ async function main() {
         await P2.click('.gc-setbtn');
         const ps = await P2.evaluate(() => ({ opts: [...document.querySelectorAll('.gc-phoneset input[type=checkbox]')].map((c) => c.getAttribute('data-opt') + ':' + c.checked), pad: VirtualPad.active(),
             size: document.querySelector('.gc-phoneset input[type=checkbox]').getBoundingClientRect().height }));
-        check(ps.opts.indexOf('dpad:false') >= 0 && ps.opts.indexOf('rotate:true') >= 0 && !ps.opts.some((o) => /^bg/.test(o)) && !ps.pad, 'Settings (top right) lists Auto rotate and GamePad (no Background in a browser) over a hidden pad (' + ps.opts + ')');
+        check(ps.opts.indexOf('dpad:false') >= 0 && ps.opts.join() === 'rotate:true,awake:true,bg:true,dpad:false' && !ps.pad, 'Settings (top right) always lists Auto rotate, Stay awake, Background and GamePad, even in a browser, over a hidden pad (' + ps.opts + ')');
         check(ps.size >= 24, 'the checkboxes are finger-sized (' + Math.round(ps.size) + ' px)');
         await P2.click('.gc-phoneset [data-opt=dpad]');
         await P2.click('.gc-phoneset .btn-primary');

@@ -17,7 +17,7 @@
  * Phone settings (Settings button on every screen, kept on the phone in arc_dev_ctrlphone.opt): Auto rotate, Stay awake,
  * Background (the Android app keeps the link with the screen off) and GamePad (a D-pad in place of the stick). The Android
  * app (MyPCNative 3+) applies the first three natively; in a browser Auto rotate and Stay awake use the Screen Orientation
- * and Wake Lock APIs where the browser has them, and the settings it cannot do are not shown.
+ * and Wake Lock APIs where the browser has them; all four settings are always shown.
  * Protocol: js/core/sensor-proto.js, docs/phone-controller.md. Separate from the touch pad that the shell draws over games. */
 (function () {
     'use strict';
@@ -57,16 +57,7 @@
     function save() { Store.rawSet(KEY, { cid: cid, code: code, p: player, mode: mode, prefs: saved.prefs || {}, ptr: saved.ptr || {}, opt: saved.opt || {}, paired: !!saved.paired }); }
     function opts() { var o = saved.opt || {}, r = {}; for (var k in OPT_DEF) r[k] = typeof o[k] === 'boolean' ? o[k] : OPT_DEF[k]; return r; }
     function nativeV() { try { return window.MyPCNative && typeof MyPCNative.version === 'function' ? +MyPCNative.version() || 0 : 0; } catch (e) { return 0; } }
-    // which settings this phone can honour: the app (3+) all of them; an older app none but GamePad (it keeps the screen on,
-    // turns with the phone and stays connected anyway); a browser rotation and screen on when it has the APIs
-    function canOpt(k) {
-        var v = nativeV();
-        if (k === 'dpad' || v >= 3) return true;
-        if (v) return false;
-        if (k === 'rotate') return !!(screen.orientation && screen.orientation.lock);
-        if (k === 'awake') return !!navigator.wakeLock;
-        return false;
-    }
+    // owner decision: every setting is always shown, no conditions (an old app or a browser simply ignores what it cannot do)
     function setOpt(k, v) {
         var o = opts(); o[k] = !!v; saved.opt = o; save();
         applyOpts();
@@ -469,7 +460,6 @@
         var box = el('div', 'gc-modepick gc-phoneset'), o = opts(), first = null;
         box.appendChild(el('div', 'gc-title', t('gcPhone')));
         OPT_NAMES.forEach(function (n) {
-            if (!canOpt(n[0])) return;
             var r = el('label', 'gc-srow gc-check'), c = el('input');
             c.type = 'checkbox'; c.checked = o[n[0]]; c.setAttribute('data-focus', ''); c.setAttribute('data-opt', n[0]);
             c.onchange = function () { setOpt(n[0], c.checked); };

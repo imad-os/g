@@ -42,8 +42,9 @@ try {
     Copy-Item 'app\build\outputs\apk\release\app-release.apk' 'My-PC.apk' -Force
     Copy-Item 'My-PC.apk' 'My-PC-Controller.apk' -Force
     $man = Join-Path $here '..\app-manifest.json'
-    $txt = Get-Content -Raw $man
+    $txt = [System.IO.File]::ReadAllText($man)
     $n = [int]([regex]::Match($txt, '"build":\s*(\d+)').Groups[1].Value) + 1
-    Set-Content -NoNewline -Encoding utf8 $man ([regex]::Replace($txt, '"build":\s*\d+', '"build": ' + $n, 1))
+    # no BOM (Windows PowerShell's -Encoding utf8 adds one, and JSON.parse in the TV loader then fails)
+    [System.IO.File]::WriteAllText($man, [regex]::Replace($txt, '"build":\s*\d+', '"build": ' + $n, 1), (New-Object System.Text.UTF8Encoding($false)))
     Write-Host ('APK: ' + (Resolve-Path 'My-PC.apk') + '  (app-manifest build ' + $n + ')')
 } finally { Pop-Location }

@@ -241,7 +241,7 @@ the app in the background: foreground service + wake locks) and **GamePad** (a D
 controller opens with **Connect** focused, not the code box (no phone keyboard popping up). The first
 three are on by default and done natively by the Android app (`MyPCNative.settings(json)`, app 2.1.0, `version()` 3,
 kept by the app in its own preferences and applied from its start). In a browser, Auto rotate uses the Screen
-Orientation API (only in full screen) and Stay awake the Wake Lock API; the settings a phone cannot do are not shown.
+Orientation API (only in full screen) and Stay awake the Wake Lock API; all four settings are always shown (owner decision); a phone that cannot do one simply ignores it.
 
 **Live** (sensor modes): gait (with confidence), pace, speed, cadence, steps, distance, last move (flashes), connection
 state with latency, sensor indicators (motion permission, data flowing, gyroscope, linear acceleration),
