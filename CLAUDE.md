@@ -106,7 +106,7 @@
 ## Rules that always apply
 - **Buttons are A B X Y + the +, always (owner rule, repeated many times).** Every pad or hint with face buttons (phone controller, the shell's
   touch pad over apps, the SDK's `MyPC.pad`, the VirtualPad library, games, on-screen hints, docs, examples) uses A B X Y in the Nintendo
-  places (A right = ok, B bottom = run + back, X top = menu, Y left = run). Never A B C, never a ☰ / "Menu" button: pause / menu is the Nintendo-style **+** button (top centre of the pad). Check this before
+  places, each sending what the same button of a real Nintendo pad sends (A right = run + back, B bottom = OK / jump, X top and Y left = run, + = menu). Never A B C, never a ☰ / "Menu" button: pause / menu is the Nintendo-style **+** button (top centre of the pad). Check this before
   you ship any control or hint.
 - One app or game at a time, full screen; free everything on close (iframes, timers, AudioContext).
   No allocation per frame in games.
