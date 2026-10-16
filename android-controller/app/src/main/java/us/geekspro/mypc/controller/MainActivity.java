@@ -195,6 +195,7 @@ public final class MainActivity extends Activity {
 
     /* ---------- page ---------- */
 
+    // OWNER RULE: the app always opens the whole My PC (HOME, the desktop), never a controller-only page
     private String startUrl(Intent i) {
         Uri u = i != null ? i.getData() : null;
         if (u != null && u.getQueryParameter("pair") != null) return pairUrl(u.toString());

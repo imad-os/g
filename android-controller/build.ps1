@@ -1,9 +1,13 @@
-# Builds the My PC Controller APK: android-controller\My-PC-Controller.apk
+# Builds the My PC APK (the whole My PC app): android-controller\My-PC.apk (and the same file as My-PC-Controller.apk, the
+# old name, for links shared before). It also bumps "build" in app-manifest.json: the desktop's Get the app link carries
+# the build, so a new APK always gets a new address and no browser or CDN hands out the old one.
 #   powershell -ExecutionPolicy Bypass -File android-controller\build.ps1
 # Needs JDK 17 and the Android SDK (platform 35, build-tools 35). By default they are looked for in
 # %USERPROFILE%\.tooling (jdk17, android-sdk); JAVA_HOME / ANDROID_HOME win when they are set.
 # The first run creates the signing key (%USERPROFILE%\.tooling\keys\mypc-controller.jks) and keystore.properties.
 # Keep that key: phones install an update over the old app only when it is signed with the same key.
+# OWNER RULE: this APK is always the WHOLE My PC app (MainActivity opens the My PC desktop), never a controller-only app,
+# and every rebuild bumps the app-manifest build so the desktop's Get the app link serves this new APK (done below).
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
 $tool = Join-Path $env:USERPROFILE '.tooling'
@@ -35,6 +39,11 @@ Push-Location $here
 try {
     & .\gradlew.bat --no-daemon -q assembleRelease
     if ($LASTEXITCODE) { throw 'Gradle build failed' }
-    Copy-Item 'app\build\outputs\apk\release\app-release.apk' 'My-PC-Controller.apk' -Force
-    Write-Host ('APK: ' + (Resolve-Path 'My-PC-Controller.apk'))
+    Copy-Item 'app\build\outputs\apk\release\app-release.apk' 'My-PC.apk' -Force
+    Copy-Item 'My-PC.apk' 'My-PC-Controller.apk' -Force
+    $man = Join-Path $here '..\app-manifest.json'
+    $txt = Get-Content -Raw $man
+    $n = [int]([regex]::Match($txt, '"build":\s*(\d+)').Groups[1].Value) + 1
+    Set-Content -NoNewline -Encoding utf8 $man ([regex]::Replace($txt, '"build":\s*\d+', '"build": ' + $n, 1))
+    Write-Host ('APK: ' + (Resolve-Path 'My-PC.apk') + '  (app-manifest build ' + $n + ')')
 } finally { Pop-Location }

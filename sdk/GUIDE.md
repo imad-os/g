@@ -539,6 +539,10 @@ the World records.
 
 ## 12. Phone controllers with motion: `MyPC.sensors` (API level 8)
 
+The Android app (**My PC for Android**, `android-controller/My-PC.apk`, downloaded from the desktop's **Get the app**)
+is **the whole My PC app** on the phone, not a separate controller: your app runs in it like on any device, and the phone
+controller is its **Game controller** app. Never build or describe a controller-only APK.
+
 Players can use a phone as a controller (My PC > **Game controller** on the phone). Besides **Buttons** (the virtual pad;
 your app just gets the usual actions) the phone has two motion modes: **Motion moves** (the phone, in the player's right
 hand, detects moves such as `LEFT` `RIGHT` `JUMP` `DUCK` `DUCK_END` and sends only the ones you ask for, plus running

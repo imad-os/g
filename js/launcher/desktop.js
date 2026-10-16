@@ -123,7 +123,7 @@ var Desktop = (function () {
     // Get the app: on every device (owner decision), a shortcut to the latest My PC APK (android-controller/).
     // In a browser it downloads the file; inside the app (window.MyPCNative) it is "Update the app" and opens the phone's
     // browser on an http:// link (the app hands every link that is not https My PC to the browser, which downloads it)
-    var APK = 'android-controller/My-PC-Controller.apk';
+    var APK = 'android-controller/My-PC.apk';
     function apkUrl() {
         var b = (typeof AppBoot !== 'undefined' && AppBoot.base && AppBoot.base()) || '';
         if (!/^https?:/.test(b)) b = location.href.split(/[?#]/)[0].replace(/[^/]*$/, '');

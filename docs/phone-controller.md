@@ -49,7 +49,7 @@ stops at the screen edges (turning back re-aligns it), hides after 5 s without m
 comes back in the centre. Nothing runs while it is hidden. The phone sends 50 small messages a second at most, only while
 moving. On a game's page the config says `pointer: false` and the phone sends nothing.
 
-**Android app** (`android-controller/`, `My-PC-Controller.apk`): the same Game controller page in a native shell that
+**Android app** (`android-controller/`, `My-PC.apk`: the whole My PC app): the same Game controller page in a native shell that
 feeds it native motion samples (200 Hz fused sensors, 100 Hz samples with their own timestamps) instead of
 `devicemotion`, scans the QR code natively, and keeps the link and sensors running with the screen off. Opened with
 `?ctrl=1`; the page talks to it through `window.MyPCNative` (`native()` in `gamepad.js`). See `android-controller/README.md`.

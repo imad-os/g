@@ -1,13 +1,20 @@
 # My PC for Android (android-controller/)
 
+> **Owner rule (never change it):** the APK is **always the whole My PC app** (it opens the My PC desktop, like on the TV;
+> the Game controller is one app on that desktop). It is **never** a controller-only app, whatever its package name
+> (`...mypc.controller`, kept so updates install over old phones) or the old file name `My-PC-Controller.apk` suggest.
+> **Every APK rebuild** goes through `build.ps1`, which also bumps `build` in `app-manifest.json`: the desktop's
+> **Get the app / Update the app** link carries that build, so it always downloads the APK just built. Commit
+> `My-PC.apk`, `My-PC-Controller.apk` and `app-manifest.json` together.
+
 My PC as an installable Android app (`My PC`, package `us.geekspro.mypc.controller`, kept so updates install over the old
 controller app): the whole hosted My PC (desktop, games, apps, App Store) opens like any app. On phones the desktop has a
 **Game controller** shortcut (buttons, motion moves, motion data, pointer), paired with the QR code the TV shows in Settings >
 Devices > Phone controller. The taskbar and desktop icons are drawn bigger on phones (`html.compact`, `js/launcher/main.js` fit()).
 Protocol and modes: [docs/phone-controller.md](../docs/phone-controller.md).
 
-**Install:** download [`My-PC-Controller.apk`](My-PC-Controller.apk) on the phone (it is also served by the hosted
-copy at `https://pc.geekspro.us/android-controller/My-PC-Controller.apk`), open it, and allow "Install unknown apps" for
+**Install:** download [`My-PC.apk`](My-PC.apk) on the phone (it is also served by the hosted
+copy at `https://pc.geekspro.us/android-controller/My-PC.apk`; `My-PC-Controller.apk` is the same file under its old name), open it, and allow "Install unknown apps" for
 the browser or file manager when Android asks. Android 8.0 or newer. My PC (every device, browser or app) has a
 **Get the app** desktop icon that downloads this file (`apkButton()` in `js/launcher/desktop.js`). Inside the app the same icon is **Update the app**: it opens the
 phone's browser on an http:// link, which downloads the latest APK.
@@ -40,7 +47,7 @@ powershell -ExecutionPolicy Bypass -File android-controller\build.ps1
 ```
 
 Needs JDK 17 and the Android SDK (platform 35, build-tools 35), looked for in `%USERPROFILE%\.tooling\jdk17` and
-`%USERPROFILE%\.tooling\android-sdk` unless `JAVA_HOME` / `ANDROID_HOME` are set. Writes `My-PC-Controller.apk` here.
+`%USERPROFILE%\.tooling\android-sdk` unless `JAVA_HOME` / `ANDROID_HOME` are set. Writes `My-PC.apk` (and the old name `My-PC-Controller.apk`) here and bumps `build` in `app-manifest.json`, so the desktop's Get the app link changes address with every new APK.
 Bump `versionCode` / `versionName` in `app/build.gradle` for a new release.
 
 **Signing key:** the first build creates `%USERPROFILE%\.tooling\keys\mypc-controller.jks` and its password file

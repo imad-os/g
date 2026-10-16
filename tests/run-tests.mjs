@@ -2775,7 +2775,7 @@ async function main() {
         await G.waitForSelector('#desk-icons [data-app="getapp"]', { timeout: 20000 });
         await G.evaluate(() => document.querySelector('[data-app="getapp"]').click());
         const dl = await G.evaluate(() => __dl[0] || []);
-        check(/android-controller\/My-PC-Controller\.apk\?b=\d+$/.test(dl[0] || '') && dl[1] === 'My-PC.apk', 'Android browser: "Get the app" downloads the latest APK (' + dl.join(' ') + ')');
+        check(/android-controller\/My-PC\.apk\?b=\d+$/.test(dl[0] || '') && dl[1] === 'My-PC.apk', 'Android browser: "Get the app" downloads the latest APK (' + dl.join(' ') + ')');
         check(G.errors.length === 0, 'no page errors with Get the app ' + G.errors.join('; '));
         await G.context().close();
         await H.evaluate(() => Input.systemBack());

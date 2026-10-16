@@ -82,9 +82,11 @@
   **Motion moves tuning on the TV** (Settings > Devices > Phone controller > Motion moves, `arc_dev_ctrltune`): per-move limits, harder
   while running, repeat guard; sent to phones as config `tune`, live test via `Controllers.monitor`. Phone settings use − / + buttons;
   the Game controller root stops `touchmove` so VirtualPad's document-wide blocking does not stop scrolling.
+  **Owner rule: the APK is ALWAYS the whole My PC app (opens the desktop), never controller-only; every APK rebuild (build.ps1)
+  bumps `build` so the desktop's Get the app link serves the new APK. Write this into any new project or session brief.**
   **Android app** `android-controller/` (APK "My PC": Java WebView shell of the hosted My PC, opens the desktop like any app; old 1.x APKs open `?ctrl=1`): phone Back = TV Back (`Input.systemBack`), exit = `MyPCNative.exit`; native sensors / QR / screen-off link
   through `window.MyPCNative` + `assets/bridge.js`; build with `android-controller/build.ps1` (JDK + SDK in `%USERPROFILE%\.tooling`), commit
-  the rebuilt `My-PC-Controller.apk`; the signing key lives outside the repo (`.tooling\keys`), never commit it.
+  the rebuilt `My-PC.apk` (+ the same file as old name `My-PC-Controller.apk`; build.ps1 also bumps `build`, which the Get the app link carries, so commit app-manifest.json with it); the signing key lives outside the repo (`.tooling\keys`), never commit it.
 - **Heart-rate sensors (TV)**: `js/core/hr-ble.js` (any BLE Heart Rate Service device: Garmin watches broadcasting, Polar, Garmin HRM, Decathlon),
   created per app by `game-host.js` for `hr-monitor` or apps with `"heartRate": true` in their config; SDK `MyPC.bluetooth`.
   Needs the `bluetooth` privileges in `config.xml` (package 1.4.0+), so a new .wgt on the TV. Unit tests: `node tests/unit-tests.mjs` (part of `npm test`).
