@@ -70,7 +70,7 @@
   P1 = Input device `keys`, P2 = `keys2` (`Input.remote`). The phone reconnects by itself when the TV changes page. Separate from the in-game touch pad.
   Pairing is a QR code (own page Settings > Devices > Phone controller, `js/core/qr.js`, link `?pair=<code>` opens the Game controller and connects).
   **Owner decision: its Buttons mode reuses the existing virtual pad (`VirtualPad`, id `controller`), never a separately drawn pad;**
-  **A B X Y in the Nintendo places** (pad button option `place`: A right = ok, B bottom = `b` (run + cancel), X top = menu, Y left = run); a **Home** button (pad option `home`, `{ t: 'k', a: 'home' }`: pause menu on Quit in a game, closes the open app on the desktop).
+  **A B X Y in the Nintendo places** (pad button option `place`) **sending exactly what the same button of a real Nintendo pad on the TV sends (owner rule; Input.PAD_BUTTONS reads by position): A right = `b` (run + cancel), B bottom = `ok` (jump + confirm), X top and Y left = run, the + button = `menu` (Start), Home (pad option `home`) = `guide`**; same mapping in the shell's touch pad and the SDK's `MyPC.pad`.
   **Phone settings** (Game controller > Settings, `arc_dev_ctrlphone.opt`): Auto rotate, Stay awake, Background (native in the APK 2.1.0+ via
   `MyPCNative.settings`; always shown, no conditions) and GamePad (pad option `dpad`: a D-pad in place of the stick); Disconnect / Forget TV; a paired TV is reconnected by itself
   when the Game controller opens (`paired`); it opens on Connect, never auto-focusing the code box.
@@ -104,6 +104,10 @@
   `tests/run-tests.mjs`); never let tests or scripts reach the real database.
 
 ## Rules that always apply
+- **Buttons are A B X Y + the +, always (owner rule, repeated many times).** Every pad or hint with face buttons (phone controller, the shell's
+  touch pad over apps, the SDK's `MyPC.pad`, the VirtualPad library, games, on-screen hints, docs, examples) uses A B X Y in the Nintendo
+  places (A right = ok, B bottom = run + back, X top = menu, Y left = run). Never A B C, never a ☰ / "Menu" button: pause / menu is the Nintendo-style **+** button (top centre of the pad). Check this before
+  you ship any control or hint.
 - One app or game at a time, full screen; free everything on close (iframes, timers, AudioContext).
   No allocation per frame in games.
 - Every screen must work with the TV remote alone (arrows, OK, Back) and Voice Guide.

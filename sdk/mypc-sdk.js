@@ -667,14 +667,14 @@ var MyPC = (function () {
      *   <script src="virtual-pad.js"></script>          (after the SDK)
      *   VirtualPad.init();                              // joystick + A (OK) + B (run) + pause; shown standalone on touch devices
      *   VirtualPad.init({ id: 'pad', buttons: [{ label: 'A', key: 13 }, { label: 'B', key: 88 }],
-     *                     catalog: [{ label: 'A', key: 13 }, { label: 'B', key: 88 }, { label: 'C', key: 8 }] });
+     *                     catalog: [{ label: 'A', key: 13 }, { label: 'B', key: 88 }, { label: 'X', key: 77 }, { label: 'Y', key: 90 }] });
      *
      * Customizable by the player: the gear button opens a panel to add or hide buttons (any entry of `catalog`),
      * make the stick and the buttons bigger or smaller, drag everything where it feels right, and reset. The choices
      * are kept on the device (localStorage, per `id`). Options:
      *   buttons  the buttons shown at first          catalog  every button the player may add (default: buttons)
      *   id       name for the saved layout           scale    { stick, btn } starting size multipliers (default 1; use ~1.3 for a pure controller)
-     *   pause    false hides the pause button        force    show anywhere (default: standalone on a touch device)
+     *   pause    false hides the + (pause / menu) button        force    show anywhere (default: standalone on a touch device)
      *   send     function (keyCode, down): route the keys somewhere else (e.g. over the network) instead of pressing them here
      *   dpad     true: a D-pad in place of the stick  home     true: a Home button (action 'home', key 36)
      *   customize false hides the gear button          onAction function (action, down): call the game's own input system for buttons that have an `action`
@@ -685,7 +685,7 @@ var MyPC = (function () {
      * Key codes: 13 Enter (OK / jump), 32 Space, 88 X (run / fire), 8 Backspace (cancel), 27 Esc (pause menu), 80 P. */
     var VirtualPad = (function () {
         'use strict';
-        var DEFAULT = [{ label: 'A', key: 13 }, { label: 'B', key: 88 }];
+        var DEFAULT = [{ label: 'A', key: 13, place: 'right' }, { label: 'B', key: 88, place: 'bottom' }];     // A B X Y in the Nintendo places, never A B C
         var DIRS = { left: 37, up: 38, right: 39, down: 40 };
         var TXT = {
             en: { opts: 'Pad settings', btns: 'Buttons', stick: 'Stick size', btn: 'Button size', move: 'Move', done: 'Done', reset: 'Reset', close: 'Close' },
@@ -930,7 +930,7 @@ var MyPC = (function () {
             if (o.home) makeHome();
             window.addEventListener('resize', layout);
             if (opt.pause !== false) {
-                var p = el('div', 'position:absolute;left:50%;top:2vmin;margin-left:-6vmin;width:12vmin;height:6vmin;border-radius:3vmin;background:rgba(255,255,255,0.14);border:2px solid rgba(255,255,255,0.35);color:#fff;font:700 3.5vmin sans-serif;display:flex;align-items:center;justify-content:center;touch-action:none;pointer-events:auto', root, 'II');
+                var p = el('div', 'position:absolute;left:50%;top:2vmin;margin-left:-6vmin;width:12vmin;height:6vmin;border-radius:3vmin;background:rgba(255,255,255,0.14);border:2px solid rgba(255,255,255,0.35);color:#fff;font:800 5vmin sans-serif;display:flex;align-items:center;justify-content:center;touch-action:none;pointer-events:auto', root, '+');   // a Nintendo-style + button: pause / menu
                 p.addEventListener('pointerdown', function (ev) { press(27, true, 'pause'); press(27, false, 'pause'); ev.preventDefault(); });
             }
             if (o.customize) {
@@ -948,7 +948,7 @@ var MyPC = (function () {
 
     var pad = (function () {
         var api = { version: VirtualPad.version }, mine = null;          // mine: the callbacks of a pad the app asked for in My PC (the shell draws it)
-        var ACTIONS = { ok: ['confirm', 'jump'], run: ['run'], cancel: ['cancel'], menu: ['menu'], left: ['left'], right: ['right'], up: ['up'], down: ['down'] };
+        var ACTIONS = { ok: ['confirm', 'jump'], b: ['run', 'cancel'], run: ['run'], cancel: ['cancel'], menu: ['menu'], left: ['left'], right: ['right'], up: ['up'], down: ['down'] };
         function hash(t) { var h = 7, i; for (i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) % 8999; return 1000 + h; }
         // [{ label (3 characters at most), action?, key? }] -> the library's buttons; a key made from the content keeps saved layouts valid
         function list(a, def) {
@@ -961,12 +961,15 @@ var MyPC = (function () {
                 k = typeof b.key === 'number' ? b.key : hash(b.label + '|' + act);
                 if (seen[k]) continue;
                 seen[k] = 1;
-                out.push(act ? { label: b.label, action: act, key: k } : { label: b.label, key: k });
+                var pl = b.place === 'right' || b.place === 'bottom' || b.place === 'top' || b.place === 'left' ? b.place : undefined, o = act ? { label: b.label, action: act, key: k } : { label: b.label, key: k };
+                if (pl) o.place = pl;
+                out.push(o);
             }
             return out.length ? out : def;
         }
-        var DEFAULT = list([{ label: 'A', action: 'ok' }, { label: 'B', action: 'run' }]);
-        var CATALOG = list([{ label: 'A', action: 'ok' }, { label: 'B', action: 'run' }, { label: 'C', action: 'cancel' }, { label: '☰', action: 'menu' }]);
+        // owner rule: A B X Y in the Nintendo places, each one sending what the same button of a real Nintendo pad sends, never A B C or a menu symbol
+        var DEFAULT = list([{ label: 'A', action: 'b', place: 'right' }, { label: 'B', action: 'ok', place: 'bottom' }]);
+        var CATALOG = list([{ label: 'A', action: 'b', place: 'right' }, { label: 'B', action: 'ok', place: 'bottom' }, { label: 'X', action: 'run', place: 'top' }, { label: 'Y', action: 'run', place: 'left' }]);
 
         // actions of the pad -> the SDK's own input (no fake keyboard events)
         function onAction(action, down) {

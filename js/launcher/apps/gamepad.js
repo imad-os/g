@@ -26,10 +26,12 @@
     var MODES = ['pad', 'sensor-actions', 'sensor-raw', 'pointer'], MODE_NAMES = ['gcModePad', 'gcModeActions', 'gcModeRaw', 'gcModePointer'];
     // the pad layout (buttons, sizes, places) is kept in My PC's store too, so it is never lost between opens
     var PAD_STORE = { get: function (k) { return Store.rawGet('arc_dev_' + k); }, set: function (k, v) { Store.rawSet('arc_dev_' + k, v); } };
-    // A B X Y where a Nintendo controller has them: A right (OK / jump), B bottom (back / run, like a gamepad's B), X top (the
-    // game's menu), Y left (run)
-    var ABXY = [{ label: 'A', key: 13, action: 'ok', place: 'right' }, { label: 'B', key: 88, action: 'b', place: 'bottom' },
-                { label: 'X', key: 77, action: 'menu', place: 'top' }, { label: 'Y', key: 90, action: 'run', place: 'left' }];
+    // A B X Y in the Nintendo places, sending EXACTLY what the same button of a real Nintendo controller on the TV sends (owner
+    // rule). My PC reads a pad by position (W3C standard mapping, js/core/input.js PAD_BUTTONS): the bottom button (B) is
+    // OK / jump, the right one (A) is run + back, top (X) and left (Y) are run. The + button is Start ('menu'), Home is the
+    // Guide button ('guide'). A test compares them with a fake pad.
+    var ABXY = [{ label: 'A', key: 13, action: 'b', place: 'right' }, { label: 'B', key: 88, action: 'ok', place: 'bottom' },
+                { label: 'X', key: 77, action: 'run', place: 'top' }, { label: 'Y', key: 90, action: 'run', place: 'left' }];
     var PAD = { buttons: ABXY, catalog: ABXY };
     var root = null, code = '', player = 1, mode = 'pad', run = false, busy = false, conn = null, linked = false, sess = null, retry = 0, wait = 0, curReq = null, offerObj = null;
     var want = {}, sent = {}, ui = {}, saved = {}, cid = '', inPad = false, wl = null, session = '';
@@ -179,7 +181,7 @@
     function send(m) { return !!(conn && linked && conn.send(m)); }
 
     /* ---------- pad mode: the existing virtual pad ---------- */
-    function padAction(a, down) { want[a] = down; sync(); }
+    function padAction(a, down) { a = a === 'pause' ? 'menu' : a === 'home' ? 'guide' : a; want[a] = down; sync(); }       // + = Start, Home = Guide, like a real pad
     function sync() {
         for (var a in want) if (want[a] !== !!sent[a]) {
             sent[a] = want[a];

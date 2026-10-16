@@ -3,7 +3,7 @@
  * (Input.touch -> actions, device 'touch'). Apps and games need no touch code. The pad is the virtual-pad library
  * (js/core/virtual-pad.js, source: sdk/pad/virtual-pad.js). Never drawn on a TV, and not while a gamepad is the active input.
  *   Manifest / mypc-app.json:  "touch": false | { "buttons": [{ "label": "A", "action": "ok" }], "catalog": [...], "scale": { "stick": 1, "btn": 1 } }
- *   (false = the app has its own touch UI; labels are 3 characters at most; actions ok run cancel menu; 8 entries at most)
+ *   (false = the app has its own touch UI; labels are 3 characters at most; actions ok b run cancel menu, `place` right / bottom / top / left for the Nintendo diamond; 8 entries at most)
  *   MyPC.init({ pad: false | { ... } }) says the same from the app (it wins over the manifest; true = no preference);
  *   MyPC.pad.init({ force: true, buttons, onAction | send }) inside the app: the app wants a pad of its own (e.g. a phone that is
  *   only a controller). The shell draws THAT one instead (any action names, shown on any device while the app runs) and sends the
@@ -17,7 +17,8 @@
 var TouchPad = (function () {
     'use strict';
 
-    var ACTIONS = { ok: 1, run: 1, cancel: 1, menu: 1 };
+    var ACTIONS = { ok: 1, run: 1, cancel: 1, menu: 1, b: 1 };
+    var PLACES = { right: 1, bottom: 1, top: 1, left: 1 };
     var MAX_ENTRIES = 8, LABEL_MAX = 3;
     var PAD_STORE = { get: function (k) { return Store.rawGet('arc_dev_' + k); }, set: function (k, v) { Store.rawSet('arc_dev_' + k, v); } };   // layouts kept in My PC's store
     var cur = null, appPad = null, own = false, ownCfg = null, relay = null, gameState = 'idle', settingsOpen = false, fromPause = false, held = false, listening = false;
@@ -33,12 +34,14 @@ var TouchPad = (function () {
             k = hash(b.label + '|' + b.action);
             if (seen[k]) continue;
             seen[k] = 1;
-            out.push({ label: b.label, action: b.action, key: k });
+            out.push(PLACES.hasOwnProperty(b.place) ? { label: b.label, action: b.action, key: k, place: b.place } : { label: b.label, action: b.action, key: k });
         }
         return out.length ? out : null;
     }
-    var DEFAULT = list([{ label: 'A', action: 'ok' }, { label: 'B', action: 'run' }]);
-    var CATALOG = list([{ label: 'A', action: 'ok' }, { label: 'B', action: 'run' }, { label: 'C', action: 'cancel' }, { label: '☰', action: 'menu' }]);
+    // owner rule: the buttons are A B X Y in the Nintendo places and each sends what the same button of a real Nintendo pad sends (A right = run + back, B bottom = OK / jump, X top and Y left = run;
+    // the + button is the pause menu), never A B C or a menu symbol
+    var DEFAULT = list([{ label: 'A', action: 'b', place: 'right' }, { label: 'B', action: 'ok', place: 'bottom' }]);
+    var CATALOG = list([{ label: 'A', action: 'b', place: 'right' }, { label: 'B', action: 'ok', place: 'bottom' }, { label: 'X', action: 'run', place: 'top' }, { label: 'Y', action: 'run', place: 'left' }]);
 
     // false -> { off: true }; true / nothing / garbage -> defaults; an object -> its valid parts
     function clean(t) {

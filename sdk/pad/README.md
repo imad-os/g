@@ -38,9 +38,10 @@ without any change. With the My PC SDK in standalone mode those keys already mea
 VirtualPad.init({
     id: 'my-game',                                   // the saved layout is kept per id
     onAction: function (action, down) { game.input(action, down); },
-    buttons: [ { label: 'A', key: 13, action: 'jump' }, { label: 'B', key: 88, action: 'run' } ],
-    catalog: [ { label: 'A', key: 13, action: 'jump' }, { label: 'B', key: 88, action: 'run' },
-               { label: 'C', key: 8,  action: 'cancel' }, { label: '☰', key: 77, action: 'menu' } ]
+    // always A B X Y in the Nintendo places (A right, B bottom, X top, Y left): never A B C, never a menu symbol
+    buttons: [ { label: 'A', key: 13, action: 'jump', place: 'right' }, { label: 'B', key: 88, action: 'run', place: 'bottom' } ],
+    catalog: [ { label: 'A', key: 13, action: 'jump', place: 'right' }, { label: 'B', key: 88, action: 'run', place: 'bottom' },
+               { label: 'X', key: 77, action: 'menu', place: 'top' }, { label: 'Y', key: 90, action: 'run', place: 'left' } ]
 });
 ```
 

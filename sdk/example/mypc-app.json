@@ -9,5 +9,5 @@
   "version": "1.0.0",
   "scores": true,
   "config": { "speed": 1 },
-  "touch": { "buttons": [{ "label": "OK", "action": "ok" }], "catalog": [{ "label": "OK", "action": "ok" }, { "label": "B", "action": "run" }, { "label": "C", "action": "cancel" }] }
+  "touch": { "buttons": [{ "label": "A", "action": "ok", "place": "right" }, { "label": "B", "action": "b", "place": "bottom" }], "catalog": [{ "label": "A", "action": "ok", "place": "right" }, { "label": "B", "action": "b", "place": "bottom" }, { "label": "X", "action": "menu", "place": "top" }, { "label": "Y", "action": "run", "place": "left" }] }
 }

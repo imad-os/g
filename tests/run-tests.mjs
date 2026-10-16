@@ -2152,7 +2152,7 @@ async function main() {
         const P = await setup({ phone: true });
         const fr = await openApp(P, 'pad-def');
         let pad = await padOf(P);
-        check(!!pad && !!pad.stick && !!pad.labels.A && !!pad.labels.B && !!pad.labels['⚙'] && !!pad.labels.II && !pad.labels.C, 'phone 844x390: the shell draws the pad (stick, A, B, pause, gear) above the app, nothing to code in the app');
+        check(!!pad && !!pad.stick && !!pad.labels.A && !!pad.labels.B && !!pad.labels['⚙'] && !!pad.labels['+'] && !pad.labels.C && !pad.labels.II && !pad.labels['☰'], 'phone 844x390: the shell draws the pad (stick, A, B, the + button, gear; never A B C) above the app, nothing to code in the app');
         check(await P.evaluate(() => { const r = [...document.body.children].find((e) => e.style && e.style.zIndex === '99999'); return r.parentNode === document.body && !document.getElementById('desktop').offsetParent; }), 'the pad lives on the page, over the game layer (the desktop is not built on the game page)');
         // the stick
         const fg = await fingers(P);
@@ -2165,39 +2165,39 @@ async function main() {
         await fg.up(1); await wait(P);
         check(await fr.evaluate(() => !MyPC.isDown('right') && !MyPC.isDown('up') && !MyPC.isDown('left')), 'letting go releases the stick');
         // buttons: A = confirm + jump (like the remote's OK), B = run, held while the finger stays
-        await fg.down(2, pad.labels.A.x, pad.labels.A.y); await wait(P);
-        check(await fr.evaluate(() => MyPC.isDown('confirm') && MyPC.isDown('jump') && !MyPC.isDown('run')), 'A = "confirm" + "jump" (the remote\'s OK), held while pressed');
+        await fg.down(2, pad.labels.B.x, pad.labels.B.y); await wait(P);
+        check(await fr.evaluate(() => MyPC.isDown('confirm') && MyPC.isDown('jump') && !MyPC.isDown('run')), 'B (bottom) = "confirm" + "jump" (the remote\'s OK), like a Nintendo pad\'s B, held while pressed');
         await P.waitForTimeout(300);
         check(await fr.evaluate(() => MyPC.isDown('jump')), 'a button stays held');
         // multi-touch: stick + A + B at once
-        await fg.down(1, pad.stick.x + 45, pad.stick.y); await fg.down(3, pad.labels.B.x, pad.labels.B.y); await wait(P);
-        check(await fr.evaluate(() => MyPC.isDown('right') && MyPC.isDown('jump') && MyPC.isDown('run')), 'multi-touch: stick + A + B at the same time');
+        await fg.down(1, pad.stick.x + 45, pad.stick.y); await fg.down(3, pad.labels.A.x, pad.labels.A.y); await wait(P);
+        check(await fr.evaluate(() => MyPC.isDown('right') && MyPC.isDown('jump') && MyPC.isDown('run') && MyPC.isDown('cancel')), 'multi-touch: stick + B + A (run + back) at the same time');
         await fg.up(2); await wait(P);
-        check(await fr.evaluate(() => !MyPC.isDown('jump') && MyPC.isDown('run') && MyPC.isDown('right')), 'releasing A keeps B and the stick');
+        check(await fr.evaluate(() => !MyPC.isDown('jump') && MyPC.isDown('run') && MyPC.isDown('right')), 'releasing B keeps A and the stick');
         await fg.up(3); await fg.up(1); await wait(P);
         check(await fr.evaluate(() => !MyPC.isDown('run') && !MyPC.isDown('right')), 'all released');
 
         // the pause button: My PC's pause menu; the pad hides while it is open; the menu offers "Touch pad settings"
-        await tap(P, pad.labels.II.x, pad.labels.II.y);
-        check(await P.evaluate(() => GameHost.state() === 'paused'), 'the pause button opens My PC\'s pause menu');
+        await tap(P, pad.labels['+'].x, pad.labels['+'].y);
+        check(await P.evaluate(() => GameHost.state() === 'paused'), 'the + button opens My PC\'s pause menu');
         check(!(await padOf(P)), 'the pad is hidden while My PC\'s pause menu is open');
         const items = await P.evaluate(() => [...document.querySelectorAll('#pause-items button')].map((b) => b.textContent));
         check(items.indexOf('Touch pad settings') > 0, 'the pause menu has "Touch pad settings" (' + items.join(', ') + ')');
-        // customize from the pause menu: add C, close, resume: C is there
+        // customize from the pause menu: add X, close, resume: C is there
         await P.evaluate(() => { [...document.querySelectorAll('#pause-items button')].find((b) => b.textContent === 'Touch pad settings').click(); });
         await wait(P);
         pad = await padOf(P);
         check(!!pad && pad.panel === true, 'Touch pad settings opens the pad\'s settings panel over the pause menu');
-        await P.evaluate(() => { [...document.querySelectorAll('div')].find((e) => !e.children.length && e.textContent === 'C' && e.style.cursor === 'pointer').click(); });
+        await P.evaluate(() => { [...document.querySelectorAll('div')].find((e) => !e.children.length && e.textContent === 'X' && e.style.cursor === 'pointer').click(); });
         await P.evaluate(() => { [...document.querySelectorAll('div')].find((e) => !e.children.length && e.textContent === 'Close').click(); });
         await wait(P);
         check(!(await padOf(P)) && await P.evaluate(() => GameHost.state() === 'paused' && !document.getElementById('pause').hidden), 'closing the panel goes back to the pause menu (pad hidden, game still paused)');
         await P.evaluate(() => document.querySelector('#pause-items button').click());      // Resume
         await wait(P);
         pad = await padOf(P);
-        check(!!pad && !!pad.labels.C && !!pad.labels.A && !!pad.labels.B, 'back in the game the pad has the new button C');
-        await fg.down(4, pad.labels.C.x, pad.labels.C.y); await wait(P);
-        check(await fr.evaluate(() => MyPC.isDown('cancel')), 'C = "cancel"');
+        check(!!pad && !!pad.labels.X && !!pad.labels.A && !!pad.labels.B, 'back in the game the pad has the new button X');
+        await fg.down(4, pad.labels.X.x, pad.labels.X.y); await wait(P);
+        check(await fr.evaluate(() => MyPC.isDown('run') && !MyPC.isDown('cancel')), 'X = "run", like a Nintendo pad\'s X');
         await fg.up(4);
         // the gear pauses the game while the panel is open (the library ignores a tap that follows another within 350 ms: no double-tap zoom)
         await P.waitForTimeout(450);
@@ -2212,7 +2212,7 @@ async function main() {
         check(!!saved && Object.values(saved.on).filter(Boolean).length === 1, 'the layout is saved as vpad:app:<app id>');
         await openApp(P, 'pad-def');                                   // loads the page again: the saved layout comes back
         pad = await padOf(P);
-        check(!!pad && !!pad.labels.C, 'after a reload the customized layout is back');
+        check(!!pad && !!pad.labels.X, 'after a reload the customized layout is back');
         // quitting removes the pad
         await P.evaluate(() => { GameHost.openPause(); }); await wait(P);
         await P.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
@@ -2402,10 +2402,10 @@ async function main() {
         check(await P1.evaluate(() => !!Desktop.appById('gamepad') && !!document.getElementById('tb-gamepad')), 'the Game controller app is a system app on the phone (taskbar)');
         await P1.waitForFunction(() => window.GamepadApp && window.GamepadApp.linked(), null, { timeout: 10000 });
         check(await P1.evaluate(() => VirtualPad.active() && !!document.getElementById('vp-stick') && !document.querySelector('.gc-bar').hidden && document.querySelector('.gc-badge').textContent === 'P1'), 'the phone shows the existing virtual pad (stick, A, B, gear, pause) as P1');
-        await press(P1, 'A', true);
+        await press(P1, 'B', true);
         await tv.waitForFunction(() => Input.isDownDev('keys', 'jump') && Input.isDownDev('keys', 'confirm'), null, { timeout: 3000 });
-        check(!(await tv.evaluate(() => Input.isDownDev('keys2', 'jump'))), 'P1 button A = OK / jump on the "keys" device only');
-        await press(P1, 'A', false);
+        check(!(await tv.evaluate(() => Input.isDownDev('keys2', 'jump'))), 'P1 button B (bottom, like a Nintendo pad) = OK / jump on the "keys" device only');
+        await press(P1, 'B', false);
         await tv.waitForFunction(() => !Input.isDownDev('keys', 'jump'), null, { timeout: 3000 });
         check(true, 'releasing the button releases the action');
         const st = await P1.evaluate(() => { const r = document.getElementById('vp-stick').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width / 2]; });
@@ -2428,23 +2428,54 @@ async function main() {
         check(!(await P1.evaluate(() => { const e = document.elementFromPoint(640, 170); return e && e.parentNode && e.parentNode.id !== 'vp-stick' && e.style.width === '50%'; })), 'the right half is not a stick zone');
         const P2 = await phone(2, 2);
         await tv.waitForFunction(() => Controllers.players()[2], null, { timeout: 40000 });
-        await press(P2, 'B', true);
+        await press(P2, 'A', true);
         await tv.waitForFunction(() => Input.isDownDev('keys2', 'run'), null, { timeout: 3000 });
-        check(!(await tv.evaluate(() => Input.isDownDev('keys', 'run'))) && await tv.evaluate(() => Input.isDownDev('keys2', 'cancel')), 'P2 button B = run and back (like a gamepad\'s B) on the "keys2" device (the second player every game supports)');
-        await press(P2, 'B', false);
+        check(!(await tv.evaluate(() => Input.isDownDev('keys', 'run'))) && await tv.evaluate(() => Input.isDownDev('keys2', 'cancel')), 'P2 button A (right) = run and back, like a Nintendo pad, on the "keys2" device (the second player every game supports)');
+        await press(P2, 'A', false);
         await press(P2, 'Y', true);
         await tv.waitForFunction(() => Input.isDownDev('keys2', 'run') && !Input.isDownDev('keys2', 'cancel'), null, { timeout: 3000 });
         await press(P2, 'Y', false);
         const dia = await P2.evaluate(() => { const c = {}; for (const l of ['A', 'B', 'X', 'Y']) { const d = [...document.querySelectorAll('div')].find((e) => e.textContent === l && e.style.borderRadius === '50%'); const r = d.getBoundingClientRect(); c[l] = [r.left + r.width / 2, r.top + r.height / 2]; } return c; });
         check(dia.A[0] > dia.X[0] && dia.Y[0] < dia.X[0] && dia.X[1] < dia.A[1] && dia.B[1] > dia.A[1] && Math.abs(dia.X[0] - dia.B[0]) < 2 && Math.abs(dia.A[1] - dia.Y[1]) < 2, 'A B X Y in the Nintendo diamond: A right, B bottom, X top, Y left; Y = run (' + JSON.stringify(dia) + ')');
         check(db.rooms[code].n === 3, 'the room counts the TV and both phones');
-        // the Home button (like a Nintendo Switch's): below and left of the face buttons; on the desktop it closes the open app
+        // the Home button (like a Nintendo Switch's): below and left of the face buttons
         const hb = await P2.evaluate(() => { const r = document.getElementById('vp-home').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
         check(hb[0] < dia.Y[0] && hb[1] > dia.Y[1], 'the pad has a Home button below and left of the face buttons (' + hb.map(Math.round) + ')');
-        await tv.evaluate(() => Win.open('calculator'));
+        // every phone button must do what the same button of a real Nintendo pad does on the TV: a fake pad (standard mapping,
+        // read by position) is pressed and compared with the phone's button, for each of A B X Y
+        await tv.evaluate(() => {
+            window.__gp = { index: 0, id: 'Pro Controller (STANDARD GAMEPAD Vendor: 057e Product: 2009)', connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })) };
+            window.__orig = navigator.getGamepads; navigator.getGamepads = () => [window.__gp];
+            window.dispatchEvent(new Event('gamepadconnected'));
+            window.__held = (dev) => ['jump', 'confirm', 'run', 'cancel'].filter((a) => Input.isDownDev(dev, a)).join();
+        });
+        const real = {};
+        for (const [name, idx] of [['A', 1], ['B', 0], ['X', 3], ['Y', 2]]) {      // standard mapping: 0 bottom, 1 right, 2 left, 3 top
+            await tv.evaluate((i) => { __gp.buttons[i] = { pressed: true, value: 1 }; }, idx);
+            await tv.waitForFunction(() => __held('pad0') !== '', null, { timeout: 3000 });
+            real[name] = await tv.evaluate(() => __held('pad0'));
+            await tv.evaluate((i) => { __gp.buttons[i] = { pressed: false, value: 0 }; }, idx);
+            await tv.waitForFunction(() => __held('pad0') === '', null, { timeout: 3000 });
+        }
+        for (const name of ['A', 'B', 'X', 'Y']) {
+            await press(P2, name, true);
+            await tv.waitForFunction(() => __held('keys2') !== '', null, { timeout: 3000 });
+            const got = await tv.evaluate(() => __held('keys2'));
+            check(got.split(',').sort().join() === real[name].split(',').sort().join(), 'phone ' + name + ' sends what ' + name + ' of a Nintendo pad sends (' + got + ' = ' + real[name] + ')');
+            await press(P2, name, false);
+            await tv.waitForFunction(() => __held('keys2') === '', null, { timeout: 3000 });
+        }
+        // + = Start (menu), Home = Guide: the same actions a real pad's Start and Home give
+        await tv.evaluate(() => { window.__seen = []; const r = Input.remote; Input.remote = function (p, a, d) { if (d) __seen.push(a); return r.apply(this, arguments); }; });
+        const [px, py] = await P2.evaluate(() => { const e = [...document.querySelectorAll('div')].find((d) => d.textContent === '+'); const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
+        await P2.mouse.move(px, py); await P2.mouse.down(); await P2.mouse.up();
         await P2.mouse.move(hb[0], hb[1]); await P2.mouse.down(); await P2.mouse.up();
-        await tv.waitForFunction(() => !Win.isOpen(), null, { timeout: 3000 });
-        check(true, 'Home on the phone closes the app open on the TV');
+        await tv.waitForFunction(() => __seen.join() === 'menu,guide', null, { timeout: 3000 });
+        check(true, 'phone + sends menu (a pad\'s Start) and Home sends guide (a pad\'s Guide button)');
+        await tv.evaluate(() => { __gp.buttons[16] = { pressed: true, value: 1 }; });
+        await tv.waitForFunction(() => Input.isDownDev('pad0', 'guide'), null, { timeout: 3000 });
+        check(true, 'a real pad\'s Home button is the same Guide action');
+        await tv.evaluate(() => { __gp.buttons[16] = { pressed: false, value: 0 }; navigator.getGamepads = window.__orig; window.dispatchEvent(new Event('gamepaddisconnected')); });
         // phone settings: Settings in the bar; a browser shows only what it can do (no Background); big checkboxes; GamePad
         // draws a D-pad in place of the stick, kept on the phone
         await P2.click('.gc-setbtn');
@@ -2476,11 +2507,11 @@ async function main() {
         await tv.waitForFunction(() => GameHost.state() === 'running', null, { timeout: 30000 });
         const homeBtn = async () => { const h = await P2.evaluate(() => { const r = document.getElementById('vp-home').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }); await P2.mouse.move(h[0], h[1]); await P2.mouse.down(); await P2.mouse.up(); };
         await homeBtn();
-        await tv.waitForFunction(() => GameHost.state() === 'paused' && document.activeElement && document.activeElement.textContent === I18n.t('quitToMenu'), null, { timeout: 3000 });
-        check(true, 'Home in a game pauses it on "Quit to menu"');
-        await homeBtn();
+        await tv.waitForFunction(() => GameHost.state() === 'paused', null, { timeout: 3000 });
+        check(true, 'Home (the Guide button) in a game opens My PC\'s pause menu, like a real pad\'s Home');
+        await press(P2, 'A', true); await press(P2, 'A', false);
         await tv.waitForFunction(() => GameHost.state() === 'running', null, { timeout: 3000 });
-        check(true, 'Home again goes back to the game');
+        check(true, 'A (back, like a Nintendo pad\'s A) closes the pause menu');
         db.down = true; await tv.evaluate(() => { Controllers.setOn(false); Controllers.setOn(true); });
         await tv.waitForFunction(() => Controllers.status().s === 'error', null, { timeout: 15000 });
         check(await tv.evaluate(() => Controllers.status().err === 'offline'), 'a room that cannot open shows the reason (offline) instead of nothing');

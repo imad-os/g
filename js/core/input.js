@@ -164,6 +164,10 @@ var Input = (function () {
             if (down) { emit(action, true, false, dev); emit(action, false, false, dev); }
             return;
         }
+        if (action === 'guide') {              // the Home button: like a pad's Guide button
+            if (down) { emit('guide', true, false, dev); emit('guide', false, false, dev); }
+            return;
+        }
         acts = TOUCH[action];
         if (!acts || !!held[action] === down) return;
         held[action] = down;

@@ -430,12 +430,6 @@ var GameHost = (function () {
         } else resume();
     }
 
-    // a phone controller's Home button: the pause menu on "Quit to menu"; Home again while that menu is up resumes the game
-    function home() {
-        if (state === 'running') return openPause('_quit');
-        if (state === 'paused' && !$('pause').hidden && !Multiplayer.screenOpen()) resume();
-    }
-
     /* ---------- exit ---------- */
 
     function removeFrame() {
@@ -550,7 +544,7 @@ var GameHost = (function () {
     }
 
     return {
-        init: init, launch: launch, exit: exit, onAction: onAction, openPause: openPause, home: home, hold: hold, release: release,
+        init: init, launch: launch, exit: exit, onAction: onAction, openPause: openPause, hold: hold, release: release,
         active: function () { return state !== 'idle'; },
         state: function () { return state; },
         frame: function () { return iframe; }

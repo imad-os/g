@@ -46,8 +46,8 @@ this guide and the SDK fresh before every task.
 - **My PC's pause menu** (Resume, your own menu items, Quit) opens with **the TV remote's Back** or by
   **holding Start + Select together for 1 s** on a gamepad (Switch **+** and **-**, Xbox Menu + View,
   PlayStation Options + Share). You get `onPause` / `onResume` / `onDestroy`. Nothing else opens it
-  while your app runs: a keyboard's **Esc / Backspace**, gamepad **B** and the phone controller's **B**
-  come to your app (`cancel` / `run`); the phone controller's **X** is `menu`, **Y** is `run`. Start or Select alone is `menu`, sent to apps that init with
+  while your app runs: a keyboard's **Esc / Backspace**, gamepad **B** and the phone controller's buttons
+  come to your app, each with what the same button of a real Nintendo pad does (**A** = `run` + `cancel`, **B** = `confirm` + `jump`, **X** and **Y** = `run`; the phone's **+** is Start = `menu`). Start or Select alone is `menu`, sent to apps that init with
   `ownMenu: true` (on a gamepad it does nothing in other apps).
 - **Standalone mode:** opened directly in a browser (not inside My PC), the SDK acts as the host:
   the keyboard sends actions, Esc or P pauses, and saves go to `localStorage`. You can develop and
@@ -178,25 +178,28 @@ What the pad sends (the same actions the TV remote and gamepads send, device `'t
 | Pad control | Action your `onInput` gets |
 |---|---|
 | stick | `left` `right` `up` `down` (a diagonal sends two) |
-| button **A** (default) | `confirm` **and** `jump` (like the remote's OK) |
-| button **B** (default) | `run` |
-| button **C** (in the catalog) | `cancel` |
-| button **&#9776;** (in the catalog) | `menu`: your own menu when you init with `ownMenu: true`, otherwise My PC's pause menu |
-| pause button (top) | My PC's pause menu |
+| button **A** (right, default) | `run` **and** `cancel` (what A does on a real Nintendo controller) |
+| button **B** (bottom, default) | `confirm` **and** `jump` (like the remote's OK; what B does on a real Nintendo controller) |
+| button **X** (top, in the catalog) | `run` (like the real X) |
+| button **Y** (left, in the catalog) | `run` (like the real Y) |
+| **+** button (top centre) | My PC's pause menu |
 
-Defaults: **A** (ok) and **B** (run) are shown; **C** (cancel) and **&#9776;** (menu) can be added by the player.
+**Owner rule: the buttons are always called and placed A B X Y like a Nintendo controller (A right, B bottom, X top, Y left).
+Never A B C, never a menu symbol (&#9776;) or the word "Menu" as a button. Pause / menu is the Nintendo-style **+** button.** The phone and the touch pad send exactly what the same button of a real Nintendo controller connected to the TV sends (My PC reads a pad by position:
+the bottom button confirms / jumps, the right one runs / goes back), so a game plays the same with either. On the phone controller **+** is
+Start (`menu`) and **Home** is the Guide button. Defaults: **A** and **B** are shown; **X** and **Y** can be added by the player.
 
 **Change the buttons in `mypc-app.json`** (optional; the App Store Manager stores it with the app):
 
 ```json
 "touch": {
-  "buttons": [ { "label": "A", "action": "ok" }, { "label": "B", "action": "run" } ],
-  "catalog": [ { "label": "A", "action": "ok" }, { "label": "B", "action": "run" }, { "label": "C", "action": "cancel" }, { "label": "\u2630", "action": "menu" } ],
+  "buttons": [ { "label": "A", "action": "b", "place": "right" }, { "label": "B", "action": "ok", "place": "bottom" } ],
+  "catalog": [ { "label": "A", "action": "b", "place": "right" }, { "label": "B", "action": "ok", "place": "bottom" }, { "label": "X", "action": "run", "place": "top" }, { "label": "Y", "action": "run", "place": "left" } ],
   "scale": { "stick": 1, "btn": 1 }
 }
 ```
 - `buttons` = shown at first, `catalog` = everything the player may add (8 entries at most each), `label` 3 characters at most,
-  `action` one of `ok` `run` `cancel` `menu`, `scale` = starting size multipliers (0.5 to 2.5; use about 1.3 for a game that is only played
+  `action` one of `ok` `b` (run + cancel) `run` `cancel` `menu`, `place` one of `right` `bottom` `top` `left` (the Nintendo diamond), `scale` = starting size multipliers (0.5 to 2.5; use about 1.3 for a game that is only played
   with the pad). Invalid entries are ignored (the App Store Manager refuses them when you add the app).
 - **`"touch": false`**: your app has its **own touch UI**: My PC draws nothing.
 - The same can be said from code: `MyPC.init({ pad: false | { buttons, catalog, scale } })`; it wins over the manifest.
@@ -374,7 +377,7 @@ Actions: `left right up down` (directions), `jump` and `confirm` (OK / Enter / S
   Backspace reach you as `cancel` (use it as your own "back": close a sub-menu, leave a screen).
 - `menu`: gamepad Start or Select pressed alone (sent when let go). Sent only to apps that init with
   `ownMenu: true` (open your own menu on it, and close it on `menu` or `cancel`); on a gamepad other
-  apps get nothing (the touch pad's &#9776; and the phone controller's X open My PC's pause menu for them).
+  apps get nothing (the touch pad's + and the phone controller's + open My PC's pause menu for them).
   **Holding Start + Select together for 1 s** always opens My PC's pause menu, so players can still quit.
   The TV remote has no Start: give your menu another way in too (e.g. an on-screen button with OK).
 
@@ -549,9 +552,8 @@ hand, detects moves such as `LEFT` `RIGHT` `JUMP` `DUCK` `DUCK_END` and sends on
 metrics if you want them) and **Motion data** (raw sensor samples at the rate you ask for). A fourth mode, **Pointer**,
 is a magic-remote style pointer for the My PC screens only: your app never sees it (its A / B buttons arrive as the
 usual actions), and `players` may report `'pointer'` for such a phone. **Buttons** has A B X Y where a Nintendo
-controller has them (A right, B bottom, X top, Y left) and a Home button that My PC keeps for itself (it opens the pause
-menu on Quit; your app never gets it); the player may swap the stick for a D-pad (same `left` `right` `up` `down`). A = OK / `jump`, B = `run` + `cancel` (like a gamepad's B),
-X = `menu`, Y = `run`. How strong each move must be (per move, harder while running) and the repeat guard (one move,
+controller has them (A right, B bottom, X top, Y left), a **+** (Start) and a Home (Guide) button that My PC keeps for itself (your app never gets Home); the player may swap the stick for a D-pad (same `left` `right` `up` `down`). Each button sends exactly what the same
+button of a real Nintendo controller on the TV sends: A = `run` + `cancel`, B = OK / `jump`, X = `run`, Y = `run`, **+** = Start (`menu`), Home = Guide. How strong each move must be (per move, harder while running) and the repeat guard (one move,
 not two, for a step and its bounce back) are set by the player on the TV (Settings > Devices > Phone controller >
 Motion moves) and apply to your app too; your own `define` rules still win for the moves they name. Actions may carry
 `gait` (`IDLE`, `WALK`, `RUN`).
