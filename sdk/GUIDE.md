@@ -545,7 +545,8 @@ hand, detects moves such as `LEFT` `RIGHT` `JUMP` `DUCK` `DUCK_END` and sends on
 metrics if you want them) and **Motion data** (raw sensor samples at the rate you ask for). A fourth mode, **Pointer**,
 is a magic-remote style pointer for the My PC screens only: your app never sees it (its A / B buttons arrive as the
 usual actions), and `players` may report `'pointer'` for such a phone. **Buttons** has A B X Y where a Nintendo
-controller has them (A right, B bottom, X top, Y left): A = OK / `jump`, B = `run` + `cancel` (like a gamepad's B),
+controller has them (A right, B bottom, X top, Y left) and a Home button that My PC keeps for itself (it opens the pause
+menu on Quit; your app never gets it); the player may swap the stick for a D-pad (same `left` `right` `up` `down`). A = OK / `jump`, B = `run` + `cancel` (like a gamepad's B),
 X = `menu`, Y = `run`. How strong each move must be (per move, harder while running) and the repeat guard (one move,
 not two, for a step and its bounce back) are set by the player on the TV (Settings > Devices > Phone controller >
 Motion moves) and apply to your app too; your own `define` rules still win for the moves they name. Actions may carry

@@ -11,7 +11,7 @@ camera app. Typing the code, picking **P1** / **P2** and a mode, then **Connect*
 
 | Mode | What the phone does | What the TV / game gets |
 |---|---|---|
-| **Buttons** (`pad`) | The virtual pad My PC already draws over games (`js/core/virtual-pad.js`): stick, **A B X Y where a Nintendo controller has them** (A right, B bottom, X top, Y left), pause, and the gear to hide buttons, resize and move everything (saved on the phone as `vpad:controller`). | The same actions as the TV remote: player 1 = device `keys`, player 2 = `keys2`. A = OK / jump, B = run + back (`cancel`, like a gamepad's B), X = `menu`, Y = run. |
+| **Buttons** (`pad`) | The virtual pad My PC already draws over games (`js/core/virtual-pad.js`): stick, **A B X Y where a Nintendo controller has them** (A right, B bottom, X top, Y left), pause, a round **Home** button below and left of A B X Y (like a Nintendo Switch's), and the gear to hide buttons, resize and move everything (saved on the phone as `vpad:controller`). With **GamePad** on (phone Settings) a D-pad replaces the stick. | The same actions as the TV remote: player 1 = device `keys`, player 2 = `keys2`. A = OK / jump, B = run + back (`cancel`, like a gamepad's B), X = `menu`, Y = run. **Home** is the shell's own (`{ t: 'k', a: 'home' }`, never sent to apps): in a game the pause menu opens on Quit to menu (Home again resumes); on the desktop the open app closes. |
 | **Motion moves** (`sensor-actions`) | The player faces the TV, phone in the right hand. The phone detects moves and sends **only the moves the game asked for**, plus metrics if asked. | `MyPC.sensors` events in the game. With no game listening, moves drive the TV: LEFT / RIGHT = left / right, JUMP = OK, DUCK … DUCK_END = down held. |
 | **Motion data** (`sensor-raw`) | Sends the sensor samples themselves at the rate the game asks for. | `raw` events; the game does its own detection. |
 | **Pointer** (`pointer`) | A TV pointer like a magic remote, on the My PC screens: see below. | The pointer moves; A = OK on what it points at, B = back. Nothing on a game's page. |
@@ -231,6 +231,14 @@ Each fired move carries a `confidence` (0.3 to 1: how far past its threshold the
   Running in place counts as running: distance is the distance you would have covered.
 
 ## Screens on the phone
+
+**Settings** (button on the join screen, top right over the pad, in the top bar of the other modes; kept on the phone in
+`arc_dev_ctrlphone.opt`): **Auto rotate** (off: the screen stays on the landscape side it is on when the phone is
+flipped), **Stay awake** (the screen stays on while connected), **Background** (the link stays up with the screen off or
+the app in the background: foreground service + wake locks) and **GamePad** (a D-pad in place of the stick). The first
+three are on by default and done natively by the Android app (`MyPCNative.settings(json)`, app 2.1.0, `version()` 3,
+kept by the app in its own preferences and applied from its start). In a browser, Auto rotate uses the Screen
+Orientation API (only in full screen) and Stay awake the Wake Lock API; the settings a phone cannot do are not shown.
 
 **Live** (sensor modes): gait (with confidence), pace, speed, cadence, steps, distance, last move (flashes), connection
 state with latency, sensor indicators (motion permission, data flowing, gyroscope, linear acceleration),

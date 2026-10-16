@@ -328,7 +328,7 @@ var App = (function () {
     // after a language change: everything that is not data-i18n driven
     function refresh() { Desktop.render(); ProfilesUI.renderButton(); showVersion(); Desktop.tick(); }
 
-    return { start: start, confirm: confirm, toast: toast, refresh: refresh, exitApp: exitApp };
+    return { start: start, confirm: confirm, toast: toast, refresh: refresh, exitApp: exitApp, dialogOpen: function () { return dialogOpen; } };
 })();
 
 App.start();

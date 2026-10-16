@@ -70,7 +70,9 @@
   P1 = Input device `keys`, P2 = `keys2` (`Input.remote`). The phone reconnects by itself when the TV changes page. Separate from the in-game touch pad.
   Pairing is a QR code (own page Settings > Devices > Phone controller, `js/core/qr.js`, link `?pair=<code>` opens the Game controller and connects).
   **Owner decision: its Buttons mode reuses the existing virtual pad (`VirtualPad`, id `controller`), never a separately drawn pad;**
-  **A B X Y in the Nintendo places** (pad button option `place`: A right = ok, B bottom = `b` (run + cancel), X top = menu, Y left = run).
+  **A B X Y in the Nintendo places** (pad button option `place`: A right = ok, B bottom = `b` (run + cancel), X top = menu, Y left = run); a **Home** button (pad option `home`, `{ t: 'k', a: 'home' }`: pause menu on Quit in a game, closes the open app on the desktop).
+  **Phone settings** (Game controller > Settings, `arc_dev_ctrlphone.opt`): Auto rotate, Stay awake, Background (native in the APK 2.1.0+ via
+  `MyPCNative.settings`, hidden in a browser when it can't) and GamePad (pad option `dpad`: a D-pad in place of the stick).
   Motion modes `sensor-actions` / `sensor-raw`: protocol `js/core/sensor-proto.js`, detection `js/core/motion.js` (moves are data rules,
   right hand only for now), games get them through `MyPC.sensors` (API 8) / `host.sensors`; full spec in `docs/phone-controller.md`.
   **Pointer mode** (`pointer`, owner decision: separate from Motion data, which stays raw): magic-remote style pointer on the My PC screens

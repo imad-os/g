@@ -4,6 +4,8 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
@@ -48,6 +50,10 @@ import java.util.regex.Pattern;
  *   a native QR scanner for the TV's pairing code,
  *   screen kept on (while a controller is connected or a game is open), and a foreground service + wake lock so the link
  *   survives with the screen off; the phone's Back is the TV remote's Back (Input.systemBack), exit closes the app.
+ * The Game controller's phone settings (Bridge.settings, kept in SharedPreferences "opts", applied from the start):
+ *   rotate  off: the screen stays on the landscape side it is on (no turning when the phone is flipped)
+ *   awake   off: the screen may turn off by itself while a controller is connected
+ *   bg      off: no foreground service; with the screen off the page pauses and the link drops
  */
 public final class MainActivity extends Activity {
     // the hosted My PC (GitHub Pages; imad-os.github.io/g redirects to the custom domain)
@@ -59,11 +65,15 @@ public final class MainActivity extends Activity {
     private SensorHub hub;
     private String bridgeJs;
     private boolean active, motion, playing;
+    private boolean optRotate = true, optAwake = true, optBg = true;
 
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         bridgeJs = asset("bridge.js");
+        SharedPreferences o = getSharedPreferences("opts", MODE_PRIVATE);
+        optRotate = o.getBoolean("rotate", true); optAwake = o.getBoolean("awake", true); optBg = o.getBoolean("bg", true);
+        rotation();
         hub = new SensorHub(this, json -> {
             final String js = "window.__mypcMotion&&__mypcMotion(" + json + ")";
             web.post(() -> { if (web != null) web.evaluateJavascript(js, null); });
@@ -98,18 +108,35 @@ public final class MainActivity extends Activity {
         if (on) hub.start(); else hub.stop();
     }
 
+    void setSettings(String json) {
+        try {
+            JSONObject j = new JSONObject(json);
+            optRotate = j.optBoolean("rotate", optRotate); optAwake = j.optBoolean("awake", optAwake); optBg = j.optBoolean("bg", optBg);
+        } catch (Exception e) { return; }
+        getSharedPreferences("opts", MODE_PRIVATE).edit()
+                .putBoolean("rotate", optRotate).putBoolean("awake", optAwake).putBoolean("bg", optBg).apply();
+        rotation();
+        screenOn();
+        if (active) LinkService.set(this, optBg);
+    }
+
+    // Auto rotate: either landscape side follows the phone; off: held on the side it is on now
+    private void rotation() {
+        setRequestedOrientation(optRotate ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE : ActivityInfo.SCREEN_ORIENTATION_LOCKED);
+    }
+
     void setActive(boolean on) {
         if (on == active) return;
         active = on;
         screenOn();
-        LinkService.set(this, on);
+        LinkService.set(this, on && optBg);
         web.removeCallbacks(pump);
         if (on) web.postDelayed(pump, PUMP_MS);
     }
 
-    // the screen stays on while a controller is connected or a game / app is open (index.html?play=<id>)
+    // the screen stays on while a controller is connected (Stay awake) or a game / app is open (index.html?play=<id>)
     private void screenOn() {
-        if (active || playing) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        if ((active && optAwake) || playing) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
@@ -246,8 +273,8 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onPause() {
-        // while connected the page keeps running (screen off, phone in a pocket): only pause it when idle
-        if (!active) web.onPause();
+        // while connected the page keeps running (screen off, phone in a pocket) unless Background is off
+        if (!active || !optBg) web.onPause();
         super.onPause();
     }
 

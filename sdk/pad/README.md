@@ -62,6 +62,8 @@ VirtualPad.init({
 | `customize` | `true` | `false` hides the gear (settings) button |
 | `onSettings` | none | `function (open)`: the settings panel opened (`true`) or closed (`false`) *(My PC addition)* |
 | `floating` | `true` | a touch anywhere in the left half puts the stick under the finger (back to its place on release); `false` = fixed stick *(My PC addition)* |
+| `dpad` | `false` | `true`: a D-pad (four arrows, diagonals when two are pressed) in place of the stick, at its place and size; it does not float *(My PC addition)* |
+| `home` | `false` | `true`: a round Home button below and left of the face buttons, action `'home'` (key 36) *(My PC addition)* |
 | `storage` | none | `{ get(key), set(key, value) }`: where the layout is saved besides `localStorage` *(My PC addition)* |
 | `force` | `false` | show the pad anywhere; by default only on touch devices when running standalone (not inside My PC) |
 

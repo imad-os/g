@@ -26,7 +26,7 @@ var Controllers = (function () {
     'use strict';
 
     var KEY = 'arc_dev_ctrl', TUNE_KEY = 'arc_dev_ctrltune', APP = 'controller', MAX_PHONES = 8, PAIR_MS = 300000, HELLO_MS = 4000;
-    var ACTIONS = { left: 1, right: 1, up: 1, down: 1, ok: 1, run: 1, cancel: 1, b: 1, menu: 1, pause: 1 };
+    var ACTIONS = { left: 1, right: 1, up: 1, down: 1, ok: 1, run: 1, cancel: 1, b: 1, menu: 1, pause: 1, home: 1 };
     var DIRS = { left: 1, right: 1, up: 1, down: 1 };
     var ALPHA = 'abcdefghjkmnpqrstuvwxyz23456789';
     var status = { s: 'off', err: '' };
@@ -90,6 +90,7 @@ var Controllers = (function () {
             }
             if (m.t === 'k') {
                 if (typeof m.a !== 'string' || !ACTIONS.hasOwnProperty(m.a)) return;
+                if (m.a === 'home') { if (m.d === 1) home(); return; }
                 if (m.d === 1 && Pointer.visible()) {
                     if (m.a === 'ok' && Pointer.press()) return;              // clicked something that is not a focusable item
                     if (DIRS[m.a]) Pointer.hide();                            // arrows: back to the focus ring, like the remote
@@ -181,6 +182,13 @@ var Controllers = (function () {
     function tune() { return SensorProto.tune(Store.rawGet(TUNE_KEY)); }
     function resend() { for (var p = 1; p <= 2; p++) if (slots[p] && slots[p].mode !== 'pad') sendConfig(slots[p]); }
 
+    // the pad's Home button (like a Nintendo Switch's): in a game the pause menu opens on "Quit to menu" (Home again goes back
+    // to the game); on the desktop the open app closes. Never while a dialog, the keyboard or the sign-in screen is up.
+    function home() {
+        if (typeof GameHost !== 'undefined' && GameHost.active()) return GameHost.home();
+        if (Welcome.open() || Keyboard.isOpen() || ProfilesUI.screenOpen() || Multiplayer.screenOpen() || App.dialogOpen()) return;
+        if (Win.isOpen()) Win.close();
+    }
     function closePhones() { for (var p = 1; p <= 2; p++) if (slots[p]) { var s = slots[p]; slots[p] = null; Input.releaseRemote(p); s.conn.close(); } }
 
     return {

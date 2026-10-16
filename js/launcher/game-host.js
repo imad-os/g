@@ -372,14 +372,14 @@ var GameHost = (function () {
         return target || box.firstChild;
     }
 
-    function openPause() {
+    function openPause(focusId) {
         if (state !== 'running') return;
         setState('paused');
         try { api.pause(); } catch (e) {}
         Input.releaseAll();
         Input.setExternalPoll(false);   // the game loop is stopped: the launcher reads the gamepads
         screenSaver(true);
-        var first = renderPause();
+        var first = renderPause(typeof focusId === 'string' ? focusId : undefined);
         $('pause').hidden = false;
         Focus.push($('pause'), first);
         A11y.announce(I18n.t('paused'));
@@ -428,6 +428,12 @@ var GameHost = (function () {
             Focus.push($('pause'), t);
             A11y.announce(t.textContent);
         } else resume();
+    }
+
+    // a phone controller's Home button: the pause menu on "Quit to menu"; Home again while that menu is up resumes the game
+    function home() {
+        if (state === 'running') return openPause('_quit');
+        if (state === 'paused' && !$('pause').hidden && !Multiplayer.screenOpen()) resume();
     }
 
     /* ---------- exit ---------- */
@@ -544,7 +550,7 @@ var GameHost = (function () {
     }
 
     return {
-        init: init, launch: launch, exit: exit, onAction: onAction, openPause: openPause, hold: hold, release: release,
+        init: init, launch: launch, exit: exit, onAction: onAction, openPause: openPause, home: home, hold: hold, release: release,
         active: function () { return state !== 'idle'; },
         state: function () { return state; },
         frame: function () { return iframe; }

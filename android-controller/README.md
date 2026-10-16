@@ -22,8 +22,9 @@ browser tab does badly:
 |---|---|---|
 | Motion samples | `devicemotion`, about 60 Hz, stamped when JavaScript gets them, paused when the page is busy | `SensorHub`: accelerometer, fused linear acceleration and gyroscope at 200 Hz on their own thread, one combined sample every 10 ms with the sensor's own timestamp, mapped onto the page clock (`assets/bridge.js`) |
 | QR pairing | `BarcodeDetector` where Chrome has it | native scanner (zxing) on every phone |
-| Screen off | link and sensors stop | foreground service + partial wake lock keep both running while connected |
+| Screen off | link and sensors stop | foreground service + partial wake lock keep both running while connected (Background on) |
 | Screen | wake lock when the browser allows it | kept on while connected or in a game, full screen, landscape |
+| Phone settings | Auto rotate and Stay awake where the browser allows | Auto rotate, Stay awake, Background (the Game controller's Settings, `MyPCNative.settings`, kept in the app's preferences) |
 | Back / exit | browser history | the phone's Back is the TV remote's Back (`Input.systemBack`); exit closes the app (`MyPCNative.exit`) |
 
 Files: `MainActivity.java` (WebView, navigation limited to My PC, Back, QR), `Bridge.java` (`window.MyPCNative`),

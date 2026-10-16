@@ -14,6 +14,10 @@
  *                   gyroscope and accelerometer and smooths -> { t: 'pm', x, y }). Its screen has no stick: big A (OK on what
  *                   the pointer is on) and B (back), Center ({ t: 'pc' }), Calibrate (fixes reversed directions) and the
  *                   tuning settings (smoothness, speed, steady zone, swap left / right, swap up / down), kept on the phone
+ * Phone settings (Settings button on every screen, kept on the phone in arc_dev_ctrlphone.opt): Auto rotate, Stay awake,
+ * Background (the Android app keeps the link with the screen off) and GamePad (a D-pad in place of the stick). The Android
+ * app (MyPCNative 3+) applies the first three natively; in a browser Auto rotate and Stay awake use the Screen Orientation
+ * and Wake Lock APIs where the browser has them, and the settings it cannot do are not shown.
  * Protocol: js/core/sensor-proto.js, docs/phone-controller.md. Separate from the touch pad that the shell draws over games. */
 (function () {
     'use strict';
@@ -40,6 +44,8 @@
     // pointer mode (js/core/aim.js): settings kept on the phone; calibration steps
     var PTR_DEF = { smooth: 5, speed: 1, steady: 1.5, swapX: false, swapY: false };
     var aim = null, aimLast = 0, calib = null;
+    // phone settings (all on except GamePad)
+    var OPT_DEF = { rotate: true, awake: true, bg: true, dpad: false }, OPT_NAMES = [['rotate', 'gcRotate'], ['awake', 'gcAwake'], ['bg', 'gcBackground'], ['dpad', 'gcDpad']];
 
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
     function t(k) { return I18n.t(k); }
@@ -48,7 +54,30 @@
     function native(fn, v) { try { if (window.MyPCNative && typeof window.MyPCNative[fn] === 'function') { window.MyPCNative[fn](v); return true; } } catch (e) {} return false; }
     function name() { return /Android/i.test(navigator.userAgent) ? 'Android' : /iPhone|iPad/i.test(navigator.userAgent) ? 'iPhone' : 'Phone'; }
     function prefs() { var p = saved.prefs || {}; return { profile: SensorProto.profile(p.profile), sensitivity: +p.sensitivity || 1, stride: +p.stride || 1, swap: !!p.swap }; }
-    function save() { Store.rawSet(KEY, { cid: cid, code: code, p: player, mode: mode, prefs: saved.prefs || {}, ptr: saved.ptr || {} }); }
+    function save() { Store.rawSet(KEY, { cid: cid, code: code, p: player, mode: mode, prefs: saved.prefs || {}, ptr: saved.ptr || {}, opt: saved.opt || {} }); }
+    function opts() { var o = saved.opt || {}, r = {}; for (var k in OPT_DEF) r[k] = typeof o[k] === 'boolean' ? o[k] : OPT_DEF[k]; return r; }
+    function nativeV() { try { return window.MyPCNative && typeof MyPCNative.version === 'function' ? +MyPCNative.version() || 0 : 0; } catch (e) { return 0; } }
+    // which settings this phone can honour: the app (3+) all of them; an older app none but GamePad (it keeps the screen on,
+    // turns with the phone and stays connected anyway); a browser rotation and screen on when it has the APIs
+    function canOpt(k) {
+        var v = nativeV();
+        if (k === 'dpad' || v >= 3) return true;
+        if (v) return false;
+        if (k === 'rotate') return !!(screen.orientation && screen.orientation.lock);
+        if (k === 'awake') return !!navigator.wakeLock;
+        return false;
+    }
+    function setOpt(k, v) {
+        var o = opts(); o[k] = !!v; saved.opt = o; save();
+        applyOpts();
+        if (k === 'dpad' && VirtualPad.active()) VirtualPad.hide();            // drawn again with or without the D-pad on close
+    }
+    function applyOpts() {
+        var o = opts();
+        native('settings', JSON.stringify({ rotate: o.rotate, awake: o.awake, bg: o.bg }));
+        lock();
+        if (run && o.awake) wake(); else unwake();
+    }
     function ptrPrefs() {
         var p = saved.ptr || {}, n = function (v, lo, hi, d) { v = +v; return isFinite(v) && v >= lo && v <= hi ? v : d; };
         return { smooth: n(p.smooth, 1, 10, PTR_DEF.smooth), speed: n(p.speed, 0.3, 3, PTR_DEF.speed), steady: n(p.steady, 0, 6, PTR_DEF.steady), swapX: !!p.swapX, swapY: !!p.swapY };
@@ -69,10 +98,10 @@
     function show(on) {
         inPad = on; ui.join.hidden = on;
         var padUi = on && mode === 'pad', ptrUi = on && mode === 'pointer';
-        ui.bar.hidden = ui.padBg.hidden = !padUi;
+        ui.bar.hidden = ui.padBg.hidden = ui.setBtn.hidden = !padUi;
         ui.ptr.hidden = !ptrUi;
         ui.sense.hidden = !(on && !padUi && !ptrUi);
-        if (padUi) VirtualPad.init({ storage: PAD_STORE, id: 'controller', force: true, scale: { stick: 1.35, btn: 1.15 }, buttons: PAD.buttons, catalog: PAD.catalog, onAction: padAction });
+        if (padUi) VirtualPad.init({ storage: PAD_STORE, id: 'controller', force: true, scale: { stick: 1.35, btn: 1.15 }, buttons: PAD.buttons, catalog: PAD.catalog, onAction: padAction, dpad: opts().dpad, home: true });
         else if (VirtualPad.active()) VirtualPad.hide();
         if (ptrUi) paintPtr();
         if (on && !padUi && !ptrUi) { ui.modeName.textContent = t(mode === 'sensor-raw' ? 'gcModeRaw' : 'gcModeActions'); setTab('live'); }
@@ -148,7 +177,7 @@
         attempt();
     }
     function stop() {
-        run = false; clearTimeout(retry); clearTimeout(wait); release(); native('active', false);
+        run = false; clearTimeout(retry); clearTimeout(wait); release(); native('active', false); unwake();
         sensorsOff();
         if (conn) { var c = conn; conn = null; c.close(); }
         if (offerObj) { offerObj.cancel(); offerObj = null; }
@@ -335,7 +364,7 @@
         s.hidden = true;
         ui.pDot = el('span', 'gc-dot'); ui.pBadge = el('span', 'gc-badge', 'P1'); ui.pState = el('span', 'gc-state');
         [ui.pDot, ui.pBadge, el('span', 'gc-mode', t('gcModePointer')), ui.pState, el('span', 'gc-grow')].forEach(function (x) { top.appendChild(x); });
-        top.appendChild(btn('gc-modebtn', t('gcMode'), openModes)); top.appendChild(btn('gc-leave2', t('gcLeave'), function () { stop(); }));
+        top.appendChild(btn('gc-modebtn', t('gcMode'), openModes)); top.appendChild(btn('gc-modebtn', t('gcSettings'), openPhone)); top.appendChild(btn('gc-leave2', t('gcLeave'), function () { stop(); }));
         s.appendChild(top);
         var body = el('div', 'gc-pbody'), set = el('div', 'gc-pset');
         set.appendChild(el('div', 'gc-line', t('gcPtrHelp')));
@@ -431,6 +460,27 @@
         if (ui.modes && ui.modes.parentNode) ui.modes.parentNode.removeChild(ui.modes);
         ui.modes = null;
         if (inPad && mode === 'pad' && !VirtualPad.active()) show(true);
+        else if (!inPad && ui.go) Focus.focus(ui.go);
+    }
+    // the phone settings, over everything like the mode list (Back closes it); the pad is drawn again on close
+    function openPhone() {
+        if (ui.modes) return;
+        if (VirtualPad.active()) VirtualPad.hide();
+        var box = el('div', 'gc-modepick gc-phoneset'), o = opts(), first = null;
+        box.appendChild(el('div', 'gc-title', t('gcPhone')));
+        OPT_NAMES.forEach(function (n) {
+            if (!canOpt(n[0])) return;
+            var r = el('label', 'gc-srow gc-check'), c = el('input');
+            c.type = 'checkbox'; c.checked = o[n[0]]; c.setAttribute('data-focus', ''); c.setAttribute('data-opt', n[0]);
+            c.onchange = function () { setOpt(n[0], c.checked); };
+            r.appendChild(el('span', 'gc-grow', t(n[1]))); r.appendChild(c); box.appendChild(r);
+            if (!first) first = c;
+        });
+        box.appendChild(el('div', 'gc-line', t('gcPhoneSaved')));
+        var cl = btn('btn-primary', t('close'), closeModes);
+        box.appendChild(cl);
+        root.appendChild(box); ui.modes = box;
+        Focus.focus(first || cl);
     }
     function switchMode(m) {
         if (m === mode) return;
@@ -661,7 +711,7 @@
         var sp = el('span', 'gc-grow'); top.appendChild(sp);
         ui.tLive = btn('', t('gcLive'), function () { setTab('live'); }); ui.tDebug = btn('', t('gcDebug'), function () { setTab('debug'); });
         ui.tTrain = btn('', t('gcTrain'), function () { setTab('train'); });
-        top.appendChild(ui.tLive); top.appendChild(ui.tDebug); top.appendChild(ui.tTrain); top.appendChild(btn('gc-modebtn', t('gcMode'), openModes)); top.appendChild(btn('gc-leave2', t('gcLeave'), function () { stop(); }));
+        top.appendChild(ui.tLive); top.appendChild(ui.tDebug); top.appendChild(ui.tTrain); top.appendChild(btn('gc-modebtn', t('gcMode'), openModes)); top.appendChild(btn('gc-modebtn', t('gcSettings'), openPhone)); top.appendChild(btn('gc-leave2', t('gcLeave'), function () { stop(); }));
         s.appendChild(top);
 
         ui.live = el('div', 'gc-live');
@@ -703,8 +753,16 @@
     }
 
     /* ---------- phone: landscape, screen on ---------- */
-    function lock() { try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {}); } catch (e) {} }
-    function wake() { try { if (navigator.wakeLock) navigator.wakeLock.request('screen').then(function (l) { wl = l; }, function () {}); } catch (e) {} }
+    // Auto rotate off: held in the landscape side it is in now (the Android app does this natively)
+    function lock() {
+        if (nativeV() >= 3) return;
+        try {
+            var so = screen.orientation;
+            if (so && so.lock) so.lock(opts().rotate || !/^landscape/.test(so.type) ? 'landscape' : so.type).catch(function () {});
+        } catch (e) {}
+    }
+    function wake() { if (!opts().awake || wl) return; try { if (navigator.wakeLock) navigator.wakeLock.request('screen').then(function (l) { if (!run || !opts().awake) { l.release(); return; } wl = l; l.addEventListener('release', function () { if (wl === l) wl = null; }); }, function () {}); } catch (e) {} }
+    function unwake() { var l = wl; wl = null; try { if (l) l.release(); } catch (e) {} }
 
     // My PC draws a 1920x1080 screen scaled to fit; on a phone that makes text tiny. --k scales this app's sizes back up
     // so they read like normal phone text (1 on a TV or a big screen).
@@ -737,7 +795,7 @@
         ui.go = btn('btn-primary gc-go', t('gcGo'), start);
         var grow = el('div', 'gc-row');
         ui.scan = btn('gc-scanbtn', t('gcScan'), startScan);
-        grow.appendChild(ui.scan); grow.appendChild(ui.go);
+        grow.appendChild(ui.scan); grow.appendChild(btn('gc-phonebtn', t('gcSettings'), openPhone)); grow.appendChild(ui.go);
         ui.join.appendChild(grow);
         ui.err = el('div', 'gc-err'); ui.err.setAttribute('role', 'alert');
         ui.join.appendChild(ui.err);
@@ -753,6 +811,9 @@
         ui.bar.appendChild(btn('gc-leave', t('gcLeave'), function () { stop(); }));
         ui.bar.hidden = true;
         root.appendChild(ui.bar);
+        // the phone settings: top right, out of the stick zone (left half) and away from the face buttons
+        ui.setBtn = btn('gc-leave gc-setbtn', t('gcSettings'), openPhone); ui.setBtn.hidden = true;
+        root.appendChild(ui.setBtn);
         ui.sense = buildSense();
         root.appendChild(ui.sense);
         ui.ptr = buildPointer();
@@ -776,6 +837,7 @@
             aim = Aim.create(ptrPrefs());
             pick(saved.p === 2 ? 2 : 1);
             pickMode(saved.mode);
+            applyOpts();
             document.addEventListener('visibilitychange', onVis);
             fromQr = false; triedOther = false;
             if (arg && typeof arg.pair === 'string' && codeFrom(arg.pair)) setTimeout(function () { if (root) pairWith(codeFrom(arg.pair)); }, 0);
@@ -792,8 +854,7 @@
             if (VirtualPad.active()) VirtualPad.hide();
             document.removeEventListener('visibilitychange', onVis);
             window.removeEventListener('resize', readable);
-            try { if (wl) wl.release(); } catch (e) {}
-            wl = null; root = null; ui = {}; eng = null;
+            unwake(); root = null; ui = {}; eng = null;
             delete window.GamepadApp;
         }
     });

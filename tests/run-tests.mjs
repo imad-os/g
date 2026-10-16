@@ -2438,6 +2438,31 @@ async function main() {
         const dia = await P2.evaluate(() => { const c = {}; for (const l of ['A', 'B', 'X', 'Y']) { const d = [...document.querySelectorAll('div')].find((e) => e.textContent === l && e.style.borderRadius === '50%'); const r = d.getBoundingClientRect(); c[l] = [r.left + r.width / 2, r.top + r.height / 2]; } return c; });
         check(dia.A[0] > dia.X[0] && dia.Y[0] < dia.X[0] && dia.X[1] < dia.A[1] && dia.B[1] > dia.A[1] && Math.abs(dia.X[0] - dia.B[0]) < 2 && Math.abs(dia.A[1] - dia.Y[1]) < 2, 'A B X Y in the Nintendo diamond: A right, B bottom, X top, Y left; Y = run (' + JSON.stringify(dia) + ')');
         check(db.rooms[code].n === 3, 'the room counts the TV and both phones');
+        // the Home button (like a Nintendo Switch's): below and left of the face buttons; on the desktop it closes the open app
+        const hb = await P2.evaluate(() => { const r = document.getElementById('vp-home').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
+        check(hb[0] < dia.Y[0] && hb[1] > dia.Y[1], 'the pad has a Home button below and left of the face buttons (' + hb.map(Math.round) + ')');
+        await tv.evaluate(() => Win.open('calculator'));
+        await P2.mouse.move(hb[0], hb[1]); await P2.mouse.down(); await P2.mouse.up();
+        await tv.waitForFunction(() => !Win.isOpen(), null, { timeout: 3000 });
+        check(true, 'Home on the phone closes the app open on the TV');
+        // phone settings: Settings in the bar; a browser shows only what it can do (no Background); big checkboxes; GamePad
+        // draws a D-pad in place of the stick, kept on the phone
+        await P2.click('.gc-setbtn');
+        const ps = await P2.evaluate(() => ({ opts: [...document.querySelectorAll('.gc-phoneset input[type=checkbox]')].map((c) => c.getAttribute('data-opt') + ':' + c.checked), pad: VirtualPad.active(),
+            size: document.querySelector('.gc-phoneset input[type=checkbox]').getBoundingClientRect().height }));
+        check(ps.opts.indexOf('dpad:false') >= 0 && ps.opts.indexOf('rotate:true') >= 0 && !ps.opts.some((o) => /^bg/.test(o)) && !ps.pad, 'Settings (top right) lists Auto rotate and GamePad (no Background in a browser) over a hidden pad (' + ps.opts + ')');
+        check(ps.size >= 24, 'the checkboxes are finger-sized (' + Math.round(ps.size) + ' px)');
+        await P2.click('.gc-phoneset [data-opt=dpad]');
+        await P2.click('.gc-phoneset .btn-primary');
+        check(await P2.evaluate(() => VirtualPad.active() && !!document.getElementById('vp-dpad') && !document.getElementById('vp-stick') && Store.rawGet('arc_dev_ctrlphone').opt.dpad === true), 'GamePad on: a D-pad in place of the stick, and the setting is kept on the phone');
+        const dp = await P2.evaluate(() => { const r = document.getElementById('vp-dpad').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width / 2]; });
+        await P2.mouse.move(dp[0] + dp[2] * 0.7, dp[1]); await P2.mouse.down();
+        await tv.waitForFunction(() => Input.isDownDev('keys2', 'right') && !Input.isDownDev('keys2', 'up'), null, { timeout: 3000 });
+        await P2.mouse.move(dp[0] + dp[2] * 0.6, dp[1] - dp[2] * 0.6, { steps: 3 });          // slide to the corner: up + right
+        await tv.waitForFunction(() => Input.isDownDev('keys2', 'right') && Input.isDownDev('keys2', 'up'), null, { timeout: 3000 });
+        await P2.mouse.up();
+        await tv.waitForFunction(() => !Input.isDownDev('keys2', 'right') && !Input.isDownDev('keys2', 'up'), null, { timeout: 3000 });
+        check(true, 'the D-pad gives right, slides to up + right (diagonal) and lets go of both');
         // a third phone cannot take a player that is taken, and unknown phones are refused once pairing is closed
         await tv.evaluate(() => Controllers.pair(0));
         const P3 = await phone(3, 1);
@@ -2448,6 +2473,14 @@ async function main() {
         await tv.waitForFunction(() => window.Controllers && Controllers.players()[1] && Controllers.players()[2], null, { timeout: 60000 });
         check(true, 'after the TV loaded another page both phones reconnected as P1 and P2');
         check(await tv.evaluate(() => !Input.isDownDev('keys', 'right') && !Input.isDownDev('keys2', 'run')), 'nothing stays pressed across the page change');
+        await tv.waitForFunction(() => GameHost.state() === 'running', null, { timeout: 30000 });
+        const homeBtn = async () => { const h = await P2.evaluate(() => { const r = document.getElementById('vp-home').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }); await P2.mouse.move(h[0], h[1]); await P2.mouse.down(); await P2.mouse.up(); };
+        await homeBtn();
+        await tv.waitForFunction(() => GameHost.state() === 'paused' && document.activeElement && document.activeElement.textContent === I18n.t('quitToMenu'), null, { timeout: 3000 });
+        check(true, 'Home in a game pauses it on "Quit to menu"');
+        await homeBtn();
+        await tv.waitForFunction(() => GameHost.state() === 'running', null, { timeout: 3000 });
+        check(true, 'Home again goes back to the game');
         db.down = true; await tv.evaluate(() => { Controllers.setOn(false); Controllers.setOn(true); });
         await tv.waitForFunction(() => Controllers.status().s === 'error', null, { timeout: 15000 });
         check(await tv.evaluate(() => Controllers.status().err === 'offline'), 'a room that cannot open shows the reason (offline) instead of nothing');
@@ -2669,10 +2702,22 @@ async function main() {
         // its own QR scanner answers, native motion samples replace devicemotion, the app is told when the link runs
         const A = await newPage(browser, base, db, { phone: true, viewport: { width: 844, height: 390 } });
         await A.addInitScript(() => { window.__nat = []; window.MyPCNative = { caps: () => '{"motion":true,"linear":true,"gyro":true}',
-            motion: (on) => __nat.push('motion:' + on), active: (on) => __nat.push('active:' + on), scanQr: () => __nat.push('scan') }; });
+            motion: (on) => __nat.push('motion:' + on), active: (on) => __nat.push('active:' + on), scanQr: () => __nat.push('scan'), version: () => 3, settings: (j) => __nat.push('settings:' + j) }; });
         await A.addInitScript({ path: path.join(ROOT, 'android-controller/app/src/main/assets/bridge.js') });
         await A.goto(base + 'index.html?ctrl=1');
         await A.waitForFunction(() => window.GamepadApp && !!document.querySelector('.gc-scanbtn'), null, { timeout: 20000 });
+        check(await A.evaluate(() => __nat.indexOf('settings:{"rotate":true,"awake":true,"bg":true}') >= 0), 'Android app: the phone settings (all on by default) go to the app when the Game controller opens');
+        await A.click('.gc-phonebtn');
+        check(await A.evaluate(() => [...document.querySelectorAll('.gc-phoneset input')].map((c) => c.getAttribute('data-opt')).join() === 'rotate,awake,bg,dpad'), 'Android app: Settings has Auto rotate, Stay awake, Background and GamePad');
+        await A.click('.gc-phoneset [data-opt=rotate]'); await A.click('.gc-phoneset [data-opt=bg]');
+        await A.click('.gc-phoneset .btn-primary');
+        check(await A.evaluate(() => __nat[__nat.length - 1] === 'settings:{"rotate":false,"awake":true,"bg":false}' && Store.rawGet('arc_dev_ctrlphone').opt.rotate === false), 'Android app: turning Auto rotate and Background off tells the app at once and is kept on the phone');
+        await A.reload();
+        await A.waitForFunction(() => window.GamepadApp && !!document.querySelector('.gc-scanbtn'), null, { timeout: 20000 });
+        check(await A.evaluate(() => __nat.indexOf('settings:{"rotate":false,"awake":true,"bg":false}') >= 0), 'Android app: the settings are still there after the app restarts');
+        await A.click('.gc-phonebtn');
+        await A.click('.gc-phoneset [data-opt=rotate]'); await A.click('.gc-phoneset [data-opt=bg]');
+        await A.click('.gc-phoneset .btn-primary');
         await A.click('.gc-modes .btn:nth-of-type(2)');           // Motion moves
         await A.click('.gc-scanbtn');
         check(await A.evaluate(() => __nat.indexOf('scan') >= 0 && !document.querySelector('.gc-scanner')), 'Android app: Scan QR code opens the app\'s own scanner');
