@@ -669,17 +669,18 @@ var req = MyPC.net.fetch(url); req.abort();                 // stop a request
 
 ### `MyPC.ai`: AI for your app (Gemini, ChatGPT, Claude, NVIDIA, any OpenAI-compatible API)
 
-The TV owner adds AI services in **Settings > AI** with their API keys: Google Gemini, OpenAI (ChatGPT), Anthropic Claude,
+The store's owner sets the AI services once for every My PC in the **App Store Manager > AI services** (with their API
+keys; each TV, phone and computer copies them at start, and Settings > AI on the TV only shows them): Google Gemini, OpenAI (ChatGPT), Anthropic Claude,
 NVIDIA, OpenRouter, Groq, Mistral, DeepSeek, xAI, Together, Ollama / LM Studio on a computer at home, or any custom
 OpenAI-compatible address with any model. **Your app never sees the keys.** The first AI request of an app asks the user
 "*<app> wants to use AI*" (Allow / Don't allow); the answer is kept until Settings > Privacy & security > *Forget what
-apps were allowed*. If no service is set up you get `no-provider` (and the TV tells the user where to add one).
+apps were allowed*. If no service is set up you get `no-provider` (and the TV says to add one in the App Store Manager).
 
 ```js
 var res = await MyPC.ai.generate({
     provider: 'gemini',                 // optional: a service id or kind ('gemini' 'openai' 'anthropic' 'nvidia' 'groq' 'ollama'...);
                                         // default: the app config's ai.provider, else the TV's default service
-    model: 'gemini-2.5-flash',          // optional: else the app config's ai.model, else the service's model from Settings > AI
+    model: 'gemini-2.5-flash',          // optional: else the app config's ai.model, else the service's model from the App Store Manager
     system: 'You are a quiz master for children.',            // string or [lines]
     rules: ['Answer in ' + MyPC.info().lang, 'Never more than 3 sentences'],
     context: { level: 3, score: 1200 },                       // string or any JSON: added to the instructions
@@ -700,7 +701,7 @@ res.usage;     // { input, output, total } tokens (when the service says), res.m
 
 var txt = await MyPC.ai.chat('Tell me a joke');           // shortcut: prompt in, text out
 var list = await MyPC.ai.providers();                     // [{ id, name, type, preset, model, isDefault, tasks }] (no keys)
-// tasks: { chat, image, speech, transcribe, video, embed } true / false: hide a feature no service of this TV has
+// tasks: { chat, image, speech, transcribe, video, embed } true / false: hide a feature no service has
 var job = MyPC.ai.generate(req); job.cancel();            // stop a request
 ```
 
@@ -725,7 +726,7 @@ OpenRouter and the other OpenAI-compatible services take the model names of thei
 depends on the service: a service that cannot do something answers with an `http` or `unsupported` error.
 
 **NVIDIA speech (Magpie-Multilingual)**: with the NVIDIA service, `task: 'speech'` goes to NVIDIA's Magpie-Multilingual
-text-to-speech (an NVCF function; its id is set in Settings > AI > NVIDIA > Voice (Magpie) function, filled in already).
+text-to-speech (an NVCF function; its id is set in the App Store Manager > AI services > NVIDIA > Voice (Magpie) function, filled in already).
 Languages `en-US`, `es-US`, `fr-FR`, `de-DE` (`'en'`, `'es'`, `'fr'`, `'de'` work too; others, Arabic included, give
 `unsupported`). `voice` is the speaker (`'Aria'` by default) or a whole voice name like `'Magpie-Multilingual.EN-US.Aria'`.
 The answer is a .wav file. One request at a time is best; play it after a user action (OK button), as browsers require.
@@ -738,7 +739,7 @@ var ctx = new AudioContext(); ctx.decodeAudioData(wav.data, function (b) { var s
 ```
 
 `task: 'transcribe'` with NVIDIA works only when the owner set a speech-to-text function (Parakeet / Riva) with an HTTP
-API in Settings > AI > NVIDIA > Speech-to-text function (it gets the audio as a multipart `file` at
+API in the App Store Manager > AI services > NVIDIA > Speech-to-text function (it gets the audio as a multipart `file` at
 `/v1/audio/transcriptions`); many NVCF speech-to-text functions only speak gRPC, which My PC cannot call. Check
 `providers()` (`tasks.transcribe`) before showing the feature; `Gemini` and `OpenAI` transcribe without any setup.
 
@@ -757,7 +758,7 @@ MyPC.ai.generate({ provider: { type: 'openai', url: 'https://integrate.api.nvidi
 // type: 'openai' (any OpenAI-compatible address) | 'gemini' | 'anthropic'; optional headers: { ... }
 ```
 
-Keys in an app's config or code can be read by anyone who opens the app's website: prefer the TV's own services.
+Keys in an app's config or code can be read by anyone who opens the app's website: prefer the services set in the App Store Manager (never sent to apps).
 
 **App config** (App Store Manager > Config) can pick the service and model for an app: `{ "ai": { "provider": "nvidia", "model": "meta/llama-3.3-70b-instruct" } }`.
 

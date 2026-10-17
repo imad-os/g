@@ -93,7 +93,7 @@
   Needs the `bluetooth` privileges in `config.xml` (package 1.4.0+), so a new .wgt on the TV. Unit tests: `node tests/unit-tests.mjs` (part of `npm test`).
 - **App bridges (API 10)**: installed apps call `MyPC.net` (web requests from My PC: no CORS on the TV, local network refused unless
   config `"lan": true`), `MyPC.ai` (one request format for Gemini / OpenAI / Claude / NVIDIA and any OpenAI-compatible URL; text,
-  images, audio, video in and out; services + keys in Settings > AI, `arc_dev_ai`, never in the backup, never sent to apps) and
+  images, audio, video in and out; services + keys set for every My PC in the App Store Manager > AI services (Firestore `settings/ai`, copied at start by `Bridges.syncAi` into `arc_dev_ai`; Settings > AI only shows them; never in the backup, never sent to apps; owner decision: no key typing on the TV) and
   `MyPC.mic` (getUserMedia in the shell, privilege `mediacapture`, package 1.5.0). Shell side `js/core/web-proxy.js`, `ai.js`,
   `mic.js`, glue + permission prompts (`arc_dev_perm`, AI and mic once per app) in `js/launcher/bridges.js`. Standalone the SDK
   loads the same three core files from the hosted site. Docs: `sdk/GUIDE.md` section 14.

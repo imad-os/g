@@ -1,7 +1,8 @@
 /* AI for installed apps (MyPC.ai in the SDK): one request format for every AI service.
  *
- * Services (providers) are added on the TV in Settings > AI, with their API key; apps never see the keys. An app can
- * also bring its own provider (with its own key) in the request. Kinds of provider:
+ * Services (providers) are set up once for every My PC in the App Store Manager (installer/, page AI services, Firestore
+ * settings/ai); each My PC copies them at start (Bridges.syncAi -> AI.setManaged) and Settings > AI only shows them.
+ * Apps never see the keys. An app can also bring its own provider (with its own key) in the request. Kinds of provider:
  *   openai     OpenAI and every OpenAI-compatible API: NVIDIA, OpenRouter, Groq, Mistral, DeepSeek, xAI, Together,
  *              Ollama / LM Studio on a computer at home, or any custom address
  *   gemini     Google Gemini (text, images, speech, video with Veo, embeddings)
@@ -24,8 +25,10 @@
  *           | 'too-big' | 'safety', message, status }
  *
  *   AI.start(req, provider, onEvent) -> { promise, cancel() }   AI.raw(req, provider) the API's own endpoints, key added
- *   AI.resolve(spec, appDefault) -> provider   AI.providers() list without keys   AI.add / update / remove / setDefault
- * Needs js/core/web-proxy.js. Runs in My PC (TV-wide store arc_dev_ai, never in the cloud backup) and, without the store,
+ *   AI.resolve(spec, appDefault) -> provider   AI.providers() list without keys   AI.setManaged({ list, def }) the copy from
+ *   the App Store Manager   AI.add / update / remove / setDefault (tests)
+ * Needs js/core/web-proxy.js. Runs in My PC (TV-wide store arc_dev_ai, never in the cloud backup), in the App Store Manager
+ * (PRESETS, clean) and, without the store,
  * inside an app opened directly in a browser (sdk/mypc-sdk.js loads both files). */
 var AI = (function () {
     'use strict';
@@ -37,7 +40,7 @@ var AI = (function () {
         { preset: 'gemini', type: 'gemini', name: 'Google Gemini', url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-flash', site: 'aistudio.google.com' },
         { preset: 'openai', type: 'openai', name: 'OpenAI (ChatGPT)', url: 'https://api.openai.com/v1', model: 'gpt-4o-mini', site: 'platform.openai.com' },
         { preset: 'anthropic', type: 'anthropic', name: 'Anthropic Claude', url: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-5', site: 'console.anthropic.com' },
-        // speech: Magpie-Multilingual (NVCF function, editable in Settings > AI); transcribe: an NVCF speech-to-text function with an HTTP API, when set
+        // speech: Magpie-Multilingual (NVCF function, editable in the App Store Manager); transcribe: an NVCF speech-to-text function with an HTTP API, when set
         { preset: 'nvidia', type: 'openai', name: 'NVIDIA', url: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.3-70b-instruct', site: 'build.nvidia.com',
           speechUrl: '877104f7-e885-42b9-8de8-f6e4c6303969', transcribeUrl: '' },
         { preset: 'openrouter', type: 'openai', name: 'OpenRouter', url: 'https://openrouter.ai/api/v1', model: 'openrouter/auto', site: 'openrouter.ai' },
@@ -94,6 +97,14 @@ var AI = (function () {
         if (all.def === id) all.def = all.list.length ? all.list[0].id : '';
         rawSet(all);
     }
+    // the services set in the App Store Manager replace this device's list
+    function setManaged(d) {
+        d = d && typeof d === 'object' ? d : {};
+        var l = (Array.isArray(d.list) ? d.list : []).filter(function (x) { return x && typeof x === 'object' && x.id; }).slice(0, 20).map(clean);
+        var def = l.some(function (x) { return x.id === d.def; }) ? d.def : (l[0] ? l[0].id : '');
+        rawSet({ list: l, def: def, at: Date.now() });
+    }
+    function managedAt() { return rawGet().at || 0; }
     function setDefault(id) { var all = rawGet(); if (find(id)) { all.def = id; rawSet(all); } }
     function defaultId() { var all = rawGet(); return find(all.def) ? all.def : (all.list[0] ? all.list[0].id : ''); }
     // what an app may know: no keys, no addresses
@@ -579,7 +590,7 @@ var AI = (function () {
         return m ? (m[2] ? m[1].toLowerCase() + '-' + m[2].toUpperCase() : NV_LANG[m[1].toLowerCase()] || l) : l;
     }
     async function nvSpeech(ctl, p, model, n, req) {
-        if (!p.speechUrl) throw err('unsupported', 'NVIDIA speech is not set up: add the Magpie function in My PC: Settings > AI > NVIDIA.');
+        if (!p.speechUrl) throw err('unsupported', 'NVIDIA speech is not set up: add the Magpie function to NVIDIA in the App Store Manager (AI services).');
         var lang = nvLang(req.language);
         if (!/^(en|es|fr|de)-/i.test(lang)) throw err('unsupported', 'NVIDIA Magpie speaks English, Spanish, French and German, not ' + lang + '.');
         var text = allText(n);
@@ -593,7 +604,7 @@ var AI = (function () {
         return result(p, model, '', [{ type: 'audio', mime: mime, data: r.body }], null, 'stop', null, req);
     }
     async function nvTranscribe(ctl, p, model, n, req) {
-        if (!p.transcribeUrl) throw err('unsupported', 'NVIDIA speech-to-text is not set up: add its function in My PC: Settings > AI > NVIDIA.');
+        if (!p.transcribeUrl) throw err('unsupported', 'NVIDIA speech-to-text is not set up: add its function to NVIDIA in the App Store Manager (AI services).');
         var a = media(n, 'audio')[0];
         if (!a) throw err('bad-request', 'Give the audio to write down (a part { type: "audio", data }).');
         await load(ctl, p, a);
@@ -632,7 +643,7 @@ var AI = (function () {
         onEvent = typeof onEvent === 'function' ? onEvent : function () {};
         var promise = (async function () {
             req = req && typeof req === 'object' ? req : {};
-            if (!p) throw err('no-provider', 'No AI service is set up. Add one in My PC: Settings > AI.');
+            if (!p) throw err('no-provider', 'No AI service is set up. Add one in the App Store Manager (AI services).');
             if (!p.url) throw err('no-provider', 'The AI service has no address.');
             if (req.timeout) ctl.timeout = Math.min(Math.max(5000, +req.timeout), 600000);
             var n = normalise(req);
@@ -643,7 +654,7 @@ var AI = (function () {
             if (!fn) throw err('unsupported', (p.name || p.type) + ' cannot do "' + n.task + '". ' + (n.task === 'chat' ? '' : 'Gemini and OpenAI can.'));
             var model = req.model || (nv ? (n.task === 'speech' ? 'magpie-multilingual' : 'parakeet') : '') ||
                 (n.task === 'chat' || n.task === 'transcribe' && p.type === 'gemini' ? '' : (p.models && p.models[n.task]) || MODELS[p.type][n.task]) || p.model;
-            if (!model) throw err('bad-request', 'Name a model (the request\'s "model", or the service\'s model in Settings > AI).');
+            if (!model) throw err('bad-request', 'Name a model (the request\'s "model", or the service\'s model in the App Store Manager).');
             var r = await fn(ctl, p, model, n, req, onEvent);
             if (n.json) r.json = parseJson(r.text);
             return r;
@@ -655,7 +666,7 @@ var AI = (function () {
     function raw(req, p, opts) {
         var ctl = newCtl(opts);
         var promise = (async function () {
-            if (!p) throw err('no-provider', 'No AI service is set up. Add one in My PC: Settings > AI.');
+            if (!p) throw err('no-provider', 'No AI service is set up. Add one in the App Store Manager (AI services).');
             req = req && typeof req === 'object' ? req : {};
             var url = req.url ? String(req.url) : p.url + '/' + String(req.path || '').replace(/^\/+/, '');
             var a = new URL(url), b = new URL(p.url + '/');
@@ -667,6 +678,6 @@ var AI = (function () {
         return { promise: promise, cancel: function () { cancelCtl(ctl); } };
     }
 
-    return { PRESETS: PRESETS, MODELS: MODELS, presetOf: presetOf, list: list, find: find, add: add, update: update, remove: remove, setDefault: setDefault,
+    return { PRESETS: PRESETS, MODELS: MODELS, presetOf: presetOf, list: list, find: find, add: add, update: update, remove: remove, setDefault: setDefault, setManaged: setManaged, managedAt: managedAt, clean: clean,
              defaultId: defaultId, providers: providers, tasks: tasks, nvcfUrl: nvcfUrl, resolve: resolve, start: start, raw: raw, normalise: normalise, parseJson: parseJson };
 })();

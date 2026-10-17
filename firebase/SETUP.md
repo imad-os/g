@@ -71,6 +71,15 @@ enforce the format:
 TVs read the list with a plain request (no SDK, no sign-in):
 `GET https://firestore.googleapis.com/v1/projects/tvgames-f984d/databases/(default)/documents/apps?key=<apiKey>`
 
+## 3a. AI services (`settings/ai`)
+The App Store Manager's **AI services** page writes one document, `settings/ai`:
+`{ list: [{ id, preset, type, name, url, key, model, speechUrl, transcribeUrl }], def, updatedAt, updatedBy }`
+(at most 20 services). Every My PC reads it at start and when Settings > AI opens (`js/launcher/bridges.js`
+`Bridges.syncAi`), keeps a copy (`arc_dev_ai`, never in the TV backup) and uses it for `MyPC.ai`; apps never get the keys.
+**Publish the rules again** after this update (the `settings` block), or the page cannot save.
+TVs never sign in, so this document is readable by anyone with the project's web key, like the catalog:
+use API keys with a spending limit (or a free tier) and replace a key in the page if it leaks.
+
 ## 3b. What the TVs write
 | collection | document | written by | rules |
 |---|---|---|---|

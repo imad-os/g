@@ -1110,7 +1110,7 @@ async function main() {
                 export function getFirestore() { return {}; }
                 export function collection(d, name) { return { name }; }
                 export function doc(d, col, id) { return { col, id }; }
-                export async function getDoc(r) { return { exists: () => !!(db[r.col] && db[r.col][r.id]) }; }
+                export async function getDoc(r) { return { exists: () => !!(db[r.col] && db[r.col][r.id]), data: () => db[r.col][r.id] }; }
                 export async function getDocs(c) { return { docs: Object.entries(db[c.name] || {}).map(([id, x]) => ({ id, data: () => x })) }; }
                 export async function setDoc(r, data) { (db[r.col] = db[r.col] || {})[r.id] = data; }
                 export async function updateDoc(r, f) { Object.assign(db[r.col][r.id], f); }
@@ -1152,9 +1152,9 @@ async function main() {
         check(rows.some((t) => /Star Catcher.*Not in store/.test(t)) && rows.some((t) => /Old Game.*In store/.test(t)) && rows.some((t) => /g_broken.*not a My PC app/.test(t)),
             'each app shows its status: not in the store, in the store, or not a My PC app');
         check(/App Store Manager/.test(await page.title()) && /App Store Manager/.test(await page.textContent('.brand')), 'the installer is now the App Store Manager');
-        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,Devices,World records'
+        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,AI services,Devices,World records'
             && document.querySelector('.nav a.on').dataset.page === 'add' && !document.querySelector('[data-view="add"]').hidden && document.querySelector('[data-view="overview"]').hidden),
-            'a menu with one page each: Overview, Apps, Add apps, Devices, World records');
+            'a menu with one page each: Overview, Apps, Add apps, AI services, Devices, World records');
         check(await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].find((r) => /Old Game/.test(r.textContent)).querySelector('input').disabled), 'installed apps cannot be selected again');
         await page.check('#sel-all');
         await page.click('#btn-install-sel');
@@ -1221,6 +1221,25 @@ async function main() {
         const upd = await page.evaluate(() => window.__db.apps['star-catcher']);
         check(upd.config.speed === 9 && upd.order === 1, 'updating an app keeps its config and its position');
         check(await page.evaluate(() => !!document.getElementById('url') && !!document.getElementById('btn-fetch')), 'the manual address section is still there for apps outside imad-os');
+        // AI services: set once here for every My PC (Firestore settings/ai)
+        await go('#ai');
+        check(/No AI service yet/.test(await page.textContent('#ai-list')) && await page.evaluate(() => document.getElementById('ai-save').disabled), 'AI services: empty at first, nothing to save');
+        await page.selectOption('#ai-preset', 'nvidia'); await page.click('#ai-add');
+        await page.selectOption('#ai-preset', 'gemini'); await page.click('#ai-add');
+        check(await page.evaluate(() => document.activeElement.id === 'ai-1-key' && document.getElementById('ai-0-speechUrl').value === '877104f7-e885-42b9-8de8-f6e4c6303969' && !document.getElementById('ai-1-speechUrl')),
+            'adding a service puts the cursor in its API key; NVIDIA shows its Magpie function, already filled in');
+        await page.fill('#ai-0-key', 'nvapi-xyz'); await page.fill('#ai-1-key', 'GK'); await page.fill('#ai-0-model', 'meta/llama-3.1-8b-instruct');
+        check(await page.getAttribute('#ai-0-key', 'type') === 'password', 'keys are hidden while typed');
+        await page.click('#ai-list button[data-def="1"]');
+        await page.click('#ai-save');
+        await page.waitForFunction(() => window.__db.settings && window.__db.settings.ai);
+        const sa = await page.evaluate(() => window.__db.settings.ai);
+        check(sa.list.length === 2 && sa.list[0].id === 'nvidia' && sa.list[0].key === 'nvapi-xyz' && sa.list[0].model === 'meta/llama-3.1-8b-instruct' && sa.list[0].speechUrl && sa.list[1].preset === 'gemini' &&
+            sa.def === 'gemini' && sa.updatedBy === 'owner@example.com' && /Saved/.test(await page.textContent('#ai-msg')), 'Save writes the services, their keys and the default into settings/ai');
+        page.once('dialog', (d) => d.accept());
+        await page.click('#ai-list button[data-del="0"]'); await page.click('#ai-save');
+        await page.waitForFunction(() => window.__db.settings.ai.list.length === 1);
+        check(await page.evaluate(() => window.__db.settings.ai.def === 'gemini'), 'Remove (after a question) takes a service out for every My PC');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }
@@ -2926,7 +2945,8 @@ async function main() {
     console.log('37. app bridges: MyPC.net (web requests), MyPC.ai (Gemini, NVIDIA / OpenAI-compatible), MyPC.mic, permissions; update screen on a phone');
     {
         const APP = 'https://apps.example.test/star/';
-        const page = await newPage(browser, base);
+        const fdb = {};
+        const page = await newPage(browser, base, fdb);
         await page.context().grantPermissions(['microphone']);
         await routeHosted(page, { offline: true });
         await page.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
@@ -2999,10 +3019,13 @@ async function main() {
         check(lan === 'blocked' && file === 'bad-request', 'the local network (the router...) and non-web addresses are refused (' + lan + ', ' + file + ')');
         // MyPC.ai without any service
         const none = await frame.evaluate(() => MyPC.ai.chat('hi').then(() => 'ok', (e) => e.code));
-        check(none === 'no-provider' && /Settings > AI/.test(await page.textContent('#toast')), 'MyPC.ai with no AI service set up: a clear error, and the TV says where to add one');
-        // the owner adds Gemini and NVIDIA in Settings > AI
-        await page.evaluate(() => { AI.add({ preset: 'gemini', type: 'gemini', url: 'https://generativelanguage.googleapis.com/v1beta', key: 'GKEY-secret', model: 'gemini-2.5-flash' });
-                                    AI.add({ preset: 'nvidia', type: 'openai', url: 'https://integrate.api.nvidia.com/v1', key: 'nvapi-secret', model: 'meta/llama-3.3-70b-instruct' }); });
+        check(none === 'no-provider' && /App Store Manager/.test(await page.textContent('#toast')), 'MyPC.ai with no AI service set up: a clear error, and the TV says where to add one');
+        // the owner adds Gemini and NVIDIA in the App Store Manager (settings/ai); the TV copies them
+        fdb.settings = { ai: { def: 'gemini', list: [
+            { id: 'gemini', preset: 'gemini', type: 'gemini', name: 'Google Gemini', url: 'https://generativelanguage.googleapis.com/v1beta', key: 'GKEY-secret', model: 'gemini-2.5-flash' },
+            { id: 'nvidia', preset: 'nvidia', type: 'openai', name: 'NVIDIA', url: 'https://integrate.api.nvidia.com/v1', key: 'nvapi-secret', model: 'meta/llama-3.3-70b-instruct', speechUrl: '877104f7-e885-42b9-8de8-f6e4c6303969' }] } };
+        await page.evaluate(() => new Promise((r) => Bridges.syncAi(r)));
+        check(await page.evaluate(() => AI.list().length === 2 && AI.defaultId() === 'gemini' && AI.find('nvidia').key === 'nvapi-secret'), 'My PC copies the AI services set in the App Store Manager (settings/ai)');
         const provs = await frame.evaluate(() => MyPC.ai.providers());
         check(provs.length === 2 && provs[0].id === 'gemini' && provs[0].isDefault && provs[1].preset === 'nvidia' && !JSON.stringify(provs).includes('secret') && !JSON.stringify(provs).includes('https'),
             'MyPC.ai.providers() lists the services by name and model, never their keys or addresses');
@@ -3076,9 +3099,12 @@ async function main() {
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body, null, { timeout: 8000 });
         await page.evaluate(() => Win.open('settings', 'ai'));
         const aiPage = await page.textContent('.set-main');
-        check(/Google Gemini \(default\)/.test(aiPage) && /NVIDIA/.test(aiPage) && /Key saved \(…cret\)/.test(aiPage) && /Add an AI service/.test(aiPage), 'Settings > AI lists the services, the default one, and that a key is saved (only its last 4 characters)');
-        await page.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Add an AI service/.test(r.textContent)).click());
-        check(/NVIDIA/.test(await page.textContent('.set-main')) && /OpenAI/.test(await page.textContent('.set-main')) && /Ollama/.test(await page.textContent('.set-main')), 'Add an AI service offers the ready-made services (Gemini, OpenAI, NVIDIA, Ollama, custom...)');
+        check(/Google Gemini \(default\)/.test(aiPage) && /NVIDIA/.test(aiPage) && /Key saved \(…cret\)/.test(aiPage) && /App Store Manager/.test(aiPage) && /NVIDIA.*voice/.test(aiPage) && !/Add an AI service|API key/.test(aiPage),
+            'Settings > AI only shows what the App Store Manager set: the services, the default one, that a key is saved (last 4 characters), what each can do; nothing to type on the TV');
+        fdb.settings.ai.list.pop();
+        await page.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Check again/.test(r.textContent)).click());
+        await page.waitForFunction(() => !/NVIDIA/.test(document.querySelector('.set-main').textContent));
+        check(await page.evaluate(() => AI.list().length === 1), 'Check again gets the App Store Manager\'s list again (a service removed there goes away)');
         await page.evaluate(() => Win.close());
         check(await page.evaluate(() => !JSON.stringify(Backup.doc()).includes('secret')), 'AI keys are never in the cloud backup');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));

@@ -292,63 +292,24 @@
             title: t('usePhone'), help: t('usePhoneHelp'), codeLabel: t('username') });
     }
 
-    /* ---------- AI (js/core/ai.js): the services apps can use, keys kept on this device ---------- */
-    function aiGo(s, idx) { sub = s; var f = renderMain(idx === undefined ? 1 : idx); if (f) Focus.focus(f); }
+    /* ---------- AI (js/core/ai.js): the services apps can use, set for every My PC in the App Store Manager ---------- */
     function keyHint(p) { return p.key ? t('aiKeySet').replace('%s', p.key.slice(-4)) : (p.preset === 'ollama' ? '' : t('aiNoKey')); }
     function aiRows(out) {
-        var i;
-        if (sub === 'aiadd') {
-            out.push({ kind: 'action', label: t('back'), run: function () { aiGo(null, 0); } });
-            out.push({ kind: 'text', value: t('aiPick') });
-            AI.PRESETS.forEach(function (pr) {
-                out.push({ kind: 'action', label: pr.name, desc: pr.site || pr.url, run: function () {
-                    var p = AI.add({ preset: pr.preset, type: pr.type, name: pr.name, url: pr.url, model: pr.model });
-                    aiGo('aiprov:' + p.id);
-                    if (pr.preset === 'custom') aiEdit(p.id, 'url');
-                    else if (!pr.noKey) aiEdit(p.id, 'key');
-                } });
-            });
-            return;
-        }
-        if (sub && sub.indexOf('aiprov:') === 0) {
-            var p = AI.find(sub.slice(7));
-            if (!p) { sub = null; return aiRows(out); }
-            var pre = AI.presetOf(p.preset) || {};
-            out.push({ kind: 'action', label: t('back'), run: function () { aiGo(null, 0); } });
-            out.push({ kind: 'action', label: t('aiKey'), desc: keyHint(p) + (pre.site ? (p.key ? '' : ' · ') + (p.key ? '' : t('aiKeyWhere').replace('%s', pre.site)) : ''), run: function () { aiEdit(p.id, 'key'); } });
-            out.push({ kind: 'action', label: t('aiModel'), desc: p.model || '—', run: function () { aiEdit(p.id, 'model'); } });
-            out.push({ kind: 'action', label: t('aiUrl'), desc: p.url, run: function () { aiEdit(p.id, 'url'); } });
-            out.push({ kind: 'action', label: t('aiName'), desc: p.name, run: function () { aiEdit(p.id, 'name'); } });
-            if (p.preset === 'nvidia') {                                          // NVIDIA's speech services are NVCF functions on their own hosts
-                out.push({ kind: 'action', label: t('aiSpeechFn'), desc: p.speechUrl || t('aiFnNone'), run: function () { aiEdit(p.id, 'speechUrl'); } });
-                out.push({ kind: 'action', label: t('aiAsrFn'), desc: p.transcribeUrl || t('aiFnNone'), run: function () { aiEdit(p.id, 'transcribeUrl'); } });
-            }
-            if (AI.defaultId() !== p.id) out.push({ kind: 'action', label: t('aiMakeDefault'), run: function () { AI.setDefault(p.id); App.toast(t('aiSaved')); aiGo(sub, 1); } });
-            out.push({ kind: 'action', label: t('aiTest'), run: function () { aiTest(p.id); } });
-            out.push({ kind: 'action', label: t('aiRemove'), danger: true, run: function () {
-                App.confirm(t('aiRemoveQ').replace('%s', p.name), t('aiRemoveText'), function () { AI.remove(p.id); aiGo(null, 0); });
-            } });
-            return;
-        }
         out.push({ kind: 'text', value: t('aiHint') });
         var l = AI.list(), d = AI.defaultId();
         if (!l.length) out.push({ kind: 'text', value: t('aiNoneYet') });
-        for (i = 0; i < l.length; i++) (function (p) {
-            out.push({ kind: 'action', label: p.name + (p.id === d ? ' (' + t('aiDefault') + ')' : ''), desc: [p.model, keyHint(p)].filter(Boolean).join(' · '), run: function () { aiGo('aiprov:' + p.id); } });
-        })(l[i]);
-        out.push({ kind: 'action', label: t('aiAdd'), primary: true, run: function () { aiGo('aiadd'); } });
+        l.forEach(function (p) {
+            var tk = AI.tasks(p), can = ['speech', 'transcribe', 'image', 'video'].filter(function (k) { return tk[k]; }).map(function (k) { return t('aiTask_' + k); });
+            out.push({ kind: 'action', label: p.name + (p.id === d ? ' (' + t('aiDefault') + ')' : ''), desc: [p.model, keyHint(p)].concat(can).filter(Boolean).join(' · '),
+                       run: function () { aiTest(p.id); } });
+        });
+        out.push({ kind: 'action', label: t('aiCheck'), run: aiSync });
     }
-    function aiEdit(id, field) {
-        var p = AI.find(id);
-        if (!p) return;
-        var f = { key: { title: t('aiKey'), mode: 'password', max: 200 }, model: { title: t('aiModel'), mode: 'code', max: 120 }, url: { title: t('aiUrl'), mode: 'code', max: 200 }, name: { title: t('aiName'), mode: 'text', max: 40 },
-                  speechUrl: { title: t('aiSpeechFn'), mode: 'code', max: 200, hint: t('aiFnHint') }, transcribeUrl: { title: t('aiAsrFn'), mode: 'code', max: 200, hint: t('aiFnHint') } }[field];
-        var pre = AI.presetOf(p.preset) || {};
-        Keyboard.open({ title: f.title + ' · ' + p.name, text: field === 'key' ? '' : p[field], max: f.max, mode: f.mode, hint: field === 'key' && pre.site ? t('aiKeyWhere').replace('%s', pre.site) : f.hint || '' }, function (v) {
-            var patch = {}; patch[field] = field === 'url' ? v.replace(/\/+$/, '') : v;
-            AI.update(id, patch);
-            App.toast(t('aiSaved'));
-            if (Win.current() === 'settings' && page === 'ai') aiGo('aiprov:' + id, { key: 1, model: 2, url: 3, name: 4, speechUrl: 5, transcribeUrl: 6 }[field]);
+    function aiSync() {
+        App.toast(t('aiChecking'));
+        Bridges.syncAi(function (e) {
+            if (e) App.toast(t('aiCheckFail'));
+            if (Win.current() === 'settings' && page === 'ai') { var f = renderMain(AI.list().length + 1); if (f) Focus.focus(f); }
         });
     }
     function aiTest(id) {
@@ -362,7 +323,6 @@
 
     function leaveSub() {
         var back = sub === 'motionmoves' ? 'phonectrl' : null;
-        if (sub && sub.indexOf('aiprov:') === 0) back = null;
         if (sub === 'motionmoves') { Controllers.monitor(null); monEl = null; }
         sub = back;
         var f = renderMain(back ? 1 : 0); if (f) Focus.focus(f);
@@ -439,6 +399,7 @@
         page = id; sub = null;
         stopPadTest();
         if (id === 'update') Updater.autoCheck();
+        if (id === 'ai') Bridges.syncAi(function () { if (Win.current() === 'settings' && page === 'ai' && !(Focus.current() && inMain(Focus.current()))) renderMain(); });
         var btns = nav.querySelectorAll('.set-nav-btn');
         for (var i = 0; i < btns.length; i++) btns[i].className = 'set-nav-btn' + (btns[i].getAttribute('data-page') === id ? ' on' : '');
         renderMain();

@@ -1235,7 +1235,7 @@ var MyPC = (function () {
      *   MyPC.net.fetch(url, { method, headers, body | json | form, responseType: 'text' | 'json' | 'arraybuffer', timeout, onChunk })
      *       web requests from My PC: on the TV no CORS limit. -> { ok, status, headers, body, text(), json() }
      *   MyPC.ai.generate({ provider, model, system, rules, context, examples, messages, prompt, output, schema, stream, ... }, { onDelta })
-     *       any AI service set up on the TV (Settings > AI, keys stay there) or the app's own { type, url, key }
+     *       any AI service set in the App Store Manager (keys never reach the app) or the app's own { type, url, key }
      *   MyPC.mic.start({ format, sampleRate, chunkMs, silence, maxSeconds }) / stop() / record(); MyPC.mic.on('data' | 'level' | 'end', fn)
      * Standalone (the page opened in a browser) the same calls run in the page itself: the SDK loads My PC's own
      * js/core/web-proxy.js, ai.js and mic.js next to it; there only APIs that allow CORS answer and AI needs the app's own key.

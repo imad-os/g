@@ -1,6 +1,6 @@
 /* What installed apps cannot do from their sandboxed iframe, done by My PC for them (sdk/mypc-sdk.js):
  *   'net'  MyPC.net    web requests without CORS limits (js/core/web-proxy.js)
- *   'ai'   MyPC.ai     AI services set up in Settings > AI, keys kept on the TV (js/core/ai.js)
+ *   'ai'   MyPC.ai     AI services set up in the App Store Manager (copied at start, Bridges.syncAi), keys never sent to apps (js/core/ai.js)
  *   'mic'  MyPC.mic    the microphone (js/core/mic.js)
  * The AI services of this TV and the microphone are used only after the user allowed it, once per app (arc_dev_perm,
  * Settings > Privacy & security forgets it). An app that brings its own AI key needs no permission. A red microphone
@@ -57,6 +57,20 @@ var Bridges = (function () {
         } else if (!on && micDot) { if (micDot.parentNode) micDot.parentNode.removeChild(micDot); micDot = null; }
     }
 
+    // the AI services of every My PC, set in the App Store Manager (Firestore settings/ai); cb(err) once the copy is saved
+    var aiWait = null;
+    function syncAi(cb) {
+        if (aiWait) { if (cb) aiWait.push(cb); return; }
+        aiWait = cb ? [cb] : [];
+        if (typeof Cloud === 'undefined') return aiDone('offline');
+        Cloud.get('settings/ai', 4000, function (e, data) {
+            if (!e) AI.setManaged(data);
+            else if (e === 'notfound') AI.setManaged({});          // none set any more
+            aiDone(e === 'notfound' ? null : e);
+        });
+    }
+    function aiDone(e) { var l = aiWait || []; aiWait = null; l.forEach(function (f) { try { f(e); } catch (x) {} }); }
+
     function errOf(e) { return { code: (e && e.code) || 'failed', message: String((e && e.message) || e || 'Failed.'), status: e && e.status || undefined }; }
     // ArrayBuffers in a result are moved to the app, not copied
     function buffers(o, out) {
@@ -93,11 +107,15 @@ var Bridges = (function () {
             if (d.op === 'providers') return send('ai', { rid: d.rid, result: AI.providers() });
             if (!alive()) return send('ai', { rid: d.rid, error: { code: 'not-running', message: 'The app is not running.' } });
             if (nAi >= AI_MAX) return send('ai', { rid: d.rid, error: { code: 'busy', message: 'Too many AI requests at once (' + AI_MAX + ').' } });
-            var p = AI.resolve(req.provider, aiCfg.provider);
+            var p = AI.resolve(req.provider, aiCfg.provider), own = req.provider && typeof req.provider === 'object';
+            if (!own && Date.now() - AI.managedAt() > 1800000) {          // the copy is old (or none): get the App Store Manager's again
+                if (!p && !d.synced) { d.synced = true; return syncAi(function () { aiRun(d); }); }
+                syncAi();
+            }
             if (!p) {
                 if (!toldNoAi && !(req.provider && typeof req.provider === 'object')) { toldNoAi = true; App.toast(I18n.t('aiNone')); }
                 return send('ai', { rid: d.rid, error: { code: 'no-provider', message: req.provider && typeof req.provider === 'object' ? 'The provider needs an https address.' :
-                    'No AI service' + (req.provider ? ' "' + req.provider + '"' : '') + ' is set up on this device. Add one in My PC: Settings > AI.' } });
+                    'No AI service' + (req.provider ? ' "' + req.provider + '"' : '') + ' is set up for My PC. Add one in the App Store Manager (AI services).' } });
             }
             if (!p.own && !req.model && aiCfg.model && (!aiCfg.provider || aiCfg.provider === p.id || aiCfg.provider === p.preset || aiCfg.provider === p.type)) req.model = aiCfg.model;
             nAi++;
@@ -167,5 +185,5 @@ var Bridges = (function () {
         };
     }
 
-    return { attach: attach, allowed: allowed, reset: reset };
+    return { attach: attach, allowed: allowed, reset: reset, syncAi: syncAi };
 })();

@@ -79,6 +79,21 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // The AI services of every My PC (App Store Manager > AI services, js/core/ai.js): read by every TV at start,
+    // written only by admins. Like the catalog, anyone can read it (TVs never sign in), keys included.
+    function validAi(d) {
+      return d.keys().hasOnly(['list', 'def', 'updatedAt', 'updatedBy'])
+          && d.list is list && d.list.size() <= 20
+          && (!('def' in d) || (d.def is string && d.def.size() <= 40))
+          && (!('updatedAt' in d) || d.updatedAt is timestamp)
+          && (!('updatedBy' in d) || (d.updatedBy is string && d.updatedBy.size() <= 120));
+    }
+    match /settings/{name} {
+      allow get: if name == 'ai';
+      allow create, update: if isAdmin() && name == 'ai' && validAi(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
     // App counters for "Popular" in the App Store: anyone may add exactly 1 to one counter.
     function plusOne(f) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([f])

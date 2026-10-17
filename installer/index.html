@@ -8,8 +8,8 @@
 <!-- Desktop browser page (not part of the TV package): the App Store Manager. It publishes apps and games
      to the My PC App Store (Firestore "apps"); each TV installs what its users pick in the App Store app.
      It also shows the statistics: TVs running My PC (their backup document), installs and opens per app,
-     the devices that installed each app (date and profiles), world records. Pages: #overview #apps
-     #app/<id> #add #devices #device/<id> #records. -->
+     the devices that installed each app (date and profiles), world records. It also sets the AI services every My PC
+     uses for MyPC.ai (Firestore settings/ai). Pages: #overview #apps #app/<id> #add #ai #devices #device/<id> #records. -->
 <style>
   :root {
     color-scheme: dark;
@@ -134,6 +134,17 @@
   .center .card { width: min(440px, 100%); }
   .center h1 { font-size: 20px; margin: 0 0 4px; display: flex; gap: 10px; align-items: center; }
 
+  /* AI services */
+  .svc { padding: 16px 18px; border-bottom: 1px solid var(--line); }
+  .svc:last-child { border-bottom: 0; }
+  .svc-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .svc-head b { font-size: 15px; }
+  .svc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0 16px; }
+  .svc-grid .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .keybox { display: flex; gap: 6px; }
+  .warn { border-color: #5a4a1a; background: #221d10; }
+  select { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: #0f1012; color: var(--text); font: inherit; }
+
   .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 10; }
   .modal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 26px; width: min(640px, 100%); max-height: 100%; overflow: auto; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6); }
   .modal h3 { margin: 0 0 4px; font-size: 18px; }
@@ -187,6 +198,7 @@
       <a href="#overview" data-page="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Overview</a>
       <a href="#apps" data-page="apps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8V7a6 6 0 0 1 12 0v1"/><path d="M3.5 8h17l-1.4 12a2 2 0 0 1-2 1.8H6.9a2 2 0 0 1-2-1.8z"/></svg>Apps<span class="count" id="nav-apps"></span></a>
       <a href="#add" data-page="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Add apps</a>
+      <a href="#ai" data-page="ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>AI services</a>
       <a href="#devices" data-page="devices"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Devices<span class="count" id="nav-tvs"></span></a>
       <a href="#records" data-page="records"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5v1a3 3 0 0 0 3 3M16 6h3v1a3 3 0 0 1-3 3M12 13v4M8 21h8M9 17h6"/></svg>World records</a>
     </nav>
@@ -293,6 +305,16 @@
       </div>
     </section>
 
+    <!-- AI services -->
+    <section data-view="ai" hidden>
+      <div class="head"><div class="grow"><h1>AI services</h1><p>Apps on every My PC use these for <code>MyPC.ai</code>. Each TV, phone and computer gets them at its next start; apps never see the keys.</p></div>
+        <button id="ai-save" class="primary" disabled>Save</button></div>
+      <div class="card warn small">TVs read this list without signing in, so, like the App Store list, anyone who has My PC's Firebase web key can read it, keys included.
+        Use API keys with a spending limit (or a free tier), and replace a key here if it leaks.</div>
+      <div class="card flush"><div id="ai-list"></div></div>
+      <div class="row"><select id="ai-preset" aria-label="Service to add"></select><button id="ai-add">Add service</button><span class="grow"></span><span id="ai-msg" class="small"></span></div>
+    </section>
+
     <!-- World records -->
     <section data-view="records" hidden>
       <div class="head"><div class="grow"><h1>World records</h1><p>The best scores of each game on every My PC.</p></div></div>
@@ -323,6 +345,7 @@
 </div>
 
 <script src="installer-lib.js"></script>
+<script src="../js/core/ai.js"></script>
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js';
   import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider,
@@ -395,7 +418,7 @@
   function route() {
     const h = location.hash.replace(/^#/, '') || 'overview';
     const [page, arg] = h.split('/');
-    const view = { app: 'app', device: 'device' }[page] || (['overview', 'apps', 'add', 'devices', 'records'].includes(page) ? page : 'overview');
+    const view = { app: 'app', device: 'device' }[page] || (['overview', 'apps', 'add', 'ai', 'devices', 'records'].includes(page) ? page : 'overview');
     document.querySelectorAll('[data-view]').forEach((s) => { s.hidden = s.dataset.view !== view; });
     const navKey = view === 'app' ? 'apps' : view === 'device' ? 'devices' : view;
     document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('on', a.dataset.page === navKey));
@@ -414,6 +437,10 @@
     catch (e) { tvs = []; tvError = e.code === 'permission-denied' ? 'Publish the new firebase/firestore.rules to see the TVs (see firebase/SETUP.md).' : 'Could not read the TVs: ' + e.message; }
     tvs.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
     try { recs = (await getDocs(collection(db, 'records'))).docs.map((d) => ({ id: d.id, list: (d.data().list || []) })); } catch (e) { recs = []; }
+    if (!aiDirty) {
+      try { const a = await getDoc(doc(db, 'settings', 'ai')); ai = a.exists() ? { list: (a.data().list || []).map(AI.clean), def: a.data().def || '' } : { list: [], def: '' }; aiErr = ''; }
+      catch (e) { aiErr = fbErr(e); }
+    }
     $('nav-apps').textContent = apps.length || '';
     $('nav-tvs').textContent = tvs.length || '';
     render();
@@ -421,6 +448,7 @@
     renderOverview();
     renderDevices();
     renderRecords();
+    renderAi();
     route();
   }
 
@@ -800,6 +828,79 @@
     } finally { $('btn-install').disabled = false; }
   };
   $('url').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-fetch').click(); });
+
+  /* ---------- AI services (Firestore settings/ai, read by every My PC: js/launcher/bridges.js syncAi) ---------- */
+
+  let ai = { list: [], def: '' }, aiDirty = false, aiErr = '';
+  $('ai-preset').innerHTML = AI.PRESETS.map((p) => '<option value="' + esc(p.preset) + '">' + esc(p.name) + '</option>').join('');
+  const AI_FIELDS = [
+    ['name', 'Name', 'text', ''], ['model', 'Model', 'text', 'Used when an app names none'], ['url', 'Address', 'text', ''],
+    ['key', 'API key', 'password', '']
+  ];
+  const NV_FIELDS = [
+    ['speechUrl', 'Voice (Magpie) function', 'text', 'NVCF function id or https address (MyPC.ai task "speech")'],
+    ['transcribeUrl', 'Speech-to-text function', 'text', 'Only a function with an HTTP API (task "transcribe"); empty = off']
+  ];
+  function aiChanged() { aiDirty = true; $('ai-save').disabled = false; say('ai-msg', 'Not saved yet', 'muted'); }
+  function renderAi() {
+    if (aiErr) say('ai-msg', aiErr, 'err');
+    if (!ai.list.length) { $('ai-list').innerHTML = '<div class="empty">No AI service yet. Pick one below and add its API key.</div>'; return; }
+    $('ai-list').innerHTML = ai.list.map((p, i) => {
+      const pre = AI.presetOf(p.preset) || {}, nv = p.preset === 'nvidia';
+      const field = (f) => '<div><label for="ai-' + i + '-' + f[0] + '">' + f[1] + '</label>' + (f[2] === 'password'
+          ? '<div class="keybox"><input id="ai-' + i + '-' + f[0] + '" type="password" autocomplete="off" spellcheck="false" data-i="' + i + '" data-f="' + f[0] + '" value="' + esc(p[f[0]]) + '"><button class="icon small" data-show="' + i + '">Show</button></div>'
+          : '<input id="ai-' + i + '-' + f[0] + '" spellcheck="false" data-i="' + i + '" data-f="' + f[0] + '" value="' + esc(p[f[0]]) + '">') +
+        (f[3] || (f[0] === 'key' && pre.site) ? '<div class="hint">' + esc(f[3] || 'Get a key at ' + pre.site) + '</div>' : '') + '</div>';
+      return '<div class="svc"><div class="svc-head"><b>' + esc(p.name) + '</b><span class="tag">' + esc(pre.name || p.preset) + '</span>' +
+        '<span class="tag cfg">' + esc(p.id) + '</span>' + (p.id === ai.def ? '<span class="tag installed">default</span>' : '') + '<span class="grow"></span>' +
+        (p.id === ai.def ? '' : '<button class="small" data-def="' + i + '">Use by default</button>') +
+        '<button class="small danger" data-del="' + i + '">Remove</button></div>' +
+        '<div class="svc-grid">' + AI_FIELDS.concat(nv ? NV_FIELDS : []).map(field).join('') + '</div></div>';
+    }).join('');
+  }
+  $('ai-list').addEventListener('input', (e) => {
+    const t = e.target, i = +t.dataset.i;
+    if (!t.dataset.f || !ai.list[i]) return;
+    ai.list[i][t.dataset.f] = t.value.trim();
+    aiChanged();
+  });
+  $('ai-list').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.show !== undefined) { const inp = b.previousElementSibling; inp.type = inp.type === 'password' ? 'text' : 'password'; b.textContent = inp.type === 'password' ? 'Show' : 'Hide'; return; }
+    if (b.dataset.def !== undefined) { ai.def = ai.list[+b.dataset.def].id; aiChanged(); return renderAi(); }
+    if (b.dataset.del !== undefined) {
+      const p = ai.list[+b.dataset.del];
+      if (!confirm('Remove ' + p.name + '? Apps on every My PC stop using it after you save.')) return;
+      ai.list.splice(+b.dataset.del, 1);
+      if (ai.def === p.id) ai.def = ai.list.length ? ai.list[0].id : '';
+      aiChanged(); renderAi();
+    }
+  });
+  $('ai-add').onclick = () => {
+    const pre = AI.presetOf($('ai-preset').value);
+    if (!pre || ai.list.length >= 20) return;
+    let id = pre.preset, n = 2;
+    while (ai.list.some((x) => x.id === id)) id = pre.preset + n++;
+    ai.list.push(AI.clean({ id, preset: pre.preset, type: pre.type, name: pre.name, url: pre.url, model: pre.model }));
+    if (!ai.def) ai.def = id;
+    aiChanged(); renderAi();
+    const k = $('ai-' + (ai.list.length - 1) + '-' + (pre.preset === 'custom' ? 'url' : 'key'));
+    if (k) k.focus();
+  };
+  $('ai-save').onclick = async () => {
+    const bad = ai.list.find((p) => !/^https?:\/\//.test(p.url));
+    if (bad) return say('ai-msg', bad.name + ': the address must start with https://', 'err');
+    $('ai-save').disabled = true;
+    try {
+      const list = ai.list.map((p) => AI.clean(p));
+      await setDoc(doc(db, 'settings', 'ai'), { list, def: ai.def || (list[0] ? list[0].id : ''), updatedAt: serverTimestamp(), updatedBy: (user && user.email) || '' });
+      aiDirty = false;
+      say('ai-msg', 'Saved. Each My PC uses it from its next start (or Settings > AI > Check again).', 'ok');
+      toast('AI services saved');
+    } catch (e) { $('ai-save').disabled = false; say('ai-msg', fbErr(e), 'err'); }
+  };
+  window.addEventListener('beforeunload', (e) => { if (aiDirty) { e.preventDefault(); e.returnValue = ''; } });
 </script>
 </body>
 </html>

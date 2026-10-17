@@ -317,6 +317,7 @@ var App = (function () {
             Backup.start();
             Accounts.start();
             World.flush();
+            Bridges.syncAi();                                    // the AI services set in the App Store Manager
             // One-time device benchmark while the menu is idle.
             setTimeout(function () {
                 if (!GameHost.active()) benchCancel = Perf.benchmark(function () { benchCancel = null; });
