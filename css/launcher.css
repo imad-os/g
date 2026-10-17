@@ -408,16 +408,18 @@ svg { display: block; width: 100%; height: 100%; }
 .lb-note { margin: 10px 0 0; font-size: 24px; color: #a8a8a8; }
 
 /* ---------- sign-in / update screens ---------- */
-.welcome { position: fixed; left: 0; top: 0; width: 1920px; height: 1080px; z-index: 900; display: flex; align-items: center; justify-content: center;
+/* the welcome / "up to date" screen sits on <body>, outside the scaled #stage: it fills the real window and its sizes
+   follow the screen (vmin, 1080 tall = the TV's sizes), so it fits a phone too */
+.welcome { position: fixed; left: 0; top: 0; right: 0; bottom: 0; width: auto; height: auto; z-index: 900; display: flex; align-items: center; justify-content: center;
            background: radial-gradient(ellipse at 50% 30%, #1d3f8a 0%, #0b1330 70%); opacity: 1; transition: opacity .4s ease-out; }
 .welcome.bye { opacity: 0; }
-.welcome-card { text-align: center; animation: wl-in .5s ease-out; }
-.welcome-avatar { display: block; width: 220px; height: 220px; margin: 0 auto 36px; line-height: 220px; font-size: 110px; border-radius: 50%; }
-.welcome-logo { width: 160px; height: 160px; margin: 0 auto 28px; }
+.welcome-card { text-align: center; max-width: 92vw; padding: 0 4vmin; box-sizing: border-box; animation: wl-in .5s ease-out; }
+.welcome-avatar { display: block; width: 20.4vmin; height: 20.4vmin; margin: 0 auto 3.3vmin; line-height: 20.4vmin; font-size: 10.2vmin; border-radius: 50%; }
+.welcome-logo { width: 14.8vmin; height: 14.8vmin; margin: 0 auto 2.6vmin; }
 .welcome-logo svg { width: 100%; height: 100%; }
-.welcome-title { margin: 0; font-size: 64px; font-weight: 600; }
-.welcome-sub { margin: 14px 0 0; font-size: 34px; color: #b8c4e8; }
-.welcome .bs-spin { margin: 70px auto 0; }
+.welcome-title { margin: 0; font-size: max(22px, 5.9vmin); font-weight: 600; }
+.welcome-sub { margin: 1.3vmin 0 0; font-size: max(15px, 3.15vmin); color: #b8c4e8; }
+.welcome .bs-spin { margin: 6.5vmin auto 0; }
 @keyframes wl-in { from { transform: translateY(24px) scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
 .welcome .bs-spin { position: relative; width: 60px; height: 60px; }
 .welcome .bs-spin i { position: absolute; left: 0; top: 0; width: 60px; height: 60px; opacity: 0; animation: bs-orbit 3.2s infinite; }
@@ -679,3 +681,9 @@ svg { display: block; width: 100%; height: 100%; }
 .gc-phoneset { overflow: auto; justify-content: safe center; padding: calc(16px * var(--k, 1)); touch-action: pan-y; }
 .gc-phoneset .gc-srow { width: min(92vw, calc(460px * var(--k, 1))); min-height: calc(48px * var(--k, 1)); background: #1b1e3f; border-radius: calc(10px * var(--k, 1)); padding: calc(6px * var(--k, 1)) calc(14px * var(--k, 1)); font-size: calc(17px * var(--k, 1)); text-align: start; box-sizing: border-box; }
 .gc-phoneset .gc-line { opacity: .7; }
+
+/* an installed app listens (MyPC.mic, js/launcher/bridges.js): a red microphone over everything until it stops */
+.mic-on { position: absolute; top: 28px; right: 28px; width: 64px; height: 64px; border-radius: 50%; background: #d93025; z-index: 60;
+          box-shadow: 0 0 0 6px rgba(217, 48, 37, 0.35); animation: mic-pulse 1.6s ease-in-out infinite; pointer-events: none; }
+.mic-on svg { position: absolute; left: 14px; top: 14px; width: 36px; height: 36px; }
+@keyframes mic-pulse { 50% { box-shadow: 0 0 0 14px rgba(217, 48, 37, 0.1); } }

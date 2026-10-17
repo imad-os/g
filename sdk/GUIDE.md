@@ -305,6 +305,9 @@ Rules for app authors:
 | `MyPC.setMenu([{id, label}])` | up to 6 extra pause-menu items (e.g. Restart, Level select); `label` already translated |
 | `MyPC.pause()` | ask My PC to open the pause menu (e.g. your own on-screen pause button) |
 | `MyPC.exit()` | close the app and go back to the desktop |
+| `MyPC.net.fetch(url, opts)` | a web request through My PC, no CORS limit on the TV (section 14) |
+| `MyPC.ai.generate(req)` / `MyPC.ai.chat(text)` | AI: Gemini, ChatGPT, Claude, NVIDIA, any OpenAI-compatible service; text, images, audio, video in and out (section 14) |
+| `MyPC.mic.start(opts)` / `stop()` / `record(opts)` | the microphone, after the user allows it (section 14) |
 
 ## 5. Input
 
@@ -537,6 +540,7 @@ the World records.
 - [ ] any owner-changeable setting comes from `MyPC.app_config` (with defaults in code), not hard-coded
 - [ ] texts in `en` (and `fr`, `es`, `ar` if possible), using `info.lang`
 - [ ] works standalone: open `index.html` in Chrome, play with the arrows + Enter, Esc pauses
+- [ ] requests to other sites through `MyPC.net`, AI through `MyPC.ai`, the microphone through `MyPC.mic` (section 14): no own proxy, AI SDK or `getUserMedia`; each error code handled (`denied`, `no-provider`...)
 - [ ] served over https with CORS (GitHub Pages)
 - [ ] every own script, stylesheet and asset is loaded with `?v=<version>`, the same as `version` in `mypc-app.json` (bumped for every release)
 
@@ -623,3 +627,157 @@ What My PC does for you:
   `tizen-api-unavailable` (not on a TV).
 
 The native side is `js/core/hr-ble.js` (unit tests in `tests/unit-tests.mjs` with fake Garmin, Polar and Decathlon devices).
+
+## 14. Web requests, AI and the microphone: `MyPC.net`, `MyPC.ai`, `MyPC.mic` (API level 10)
+
+Your app runs in a sandboxed iframe on its own website, so it **cannot** call most APIs directly (CORS errors), use the
+TV's own (Tizen) APIs, or open the microphone on a TV. My PC does these things for you over the SDK. **MUST**: use
+these calls for any request to another website, any AI call and any microphone use; never put your own proxy, a CORS
+workaround, `getUserMedia` or a third-party AI SDK in the app. Check `MyPC.apiLevel >= 10` (an older My PC rejects the
+calls with `code: 'unsupported'`).
+
+Every call returns a Promise. Errors are `Error` objects with a `code` (and `status` for HTTP errors):
+`denied` (the user said no) · `no-provider` (no AI service set up) · `unsupported` · `bad-request` · `blocked` ·
+`http` · `network` · `timeout` · `too-big` · `busy` · `cancelled` · `not-running` · `no-mic` · `safety`.
+Show a short message and keep the app usable without the feature.
+
+**Standalone** (your page opened directly in a browser) the same calls work inside the page: the SDK loads My PC's own
+modules next to it. There only APIs that send CORS headers answer, AI needs your own provider object with a key (see
+below), and the microphone is the browser's (it asks the user).
+
+### `MyPC.net`: web requests without CORS limits
+
+```js
+var r = await MyPC.net.fetch('https://api.example.com/items?page=1', {
+    method: 'POST',                        // GET (default) POST PUT PATCH DELETE HEAD OPTIONS
+    headers: { 'X-Api-Key': '...' },       // the browser's own headers (Cookie, Origin, User-Agent, Referer...) cannot be set
+    json: { name: 'x' },                   // or body: string | ArrayBuffer | Uint8Array | Blob, or form: { field: 'text', file: blob }
+    responseType: 'json',                  // 'text' (default) | 'json' | 'arraybuffer' (images, audio, any binary)
+    timeout: 30000,                        // ms (30 s default, 10 min at most)
+    onChunk: function (text) { }           // optional: the answer piece by piece while it arrives (Server-Sent Events, long answers)
+});
+r.ok; r.status; r.statusText; r.url; r.headers['content-type']; r.body;   // body: string, parsed JSON or ArrayBuffer
+r.text(); r.json();
+var req = MyPC.net.fetch(url); req.abort();                 // stop a request
+```
+
+- On a **TV** the request goes out from My PC itself, which has no CORS limit: any public API works. In a browser or on
+  the Android app My PC is a web page too, so there only APIs that allow other sites (CORS) answer; keep a message for that.
+- Addresses of the **local network** (192.168.x.x, 10.x, localhost, `*.local`...) are refused (`blocked`) unless the
+  owner sets `"lan": true` in the app's config in the App Store Manager. Only `http` and `https` addresses.
+- At most 8 requests at once and 32 MB per answer. Requests stop when the app closes.
+
+### `MyPC.ai`: AI for your app (Gemini, ChatGPT, Claude, NVIDIA, any OpenAI-compatible API)
+
+The TV owner adds AI services in **Settings > AI** with their API keys: Google Gemini, OpenAI (ChatGPT), Anthropic Claude,
+NVIDIA, OpenRouter, Groq, Mistral, DeepSeek, xAI, Together, Ollama / LM Studio on a computer at home, or any custom
+OpenAI-compatible address with any model. **Your app never sees the keys.** The first AI request of an app asks the user
+"*<app> wants to use AI*" (Allow / Don't allow); the answer is kept until Settings > Privacy & security > *Forget what
+apps were allowed*. If no service is set up you get `no-provider` (and the TV tells the user where to add one).
+
+```js
+var res = await MyPC.ai.generate({
+    provider: 'gemini',                 // optional: a service id or kind ('gemini' 'openai' 'anthropic' 'nvidia' 'groq' 'ollama'...);
+                                        // default: the app config's ai.provider, else the TV's default service
+    model: 'gemini-2.5-flash',          // optional: else the app config's ai.model, else the service's model from Settings > AI
+    system: 'You are a quiz master for children.',            // string or [lines]
+    rules: ['Answer in ' + MyPC.info().lang, 'Never more than 3 sentences'],
+    context: { level: 3, score: 1200 },                       // string or any JSON: added to the instructions
+    examples: [{ input: 'Easy question about cats', output: '{"q":"How many legs does a cat have?","a":"4"}' }],
+    messages: [ { role: 'user', content: 'Hi' }, { role: 'assistant', content: 'Hello!' } ],   // earlier turns (optional)
+    prompt: ['What is in this picture?', { type: 'image', data: arrayBuffer, mime: 'image/jpeg' }],   // the new user turn
+    output: 'json',                     // 'text' (default) | 'json' | 'image' | 'audio' | 'video' | ['text', 'image'] ...
+    schema: { type: 'object', properties: { q: { type: 'string' }, a: { type: 'string' } }, required: ['q', 'a'] },
+    temperature: 0.7, maxTokens: 400, topP: 0.9, stop: ['END'], seed: 1,
+    extra: { }                          // optional: fields copied as they are into the service's own request body
+}, {
+    onDelta: function (text) { }        // optional: streaming, the answer piece by piece (text output)
+});
+res.text;      // the whole text answer
+res.json;      // output 'json': the parsed object (undefined if the model did not answer valid JSON)
+res.parts;     // [{ type: 'text', text }, { type: 'image' | 'audio' | 'video', mime, data: ArrayBuffer }]
+res.usage;     // { input, output, total } tokens (when the service says), res.model, res.provider, res.finish
+
+var txt = await MyPC.ai.chat('Tell me a joke');           // shortcut: prompt in, text out
+var list = await MyPC.ai.providers();                     // [{ id, name, type, preset, model, isDefault }] (no keys)
+var job = MyPC.ai.generate(req); job.cancel();            // stop a request
+```
+
+**Parts** (in `prompt`, or in `messages[].content` as an array): a string, `{ type: 'text', text }`, or
+`{ type: 'image' | 'audio' | 'video' | 'file', data, mime, url, name }` where `data` is an ArrayBuffer, a typed array,
+a Blob, base64 or a `data:` URL, or `url` an https address My PC downloads. `file` is for PDF documents.
+
+**Tasks**: `task` is guessed from `output` ('image' → image, 'audio' → speech, 'video' → video) or set it yourself:
+
+| `task` | What | Gemini | OpenAI / compatible | Claude |
+|---|---|---|---|---|
+| `chat` (default) | text / JSON answer; input text, images, audio, video, PDF | ✓ (all inputs; image / audio output with `output: ['text', 'image']`) | ✓ text, images, audio (`input_audio`), PDF; audio answer with `output: ['text', 'audio']` | ✓ text, images, PDF |
+| `image` | make or edit an image (give an image part to edit) | `gemini-2.5-flash-image`, or `imagen-*` | `gpt-image-1` (`size`, `n`, `quality`, `format`) | – |
+| `speech` | text to speech (`voice`, `format`) | `gemini-2.5-flash-preview-tts` (`voice: 'Kore'`), comes back as .wav | `gpt-4o-mini-tts` (`voice: 'alloy'`, `format: 'mp3'`) | – |
+| `transcribe` | speech to text (an audio part; `language`) | ✓ | `gpt-4o-mini-transcribe` / `whisper-1` | – |
+| `video` | make a video (`duration`, `aspectRatio`, `size`; an image part to animate); takes minutes, `onEvent` gets `{ ev: 'status' }` | Veo (`veo-3.0-fast-generate-001`) | Sora (`sora-2`) | – |
+| `embed` | vectors for text (`input: ['a', 'b']`) → `res.vectors` | `gemini-embedding-001` | `text-embedding-3-small` | – |
+
+The models in the table are used when neither the request nor the service names one for that task; NVIDIA, Groq,
+OpenRouter and the other OpenAI-compatible services take the model names of their own catalog (for example NVIDIA
+`meta/llama-3.3-70b-instruct`, `deepseek-ai/deepseek-r1`, `nvidia/llama-3.1-nemotron-70b-instruct`). What a model can do
+depends on the service: a service that cannot do something answers with an `http` or `unsupported` error.
+
+**Anything else of a service's API** (tools / function calling, a special endpoint): `MyPC.ai.raw({ provider, method,
+path: 'models', json, responseType })` calls the service's own API with its key added (only on the service's own site),
+and `extra` adds fields to a `generate` body.
+
+**The app's own key** (an app whose maker pays for the AI): give a provider object instead of a name; no permission
+question then, and it also works standalone:
+
+```js
+MyPC.ai.generate({ provider: { type: 'openai', url: 'https://integrate.api.nvidia.com/v1', key: MyPC.app_config.aiKey, model: 'meta/llama-3.3-70b-instruct' },
+                   prompt: 'Hello' });
+// type: 'openai' (any OpenAI-compatible address) | 'gemini' | 'anthropic'; optional headers: { ... }
+```
+
+Keys in an app's config or code can be read by anyone who opens the app's website: prefer the TV's own services.
+
+**App config** (App Store Manager > Config) can pick the service and model for an app: `{ "ai": { "provider": "nvidia", "model": "meta/llama-3.3-70b-instruct" } }`.
+
+### `MyPC.mic`: the microphone
+
+My PC opens the microphone and sends you the sound. The first use asks the user "*<app> wants to use the microphone*";
+a red microphone shows on the screen while it listens. Which microphone a TV gives to apps depends on the model (a USB
+or Bluetooth microphone or headset, the TV camera's microphone, the remote's microphone on many models; some keep the
+remote's for Bixby); on phones and computers it is the device's own. Needs My PC package 1.5.0 on a TV;
+`MyPC.mic.available()` says whether there is a microphone path.
+
+```js
+// simplest: record until the person stops talking (or 10 s), then send it to AI
+var rec = await MyPC.mic.record({ maxSeconds: 10, silence: { ms: 1200, threshold: 0.02 } });
+var said = await MyPC.ai.generate({ task: 'transcribe', prompt: [{ type: 'audio', data: rec.audio, mime: rec.mime }] });
+
+// live: chunks while it listens (speech recognition services, visualisers)
+MyPC.mic.on('data', function (e) { send(e.chunk); });         // e.chunk: ArrayBuffer (16-bit PCM, little endian, mono), e.seq
+MyPC.mic.on('level', function (e) { meter(e.v); });          // 0..1, 10 times a second
+MyPC.mic.on('end', function (e) { });                        // stopped by itself: e.reason 'silence' | 'max' | 'paused' | 'closed', e.result
+var info = await MyPC.mic.start({
+    format: 'wav',          // 'wav' (default: PCM chunks, a .wav file at the end) | 'pcm16' | 'float32' | 'webm' (Opus, much smaller)
+    sampleRate: 16000,      // 8000..48000 (wav / pcm16 / float32)
+    chunkMs: 250,           // chunk length; 0 = no live chunks
+    keep: true,             // false: no recording at the end (live chunks only)
+    maxSeconds: 60,         // up to 600
+    silence: null,          // { ms, threshold }: stop by itself after someone spoke and then was silent
+    echoCancellation: true, noiseSuppression: true, autoGainControl: true
+});                         // -> { sampleRate, format, mime, label }
+var res = await MyPC.mic.stop();       // { audio: ArrayBuffer, mime: 'audio/wav', format, sampleRate, seconds }
+MyPC.mic.cancel();                     // stop and drop it
+```
+
+My PC stops the microphone when its menu opens or the app closes (`end` with reason `paused` / `closed`); start it
+again from your own button. Only while the app runs (not under My PC's menu). One recording at a time.
+
+### Protocol (for reference)
+
+App → My PC: `{ mypc: 1, type: 'net' | 'ai' | 'mic', data: { rid, op, req | opts } }` with `op` `request` / `abort`
+(net), `generate` / `raw` / `providers` / `cancel` (ai), `start` / `stop` / `cancel` (mic). My PC → app:
+`{ rid, result }` or `{ rid, error: { code, message, status } }`; events `{ rid, ev: 'chunk' | 'delta' | 'status', ... }`
+and for the microphone `{ ev: 'data' | 'level' | 'end', of: rid, ... }`. ArrayBuffers are transferred, not copied.
+The init message carries `bridges: { net: 1, ai: 1, mic: 0 | 1 }` (`MyPC.info().bridges`).
+My PC side: `js/core/web-proxy.js`, `js/core/ai.js`, `js/core/mic.js`, `js/launcher/bridges.js`.

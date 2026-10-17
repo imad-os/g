@@ -15,6 +15,7 @@
         { id: 'devices', icon: 'gamepad', label: 'sysDevices' },
         { id: 'time', icon: 'clock', label: 'sysTime' },
         { id: 'gaming', icon: 'controller', label: 'sysGaming' },
+        { id: 'ai', icon: 'globe', label: 'sysAi' },
         { id: 'privacy', icon: 'shield', label: 'sysPrivacy' },
         { id: 'about', icon: 'info', label: 'about' },
         { id: 'update', icon: 'reload', label: 'sysUpdate' }
@@ -34,6 +35,7 @@
         var out = [], i, lines;
         if (sub === 'phonectrl' && id === 'devices') { phoneRows(out); return out; }
         if (sub === 'motionmoves' && id === 'devices') { movesRows(out); return out; }
+        if (id === 'ai') { aiRows(out); return out; }
         if (sub === 'padtest' && id === 'devices') {
             var pl = Input.pads();
             if (pl.length) out.push({ kind: 'padtest', pad: pl[0].index }); else out.push({ kind: 'text', value: t('devNoPad') });
@@ -95,6 +97,7 @@
                     Backup.erase(function (err) { App.toast(t(err ? 'cloudFail' : 'deleteBackupDone')); if (Win.current() === 'settings') { var f = renderMain(1); if (f) Focus.focus(f); } });
                 });
             } });
+            out.push({ kind: 'action', label: t('permReset'), desc: t('permResetDesc'), run: function () { Bridges.reset(); App.toast(t('permResetDone')); } });
             lines = t('privacyText');
             for (i = 0; i < lines.length; i++) out.push({ kind: 'text', value: lines[i] });
         } else if (id === 'devices') {
@@ -289,8 +292,72 @@
             title: t('usePhone'), help: t('usePhoneHelp'), codeLabel: t('username') });
     }
 
+    /* ---------- AI (js/core/ai.js): the services apps can use, keys kept on this device ---------- */
+    function aiGo(s, idx) { sub = s; var f = renderMain(idx === undefined ? 1 : idx); if (f) Focus.focus(f); }
+    function keyHint(p) { return p.key ? t('aiKeySet').replace('%s', p.key.slice(-4)) : (p.preset === 'ollama' ? '' : t('aiNoKey')); }
+    function aiRows(out) {
+        var i;
+        if (sub === 'aiadd') {
+            out.push({ kind: 'action', label: t('back'), run: function () { aiGo(null, 0); } });
+            out.push({ kind: 'text', value: t('aiPick') });
+            AI.PRESETS.forEach(function (pr) {
+                out.push({ kind: 'action', label: pr.name, desc: pr.site || pr.url, run: function () {
+                    var p = AI.add({ preset: pr.preset, type: pr.type, name: pr.name, url: pr.url, model: pr.model });
+                    aiGo('aiprov:' + p.id);
+                    if (pr.preset === 'custom') aiEdit(p.id, 'url');
+                    else if (!pr.noKey) aiEdit(p.id, 'key');
+                } });
+            });
+            return;
+        }
+        if (sub && sub.indexOf('aiprov:') === 0) {
+            var p = AI.find(sub.slice(7));
+            if (!p) { sub = null; return aiRows(out); }
+            var pre = AI.presetOf(p.preset) || {};
+            out.push({ kind: 'action', label: t('back'), run: function () { aiGo(null, 0); } });
+            out.push({ kind: 'action', label: t('aiKey'), desc: keyHint(p) + (pre.site ? (p.key ? '' : ' · ') + (p.key ? '' : t('aiKeyWhere').replace('%s', pre.site)) : ''), run: function () { aiEdit(p.id, 'key'); } });
+            out.push({ kind: 'action', label: t('aiModel'), desc: p.model || '—', run: function () { aiEdit(p.id, 'model'); } });
+            out.push({ kind: 'action', label: t('aiUrl'), desc: p.url, run: function () { aiEdit(p.id, 'url'); } });
+            out.push({ kind: 'action', label: t('aiName'), desc: p.name, run: function () { aiEdit(p.id, 'name'); } });
+            if (AI.defaultId() !== p.id) out.push({ kind: 'action', label: t('aiMakeDefault'), run: function () { AI.setDefault(p.id); App.toast(t('aiSaved')); aiGo(sub, 5); } });
+            out.push({ kind: 'action', label: t('aiTest'), run: function () { aiTest(p.id); } });
+            out.push({ kind: 'action', label: t('aiRemove'), danger: true, run: function () {
+                App.confirm(t('aiRemoveQ').replace('%s', p.name), t('aiRemoveText'), function () { AI.remove(p.id); aiGo(null, 0); });
+            } });
+            return;
+        }
+        out.push({ kind: 'text', value: t('aiHint') });
+        var l = AI.list(), d = AI.defaultId();
+        if (!l.length) out.push({ kind: 'text', value: t('aiNoneYet') });
+        for (i = 0; i < l.length; i++) (function (p) {
+            out.push({ kind: 'action', label: p.name + (p.id === d ? ' (' + t('aiDefault') + ')' : ''), desc: [p.model, keyHint(p)].filter(Boolean).join(' · '), run: function () { aiGo('aiprov:' + p.id); } });
+        })(l[i]);
+        out.push({ kind: 'action', label: t('aiAdd'), primary: true, run: function () { aiGo('aiadd'); } });
+    }
+    function aiEdit(id, field) {
+        var p = AI.find(id);
+        if (!p) return;
+        var f = { key: { title: t('aiKey'), mode: 'password', max: 200 }, model: { title: t('aiModel'), mode: 'code', max: 120 }, url: { title: t('aiUrl'), mode: 'code', max: 200 }, name: { title: t('aiName'), mode: 'text', max: 40 } }[field];
+        var pre = AI.presetOf(p.preset) || {};
+        Keyboard.open({ title: f.title + ' · ' + p.name, text: field === 'key' ? '' : p[field], max: f.max, mode: f.mode, hint: field === 'key' && pre.site ? t('aiKeyWhere').replace('%s', pre.site) : '' }, function (v) {
+            var patch = {}; patch[field] = field === 'url' ? v.replace(/\/+$/, '') : v;
+            AI.update(id, patch);
+            App.toast(t('aiSaved'));
+            if (Win.current() === 'settings' && page === 'ai') aiGo('aiprov:' + id, { key: 1, model: 2, url: 3, name: 4 }[field]);
+        });
+    }
+    function aiTest(id) {
+        var p = AI.find(id);
+        if (!p) return;
+        App.toast(t('aiTesting'));
+        AI.start({ prompt: 'Reply with the single word OK.', maxTokens: 20, timeout: 30000 }, p, null, { lan: true }).promise.then(function (r) {
+            App.toast(t('aiTestOk').replace('%s', (r.text || '').trim().slice(0, 60) || r.model));
+        }, function (e) { App.toast(t('aiTestFail').replace('%s', String(e && e.message || e).slice(0, 140))); });
+    }
+
     function leaveSub() {
         var back = sub === 'motionmoves' ? 'phonectrl' : null;
+        if (sub && sub.indexOf('aiprov:') === 0) back = null;
         if (sub === 'motionmoves') { Controllers.monitor(null); monEl = null; }
         sub = back;
         var f = renderMain(back ? 1 : 0); if (f) Focus.focus(f);

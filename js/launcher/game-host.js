@@ -142,7 +142,13 @@ var GameHost = (function () {
     // GameAPI-shaped proxy that talks to the app's My PC SDK with postMessage
     function remoteApi() {
         var id = game.id, origin = originOf(game.remote.entry), items = [], win = null, mp = null;
-        function send(type, d) { if (win) { try { win.postMessage({ mypc: 1, type: type, data: d === undefined ? null : d }, origin); } catch (e) {} } }
+        function send(type, d, transfer) {
+            if (!win) return;
+            try { win.postMessage({ mypc: 1, type: type, data: d === undefined ? null : d }, origin, transfer && transfer.length ? transfer : undefined); }
+            catch (e) { if (transfer && transfer.length) { try { win.postMessage({ mypc: 1, type: type, data: d === undefined ? null : d }, origin); } catch (e2) {} } }
+        }
+        // MyPC.net / MyPC.ai / MyPC.mic (js/launcher/bridges.js): web requests, AI services and the microphone, done by My PC
+        var br = Bridges.attach({ appId: id, title: title(), config: game.remote.config || {}, send: send, hold: hold, release: release, state: function () { return state; } });
         function bleAllowed() { return id === 'hr-monitor' || !!(game.remote.config && game.remote.config.heartRate === true); }
         // heart-rate sensors over Bluetooth LE (js/core/hr-ble.js), only for apps allowed to use them (bleAllowed)
         var ble = HrBle.create(function (kind, m) { send('ble-event', m); });
@@ -166,6 +172,7 @@ var GameHost = (function () {
             var m = e.data, d;
             if (!m || m.mypc !== 1 || typeof m.type !== 'string') return;
             d = m.data || {};
+            if (e.origin === origin && br.handle(m.type, d)) return;
             switch (m.type) {
                 case 'hello':
                     win = e.source;
@@ -177,7 +184,8 @@ var GameHost = (function () {
                         profile: { id: Profiles.current().id, name: Profiles.name(null, I18n.t('player')) },
                         data: Store.get('game_' + id + '_data', {}), app: { id: id },
                         config: game.remote.config || {},
-                        mp: typeof Multiplayer !== 'undefined' && typeof Rooms !== 'undefined' && NetLink.supported() ? 1 : 0   // MyPC.multiplayer is supported
+                        mp: typeof Multiplayer !== 'undefined' && typeof Rooms !== 'undefined' && NetLink.supported() ? 1 : 0,   // MyPC.multiplayer is supported
+                        bridges: { net: 1, ai: 1, mic: Mic.supported() ? 1 : 0 }      // MyPC.net / ai / mic go through My PC (API 10)
                     });
                     padsSent = ''; padsChanged();
                     Input.onPadRaw(rawPad); Input.offDevices(padsChanged); Input.onDevices(padsChanged);
@@ -240,9 +248,9 @@ var GameHost = (function () {
             ownMenu: false,
             init: function () {},
             start: function () { send('start'); },
-            pause: function () { send('pause'); },
+            pause: function () { br.pause(); send('pause'); },
             resume: function () { send('resume'); },
-            destroy: function () { Input.onPadRaw(null); Input.offDevices(padsChanged); ble.destroy(); if (mp) { mp.destroy(); mp = null; } send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
+            destroy: function () { br.destroy(); Input.onPadRaw(null); Input.offDevices(padsChanged); ble.destroy(); if (mp) { mp.destroy(); mp = null; } send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
             menuItems: function () { return items; },
             onMenu: function (mid) { send('menu', { id: String(mid).slice(4) }); },
             onAction: function (a, pressed, repeat, dev) { send('input', { action: a, pressed: pressed, repeat: repeat, dev: dev }); }

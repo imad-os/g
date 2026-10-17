@@ -25,8 +25,8 @@
                        display: flex; flex-direction: column; align-items: center; justify-content: center;
                        opacity: 1; transition: opacity .35s ease-out; }
         #boot-splash.bye { opacity: 0; }
-        #boot-splash svg { width: 150px; height: 150px; }
-        .bs-spin { position: relative; width: 60px; height: 60px; margin-top: 90px; }
+        #boot-splash svg { width: min(150px, 26vmin); height: min(150px, 26vmin); }
+        .bs-spin { position: relative; width: 60px; height: 60px; margin-top: min(90px, 12vmin); }
         .bs-spin i { position: absolute; left: 0; top: 0; width: 60px; height: 60px; opacity: 0;
                      animation: bs-orbit 3.2s infinite; }
         .bs-spin i:after { content: ""; position: absolute; left: 28px; top: 0; width: 7px; height: 7px; border-radius: 50%; background: #fff; }

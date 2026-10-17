@@ -20,9 +20,10 @@ performance on low-resource TVs**: when in doubt, choose the lighter option.
 
 - Build a static site at the root of its own repository, ready for GitHub Pages, from the guide's template (section 9).
 - If the owner did not say what to build, ask for: name, id, game or app, the idea, and extras (scores, local
-  multiplayer, phone motion, heart rate, config keys).
+  multiplayer, phone motion, heart rate, AI, microphone, config keys).
 - **Game controllers come first**: design for a controller and map every button, trigger and stick through
   `MyPC.gamepad` (guide section 5), then check it still plays with the TV remote's arrows + OK.
-- Use only what My PC gives you for input, saves, scores, profiles, multiplayer, sensors and heart rate. Never build
-  your own key handling, login, lobby, backend or Firebase.
+- Use only what My PC gives you for input, saves, scores, profiles, multiplayer, sensors, heart rate, web requests,
+  AI and the microphone (guide section 14). Never build your own key handling, login, lobby, backend, Firebase, CORS
+  proxy, AI SDK or microphone code.
 - Finish with the guide's checklist (section 11), each item ticked, then the publish steps from section 10.

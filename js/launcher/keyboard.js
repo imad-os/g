@@ -3,7 +3,8 @@
  *   Keyboard.open({ title, text, max, mode, hint, placeholder, ok }, function (value) {...}, onCancel)
  * 'name' capitalises each word, 'url' adds . / : - _ and keeps lower case, 'text' is free text,
  * 'user' is a username (lower case letters, digits, _ and .), 'password' hides what is typed (a Show key,
- * a Shift key for capitals, a few symbols) and Voice Guide says only how many characters there are. */
+ * a Shift key for capitals, a few symbols) and Voice Guide says only how many characters there are; 'code' is typed as is
+ * (Shift for capitals, / : . - _, no space: AI model names, addresses with capitals). Pasting (a PC or phone keyboard) types the text. */
 var Keyboard = (function () {
     'use strict';
 
@@ -12,6 +13,7 @@ var Keyboard = (function () {
     var TEXT_EXTRA = ['.', ',', '!', '?', '-', ':'];
     var USER_EXTRA = ['_', '.'];
     var PASS_EXTRA = ['.', '-', '_', '@', '!', '?', '#', '$', '*'];
+    var CODE_EXTRA = ['.', '/', ':', '-', '_', '@', '=', '+'];
     var cb = null, cancelCb = null, text = '', opts = null, isOpen = false, caps = false, shown = false;
 
     function $(id) { return document.getElementById(id); }
@@ -51,7 +53,7 @@ var Keyboard = (function () {
         cb = done;
         cancelCb = onCancel || null;
         text = opts.text || '';
-        caps = false; shown = false;
+        caps = false; shown = opts.mode === 'code';
         $('namer-title').textContent = opts.title || '';
         $('namer-hint').textContent = opts.hint || '';
         $('namer-hint').hidden = !opts.hint;
@@ -60,11 +62,12 @@ var Keyboard = (function () {
         var lower = m !== 'name';
         for (i = 0; i < LETTERS.length; i++) {
             var c = lower ? LETTERS[i].toLowerCase() : LETTERS[i];
-            var b = key(box, c, '', (function (ch) { return function () { type(m === 'password' && caps ? ch.toUpperCase() : ch); }; })(c));
-            if (m === 'password' && /[a-z]/.test(c)) b.setAttribute('data-ch', c);
+            var b = key(box, c, '', (function (ch) { return function () { type((m === 'password' || m === 'code') && caps ? ch.toUpperCase() : ch); }; })(c));
+            if ((m === 'password' || m === 'code') && /[a-z]/.test(c)) b.setAttribute('data-ch', c);
         }
-        var extra = m === 'url' ? URL_EXTRA : m === 'text' ? TEXT_EXTRA : m === 'user' ? USER_EXTRA : m === 'password' ? PASS_EXTRA : [];
+        var extra = m === 'url' ? URL_EXTRA : m === 'text' ? TEXT_EXTRA : m === 'user' ? USER_EXTRA : m === 'password' ? PASS_EXTRA : m === 'code' ? CODE_EXTRA : [];
         for (i = 0; i < extra.length; i++) key(box, extra[i], extra[i].length > 1 ? 'key-mid' : '', (function (ch) { return function () { type(ch); }; })(extra[i]));
+        if (m === 'code') key(box, '⇧', 'key-mid', function () { caps = !caps; relabel(); A11y.announce(I18n.t(caps ? 'capsOn' : 'capsOff')); }, I18n.t('capsKey'));
         if (m === 'password') {
             key(box, '⇧', 'key-mid', function () { caps = !caps; relabel(); A11y.announce(I18n.t(caps ? 'capsOn' : 'capsOff')); }, I18n.t('capsKey'));
             key(box, I18n.t('showPw'), 'key-wide', function () { shown = !shown; this.textContent = I18n.t(shown ? 'hidePw' : 'showPw'); draw(); if (shown) A11y.announce(text); });
@@ -97,7 +100,7 @@ var Keyboard = (function () {
         } else if (opts.mode === 'user') {
             c = c.toLowerCase();
             if (!/^[a-z0-9_.]$/.test(c)) return;
-        } else if (opts.mode === 'password') {
+        } else if (opts.mode === 'password' || opts.mode === 'code') {
             if (c === ' ') return;
         } else if (c === ' ' && (!text || prev === ' ')) return;
         text += c;
@@ -148,6 +151,21 @@ var Keyboard = (function () {
         else if ((a === 'back' || a === 'cancel') && !repeat) cancel();
     }
 
+    // pasting while the keyboard is open types the text (an API key copied on a PC, a phone's keyboard)
+    function onPaste(e) {
+        if (!isOpen) return;
+        var t = '';
+        try { t = (e.clipboardData || window.clipboardData).getData('text') || ''; } catch (x) {}
+        if (!t) return;
+        e.preventDefault();
+        t = t.replace(/[\r\n\t]+/g, opts.mode === 'text' || opts.mode === 'name' ? ' ' : '');
+        if (opts.mode === 'password' || opts.mode === 'code') t = t.replace(/\s+/g, '');
+        text = (text + t).slice(0, opts.max);
+        draw();
+        A11y.announce(opts.mode === 'password' && !shown ? I18n.t('pwCount').replace('%n', text.length) : text);
+    }
+
+    window.addEventListener('paste', onPaste, true);
     window.addEventListener('keydown', onRawKey, true);
     window.addEventListener('keyup', onRawKey, true);
 

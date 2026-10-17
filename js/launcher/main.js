@@ -2,7 +2,7 @@
 var App = (function () {
     'use strict';
 
-    var dialogOpen = false, dialogYes = null, toastTimer = 0, benchCancel = null;
+    var dialogOpen = false, dialogYes = null, dialogNo = null, toastTimer = 0, benchCancel = null;
 
     function $(id) { return document.getElementById(id); }
 
@@ -33,21 +33,26 @@ var App = (function () {
     }
 
     /* ---------- dialogs & toasts ---------- */
-    function confirm(title, text, onYes) {
+    // opts (optional): { yes: 'Allow', no: "Don't allow", onNo: fn } (onNo also runs on Back)
+    function confirm(title, text, onYes, opts) {
+        opts = opts || {};
         $('dialog-title').textContent = title;
         $('dialog-text').textContent = text;
-        $('dialog-yes').textContent = I18n.t('yes');
-        $('dialog-no').textContent = I18n.t('no');
+        $('dialog-yes').textContent = opts.yes || I18n.t('yes');
+        $('dialog-no').textContent = opts.no || I18n.t('no');
         dialogYes = onYes;
+        dialogNo = opts.onNo || null;
         dialogOpen = true;
         $('dialog-backdrop').hidden = false;
         Focus.push($('dialog'), $('dialog-no'));
     }
     function closeDialog() {
         dialogOpen = false;
+        dialogNo = null;
         $('dialog-backdrop').hidden = true;
         Focus.pop();
     }
+    function dialogRefused() { var cb = dialogNo; closeDialog(); if (cb) cb(); }
 
     function toast(text) {
         var t = $('toast');
@@ -106,7 +111,7 @@ var App = (function () {
             if (!pressed) return;
             if (action === 'left' || action === 'right') Focus.move(action);
             else if (action === 'confirm' && !repeat) Focus.current() && Focus.current().click();
-            else if ((action === 'back' || action === 'cancel') && !repeat) closeDialog();
+            else if ((action === 'back' || action === 'cancel') && !repeat) dialogRefused();
             return;
         }
 
@@ -247,7 +252,7 @@ var App = (function () {
         Win.init();
         watchNetwork();
         $('dialog-yes').onclick = function () { var cb = dialogYes; closeDialog(); if (cb) cb(); };
-        $('dialog-no').onclick = closeDialog;
+        $('dialog-no').onclick = dialogRefused;
 
         // Multitasking: pause the game (and its audio) when the app goes to the background.
         document.addEventListener('visibilitychange', function () {

@@ -21,6 +21,7 @@
  *
  * Input actions: left right up down jump run confirm cancel pause menu
  *   Every controller button, trigger and stick: MyPC.gamepad (API 9). Game controllers come first: use all of them.
+ * Web requests without CORS limits, AI services and the microphone: MyPC.net, MyPC.ai, MyPC.mic (API 10).
  *   'menu' = gamepad Start or Select pressed alone; only sent to apps that init with { ownMenu: true }.
  *   Only the TV remote's Back, or holding Start + Select together 1 s, opens My PC's menu; Esc / Backspace are 'cancel'.
  * Written in ES5 so it loads anywhere; My PC itself supports Samsung TVs from 2024 (Tizen 8+).
@@ -70,7 +71,7 @@ var MyPC = (function () {
                 data = d.data || {};
                 pub.app_config = plainObject(d.config) ? d.config : {};
                 info = { standalone: false, lang: d.lang || 'en', rtl: !!d.rtl, volume: d.volume || { music: 0.7, sfx: 0.8 },
-                         profile: d.profile || { id: 'p1', name: '' }, quality: d.quality || { tier: 'mid' }, app: d.app || {} };
+                         profile: d.profile || { id: 'p1', name: '' }, quality: d.quality || { tier: 'mid' }, app: d.app || {}, bridges: d.bridges || null };
                 if (info.rtl) document.documentElement.setAttribute('dir', 'rtl');
                 document.documentElement.setAttribute('lang', info.lang);
                 multiplayer._enable(d.mp === 1 ? 'shell' : 'none');       // false on an older My PC: apps hide the multiplayer feature
@@ -81,7 +82,7 @@ var MyPC = (function () {
             case 'resume': call('onResume'); break;
             case 'destroy':
                 if (destroyed) return;
-                destroyed = true; releaseAll(); gamepad._stop();
+                destroyed = true; releaseAll(); gamepad._stop(); mic._stop();
                 call('onDestroy');
                 break;
             case 'input': setInput(d.action, !!d.pressed, d.repeat, d.dev); break;
@@ -92,6 +93,9 @@ var MyPC = (function () {
             case 'ble-event': bluetooth._message(d); break;
             case 'sensors': sensors._message(d); break;
             case 'gp': gamepad._message(d); break;
+            case 'net': net._message(d); break;
+            case 'ai': ai._message(d); break;
+            case 'mic': mic._message(d); break;
         }
     }
 
@@ -1227,14 +1231,188 @@ var MyPC = (function () {
         };
     })();
 
+    /* MyPC.net, MyPC.ai, MyPC.mic (API 10): what the sandboxed iframe cannot do, My PC does for the app.
+     *   MyPC.net.fetch(url, { method, headers, body | json | form, responseType: 'text' | 'json' | 'arraybuffer', timeout, onChunk })
+     *       web requests from My PC: on the TV no CORS limit. -> { ok, status, headers, body, text(), json() }
+     *   MyPC.ai.generate({ provider, model, system, rules, context, examples, messages, prompt, output, schema, stream, ... }, { onDelta })
+     *       any AI service set up on the TV (Settings > AI, keys stay there) or the app's own { type, url, key }
+     *   MyPC.mic.start({ format, sampleRate, chunkMs, silence, maxSeconds }) / stop() / record(); MyPC.mic.on('data' | 'level' | 'end', fn)
+     * Standalone (the page opened in a browser) the same calls run in the page itself: the SDK loads My PC's own
+     * js/core/web-proxy.js, ai.js and mic.js next to it; there only APIs that allow CORS answer and AI needs the app's own key.
+     * Full reference: sdk/GUIDE.md, "Web requests, AI and microphone". */
+    var SDK_BASE = (function () {
+        try { var s = document.currentScript && document.currentScript.src; if (s && /\/sdk\/[^\/?#]*([?#].*)?$/.test(s)) return s.replace(/sdk\/[^\/]*$/, ''); } catch (e) {}
+        return 'https://imad-os.github.io/g/';
+    })();
+    var libs = {};
+    function need(files) {                                     // standalone: My PC's own modules, loaded once
+        return Promise.all(files.map(function (f) {
+            if (!libs[f]) libs[f] = new Promise(function (resolve, reject) {
+                var s = document.createElement('script');
+                s.src = SDK_BASE + f;
+                s.onload = resolve;
+                s.onerror = function () { delete libs[f]; reject(bridgeError({ code: 'network', message: 'Could not load ' + f + ' from ' + SDK_BASE })); };
+                (document.head || document.documentElement).appendChild(s);
+            });
+            return libs[f];
+        }));
+    }
+    function bridgeError(e) { var x = new Error((e && e.message) || 'Failed.'); x.code = (e && e.code) || 'failed'; if (e && e.status) x.status = e.status; return x; }
+    function viaShell() { return hosted && hostWin && info && !info.standalone; }
+    function bridgeReady() {
+        if (!info) return Promise.reject(bridgeError({ code: 'not-ready', message: 'Call MyPC.init() and wait for onInit first.' }));
+        if (viaShell() && !(info.bridges)) return Promise.reject(bridgeError({ code: 'unsupported', message: 'This My PC is too old for this. Update My PC (Settings > Update).' }));
+        return Promise.resolve();
+    }
+    function channel(type) {
+        var waiting = {}, n = 1;
+        return {
+            call: function (op, payload, onEvent) {
+                var rid = n++, p = new Promise(function (resolve, reject) {
+                    waiting[rid] = { resolve: resolve, reject: reject, ev: onEvent };
+                    var d = { rid: rid, op: op };
+                    for (var k in payload) if (payload.hasOwnProperty(k)) d[k] = payload[k];
+                    post(type, d);
+                });
+                p.rid = rid;
+                return p;
+            },
+            _message: function (d) {
+                var w = waiting[d.rid];
+                if (!w) return false;
+                if (d.ev) { if (w.ev) { try { w.ev(d); } catch (e) { try { console.error('[MyPC ' + type + '] ' + e); } catch (x) {} } } return true; }
+                delete waiting[d.rid];
+                if (d.error) w.reject(bridgeError(d.error)); else w.resolve(d.result);
+                return true;
+            }
+        };
+    }
+    function textOf(b) { return typeof b === 'string' ? b : b instanceof ArrayBuffer ? new TextDecoder().decode(b) : b === null || b === undefined ? '' : JSON.stringify(b); }
+    function response(r) {
+        r.text = function () { return textOf(r.body); };
+        r.json = function () { return typeof r.body === 'string' || r.body instanceof ArrayBuffer ? JSON.parse(textOf(r.body)) : r.body; };
+        return r;
+    }
+
+    var net = (function () {
+        var ch = channel('net');
+        function request(req) {
+            req = req && typeof req === 'object' ? req : {};
+            var onChunk = typeof req.onChunk === 'function' ? req.onChunk : null, handle = null, rid = 0, wire = {};
+            for (var k in req) if (req.hasOwnProperty(k) && k !== 'onChunk') wire[k] = req[k];
+            if (onChunk) wire.stream = true;
+            var p = bridgeReady().then(function () {
+                if (viaShell()) { var q = ch.call('request', { req: wire }, function (d) { if (d.ev === 'chunk' && onChunk) onChunk(d.text); }); rid = q.rid; return q; }
+                return need(['js/core/web-proxy.js']).then(function () {
+                    return new Promise(function (resolve, reject) {
+                        handle = WebProxy.request(wire, { lan: true }, onChunk, function (e, r) { if (e) reject(bridgeError(e)); else resolve(r); });
+                    });
+                });
+            }).then(response);
+            p.abort = function () { if (handle) handle.abort(); else if (rid) post('net', { rid: rid, op: 'abort' }); };
+            return p;
+        }
+        return {
+            request: request,
+            fetch: function (url, opt) { var r = {}; opt = opt || {}; for (var k in opt) if (opt.hasOwnProperty(k)) r[k] = opt[k]; r.url = url; return request(r); },
+            _message: ch._message
+        };
+    })();
+
+    var ai = (function () {
+        var ch = channel('ai');
+        function run(op, req, opt) {
+            opt = opt || {};
+            req = req && typeof req === 'object' ? req : {};
+            var job = null, rid = 0, onDelta = typeof opt.onDelta === 'function' ? opt.onDelta : null, onEvent = typeof opt.onEvent === 'function' ? opt.onEvent : null;
+            var wire = {};
+            for (var k in req) if (req.hasOwnProperty(k)) wire[k] = req[k];
+            if (onDelta && wire.stream === undefined) wire.stream = true;
+            function ev(d) { if (d.ev === 'delta' && onDelta) onDelta(d.text); if (onEvent) onEvent(d); }
+            var p = bridgeReady().then(function () {
+                if (viaShell()) { var q = ch.call(op, { req: wire }, ev); rid = q.rid; return q; }
+                return need(['js/core/web-proxy.js', 'js/core/ai.js']).then(function () {
+                    var prov = AI.resolve(wire.provider, pub.app_config && pub.app_config.ai && pub.app_config.ai.provider);
+                    if (!prov) throw bridgeError({ code: 'no-provider', message: 'Standalone, give your own provider: { provider: { type: "openai", url, key, model } }. Inside My PC the TV\'s AI services are used.' });
+                    job = op === 'raw' ? AI.raw(wire, prov, { lan: true }) : AI.start(wire, prov, ev, { lan: true });
+                    return job.promise.catch(function (e) { throw bridgeError(e); });
+                });
+            });
+            p.cancel = function () { if (job) job.cancel(); else if (rid) post('ai', { rid: rid, op: 'cancel' }); };
+            return p;
+        }
+        return {
+            generate: function (req, opt) { return run('generate', req, opt); },
+            // MyPC.ai.chat('Hello') or chat({ prompt, system, ... }) -> the answer's text
+            chat: function (req, opt) { return run('generate', typeof req === 'string' ? { prompt: req } : req, opt).then(function (r) { return r.text; }); },
+            raw: function (req) { return run('raw', req); },
+            providers: function () { return bridgeReady().then(function () { return viaShell() ? ch.call('providers', {}) : []; }); },
+            _message: ch._message
+        };
+    })();
+
+    var mic = (function () {
+        var ch = channel('mic'), listeners = { data: [], level: [], end: [] }, on = false, ending = null;
+        function emit(name, payload) { var l = listeners[name].slice(); for (var i = 0; i < l.length; i++) { try { l[i](payload); } catch (e) { try { console.error('[MyPC mic] ' + e); } catch (x) {} } } }
+        function event(name, d) {
+            if (name === 'end') { on = false; var e = ending; ending = null; emit('end', d); if (e) e.resolve(d.result); return; }
+            emit(name, d);
+        }
+        function start(opts) {
+            if (on) return Promise.reject(bridgeError({ code: 'busy', message: 'The microphone is already recording.' }));
+            var wire = {};
+            opts = opts && typeof opts === 'object' ? opts : {};
+            for (var k in opts) if (opts.hasOwnProperty(k)) wire[k] = opts[k];
+            on = true;
+            return bridgeReady().then(function () {
+                if (viaShell()) return ch.call('start', { opts: wire });
+                return need(['js/core/web-proxy.js', 'js/core/mic.js']).then(function () {
+                    return new Promise(function (resolve, reject) {
+                        Mic.start(wire, function (ev, data) { event(ev, data); }, function (e, inf) { if (e) reject(bridgeError(e)); else resolve(inf); });
+                    });
+                });
+            }).then(function (inf) { return inf; }, function (e) { on = false; throw e; });
+        }
+        function stop() {
+            if (!on) return Promise.resolve(null);
+            on = false;
+            if (viaShell()) return ch.call('stop', {});
+            return new Promise(function (resolve) { Mic.stop(function (e, r) { resolve(r); }); });
+        }
+        return {
+            available: function () { return viaShell() ? !!(info.bridges && info.bridges.mic) : !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia); },
+            start: start,
+            stop: stop,
+            cancel: function () { if (!on) return; on = false; if (viaShell()) ch.call('cancel', {}); else Mic.cancel(); },
+            // start, then resolve with the recording when it stops by itself (silence, maxSeconds) or when stop() is called
+            record: function (opts) {
+                return start(opts).then(function () { return new Promise(function (resolve, reject) { ending = { resolve: resolve, reject: reject }; }); });
+            },
+            active: function () { return on; },
+            on: function (name, fn) {
+                if (typeof fn !== 'function' || !listeners[name]) return function () {};
+                listeners[name].push(fn);
+                return function () { var l = listeners[name], i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); };
+            },
+            _message: function (d) {
+                if (d.ev) { event(d.ev, d); return; }
+                if (ch._message(d) && d.of !== undefined && ending) { var e = ending; ending = null; e.resolve(d.result); }
+            },
+            _stop: function () { on = false; ending = null; }
+        };
+    })();
+
     var pub = {
         version: VERSION,
-        apiLevel: 9,                     // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: 10,                    // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,
         sensors: sensors,
         gamepad: gamepad,
+        net: net,
+        ai: ai,
+        mic: mic,
         // The app's settings object, set in the installer and read before the app opens. Read it in
         // onInit (or later). Always an object ({} when none). Standalone, test it with ?app_config={"a":1}.
         app_config: {},

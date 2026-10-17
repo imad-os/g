@@ -1,6 +1,6 @@
 {
-  "build": 63,
-  "version": "2.16.0",
+  "build": 64,
+  "version": "2.17.0",
   "shell": 1,
   "css": [
     "css/launcher.css"
@@ -17,6 +17,9 @@
     "js/core/motion-train.js",
     "js/core/aim.js",
     "js/core/hr-ble.js",
+    "js/core/web-proxy.js",
+    "js/core/ai.js",
+    "js/core/mic.js",
     "js/core/qr.js",
     "js/core/virtual-pad.js",
     "js/core/backup.js",
@@ -48,6 +51,7 @@
     "js/launcher/pointer.js",
     "js/launcher/controllers.js",
     "js/launcher/touchpad.js",
+    "js/launcher/bridges.js",
     "js/launcher/welcome.js",
     "js/launcher/game-host.js",
     "js/launcher/main.js"

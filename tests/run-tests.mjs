@@ -33,6 +33,7 @@
 //  27. TV id, cloud backup and restore after a reinstall, world records
 //  23. Boot screen: black, inline logo, orbit dots, fades out; no logo when opening a game
 //  34. phone controller (the existing virtual pad) as P1 / P2;  35. its sensor modes (moves, metrics, raw, live / debug screens)
+//  37. app bridges: MyPC.net, MyPC.ai (Gemini, NVIDIA), MyPC.mic, permission prompts, Settings > AI; update screen on a phone
 //  Unit tests without a browser (Bluetooth heart-rate bridge, controller protocol, motion engine): node tests/unit-tests.mjs
 //
 //  CHROMIUM_PATH=/path/to/chrome uses an existing Chromium instead of Playwright's download.
@@ -282,7 +283,7 @@ async function playable(page, id = 'blocks') {
 async function main() {
     const srv = await serve();
     const base = `http://localhost:${srv.address().port}/`;
-    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--autoplay-policy=no-user-gesture-required', '--disable-features=WebRtcHideLocalIpsWithMdns', '--js-flags=--expose-gc', '--enable-precise-memory-info'] });
+    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--autoplay-policy=no-user-gesture-required', '--disable-features=WebRtcHideLocalIpsWithMdns', '--js-flags=--expose-gc', '--enable-precise-memory-info', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
 
     console.log('1. hosted newer build runs');
     {
@@ -2534,7 +2535,7 @@ async function main() {
         await P1.waitForFunction(() => VirtualPad.active(), null, { timeout: 5000 });
         check(await P1.evaluate(() => [...document.querySelectorAll('div')].some((d) => d.textContent === 'Y' && d.style.borderRadius === '50%' && d.style.display === 'none') && [...document.querySelectorAll('div')].some((d) => d.textContent === 'X' && d.style.borderRadius === '50%' && d.style.display === 'flex') && !!Store.rawGet('arc_dev_vpad:controller2')), 'the pad settings are kept after closing the app and reloading (no setting up again; Y hidden here)');
         // Settings: Disconnect / Forget TV; a phone with no TV opens on Connect (not the code box: no keyboard popping up)
-        await P1.click('.gc-setbtn');
+        await P1.evaluate(() => document.querySelector('.gc-setbtn').click());      // at once: the boot screen may still be fading out over it
         check(await P1.evaluate(() => !!document.querySelector('.gc-phoneset .gc-disc') && /^Forget TV/.test(document.querySelector('.gc-phoneset .gc-forget').textContent)), 'Settings has Disconnect and Forget TV while connected');
         await P1.click('.gc-phoneset .gc-forget');
         check(await P1.evaluate(() => !GamepadApp.running() && !Store.rawGet('arc_dev_ctrlphone').paired && !Store.rawGet('arc_dev_ctrlphone').code && document.querySelector('.gc-code').value === ''), 'Forget TV disconnects and forgets the code');
@@ -2920,6 +2921,161 @@ async function main() {
         check(again, 'the new password signs it in again');
         check(tv.errors.length === 0 && ph.errors.length === 0, 'no page errors ' + tv.errors.concat(ph.errors).join('; '));
         await tv.context().close(); await ph.context().close();
+    }
+
+    console.log('37. app bridges: MyPC.net (web requests), MyPC.ai (Gemini, NVIDIA / OpenAI-compatible), MyPC.mic, permissions; update screen on a phone');
+    {
+        const APP = 'https://apps.example.test/star/';
+        const page = await newPage(browser, base);
+        await page.context().grantPermissions(['microphone']);
+        await routeHosted(page, { offline: true });
+        await page.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+        await page.context().route(APP + '**', (r) => {
+            const rel = r.request().url().slice(APP.length).split('?')[0] || 'index.html', p = path.join(ROOT, 'sdk/example', rel);
+            if (!fs.existsSync(p)) return r.fulfill({ status: 404, body: '' });
+            r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || 'image/svg+xml', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(p) });
+        });
+        const doc = { fields: { id: { stringValue: 'star-catcher' }, name: { stringValue: 'Star Catcher' }, url: { stringValue: APP }, entry: { stringValue: APP + 'index.html' },
+            icon: { stringValue: APP + 'icon.svg' }, type: { stringValue: 'game' }, version: { stringValue: '1.0.0' }, enabled: { booleanValue: true }, order: { integerValue: '0' } } };
+        await page.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'star-catcher', at: 1 }])); });
+        await page.context().route('https://firestore.googleapis.com/**', (r) => {
+            if (!/\/documents\/apps(\/|\?|$)/.test(r.request().url())) return r.fallback();
+            const body = r.request().url().indexOf('/documents/apps/star-catcher') > 0 ? doc : { documents: [doc] };
+            r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(body) });
+        });
+        // "other websites" the app calls. (Chromium needs a CORS header here; on the TV My PC's requests have no CORS limit.)
+        const seen = {};
+        const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': '*' };
+        await page.context().route('https://api.nocors.test/**', (r) => {
+            const q = r.request();
+            if (q.method() === 'OPTIONS') return r.fulfill({ status: 204, headers: cors });
+            seen.net = { method: q.method(), header: q.headers()['x-test'], body: q.postData() };
+            if (/bin$/.test(q.url())) return r.fulfill({ status: 200, contentType: 'application/octet-stream', headers: cors, body: Buffer.from([7, 8, 9, 10]) });
+            if (/sse$/.test(q.url())) return r.fulfill({ status: 200, contentType: 'text/event-stream', headers: cors, body: 'data: one\n\ndata: two\n\n' });
+            r.fulfill({ status: 201, contentType: 'application/json', headers: Object.assign({ 'X-Reply': 'yes', 'Access-Control-Expose-Headers': 'X-Reply' }, cors), body: JSON.stringify({ hello: 'world' }) });
+        });
+        const gemPng = Buffer.from([137, 80, 78, 71]).toString('base64');
+        await page.context().route('https://generativelanguage.googleapis.com/**', (r) => {
+            const q = r.request();
+            if (q.method() === 'OPTIONS') return r.fulfill({ status: 204, headers: cors });
+            seen.gemini = { url: q.url(), key: q.headers()['x-goog-api-key'], body: JSON.parse(q.postData() || '{}') };
+            r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"a": 1}' }, { inlineData: { mimeType: 'image/png', data: gemPng } }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 3, totalTokenCount: 8 } }) });
+        });
+        await page.context().route('https://integrate.api.nvidia.com/**', (r) => {
+            const q = r.request();
+            if (q.method() === 'OPTIONS') return r.fulfill({ status: 204, headers: cors });
+            seen.nvidia = { url: q.url(), auth: q.headers().authorization, body: JSON.parse(q.postData() || '{}') };
+            if (seen.nvidia.body.stream) return r.fulfill({ status: 200, contentType: 'text/event-stream', headers: cors, body: 'data: {"choices":[{"delta":{"content":"Hel"}}]}\n\ndata: {"choices":[{"delta":{"content":"lo"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n' });
+            r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ choices: [{ message: { content: 'Hi there' }, finish_reason: 'stop' }], usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 } }) });
+        });
+        await page.goto(base + 'index.html');
+        const icon = '#desk-icons [data-game="app-star-catcher"]';
+        async function openApp() {
+            await page.waitForSelector(icon, { timeout: 8000 });
+            await page.focus(icon); await page.keyboard.press('Enter');
+            await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 10000 });
+            const f = page.frames().find((x) => x.url().indexOf(APP) === 0);
+            await f.waitForFunction(() => MyPC.info() && MyPC.info().bridges);
+            return f;
+        }
+        let frame = await openApp();
+        check(await frame.evaluate(() => MyPC.apiLevel >= 10 && MyPC.info().bridges.net === 1 && MyPC.info().bridges.ai === 1), 'the app learns that My PC does web requests, AI and the microphone for it (API 10)');
+        // MyPC.net
+        const r1 = await frame.evaluate(() => MyPC.net.fetch('https://api.nocors.test/items', { method: 'POST', headers: { 'X-Test': 'abc', Cookie: 'no' }, json: { n: 1 }, responseType: 'json' }).then((r) => ({ status: r.status, body: r.body, json: r.json(), h: r.headers['x-reply'] })));
+        check(r1.status === 201 && r1.body.hello === 'world' && r1.json.hello === 'world' && r1.h === 'yes' && seen.net.method === 'POST' && seen.net.header === 'abc' && seen.net.body === '{"n":1}',
+            'MyPC.net.fetch sends the request from My PC (method, headers, JSON body) and gives back status, headers and the parsed answer');
+        const bin = await frame.evaluate(() => MyPC.net.fetch('https://api.nocors.test/file.bin', { responseType: 'arraybuffer' }).then((r) => r.body instanceof ArrayBuffer ? Array.from(new Uint8Array(r.body)).join(',') : 'no'));
+        check(bin === '7,8,9,10', 'binary answers arrive as an ArrayBuffer (' + bin + ')');
+        const sse = await frame.evaluate(() => { const parts = []; return MyPC.net.fetch('https://api.nocors.test/sse', { onChunk: (t) => parts.push(t) }).then((r) => parts.join('') === r.body && /two/.test(r.body)); });
+        check(sse, 'onChunk streams the answer while it arrives (Server-Sent Events)');
+        const lan = await frame.evaluate(() => MyPC.net.fetch('http://192.168.1.1/admin').then(() => 'ok', (e) => e.code));
+        const file = await frame.evaluate(() => MyPC.net.fetch('file:///etc/passwd').then(() => 'ok', (e) => e.code));
+        check(lan === 'blocked' && file === 'bad-request', 'the local network (the router...) and non-web addresses are refused (' + lan + ', ' + file + ')');
+        // MyPC.ai without any service
+        const none = await frame.evaluate(() => MyPC.ai.chat('hi').then(() => 'ok', (e) => e.code));
+        check(none === 'no-provider' && /Settings > AI/.test(await page.textContent('#toast')), 'MyPC.ai with no AI service set up: a clear error, and the TV says where to add one');
+        // the owner adds Gemini and NVIDIA in Settings > AI
+        await page.evaluate(() => { AI.add({ preset: 'gemini', type: 'gemini', url: 'https://generativelanguage.googleapis.com/v1beta', key: 'GKEY-secret', model: 'gemini-2.5-flash' });
+                                    AI.add({ preset: 'nvidia', type: 'openai', url: 'https://integrate.api.nvidia.com/v1', key: 'nvapi-secret', model: 'meta/llama-3.3-70b-instruct' }); });
+        const provs = await frame.evaluate(() => MyPC.ai.providers());
+        check(provs.length === 2 && provs[0].id === 'gemini' && provs[0].isDefault && provs[1].preset === 'nvidia' && !JSON.stringify(provs).includes('secret') && !JSON.stringify(provs).includes('https'),
+            'MyPC.ai.providers() lists the services by name and model, never their keys or addresses');
+        const gen = frame.evaluate(() => MyPC.ai.generate({ system: 'You grade drawings.', rules: ['Be short', 'Use French'], context: { level: 2 },
+            prompt: ['Describe this', { type: 'image', data: new Uint8Array([1, 2, 3]).buffer, mime: 'image/png' }], output: ['json', 'image'], schema: { type: 'object' }, temperature: 0.2 })
+            .then((r) => ({ json: r.json, text: r.text, img: r.parts.filter((p) => p.type === 'image').map((p) => p.mime + ':' + (p.data instanceof ArrayBuffer ? p.data.byteLength : -1)), usage: r.usage, all: JSON.stringify(r) })));
+        await page.waitForSelector('#dialog-backdrop:not([hidden])', { timeout: 4000 });
+        check(/Star Catcher wants to use AI/.test(await page.textContent('#dialog-title')) && /Google Gemini/.test(await page.textContent('#dialog-text')) && await page.textContent('#dialog-yes') === 'Allow' &&
+            await page.evaluate(() => GameHost.state()) === 'paused', 'the first AI request asks the user (Allow / Don\'t allow), with the app paused under the question');
+        await page.click('#dialog-yes');
+        const g = await gen;
+        const gb = seen.gemini.body;
+        check(seen.gemini.key === 'GKEY-secret' && /models\/gemini-2\.5-flash:generateContent$/.test(seen.gemini.url) && /You grade drawings/.test(gb.systemInstruction.parts[0].text) && /- Use French/.test(gb.systemInstruction.parts[0].text) &&
+            /"level":2/.test(gb.systemInstruction.parts[0].text) && gb.contents[0].parts[1].inline_data.data === 'AQID' && gb.contents[0].parts[1].inline_data.mime_type === 'image/png' &&
+            gb.generationConfig.responseMimeType === 'application/json' && gb.generationConfig.temperature === 0.2 && gb.generationConfig.responseModalities.join() === 'TEXT,IMAGE',
+            'Gemini gets the system text with the rules and context, the image as inline data, JSON and image output, and the key in its header');
+        check(g.json && g.json.a === 1 && g.img[0] === 'image/png:4' && g.usage.total === 8 && !g.all.includes('GKEY'), 'the answer comes back as text, parsed JSON and an image (ArrayBuffer), with usage; the key never reaches the app');
+        check(await page.evaluate(() => GameHost.state()) === 'running', 'after the answer the app runs again');
+        const deltas = await frame.evaluate(() => { const d = []; return MyPC.ai.generate({ provider: 'nvidia', prompt: 'hi', maxTokens: 50 }, { onDelta: (t) => d.push(t) }).then((r) => d.join('|') + '=' + r.text + ':' + r.finish); });
+        check(deltas === 'Hel|lo=Hello:stop' && seen.nvidia.auth === 'Bearer nvapi-secret' && /\/v1\/chat\/completions$/.test(seen.nvidia.url) && seen.nvidia.body.model === 'meta/llama-3.3-70b-instruct' && seen.nvidia.body.max_tokens === 50 && seen.nvidia.body.stream === true,
+            'NVIDIA (OpenAI-compatible): streamed pieces through onDelta, Bearer key, the service\'s model; no second question once allowed (' + deltas + ')');
+        const own = await frame.evaluate(() => MyPC.ai.generate({ provider: { type: 'openai', url: 'https://integrate.api.nvidia.com/v1', key: 'app-own-key', model: 'm1' }, messages: [{ role: 'system', content: 'S' }, { role: 'user', content: 'Q' }, { role: 'assistant', content: 'A' }, { role: 'user', content: 'Q2' }] }).then((r) => r.text));
+        check(own === 'Hi there' && seen.nvidia.auth === 'Bearer app-own-key' && seen.nvidia.body.messages.map((m) => m.role).join() === 'system,user,assistant,user', 'an app can bring its own provider and key; messages keep their roles');
+        const unsup = await frame.evaluate(() => MyPC.ai.generate({ provider: 'nvidia', task: 'video', prompt: 'a cat' }).then(() => 'ok', (e) => e.code));
+        check(unsup === 'http' || unsup === 'unsupported' || unsup === 'network', 'a task the service cannot do fails with an error, not a hang (' + unsup + ')');
+        // MyPC.mic: allowed once, red microphone while it listens, a .wav at the end
+        const micP = frame.evaluate(() => { window.__chunks = 0; window.__lv = 0; MyPC.mic.on('data', () => __chunks++); MyPC.mic.on('level', () => __lv++); return MyPC.mic.start({ chunkMs: 100, sampleRate: 16000 }).then((i) => i.sampleRate + ':' + i.format, (e) => 'err:' + e.code + ' ' + e.message); });
+        await page.waitForSelector('#dialog-backdrop:not([hidden])', { timeout: 4000 });
+        check(/wants to use the microphone/.test(await page.textContent('#dialog-title')), 'the microphone asks first');
+        await page.click('#dialog-yes');
+        const micInfo = await micP;
+        check(/^\d+:wav$/.test(micInfo) && await page.evaluate(() => !!document.querySelector('.mic-on')), 'the microphone starts and a red microphone shows over the app (' + micInfo + ')');
+        await page.waitForTimeout(700);
+        const rec = await frame.evaluate(() => MyPC.mic.stop().then((r) => ({ riff: r && new TextDecoder().decode(r.audio.slice(0, 4)), mime: r && r.mime, len: r && r.audio.byteLength, chunks: __chunks, lv: __lv })));
+        check(rec.riff === 'RIFF' && rec.mime === 'audio/wav' && rec.len > 44 && rec.chunks > 0 && rec.lv > 0 && await page.evaluate(() => !document.querySelector('.mic-on')),
+            'stop() gives the recording as a .wav; live chunks and levels came while it listened; the red microphone goes away (' + rec.len + ' bytes, ' + rec.chunks + ' chunks)');
+        const ended = frame.evaluate(() => new Promise((res) => { const off = MyPC.mic.on('end', (e) => { off(); res(e.reason + ':' + !!(e.result && e.result.audio)); }); MyPC.mic.start({ chunkMs: 0 }); }));
+        await page.waitForSelector('.mic-on', { timeout: 4000 });
+        await tvBack(page);
+        check(await ended === 'paused:true' && await page.evaluate(() => !document.querySelector('.mic-on')), 'My PC\'s menu stops the microphone; the app gets "end" with the recording so far');
+        await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
+        await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body, null, { timeout: 8000 });
+        // Settings > Privacy forgets the permissions: the next request asks again, and "Don't allow" is an error
+        await page.evaluate(() => Win.open('settings', 'privacy'));
+        await page.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Forget what apps were allowed/.test(r.textContent)).click());
+        check(await page.evaluate(() => !Bridges.allowed('app-star-catcher', 'ai') && !Bridges.allowed('app-star-catcher', 'mic')), 'Settings > Privacy & security > Forget what apps were allowed');
+        await page.evaluate(() => Win.close());
+        frame = await openApp();
+        const denied = frame.evaluate(() => MyPC.ai.chat('hi').then(() => 'ok', (e) => e.code));
+        await page.waitForSelector('#dialog-backdrop:not([hidden])', { timeout: 4000 });
+        await page.click('#dialog-no');
+        check(await denied === 'denied' && await frame.evaluate(() => MyPC.ai.chat('again').then(() => 'ok', (e) => e.code)) === 'denied' && await page.evaluate(() => document.getElementById('dialog-backdrop').hidden),
+            '"Don\'t allow" refuses, and the app cannot ask again until it is opened again');
+        // Settings > AI lists the services; keys are not in the cloud backup
+        await frame.evaluate(() => MyPC.exit());
+        await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body, null, { timeout: 8000 });
+        await page.evaluate(() => Win.open('settings', 'ai'));
+        const aiPage = await page.textContent('.set-main');
+        check(/Google Gemini \(default\)/.test(aiPage) && /NVIDIA/.test(aiPage) && /Key saved \(…cret\)/.test(aiPage) && /Add an AI service/.test(aiPage), 'Settings > AI lists the services, the default one, and that a key is saved (only its last 4 characters)');
+        await page.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Add an AI service/.test(r.textContent)).click());
+        check(/NVIDIA/.test(await page.textContent('.set-main')) && /OpenAI/.test(await page.textContent('.set-main')) && /Ollama/.test(await page.textContent('.set-main')), 'Add an AI service offers the ready-made services (Gemini, OpenAI, NVIDIA, Ollama, custom...)');
+        await page.evaluate(() => Win.close());
+        check(await page.evaluate(() => !JSON.stringify(Backup.doc()).includes('secret')), 'AI keys are never in the cloud backup');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+    {
+        // the "My PC is up to date" screen on a phone: it fits the screen (it used to be 1920 wide and went off screen)
+        const page = await newPage(browser, base, null, { phone: true });
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForFunction(() => window.Desktop && document.querySelector('.dicon'), null, { timeout: 15000 });
+        await page.evaluate(() => Store.rawSet('arc_dev_seen_build', 1));
+        await page.reload();
+        await page.waitForSelector('.welcome-update', { timeout: 15000 });
+        const box = await page.evaluate(() => { const w = document.querySelector('.welcome').getBoundingClientRect(), c = document.querySelector('.welcome-card').getBoundingClientRect(), t = document.querySelector('.welcome-title').getBoundingClientRect();
+            return { w: w.width, h: w.height, vw: innerWidth, vh: innerHeight, cl: c.left, cr: c.right, ct: c.top, cb: c.bottom, tw: t.width }; });
+        check(box.w === box.vw && box.h === box.vh && box.cl >= 0 && box.cr <= box.vw && box.ct >= 0 && box.cb <= box.vh, 'on a phone the update screen fills the screen and its text is fully visible (' + JSON.stringify(box) + ')');
+        await page.context().close();
     }
 
     await browser.close();

@@ -5,6 +5,7 @@
 //   3. MotionEngine: synthetic recordings (still, walking, running in place, jump, duck, side steps) -> the right events only,
 //      at 60 Hz (browser) and 100 Hz (Android app)
 //   4. Android controller app bridge (android-controller/app/src/main/assets/bridge.js)
+//   5. app bridges: WebProxy (local network check, base64, .wav) and AI (request shapes for Gemini, OpenAI-compatible, Claude)
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -366,6 +367,36 @@ console.log('4. Android controller app: native motion samples reach the page as 
     check(e.acceleration.x === 0.1 && e.accelerationIncludingGravity.x === 9.9 && e.rotationRate.alpha === 10 && e.rotationRate.gamma === null, 'acceleration, with gravity and rotation rate are filled like a devicemotion event');
     ctx.removeEventListener('devicemotion', fn);
     check(calls.join() === 'true,false', 'removing the last listener stops the native sensors');
+}
+
+/* ---------------- 5. WebProxy + AI ---------------- */
+console.log('5. app bridges: WebProxy and AI request formats');
+{
+    const store = {};
+    const ctx = vm.createContext({ console, Math, JSON, Date, Uint8Array, Int16Array, ArrayBuffer, DataView, Array, Object, String, Number, Error, Promise, Set, URL, TextDecoder,
+        btoa: (s) => Buffer.from(s, 'binary').toString('base64'), atob: (s) => Buffer.from(s, 'base64').toString('binary'), setTimeout, clearTimeout,
+        localStorage: { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = String(v); } }, Blob: class {}, FormData: class { append() {} } });
+    ctx.window = ctx;
+    load('js/core/web-proxy.js', ctx); load('js/core/ai.js', ctx);
+    const W = ctx.WebProxy, A = ctx.AI;
+    check(['localhost', '127.0.0.1', '10.1.2.3', '192.168.1.1', '172.20.0.1', '169.254.1.1', 'tv.local', '[::1]', 'fd00::1'].every((h) => W.isPrivateHost(h)) &&
+        !['api.openai.com', '8.8.8.8', '172.32.0.1', 'integrate.api.nvidia.com'].some((h) => W.isPrivateHost(h)), 'the local network is told apart from the internet');
+    check(W.b64(new Uint8Array([1, 2, 3]).buffer) === 'AQID' && new Uint8Array(W.unb64('data:x;base64,AQID')).join() === '1,2,3', 'base64 both ways (data: URLs too)');
+    const wav = new Uint8Array(W.wav(new Int16Array([1, -1]).buffer, 24000, 1));
+    check(Buffer.from(wav.slice(0, 4)).toString() === 'RIFF' && wav.length === 48 && new DataView(wav.buffer).getUint32(24, true) === 24000, 'raw PCM becomes a playable .wav (Gemini speech, the microphone)');
+    const n = A.normalise({ system: ['A', 'B'], rules: ['r1', 'r2'], context: { x: 1 }, examples: [{ input: 'q', output: { a: 1 } }],
+        messages: [{ role: 'system', content: 'S2' }, { role: 'model', content: 'old' }], prompt: ['hi', { type: 'image', data: 'AQID', mime: 'image/png' }], output: 'json', schema: { type: 'object' } });
+    check(/^A\nB\n\nRules:\n- r1\n- r2\n\nContext:\n\{"x":1\}\n\nS2\n\nReply with JSON only/.test(n.sys) && n.msgs.map((m) => m.role).join() === 'user,assistant,assistant,user' && n.msgs[1].parts[0].text === '{"a":1}' &&
+        n.msgs[3].parts[1].type === 'image' && n.task === 'chat' && n.json, 'a structured prompt (system lines, rules, context, examples, roles, parts) becomes one shape');
+    check(A.normalise({ prompt: 'x', output: 'image' }).task === 'image' && A.normalise({ prompt: 'x', output: 'audio' }).task === 'speech' && A.normalise({ prompt: 'x', output: ['text', 'image'] }).task === 'chat' &&
+        A.normalise({ prompt: 'x', output: 'video' }).task === 'video', 'the task is guessed from the output');
+    check(A.parseJson('```json\n{"a":[1]}\n```').a[0] === 1 && A.parseJson('Sure! {"b":2} hope it helps').b === 2 && A.parseJson('nope') === undefined, 'JSON answers are read even inside code fences or text');
+    const nv = A.add({ preset: 'nvidia', key: 'k1' }), g = A.add({ preset: 'gemini', key: 'k2' });
+    check(nv.type === 'openai' && nv.url === 'https://integrate.api.nvidia.com/v1' && A.defaultId() === 'nvidia' && A.resolve('gemini').id === 'gemini' && A.resolve('openai').id === 'nvidia' && A.resolve().id === 'nvidia' &&
+        A.resolve({ type: 'anthropic', key: 'x' }).url === 'https://api.anthropic.com/v1' && A.resolve({ url: 'ftp://x' }) === null && !JSON.stringify(A.providers()).includes('k1'),
+        'providers: presets (NVIDIA is OpenAI-compatible), default, by id / preset / type, an app\'s own; the list for apps has no keys');
+    A.remove('nvidia');
+    check(A.defaultId() === 'gemini' && A.list().length === 1, 'removing the default service makes the next one the default');
 }
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall unit checks passed');
 process.exit(failures ? 1 : 0);
