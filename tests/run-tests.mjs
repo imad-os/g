@@ -33,7 +33,7 @@
 //  27. TV id, cloud backup and restore after a reinstall, world records
 //  23. Boot screen: black, inline logo, orbit dots, fades out; no logo when opening a game
 //  34. phone controller (the existing virtual pad) as P1 / P2;  35. its sensor modes (moves, metrics, raw, live / debug screens)
-//  37. app bridges: MyPC.net, MyPC.ai (Gemini, NVIDIA), MyPC.mic, permission prompts, Settings > AI; update screen on a phone
+//  37. app bridges: MyPC.net, MyPC.ai (Gemini, NVIDIA, Magpie speech), MyPC.mic, permission prompts, Settings > AI; update screen on a phone
 //  Unit tests without a browser (Bluetooth heart-rate bridge, controller protocol, motion engine): node tests/unit-tests.mjs
 //
 //  CHROMIUM_PATH=/path/to/chrome uses an existing Chromium instead of Playwright's download.
@@ -2968,6 +2968,12 @@ async function main() {
             if (seen.nvidia.body.stream) return r.fulfill({ status: 200, contentType: 'text/event-stream', headers: cors, body: 'data: {"choices":[{"delta":{"content":"Hel"}}]}\n\ndata: {"choices":[{"delta":{"content":"lo"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n' });
             r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ choices: [{ message: { content: 'Hi there' }, finish_reason: 'stop' }], usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 } }) });
         });
+        await page.context().route('https://877104f7-e885-42b9-8de8-f6e4c6303969.invocation.api.nvcf.nvidia.com/**', (r) => {
+            const q = r.request();
+            if (q.method() === 'OPTIONS') return r.fulfill({ status: 204, headers: cors });
+            seen.magpie = { url: q.url(), auth: q.headers().authorization, type: q.headers()['content-type'] || '', body: (q.postDataBuffer() || Buffer.alloc(0)).toString('latin1') };
+            r.fulfill({ status: 200, contentType: 'audio/wav', headers: cors, body: Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(40)]) });
+        });
         await page.goto(base + 'index.html');
         const icon = '#desk-icons [data-game="app-star-catcher"]';
         async function openApp() {
@@ -3022,6 +3028,21 @@ async function main() {
         check(own === 'Hi there' && seen.nvidia.auth === 'Bearer app-own-key' && seen.nvidia.body.messages.map((m) => m.role).join() === 'system,user,assistant,user', 'an app can bring its own provider and key; messages keep their roles');
         const unsup = await frame.evaluate(() => MyPC.ai.generate({ provider: 'nvidia', task: 'video', prompt: 'a cat' }).then(() => 'ok', (e) => e.code));
         check(unsup === 'http' || unsup === 'unsupported' || unsup === 'network', 'a task the service cannot do fails with an error, not a hang (' + unsup + ')');
+        // NVIDIA Magpie-Multilingual text to speech (an NVCF function, multipart form, .wav back)
+        const tts = await frame.evaluate(() => MyPC.ai.generate({ provider: 'nvidia', task: 'speech', model: 'magpie-multilingual', prompt: 'Hola', voice: 'Aria', language: 'es-US' })
+            .then((r) => r.parts.map((p) => p.type + ':' + p.mime + ':' + (p.data instanceof ArrayBuffer ? new TextDecoder().decode(p.data.slice(0, 4)) + p.data.byteLength : 'x')).join()));
+        const mb = seen.magpie && seen.magpie.body || '';
+        check(tts === 'audio:audio/wav:RIFF44' && /\/v1\/audio\/synthesize$/.test(seen.magpie.url) && seen.magpie.auth === 'Bearer nvapi-secret' && /^multipart\/form-data; boundary=/.test(seen.magpie.type) &&
+            /name="text"\r\n\r\nHola\r\n/.test(mb) && /name="language"\r\n\r\nes-US\r\n/.test(mb) && /name="voice"\r\n\r\nMagpie-Multilingual\.ES-US\.Aria\r\n/.test(mb),
+            'NVIDIA Magpie speech: a multipart form (text, language, voice) to its NVCF function with the TV\'s key, the .wav comes back as an audio part (' + tts + ')');
+        const ttsAr = await frame.evaluate(() => MyPC.ai.generate({ provider: 'nvidia', task: 'speech', prompt: 'مرحبا', language: 'ar' }).then(() => 'ok', (e) => e.code));
+        const asr = await frame.evaluate(() => MyPC.ai.generate({ provider: 'nvidia', task: 'transcribe', prompt: [{ type: 'audio', data: new Uint8Array([1, 2]).buffer, mime: 'audio/wav' }] }).then(() => 'ok', (e) => e.code));
+        const pv2 = await frame.evaluate(() => MyPC.ai.providers().then((l) => l.find((x) => x.preset === 'nvidia').tasks));
+        check(ttsAr === 'unsupported' && asr === 'unsupported' && pv2.speech && !pv2.transcribe && pv2.chat, 'Magpie refuses languages it does not speak; speech to text waits for its function; providers() tells the app which tasks exist (' + ttsAr + ', ' + asr + ')');
+        const rawNv = await frame.evaluate(() => MyPC.ai.raw({ provider: 'nvidia', url: 'https://877104f7-e885-42b9-8de8-f6e4c6303969.invocation.api.nvcf.nvidia.com/v1/audio/synthesize', method: 'POST',
+            form: { text: 'Hi', language: 'en-US', voice: 'Magpie-Multilingual.EN-US.Aria' }, responseType: 'arraybuffer' }).then((r) => r.status + ':' + (r.body instanceof ArrayBuffer ? r.body.byteLength : -1)));
+        const rawBad = await frame.evaluate(() => MyPC.ai.raw({ provider: 'nvidia', url: 'https://evil.example.com/steal', method: 'POST', json: {} }).then(() => 'ok', (e) => e.code));
+        check(rawNv === '200:44' && /name="voice"\r\n\r\nMagpie-Multilingual\.EN-US\.Aria/.test(seen.magpie.body) && rawBad === 'blocked', 'MyPC.ai.raw reaches NVIDIA\'s own hosts with a form and binary answer; any other host never gets the key (' + rawNv + ', ' + rawBad + ')');
         // MyPC.mic: allowed once, red microphone while it listens, a .wav at the end
         const micP = frame.evaluate(() => { window.__chunks = 0; window.__lv = 0; MyPC.mic.on('data', () => __chunks++); MyPC.mic.on('level', () => __lv++); return MyPC.mic.start({ chunkMs: 100, sampleRate: 16000 }).then((i) => i.sampleRate + ':' + i.format, (e) => 'err:' + e.code + ' ' + e.message); });
         await page.waitForSelector('#dialog-backdrop:not([hidden])', { timeout: 4000 });

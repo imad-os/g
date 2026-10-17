@@ -5,7 +5,7 @@
 //   3. MotionEngine: synthetic recordings (still, walking, running in place, jump, duck, side steps) -> the right events only,
 //      at 60 Hz (browser) and 100 Hz (Android app)
 //   4. Android controller app bridge (android-controller/app/src/main/assets/bridge.js)
-//   5. app bridges: WebProxy (local network check, base64, .wav) and AI (request shapes for Gemini, OpenAI-compatible, Claude)
+//   5. app bridges: WebProxy (local network check, base64, .wav) and AI (request shapes for Gemini, OpenAI-compatible, Claude, NVIDIA speech)
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -395,6 +395,12 @@ console.log('5. app bridges: WebProxy and AI request formats');
     check(nv.type === 'openai' && nv.url === 'https://integrate.api.nvidia.com/v1' && A.defaultId() === 'nvidia' && A.resolve('gemini').id === 'gemini' && A.resolve('openai').id === 'nvidia' && A.resolve().id === 'nvidia' &&
         A.resolve({ type: 'anthropic', key: 'x' }).url === 'https://api.anthropic.com/v1' && A.resolve({ url: 'ftp://x' }) === null && !JSON.stringify(A.providers()).includes('k1'),
         'providers: presets (NVIDIA is OpenAI-compatible), default, by id / preset / type, an app\'s own; the list for apps has no keys');
+    const pv = A.providers(), tn = pv.find((x) => x.id === 'nvidia').tasks, tg = pv.find((x) => x.id === 'gemini').tasks;
+    check(tn.chat && tn.speech && !tn.transcribe && !tn.image && tn.embed && tg.speech && tg.transcribe && tg.video &&
+        A.nvcfUrl('877104F7-E885-42B9-8DE8-F6E4C6303969', '/v1/audio/synthesize') === 'https://877104f7-e885-42b9-8de8-f6e4c6303969.invocation.api.nvcf.nvidia.com/v1/audio/synthesize' &&
+        A.update('nvidia', { transcribeUrl: 'https://x.invocation.api.nvcf.nvidia.com/v1/asr' }).transcribeUrl !== '' && A.tasks(A.find('nvidia')).transcribe &&
+        A.update('nvidia', { speechUrl: '' }).speechUrl === '' && !A.tasks(A.find('nvidia')).speech,
+        'tasks per service: NVIDIA speaks through its Magpie function (editable, can be cleared), transcribes only once a function is set');
     A.remove('nvidia');
     check(A.defaultId() === 'gemini' && A.list().length === 1, 'removing the default service makes the next one the default');
 }

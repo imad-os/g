@@ -319,7 +319,11 @@
             out.push({ kind: 'action', label: t('aiModel'), desc: p.model || '—', run: function () { aiEdit(p.id, 'model'); } });
             out.push({ kind: 'action', label: t('aiUrl'), desc: p.url, run: function () { aiEdit(p.id, 'url'); } });
             out.push({ kind: 'action', label: t('aiName'), desc: p.name, run: function () { aiEdit(p.id, 'name'); } });
-            if (AI.defaultId() !== p.id) out.push({ kind: 'action', label: t('aiMakeDefault'), run: function () { AI.setDefault(p.id); App.toast(t('aiSaved')); aiGo(sub, 5); } });
+            if (p.preset === 'nvidia') {                                          // NVIDIA's speech services are NVCF functions on their own hosts
+                out.push({ kind: 'action', label: t('aiSpeechFn'), desc: p.speechUrl || t('aiFnNone'), run: function () { aiEdit(p.id, 'speechUrl'); } });
+                out.push({ kind: 'action', label: t('aiAsrFn'), desc: p.transcribeUrl || t('aiFnNone'), run: function () { aiEdit(p.id, 'transcribeUrl'); } });
+            }
+            if (AI.defaultId() !== p.id) out.push({ kind: 'action', label: t('aiMakeDefault'), run: function () { AI.setDefault(p.id); App.toast(t('aiSaved')); aiGo(sub, 1); } });
             out.push({ kind: 'action', label: t('aiTest'), run: function () { aiTest(p.id); } });
             out.push({ kind: 'action', label: t('aiRemove'), danger: true, run: function () {
                 App.confirm(t('aiRemoveQ').replace('%s', p.name), t('aiRemoveText'), function () { AI.remove(p.id); aiGo(null, 0); });
@@ -337,13 +341,14 @@
     function aiEdit(id, field) {
         var p = AI.find(id);
         if (!p) return;
-        var f = { key: { title: t('aiKey'), mode: 'password', max: 200 }, model: { title: t('aiModel'), mode: 'code', max: 120 }, url: { title: t('aiUrl'), mode: 'code', max: 200 }, name: { title: t('aiName'), mode: 'text', max: 40 } }[field];
+        var f = { key: { title: t('aiKey'), mode: 'password', max: 200 }, model: { title: t('aiModel'), mode: 'code', max: 120 }, url: { title: t('aiUrl'), mode: 'code', max: 200 }, name: { title: t('aiName'), mode: 'text', max: 40 },
+                  speechUrl: { title: t('aiSpeechFn'), mode: 'code', max: 200, hint: t('aiFnHint') }, transcribeUrl: { title: t('aiAsrFn'), mode: 'code', max: 200, hint: t('aiFnHint') } }[field];
         var pre = AI.presetOf(p.preset) || {};
-        Keyboard.open({ title: f.title + ' · ' + p.name, text: field === 'key' ? '' : p[field], max: f.max, mode: f.mode, hint: field === 'key' && pre.site ? t('aiKeyWhere').replace('%s', pre.site) : '' }, function (v) {
+        Keyboard.open({ title: f.title + ' · ' + p.name, text: field === 'key' ? '' : p[field], max: f.max, mode: f.mode, hint: field === 'key' && pre.site ? t('aiKeyWhere').replace('%s', pre.site) : f.hint || '' }, function (v) {
             var patch = {}; patch[field] = field === 'url' ? v.replace(/\/+$/, '') : v;
             AI.update(id, patch);
             App.toast(t('aiSaved'));
-            if (Win.current() === 'settings' && page === 'ai') aiGo('aiprov:' + id, { key: 1, model: 2, url: 3, name: 4 }[field]);
+            if (Win.current() === 'settings' && page === 'ai') aiGo('aiprov:' + id, { key: 1, model: 2, url: 3, name: 4, speechUrl: 5, transcribeUrl: 6 }[field]);
         });
     }
     function aiTest(id) {

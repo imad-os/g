@@ -37,7 +37,9 @@ var AI = (function () {
         { preset: 'gemini', type: 'gemini', name: 'Google Gemini', url: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-flash', site: 'aistudio.google.com' },
         { preset: 'openai', type: 'openai', name: 'OpenAI (ChatGPT)', url: 'https://api.openai.com/v1', model: 'gpt-4o-mini', site: 'platform.openai.com' },
         { preset: 'anthropic', type: 'anthropic', name: 'Anthropic Claude', url: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-5', site: 'console.anthropic.com' },
-        { preset: 'nvidia', type: 'openai', name: 'NVIDIA', url: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.3-70b-instruct', site: 'build.nvidia.com' },
+        // speech: Magpie-Multilingual (NVCF function, editable in Settings > AI); transcribe: an NVCF speech-to-text function with an HTTP API, when set
+        { preset: 'nvidia', type: 'openai', name: 'NVIDIA', url: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.3-70b-instruct', site: 'build.nvidia.com',
+          speechUrl: '877104f7-e885-42b9-8de8-f6e4c6303969', transcribeUrl: '' },
         { preset: 'openrouter', type: 'openai', name: 'OpenRouter', url: 'https://openrouter.ai/api/v1', model: 'openrouter/auto', site: 'openrouter.ai' },
         { preset: 'groq', type: 'openai', name: 'Groq', url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile', site: 'console.groq.com' },
         { preset: 'mistral', type: 'openai', name: 'Mistral', url: 'https://api.mistral.ai/v1', model: 'mistral-small-latest', site: 'console.mistral.ai' },
@@ -65,7 +67,8 @@ var AI = (function () {
         var pre = presetOf(p.preset) || {};
         return { id: String(p.id || ''), preset: p.preset || 'custom', type: /^(openai|gemini|anthropic)$/.test(p.type) ? p.type : (pre.type || 'openai'),
                  name: String(p.name || pre.name || 'AI').slice(0, 40), url: String(p.url || pre.url || '').replace(/\/+$/, ''), key: String(p.key || ''),
-                 model: String(p.model || '').trim(), models: p.models && typeof p.models === 'object' ? p.models : {}, lan: !!(p.lan || pre.lan) };
+                 model: String(p.model || '').trim(), models: p.models && typeof p.models === 'object' ? p.models : {}, lan: !!(p.lan || pre.lan),
+                 speechUrl: String(p.speechUrl !== undefined ? p.speechUrl : pre.speechUrl || '').trim(), transcribeUrl: String(p.transcribeUrl !== undefined ? p.transcribeUrl : pre.transcribeUrl || '').trim() };
     }
     function presetOf(id) { for (var i = 0; i < PRESETS.length; i++) if (PRESETS[i].preset === id) return PRESETS[i]; return null; }
     function list() { return rawGet().list.map(clean); }
@@ -96,8 +99,32 @@ var AI = (function () {
     // what an app may know: no keys, no addresses
     function providers() {
         var d = defaultId();
-        return list().map(function (p) { return { id: p.id, name: p.name, type: p.type, preset: p.preset, model: p.model, isDefault: p.id === d }; });
+        return list().map(function (p) { return { id: p.id, name: p.name, type: p.type, preset: p.preset, model: p.model, isDefault: p.id === d, tasks: tasks(p) }; });
     }
+
+    // what a service can do (apps hide a feature when no service has it)
+    var EMBED = { openai: 1, nvidia: 1, mistral: 1, together: 1, ollama: 1, gemini: 1 };
+    function tasks(p) {
+        var t = { chat: true, image: false, speech: false, transcribe: false, video: false, embed: false };
+        if (p.type === 'gemini' || (p.type === 'openai' && (p.preset === 'openai' || /\/\/api\.openai\.com/.test(p.url)))) { t.image = t.speech = t.transcribe = t.video = t.embed = true; }
+        else if (p.type === 'openai') {
+            t.embed = !!EMBED[p.preset];
+            if (isNvidia(p)) { t.speech = !!p.speechUrl; t.transcribe = !!p.transcribeUrl; }
+        }
+        return t;
+    }
+    function isNvidia(p) { return p.preset === 'nvidia' || /\/\/integrate\.api\.nvidia\.com/.test(p.url || ''); }
+    // an NVCF function: its id alone, or its whole address
+    function nvcfUrl(v, path) { v = String(v || '').trim(); return /^[0-9a-f-]{36}$/i.test(v) ? 'https://' + v.toLowerCase() + '.invocation.api.nvcf.nvidia.com' + path : v; }
+    // the key only goes to NVIDIA: a full address must be one of its https hosts
+    function nvFn(v, path) {
+        var u = nvcfUrl(v, path), a;
+        try { a = new URL(u); } catch (e) { a = null; }
+        if (!a || a.protocol !== 'https:' || !nvidiaHost(a.hostname)) throw err('blocked', 'The NVIDIA function must be a function id or an https address on NVIDIA\'s hosts.');
+        return u;
+    }
+    // the other NVIDIA hosts its key may go to (NVCF functions, ai.api.nvidia.com)
+    function nvidiaHost(h) { return /(^|\.)invocation\.api\.nvcf\.nvidia\.com$/.test(h) || h === 'ai.api.nvidia.com' || h === 'api.nvcf.nvidia.com'; }
 
     // spec: undefined (the app's config "ai.provider", else the TV's default) | an id | a type / preset name | an app's own { type, url, key }
     function resolve(spec, appDefault) {
@@ -107,7 +134,9 @@ var AI = (function () {
             var url = String(spec.url || pre.url || '').replace(/\/+$/, '');
             if (!/^https?:\/\//.test(url)) return null;
             return { id: 'app', own: true, type: t, name: String(spec.name || pre.name || 'App'), url: url, key: String(spec.key || ''), model: String(spec.model || ''),
-                     models: spec.models && typeof spec.models === 'object' ? spec.models : {}, headers: spec.headers && typeof spec.headers === 'object' ? spec.headers : null };
+                     models: spec.models && typeof spec.models === 'object' ? spec.models : {}, headers: spec.headers && typeof spec.headers === 'object' ? spec.headers : null,
+                     preset: spec.preset || (/\/\/integrate\.api\.nvidia\.com/.test(url) ? 'nvidia' : ''),
+                     speechUrl: String(spec.speechUrl || (/\/\/integrate\.api\.nvidia\.com/.test(url) ? presetOf('nvidia').speechUrl : '')), transcribeUrl: String(spec.transcribeUrl || '') };
         }
         var want = spec || appDefault, l = list(), i;
         if (!want) return find(defaultId());
@@ -541,6 +570,41 @@ var AI = (function () {
 
     /* ---------------- running a request ---------------- */
 
+    /* ---------------- NVIDIA speech (Magpie-Multilingual TTS, NVCF speech-to-text) ---------------- */
+
+    var NV_LANG = { en: 'en-US', es: 'es-US', fr: 'fr-FR', de: 'de-DE' };
+    function nvLang(l) {
+        l = String(l || 'en-US');
+        var m = /^([a-z]{2})(?:[-_]([a-z]{2}))?$/i.exec(l);
+        return m ? (m[2] ? m[1].toLowerCase() + '-' + m[2].toUpperCase() : NV_LANG[m[1].toLowerCase()] || l) : l;
+    }
+    async function nvSpeech(ctl, p, model, n, req) {
+        if (!p.speechUrl) throw err('unsupported', 'NVIDIA speech is not set up: add the Magpie function in My PC: Settings > AI > NVIDIA.');
+        var lang = nvLang(req.language);
+        if (!/^(en|es|fr|de)-/i.test(lang)) throw err('unsupported', 'NVIDIA Magpie speaks English, Spanish, French and German, not ' + lang + '.');
+        var text = allText(n);
+        if (!text) throw err('bad-request', 'Give the text to say.');
+        var v = String(req.voice || 'Aria'), base = /^magpie/i.test(model) ? 'Magpie-Multilingual' : model;
+        var voice = v.indexOf('.') >= 0 ? v : base + '.' + lang.toUpperCase() + '.' + v;
+        var form = Object.assign({ text: text, language: lang, voice: voice }, req.extra || {});
+        var r = await http(ctl, p, { url: nvFn(p.speechUrl, '/v1/audio/synthesize'), form: form, responseType: 'arraybuffer' });
+        var mime = String(r.headers['content-type'] || '').split(';')[0];
+        if (!/^audio\//.test(mime)) mime = 'audio/wav';
+        return result(p, model, '', [{ type: 'audio', mime: mime, data: r.body }], null, 'stop', null, req);
+    }
+    async function nvTranscribe(ctl, p, model, n, req) {
+        if (!p.transcribeUrl) throw err('unsupported', 'NVIDIA speech-to-text is not set up: add its function in My PC: Settings > AI > NVIDIA.');
+        var a = media(n, 'audio')[0];
+        if (!a) throw err('bad-request', 'Give the audio to write down (a part { type: "audio", data }).');
+        await load(ctl, p, a);
+        var ext = (/(mp3|mpeg|webm|ogg|wav|flac|opus)/.exec(a.mime) || [, 'wav'])[1].replace('mpeg', 'mp3');
+        var form = Object.assign({ file: { data: WebProxy.unb64(a._b64), name: 'audio.' + ext, type: a.mime }, language: nvLang(req.language) }, req.extra || {});
+        var r = await http(ctl, p, { url: nvFn(p.transcribeUrl, '/v1/audio/transcriptions'), form: form, responseType: 'text' });
+        var b = r.body, t = b;
+        try { b = JSON.parse(b); t = b.text !== undefined ? b.text : (b.results || []).map(function (x) { return ((x.alternatives || [])[0] || {}).transcript || ''; }).join(' '); } catch (e) {}
+        return result(p, model, String(t || '').trim(), [], null, 'stop', b, req);
+    }
+
     var RUN = {
         openai: { chat: oaChat, image: oaImage, speech: oaSpeech, transcribe: oaTranscribe, video: oaVideo, embed: oaEmbed },
         gemini: { chat: function (c, p, m, n, r, e) { return gGenerate(c, p, m, n, r, e, null); }, image: gImage, speech: gSpeech, transcribe: gTranscribe, video: gVideo, embed: gEmbed },
@@ -574,8 +638,11 @@ var AI = (function () {
             var n = normalise(req);
             if (!n.msgs.length && !(n.task === 'embed' && Array.isArray(req.input))) throw err('bad-request', 'Give a prompt or messages.');
             var fn = (RUN[p.type] || {})[n.task];
+            var nv = isNvidia(p) && (n.task === 'speech' || n.task === 'transcribe');
+            if (nv) fn = n.task === 'speech' ? nvSpeech : nvTranscribe;
             if (!fn) throw err('unsupported', (p.name || p.type) + ' cannot do "' + n.task + '". ' + (n.task === 'chat' ? '' : 'Gemini and OpenAI can.'));
-            var model = req.model || (n.task === 'chat' || n.task === 'transcribe' && p.type === 'gemini' ? '' : (p.models && p.models[n.task]) || MODELS[p.type][n.task]) || p.model;
+            var model = req.model || (nv ? (n.task === 'speech' ? 'magpie-multilingual' : 'parakeet') : '') ||
+                (n.task === 'chat' || n.task === 'transcribe' && p.type === 'gemini' ? '' : (p.models && p.models[n.task]) || MODELS[p.type][n.task]) || p.model;
             if (!model) throw err('bad-request', 'Name a model (the request\'s "model", or the service\'s model in Settings > AI).');
             var r = await fn(ctl, p, model, n, req, onEvent);
             if (n.json) r.json = parseJson(r.text);
@@ -592,7 +659,7 @@ var AI = (function () {
             req = req && typeof req === 'object' ? req : {};
             var url = req.url ? String(req.url) : p.url + '/' + String(req.path || '').replace(/^\/+/, '');
             var a = new URL(url), b = new URL(p.url + '/');
-            if (a.origin !== b.origin) throw err('blocked', 'The key of ' + p.name + ' is only sent to ' + b.host + '.');
+            if (a.origin !== b.origin && !(isNvidia(p) && a.protocol === 'https:' && nvidiaHost(a.hostname))) throw err('blocked', 'The key of ' + p.name + ' is only sent to ' + b.host + (isNvidia(p) ? ' and NVIDIA\'s own hosts' : '') + '.');
             if (req.timeout) ctl.timeout = Math.min(Math.max(5000, +req.timeout), 600000);
             var r = await http(ctl, p, { url: url, method: req.method, headers: req.headers, json: req.json, body: req.body, form: req.form, responseType: req.responseType || 'json' });
             return { status: r.status, headers: r.headers, body: r.body };
@@ -601,5 +668,5 @@ var AI = (function () {
     }
 
     return { PRESETS: PRESETS, MODELS: MODELS, presetOf: presetOf, list: list, find: find, add: add, update: update, remove: remove, setDefault: setDefault,
-             defaultId: defaultId, providers: providers, resolve: resolve, start: start, raw: raw, normalise: normalise, parseJson: parseJson };
+             defaultId: defaultId, providers: providers, tasks: tasks, nvcfUrl: nvcfUrl, resolve: resolve, start: start, raw: raw, normalise: normalise, parseJson: parseJson };
 })();

@@ -699,7 +699,8 @@ res.parts;     // [{ type: 'text', text }, { type: 'image' | 'audio' | 'video', 
 res.usage;     // { input, output, total } tokens (when the service says), res.model, res.provider, res.finish
 
 var txt = await MyPC.ai.chat('Tell me a joke');           // shortcut: prompt in, text out
-var list = await MyPC.ai.providers();                     // [{ id, name, type, preset, model, isDefault }] (no keys)
+var list = await MyPC.ai.providers();                     // [{ id, name, type, preset, model, isDefault, tasks }] (no keys)
+// tasks: { chat, image, speech, transcribe, video, embed } true / false: hide a feature no service of this TV has
 var job = MyPC.ai.generate(req); job.cancel();            // stop a request
 ```
 
@@ -723,9 +724,29 @@ OpenRouter and the other OpenAI-compatible services take the model names of thei
 `meta/llama-3.3-70b-instruct`, `deepseek-ai/deepseek-r1`, `nvidia/llama-3.1-nemotron-70b-instruct`). What a model can do
 depends on the service: a service that cannot do something answers with an `http` or `unsupported` error.
 
+**NVIDIA speech (Magpie-Multilingual)**: with the NVIDIA service, `task: 'speech'` goes to NVIDIA's Magpie-Multilingual
+text-to-speech (an NVCF function; its id is set in Settings > AI > NVIDIA > Voice (Magpie) function, filled in already).
+Languages `en-US`, `es-US`, `fr-FR`, `de-DE` (`'en'`, `'es'`, `'fr'`, `'de'` work too; others, Arabic included, give
+`unsupported`). `voice` is the speaker (`'Aria'` by default) or a whole voice name like `'Magpie-Multilingual.EN-US.Aria'`.
+The answer is a .wav file. One request at a time is best; play it after a user action (OK button), as browsers require.
+
+```js
+var res = await MyPC.ai.generate({ provider: 'nvidia', task: 'speech', model: 'magpie-multilingual',
+                                   prompt: 'Hola', voice: 'Aria', language: 'es-US' });
+var wav = res.parts[0];          // { type: 'audio', mime: 'audio/wav', data: ArrayBuffer }
+var ctx = new AudioContext(); ctx.decodeAudioData(wav.data, function (b) { var s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(); });
+```
+
+`task: 'transcribe'` with NVIDIA works only when the owner set a speech-to-text function (Parakeet / Riva) with an HTTP
+API in Settings > AI > NVIDIA > Speech-to-text function (it gets the audio as a multipart `file` at
+`/v1/audio/transcriptions`); many NVCF speech-to-text functions only speak gRPC, which My PC cannot call. Check
+`providers()` (`tasks.transcribe`) before showing the feature; `Gemini` and `OpenAI` transcribe without any setup.
+
 **Anything else of a service's API** (tools / function calling, a special endpoint): `MyPC.ai.raw({ provider, method,
-path: 'models', json, responseType })` calls the service's own API with its key added (only on the service's own site),
-and `extra` adds fields to a `generate` body.
+path: 'models', json, responseType })` calls the service's own API with its key added (only on the service's own site;
+for NVIDIA also its own https hosts `*.invocation.api.nvcf.nvidia.com` and `ai.api.nvidia.com`, with `url`, a multipart
+`form: { name: value | { data, name, type } }` and `responseType: 'arraybuffer'`), and `extra` adds fields to a
+`generate` body (for Magpie: more form fields).
 
 **The app's own key** (an app whose maker pays for the AI): give a provider object instead of a name; no permission
 question then, and it also works standalone:
