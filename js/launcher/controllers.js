@@ -5,6 +5,7 @@
  *   - Link: the same WebRTC data channel as multiplayer (js/core/netlink.js); presses never go through Firebase.
  *   - Player 1 = the 'keys' device (like the remote / keyboard), player 2 = 'keys2': every game already reads both (Input.remote).
  *   - A phone is trusted by a random id. New phones are accepted only for 5 minutes after "Pair a phone" in Settings > Devices.
+ * Pad mode sends { t: 'gp', b: bit mask of the standard gamepad buttons 0-16, x, y: stick }: the TV makes a virtual gamepad of it.
  * Phone -> TV: { t: 'hi', p: 1|2, cid, name, proto, mode, session, caps, now } then { t: 'k', a: action, d: 1|0 } (pad mode).
  * TV -> phone: { t: 'ok', p, proto, session } | { t: 'no', why: 'busy'|'locked' }.
  * Sensor modes ('sensor-actions', 'sensor-raw'; protocol js/core/sensor-proto.js, docs/phone-controller.md): the TV sends the
@@ -55,7 +56,7 @@ var Controllers = (function () {
     function drop(p, slot) {
         if (slots[p] !== slot) return;
         slots[p] = null;
-        Input.releaseRemote(p);
+        Input.releaseRemote(p); Input.virtualPad(p, null);
         if (slot.mode === 'pointer') Pointer.hide();
         say(I18n.t('ctrlGone').replace('%s', slot.name).replace('%n', p));
         report();
@@ -78,7 +79,7 @@ var Controllers = (function () {
                     save(c);
                 }
                 if (slots[p] && slots[p].cid !== cid) { conn.send({ t: 'no', why: 'busy' }); return setTimeout(function () { conn.close(); }, 300); }
-                if (slots[p]) { var old = slots[p]; slots[p] = null; Input.releaseRemote(p); old.conn.close(); }
+                if (slots[p]) { var old = slots[p]; slots[p] = null; Input.releaseRemote(p); Input.virtualPad(p, null); old.conn.close(); }
                 var h = SensorProto.hello(m);
                 slot = { conn: conn, cid: cid, p: p, name: name || 'Phone', mode: h.mode, proto: h.proto, session: h.session || SensorProto.session(),
                          offset: h.now ? Date.now() - h.now : null, seen: SensorProto.tracker(), stats: { actions: 0, duplicate: 0, stale: 0, invalid: 0, metrics: 0, raw: 0 } };
@@ -87,6 +88,12 @@ var Controllers = (function () {
                 if (slot.mode !== 'pad') sendConfig(slot);
                 say(I18n.t('ctrlOn').replace('%s', slot.name).replace('%n', p));
                 report();
+                return;
+            }
+            if (m.t === 'gp') {                                                // pad mode: raw buttons + stick, a virtual gamepad
+                if (slot.mode !== 'pad' || typeof m.b !== 'number') return;
+                if (m.b && Pointer.visible()) Pointer.hide();
+                Input.virtualPad(slot.p, m.b | 0, m.x, m.y, slot.name);
                 return;
             }
             if (m.t === 'k') {
@@ -182,7 +189,7 @@ var Controllers = (function () {
     function tune() { return SensorProto.tune(Store.rawGet(TUNE_KEY)); }
     function resend() { for (var p = 1; p <= 2; p++) if (slots[p] && slots[p].mode !== 'pad') sendConfig(slots[p]); }
 
-    function closePhones() { for (var p = 1; p <= 2; p++) if (slots[p]) { var s = slots[p]; slots[p] = null; Input.releaseRemote(p); s.conn.close(); } }
+    function closePhones() { for (var p = 1; p <= 2; p++) if (slots[p]) { var s = slots[p]; slots[p] = null; Input.releaseRemote(p); Input.virtualPad(p, null); s.conn.close(); } }
 
     return {
         start: function () { if (started) return; started = true; if (cfg().on) open(); },

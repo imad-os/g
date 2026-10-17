@@ -30,8 +30,11 @@
     // rule). My PC reads a pad by position (W3C standard mapping, js/core/input.js PAD_BUTTONS): the bottom button (B) is
     // OK / jump, the right one (A) is run + back, top (X) and left (Y) are run. The + button is Start ('menu'), Home is the
     // Guide button ('guide'). A test compares them with a fake pad.
-    var ABXY = [{ label: 'A', key: 13, action: 'b', place: 'right' }, { label: 'B', key: 88, action: 'ok', place: 'bottom' },
-                { label: 'X', key: 77, action: 'run', place: 'top' }, { label: 'Y', key: 90, action: 'run', place: 'left' }];
+    var ABXY = [{ label: 'A', key: 13, action: 'g1', place: 'right' }, { label: 'B', key: 88, action: 'g0', place: 'bottom' },
+                { label: 'X', key: 77, action: 'g3', place: 'top' }, { label: 'Y', key: 90, action: 'g2', place: 'left' }];
+    // Pad mode is a real gamepad: the phone sends raw button bits of the W3C standard layout (g0..g3 = buttons 0..3, + = 9, Home = 16,
+    // D-pad = 12..15) and the stick as axes; the TV makes a virtual gamepad of it (Input.virtualPad).
+    var GBTN = { g0: 0, g1: 1, g2: 2, g3: 3, menu: 9, guide: 16 }, DPAD = { up: 12, down: 13, left: 14, right: 15 }, gpBits = 0, gpHeld = {}, gpSent = '';
     var PAD = { buttons: ABXY, catalog: ABXY };
     var root = null, code = '', player = 1, mode = 'pad', run = false, busy = false, conn = null, linked = false, sess = null, retry = 0, wait = 0, curReq = null, offerObj = null;
     var want = {}, sent = {}, ui = {}, saved = {}, cid = '', inPad = false, wl = null, session = '';
@@ -94,7 +97,7 @@
         ui.bar.hidden = ui.padBg.hidden = ui.setBtn.hidden = !padUi;
         ui.ptr.hidden = !ptrUi;
         ui.sense.hidden = !(on && !padUi && !ptrUi);
-        if (padUi) VirtualPad.init({ storage: PAD_STORE, id: 'controller', force: true, scale: { stick: 1.35, btn: 1.15 }, buttons: PAD.buttons, catalog: PAD.catalog, onAction: padAction, dpad: opts().dpad, home: true });
+        if (padUi) VirtualPad.init({ storage: PAD_STORE, id: 'controller2', force: true, scale: { stick: 1.35, btn: 1.15 }, buttons: PAD.buttons, catalog: PAD.catalog, onAction: padAction, dpad: opts().dpad, home: true });
         else if (VirtualPad.active()) VirtualPad.hide();
         if (ptrUi) paintPtr();
         if (on && !padUi && !ptrUi) { ui.modeName.textContent = t(mode === 'sensor-raw' ? 'gcModeRaw' : 'gcModeActions'); setTab('live'); }
@@ -181,15 +184,27 @@
     function send(m) { return !!(conn && linked && conn.send(m)); }
 
     /* ---------- pad mode: the existing virtual pad ---------- */
-    function padAction(a, down) { a = a === 'pause' ? 'menu' : a === 'home' ? 'guide' : a; want[a] = down; sync(); }       // + = Start, Home = Guide, like a real pad
-    function sync() {
-        for (var a in want) if (want[a] !== !!sent[a]) {
-            sent[a] = want[a];
-            send({ t: 'k', a: a, d: want[a] ? 1 : 0 });
-            if (want[a] && navigator.vibrate) { try { navigator.vibrate(8); } catch (e) {} }
+    function padAction(a, down) {
+        if (mode === 'pointer') {                                          // the pointer screen's A / B: plain actions
+            if (!!want[a] !== down) { want[a] = down; send({ t: 'k', a: a, d: down ? 1 : 0 }); if (down && navigator.vibrate) { try { navigator.vibrate(8); } catch (e) {} } }
+            return;
         }
+        a = a === 'pause' ? 'menu' : a === 'home' ? 'guide' : a;       // + = Start, Home = Guide, like a real pad
+        var i = GBTN.hasOwnProperty(a) ? GBTN[a] : (DPAD.hasOwnProperty(a) && opts().dpad ? DPAD[a] : -1);
+        if (i >= 0) { if (down) gpBits |= 1 << i; else gpBits &= ~(1 << i); }
+        else if (DPAD.hasOwnProperty(a)) gpHeld[a] = down;               // the stick: axes
+        else return;
+        if (down && navigator.vibrate) { try { navigator.vibrate(8); } catch (e) {} }
+        sync();
     }
-    function release() { for (var a in want) want[a] = false; sync(); }
+    function sync() {
+        var x = (gpHeld.right ? 1 : 0) - (gpHeld.left ? 1 : 0), y = (gpHeld.down ? 1 : 0) - (gpHeld.up ? 1 : 0), k = gpBits + ',' + x + ',' + y;
+        if (x && y) { x *= 0.7071; y *= 0.7071; }
+        if (k === gpSent) return;
+        gpSent = k;
+        send({ t: 'gp', b: gpBits, x: x, y: y });
+    }
+    function release() { gpBits = 0; gpHeld = {}; sync(); for (var a in want) if (want[a]) padAction(a, false); }
     function onVis() { if (document.hidden) release(); else if (run) wake(); }
 
     /* ---------- sensor modes ---------- */
@@ -831,7 +846,7 @@
             saved = Store.rawGet(KEY) || {};
             cid = typeof saved.cid === 'string' && /^[a-z0-9]{6,24}$/.test(saved.cid) ? saved.cid : '';
             if (!cid) for (var i = 0; i < 12; i++) cid += 'abcdefghijklmnopqrstuvwxyz0123456789'.charAt(Math.floor(Math.random() * 36));
-            want = {}; sent = {}; ui = {}; inPad = false; aimLast = 0; calib = null; log = []; plot = []; seq = 0; acks = {}; rtt = 0; lastAction = null; rawSent = 0; rawLast = 0; cfg = null; perm = 'unknown';
+            want = {}; sent = {}; gpBits = 0; gpHeld = {}; gpSent = ""; ui = {}; inPad = false; aimLast = 0; calib = null; log = []; plot = []; seq = 0; acks = {}; rtt = 0; lastAction = null; rawSent = 0; rawLast = 0; cfg = null; perm = 'unknown';
             diag = { acked: 0, tvDuplicate: 0, tvStale: 0, unacked: 0 };
             build(body);
             readable(); window.addEventListener('resize', readable); setTimeout(readable, 350);

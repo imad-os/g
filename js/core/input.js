@@ -213,7 +213,34 @@ var Input = (function () {
     }
 
     function getPads() {
-        try { return (navigator.getGamepads || navigator.webkitGetGamepads).call(navigator) || []; } catch (e) { return []; }
+        var real = [];
+        try { real = (navigator.getGamepads || navigator.webkitGetGamepads).call(navigator) || []; } catch (e) {}
+        if (!vpadN) return real;
+        var out = Array.prototype.slice.call(real);
+        for (var k in vpads) out.push(vpads[k]);
+        return out;
+    }
+
+    // A phone controller in pad mode is a virtual standard gamepad (index 100 + player): the phone sends raw button bits and
+    // stick axes, and everything downstream (actions, Start / Select, MyPC.gamepad, padN devices) treats it like a real pad.
+    var vpads = {}, vpadN = 0;
+    function virtualPad(player, mask, x, y, name) {
+        var p = vpads[player], j;
+        if (mask === null) {
+            if (!p) return;
+            delete vpads[player]; vpadN--;
+            refreshPads();
+            return;
+        }
+        if (!p) {
+            p = vpads[player] = { index: 100 + player, id: (name || 'Phone') + ' (STANDARD GAMEPAD Vendor: 0000 Product: 0000)', connected: true, mapping: 'standard', buttons: [], axes: [0, 0, 0, 0] };
+            for (j = 0; j < 17; j++) p.buttons.push({ pressed: false, value: 0 });
+            vpadN++;
+            refreshPads();
+        }
+        for (j = 0; j < 17; j++) { var on = (mask >> j) & 1; p.buttons[j].pressed = !!on; p.buttons[j].value = on; }
+        p.axes[0] = +x || 0; p.axes[1] = +y || 0;
+        poll();
     }
 
     // Reads all connected pads. Called once per frame by the running game (lowest latency),
@@ -395,6 +422,7 @@ var Input = (function () {
     return {
         init: init,
         onKey: onKey,                        // game iframes forward their key events here
+        virtualPad: virtualPad,              // a phone controller as a real gamepad: virtualPad(player, buttonBits, x, y, name); (player, null) removes it
         remote: remote,                      // a phone controller's actions: remote(player 1|2, action, down)
         releaseRemote: releaseRemote,
         touch: touch,                        // the touch pad's actions (left right up down ok run cancel menu pause)

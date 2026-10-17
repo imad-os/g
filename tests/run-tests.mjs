@@ -2403,37 +2403,37 @@ async function main() {
         await P1.waitForFunction(() => window.GamepadApp && window.GamepadApp.linked(), null, { timeout: 10000 });
         check(await P1.evaluate(() => VirtualPad.active() && !!document.getElementById('vp-stick') && !document.querySelector('.gc-bar').hidden && document.querySelector('.gc-badge').textContent === 'P1'), 'the phone shows the existing virtual pad (stick, A, B, gear, pause) as P1');
         await press(P1, 'B', true);
-        await tv.waitForFunction(() => Input.isDownDev('keys', 'jump') && Input.isDownDev('keys', 'confirm'), null, { timeout: 3000 });
-        check(!(await tv.evaluate(() => Input.isDownDev('keys2', 'jump'))), 'P1 button B (bottom, like a Nintendo pad) = OK / jump on the "keys" device only');
+        await tv.waitForFunction(() => Input.isDownDev('pad101', 'jump') && Input.isDownDev('pad101', 'confirm'), null, { timeout: 3000 });
+        check(!(await tv.evaluate(() => Input.isDownDev('pad102', 'jump'))), 'P1 button B (bottom, like a Nintendo pad) = OK / jump on the "pad101" device only');
         await press(P1, 'B', false);
-        await tv.waitForFunction(() => !Input.isDownDev('keys', 'jump'), null, { timeout: 3000 });
+        await tv.waitForFunction(() => !Input.isDownDev('pad101', 'jump'), null, { timeout: 3000 });
         check(true, 'releasing the button releases the action');
         const st = await P1.evaluate(() => { const r = document.getElementById('vp-stick').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width / 2]; });
         await P1.mouse.move(st[0], st[1]); await P1.mouse.down(); await P1.mouse.move(st[0] + st[2] * 0.9, st[1], { steps: 3 });
-        await tv.waitForFunction(() => Input.isDownDev('keys', 'right') && !Input.isDownDev('keys', 'left'), null, { timeout: 3000 });
+        await tv.waitForFunction(() => Input.isDownDev('pad101', 'right') && !Input.isDownDev('pad101', 'left'), null, { timeout: 3000 });
         check(true, 'pushing the stick to the right gives right');
         await P1.mouse.up();
-        await tv.waitForFunction(() => !Input.isDownDev('keys', 'right'), null, { timeout: 3000 });
+        await tv.waitForFunction(() => !Input.isDownDev('pad101', 'right'), null, { timeout: 3000 });
         check(await P1.evaluate(() => [...document.querySelectorAll('div')].filter((d) => /^[AB]$/.test(d.textContent) && d.style.borderRadius === '50%').every((d) => getComputedStyle(d).display === 'flex' && getComputedStyle(d).justifyContent === 'center')), 'the button letters are centred');
         // floating stick: a touch anywhere in the left half puts the stick there; it goes back when the finger is lifted
         const home = await P1.evaluate(() => { const r = document.getElementById('vp-stick').getBoundingClientRect(); return [r.left, r.top]; });
         await P1.mouse.move(320, 170); await P1.mouse.down(); await P1.mouse.move(320 - 60, 170, { steps: 3 });
-        await tv.waitForFunction(() => Input.isDownDev('keys', 'left'), null, { timeout: 3000 });
+        await tv.waitForFunction(() => Input.isDownDev('pad101', 'left'), null, { timeout: 3000 });
         const moved = await P1.evaluate(() => { const r = document.getElementById('vp-stick').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
         check(Math.abs(moved[0] - 320) < 2 && Math.abs(moved[1] - 170) < 2, 'a touch in the left half starts the stick under the finger (' + moved.map(Math.round) + ')');
         await P1.mouse.up();
-        await tv.waitForFunction(() => !Input.isDownDev('keys', 'left'), null, { timeout: 3000 });
+        await tv.waitForFunction(() => !Input.isDownDev('pad101', 'left'), null, { timeout: 3000 });
         const back = await P1.evaluate(() => { const r = document.getElementById('vp-stick').getBoundingClientRect(); return [r.left, r.top]; });
         check(back[0] === home[0] && back[1] === home[1], 'lifting the finger puts the stick back in its place and releases the direction');
         check(!(await P1.evaluate(() => { const e = document.elementFromPoint(640, 170); return e && e.parentNode && e.parentNode.id !== 'vp-stick' && e.style.width === '50%'; })), 'the right half is not a stick zone');
         const P2 = await phone(2, 2);
         await tv.waitForFunction(() => Controllers.players()[2], null, { timeout: 40000 });
         await press(P2, 'A', true);
-        await tv.waitForFunction(() => Input.isDownDev('keys2', 'run'), null, { timeout: 3000 });
-        check(!(await tv.evaluate(() => Input.isDownDev('keys', 'run'))) && await tv.evaluate(() => Input.isDownDev('keys2', 'cancel')), 'P2 button A (right) = run and back, like a Nintendo pad, on the "keys2" device (the second player every game supports)');
+        await tv.waitForFunction(() => Input.isDownDev('pad102', 'run'), null, { timeout: 3000 });
+        check(!(await tv.evaluate(() => Input.isDownDev('pad101', 'run'))) && await tv.evaluate(() => Input.isDownDev('pad102', 'cancel')), 'P2 button A (right) = run and back, like a Nintendo pad, on the "pad102" device (the second player every game supports)');
         await press(P2, 'A', false);
         await press(P2, 'Y', true);
-        await tv.waitForFunction(() => Input.isDownDev('keys2', 'run') && !Input.isDownDev('keys2', 'cancel'), null, { timeout: 3000 });
+        await tv.waitForFunction(() => Input.isDownDev('pad102', 'run') && !Input.isDownDev('pad102', 'cancel'), null, { timeout: 3000 });
         await press(P2, 'Y', false);
         const dia = await P2.evaluate(() => { const c = {}; for (const l of ['A', 'B', 'X', 'Y']) { const d = [...document.querySelectorAll('div')].find((e) => e.textContent === l && e.style.borderRadius === '50%'); const r = d.getBoundingClientRect(); c[l] = [r.left + r.width / 2, r.top + r.height / 2]; } return c; });
         check(dia.A[0] > dia.X[0] && dia.Y[0] < dia.X[0] && dia.X[1] < dia.A[1] && dia.B[1] > dia.A[1] && Math.abs(dia.X[0] - dia.B[0]) < 2 && Math.abs(dia.A[1] - dia.Y[1]) < 2, 'A B X Y in the Nintendo diamond: A right, B bottom, X top, Y left; Y = run (' + JSON.stringify(dia) + ')');
@@ -2459,19 +2459,20 @@ async function main() {
         }
         for (const name of ['A', 'B', 'X', 'Y']) {
             await press(P2, name, true);
-            await tv.waitForFunction(() => __held('keys2') !== '', null, { timeout: 3000 });
-            const got = await tv.evaluate(() => __held('keys2'));
+            await tv.waitForFunction(() => __held('pad102') !== '', null, { timeout: 3000 });
+            const got = await tv.evaluate(() => __held('pad102'));
             check(got.split(',').sort().join() === real[name].split(',').sort().join(), 'phone ' + name + ' sends what ' + name + ' of a Nintendo pad sends (' + got + ' = ' + real[name] + ')');
             await press(P2, name, false);
-            await tv.waitForFunction(() => __held('keys2') === '', null, { timeout: 3000 });
+            await tv.waitForFunction(() => __held('pad102') === '', null, { timeout: 3000 });
         }
+        check(await tv.evaluate(() => Input.pads().some((q) => q.index === 102 && q.standard && q.buttons === 17)), 'the phone is a standard gamepad (pad102, 17 buttons) in the TV\'s pad list, like a real controller');
         // + = Start (menu), Home = Guide: the same actions a real pad's Start and Home give
-        await tv.evaluate(() => { window.__seen = []; const r = Input.remote; Input.remote = function (p, a, d) { if (d) __seen.push(a); return r.apply(this, arguments); }; });
+        await tv.evaluate(() => { window.__seen = []; const r = Input.virtualPad; Input.virtualPad = function (p, m) { if (m & (1 << 9)) __seen.push('menu'); if (m & (1 << 16)) __seen.push('guide'); return r.apply(this, arguments); }; });
         const [px, py] = await P2.evaluate(() => { const e = [...document.querySelectorAll('div')].find((d) => d.textContent === '+'); const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
         await P2.mouse.move(px, py); await P2.mouse.down(); await P2.mouse.up();
         await P2.mouse.move(hb[0], hb[1]); await P2.mouse.down(); await P2.mouse.up();
         await tv.waitForFunction(() => __seen.join() === 'menu,guide', null, { timeout: 3000 });
-        check(true, 'phone + sends menu (a pad\'s Start) and Home sends guide (a pad\'s Guide button)');
+        check(true, 'phone + sets button 9 (a pad\'s Start) and Home sets button 16 (a pad\'s Guide button) of the virtual gamepad');
         await tv.evaluate(() => { __gp.buttons[16] = { pressed: true, value: 1 }; });
         await tv.waitForFunction(() => Input.isDownDev('pad0', 'guide'), null, { timeout: 3000 });
         check(true, 'a real pad\'s Home button is the same Guide action');
@@ -2488,11 +2489,11 @@ async function main() {
         check(await P2.evaluate(() => VirtualPad.active() && !!document.getElementById('vp-dpad') && !document.getElementById('vp-stick') && Store.rawGet('arc_dev_ctrlphone').opt.dpad === true), 'GamePad on: a D-pad in place of the stick, and the setting is kept on the phone');
         const dp = await P2.evaluate(() => { const r = document.getElementById('vp-dpad').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width / 2]; });
         await P2.mouse.move(dp[0] + dp[2] * 0.7, dp[1]); await P2.mouse.down();
-        await tv.waitForFunction(() => Input.isDownDev('keys2', 'right') && !Input.isDownDev('keys2', 'up'), null, { timeout: 3000 });
+        await tv.waitForFunction(() => Input.isDownDev('pad102', 'right') && !Input.isDownDev('pad102', 'up'), null, { timeout: 3000 });
         await P2.mouse.move(dp[0] + dp[2] * 0.6, dp[1] - dp[2] * 0.6, { steps: 3 });          // slide to the corner: up + right
-        await tv.waitForFunction(() => Input.isDownDev('keys2', 'right') && Input.isDownDev('keys2', 'up'), null, { timeout: 3000 });
+        await tv.waitForFunction(() => Input.isDownDev('pad102', 'right') && Input.isDownDev('pad102', 'up'), null, { timeout: 3000 });
         await P2.mouse.up();
-        await tv.waitForFunction(() => !Input.isDownDev('keys2', 'right') && !Input.isDownDev('keys2', 'up'), null, { timeout: 3000 });
+        await tv.waitForFunction(() => !Input.isDownDev('pad102', 'right') && !Input.isDownDev('pad102', 'up'), null, { timeout: 3000 });
         check(true, 'the D-pad gives right, slides to up + right (diagonal) and lets go of both');
         // a third phone cannot take a player that is taken, and unknown phones are refused once pairing is closed
         await tv.evaluate(() => Controllers.pair(0));
@@ -2503,7 +2504,7 @@ async function main() {
         await tv.goto(base + 'index.html?play=blocks');
         await tv.waitForFunction(() => window.Controllers && Controllers.players()[1] && Controllers.players()[2], null, { timeout: 60000 });
         check(true, 'after the TV loaded another page both phones reconnected as P1 and P2');
-        check(await tv.evaluate(() => !Input.isDownDev('keys', 'right') && !Input.isDownDev('keys2', 'run')), 'nothing stays pressed across the page change');
+        check(await tv.evaluate(() => !Input.isDownDev('pad101', 'right') && !Input.isDownDev('pad102', 'run')), 'nothing stays pressed across the page change');
         await tv.waitForFunction(() => GameHost.state() === 'running', null, { timeout: 30000 });
         const homeBtn = async () => { const h = await P2.evaluate(() => { const r = document.getElementById('vp-home').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }); await P2.mouse.move(h[0], h[1]); await P2.mouse.down(); await P2.mouse.up(); };
         await homeBtn();
@@ -2531,7 +2532,7 @@ async function main() {
         await P1.waitForFunction(() => window.Win && document.querySelector('[data-game]'), null, { timeout: 20000 });
         await P1.evaluate(() => Win.open('gamepad'));
         await P1.waitForFunction(() => VirtualPad.active(), null, { timeout: 5000 });
-        check(await P1.evaluate(() => [...document.querySelectorAll('div')].some((d) => d.textContent === 'Y' && d.style.borderRadius === '50%' && d.style.display === 'none') && [...document.querySelectorAll('div')].some((d) => d.textContent === 'X' && d.style.borderRadius === '50%' && d.style.display === 'flex') && !!Store.rawGet('arc_dev_vpad:controller')), 'the pad settings are kept after closing the app and reloading (no setting up again; Y hidden here)');
+        check(await P1.evaluate(() => [...document.querySelectorAll('div')].some((d) => d.textContent === 'Y' && d.style.borderRadius === '50%' && d.style.display === 'none') && [...document.querySelectorAll('div')].some((d) => d.textContent === 'X' && d.style.borderRadius === '50%' && d.style.display === 'flex') && !!Store.rawGet('arc_dev_vpad:controller2')), 'the pad settings are kept after closing the app and reloading (no setting up again; Y hidden here)');
         // Settings: Disconnect / Forget TV; a phone with no TV opens on Connect (not the code box: no keyboard popping up)
         await P1.click('.gc-setbtn');
         check(await P1.evaluate(() => !!document.querySelector('.gc-phoneset .gc-disc') && /^Forget TV/.test(document.querySelector('.gc-phoneset .gc-forget').textContent)), 'Settings has Disconnect and Forget TV while connected');

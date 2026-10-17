@@ -324,7 +324,7 @@ make sure it still works with the other inputs. Players should never have to fig
   You still receive their button events, but don't give them an essential job of their own.
 - Never call `navigator.getGamepads()` or listen to `gamepadconnected` yourself: on the TV your page has no focus and gets
   nothing. The SDK does it for you (also standalone, where it reads the pads itself, so you can test with a pad on a PC).
-- Physical controllers only: the TV remote, the keyboard, the touch pad and the phone controller send actions
+- Physical controllers only: the TV remote, the keyboard, the touch pad send actions (a phone in Buttons mode is a real gamepad: `MyPC.gamepad` sees it as a standard pad, device `pad101` / `pad102`)
   (`onInput`), so the game must also be playable with `left right up down` + `confirm` (see the rules below).
 
 ```js
