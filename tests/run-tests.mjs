@@ -881,13 +881,23 @@ async function main() {
         const notes = await page.evaluate(() => Store.get('cal_notes', {}));
         check(Object.keys(notes).length === 1 && Object.values(notes)[0][0] === 'Match' && await page.evaluate(() => !!document.querySelector('.cal-today .cal-dot')), 'a note is saved on the day and marked');
         await key('Escape');
-        // settings with the remote: background
+        // the Control Panel (was Settings) opens on a grid of categories
         await page.evaluate(() => Win.open('settings'));
-        await key('ArrowDown', 'ArrowRight', 'ArrowRight', 'Enter');
+        check(await page.evaluate(() => document.querySelectorAll('.cp-tile').length === 12 && document.getElementById('win-title').textContent === 'Control Panel' &&
+            document.activeElement.getAttribute('data-page') === 'system' && document.querySelector('.set-nav').hidden), 'the Control Panel opens on a grid of 12 categories, focus on the first');
+        await key('ArrowRight', 'Enter');
+        check(await page.evaluate(() => !document.querySelector('.cp-home') .offsetParent && document.querySelector('.set-title').textContent === 'Personalization' &&
+            document.activeElement.getAttribute('data-theme') === 'win11'), 'OK on a card opens its page, focus on its first row (the theme)');
+        // settings with the remote: background (the row under the themes)
+        await key('ArrowDown', 'ArrowRight', 'Enter');
         check(await page.evaluate(() => Store.get('wallpaper') === 'aurora' && document.getElementById('wallpaper').className.indexOf('wp-aurora') >= 0), 'Settings > Personalization changes the background');
         await key('Escape', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowRight', 'ArrowLeft');   // Personalization > Apps > Accounts > Sound
         check(await page.evaluate(() => AudioPrefs.music()) === 6, 'Settings > Sound: left lowers the music volume');
         await key('Escape', 'Escape');
+        check(await page.evaluate(() => Win.current() === 'settings' && !!document.querySelector('.cp-grid') && !document.querySelector('.cp-home').hidden &&
+            document.activeElement.getAttribute('data-page') === 'sound'), 'Back from the page list goes to the grid, on the category just left');
+        await key('Escape');
+        check(await page.evaluate(() => Win.current() === null), 'Back on the grid closes the Control Panel');
         // explorer: Games folder starts a game; quitting comes back to the desktop
         await page.evaluate(() => Win.open('explorer', 'games'));
         await key('Enter');
@@ -1767,7 +1777,7 @@ async function main() {
         check(await page.evaluate(() => !!document.querySelector('#profile-avatar img') && !!Profiles.current().photo), 'a photo shows on the home button');
         check(await page.evaluate(() => Backup.snapshot().arc_profiles.indexOf('photo') > 0), 'the picture is part of the cloud backup');
         await page.keyboard.press('Escape');
-        await page.evaluate(() => { Win.open('settings'); });
+        await page.evaluate(() => { Win.open('settings', 'accounts'); });
         await page.waitForSelector('.set-nav-btn[data-page="accounts"]');
         await page.focus('.set-nav-btn[data-page="accounts"]'); await page.keyboard.press('Enter');
         const hasRow = await page.evaluate(() => [...document.querySelectorAll('.set-row')].some((r) => /Profile picture/.test(r.textContent)));
@@ -3122,6 +3132,66 @@ async function main() {
         const box = await page.evaluate(() => { const w = document.querySelector('.welcome').getBoundingClientRect(), c = document.querySelector('.welcome-card').getBoundingClientRect(), t = document.querySelector('.welcome-title').getBoundingClientRect();
             return { w: w.width, h: w.height, vw: innerWidth, vh: innerHeight, cl: c.left, cr: c.right, ct: c.top, cb: c.bottom, tw: t.width }; });
         check(box.w === box.vw && box.h === box.vh && box.cl >= 0 && box.cr <= box.vw && box.ct >= 0 && box.cb <= box.vh, 'on a phone the update screen fills the screen and its text is fully visible (' + JSON.stringify(box) + ')');
+        await page.context().close();
+    }
+
+    console.log('38. roles (administrator / user), themes per profile, Control Panel > Other users');
+    {
+        const page = await newPage(browser, base);
+        await page.goto(base + 'index.html');
+        await page.waitForFunction(() => window.Desktop && document.querySelector('.dicon'), null, { timeout: 15000 });
+        // the first profile is the administrator, also on an older list without roles
+        check(await page.evaluate(() => Profiles.isAdmin() && Profiles.current().role === 'admin'), 'a new TV: its first profile is the administrator');
+        await page.evaluate(() => { Store.rawSet('arc_profiles', [{ id: 'p1', name: 'Dad', color: '#ffd23f' }, { id: 'p2', name: 'Kid', color: '#4cd97b' }]); });
+        check(await page.evaluate(() => Profiles.isAdmin('p1') && !Profiles.isAdmin('p2') && Profiles.admins() === 1), 'profiles made before roles: the first one becomes the administrator, the others users');
+        check(await page.evaluate(() => !Profiles.setRole('p1', 'user') && Profiles.isAdmin('p1') && !Profiles.canRemove('p1')), 'the last administrator can be neither made a user nor removed');
+        check(await page.evaluate(() => { const p = Profiles.create('Mum'); return p.role === 'user'; }), 'a profile added once the TV has a real administrator is a user');
+        check(await page.evaluate(() => Backup.snapshot().arc_profiles.indexOf('"role":"admin"') > 0), 'roles are kept in the TV backup');
+        // the administrator: Install in the App Store, Other users in the Control Panel
+        await page.evaluate(() => Win.open('settings', 'accounts'));
+        check(await page.evaluate(() => [...document.querySelectorAll('.set-row-name')].some((n) => n.textContent === 'Other users') && /Administrator/.test(document.querySelector('.set-main').textContent)), 'Accounts shows the role and, for an administrator, Other users');
+        await page.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Other users/.test(r.textContent)).click());
+        check(await page.evaluate(() => ['Dad', 'Kid', 'Mum'].every((n) => [...document.querySelectorAll('.set-row-name')].some((x) => x.textContent.indexOf(n) === 0))), 'Other users lists every profile');
+        await page.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /^Kid/.test(r.querySelector('.set-row-name') ? r.querySelector('.set-row-name').textContent : '')).click());
+        await page.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Role/.test(r.textContent)).click());
+        check(await page.evaluate(() => Profiles.isAdmin('p2') && Profiles.admins() === 2), 'OK on Role makes Kid an administrator');
+        await page.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Role/.test(r.textContent)).click());
+        check(await page.evaluate(() => !Profiles.isAdmin('p2')), 'and again makes Kid a user');
+        await page.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Remove this user/.test(r.textContent)).click());
+        await page.evaluate(() => document.getElementById('dialog-yes').click());
+        check(await page.evaluate(() => !Profiles.find('p2') && document.querySelector('.set-main').textContent.indexOf('Kid') < 0), 'Remove this user (after a question) removes Kid and goes back to the list');
+        await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+        await page.evaluate(() => Win.close());
+        // a user: no Install / Uninstall, no new profiles, TV-wide settings are "Administrator only"
+        await page.evaluate(() => { Store.setProfile(Profiles.list().find((p) => p.name === 'Mum').id); });
+        check(await page.evaluate(() => !Profiles.isAdmin()), 'switched to Mum, a user');
+        await page.evaluate(() => Win.open('settings', 'privacy'));
+        check(await page.evaluate(() => !document.querySelector('.set-main .set-toggle') && /Administrator only/.test(document.querySelector('.set-main').textContent)), 'a user sees cloud backup and world records as "Administrator only"');
+        await page.evaluate(() => Win.open('settings', 'accounts'));
+        check(await page.evaluate(() => ![...document.querySelectorAll('.set-row-name')].some((n) => n.textContent === 'Other users') && /User/.test(document.querySelector('.set-main').textContent)), 'a user has no Other users');
+        await page.evaluate(() => Win.close());
+        await page.evaluate(() => ProfilesUI.open());
+        check(await page.evaluate(() => document.getElementById('profile-new').hidden && document.getElementById('profile-signin').hidden && document.getElementById('profile-delete').hidden && !document.getElementById('profiles-adminonly').hidden),
+            'the profiles screen of a user: no New profile, Sign in or Delete, and it says why');
+        await page.keyboard.press('Escape');
+        // themes: per profile, one class on <html>, the theme's background, nothing broken
+        await page.evaluate(() => Win.open('settings', 'personal'));
+        check(await page.evaluate(() => document.querySelectorAll('.set-th').length === 6 && document.querySelectorAll('.set-wp:not(.set-th)').length === Desktop.WALLPAPERS.length), 'Personalization has the 6 themes and the backgrounds');
+        await page.evaluate(() => document.querySelector('.set-th[data-theme="xp"]').click());
+        check(await page.evaluate(() => document.documentElement.classList.contains('th-xp') && Store.get('theme') === 'xp' && Store.get('wallpaper') === 'hills' && document.activeElement.getAttribute('data-theme') === 'xp'), 'picking a theme applies it with its background and keeps the focus on it');
+        await page.evaluate(() => Win.close());
+        const tb = await page.evaluate(() => { const s = document.getElementById('tb-start'); return { label: s.getAttribute('data-label'), after: getComputedStyle(s, ':after').content, bg: getComputedStyle(document.querySelector('.taskbar')).backgroundImage }; });
+        check(tb.label === 'start' && /start/.test(tb.after) && /gradient/.test(tb.bg), 'XP style: blue taskbar and the green "start" button');
+        for (const th of ['win7', 'mac', 'android', 'ios', 'win11']) {
+            await page.evaluate((x) => Themes.set(x), th);
+            const r = await page.evaluate(() => { const a = document.querySelector('#tb-apps').getBoundingClientRect(), t = document.querySelector('.tray').getBoundingClientRect(), st = document.getElementById('stage').getBoundingClientRect();
+                return { inside: a.left >= st.left - 1 && a.right <= st.right + 1 && a.bottom <= st.bottom + 1 && t.top >= st.top - 1 && t.bottom <= st.bottom + 1 }; });
+            check(r.inside && await page.evaluate((x) => document.documentElement.className.split(' ').filter((c) => c.indexOf('th-') === 0).join() === 'th-' + x, th), th + ' style: one theme class, the dock / taskbar and the tray stay on screen');
+        }
+        await page.evaluate(() => Themes.set('mac'));
+        await page.evaluate(() => { Store.setProfile('p1'); Desktop.render(); });
+        check(await page.evaluate(() => Themes.current() === 'win11' && document.documentElement.classList.contains('th-win11')), 'each profile has its own theme');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }
 

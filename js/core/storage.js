@@ -83,11 +83,15 @@ var Profiles = (function () {
     function list() {
         var l = Store.rawGet(KEY);
         if (!l || !l.length) {
-            l = [{ id: 'p1', name: '', color: COLORS[0] }];   // '' = "Player 1" in the current language
+            l = [{ id: 'p1', name: '', color: COLORS[0], role: 'admin' }];   // '' = "Player 1" in the current language
+            Store.rawSet(KEY, l);
+        } else if (!hasAdmin(l)) {
+            l[0].role = 'admin';                // older lists (before roles): the first profile is the admin
             Store.rawSet(KEY, l);
         }
         return l;
     }
+    function hasAdmin(l) { for (var i = 0; i < l.length; i++) if (l[i].role === 'admin') return true; return false; }
     function find(id) { var l = list(); for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
     function current() { return find(Store.profile()) || list()[0]; }
     function cleanName(n) { return String(n || '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '').slice(0, NAME_MAX); }
@@ -100,7 +104,8 @@ var Profiles = (function () {
         var used = {}, color = COLORS[0];
         for (var i = 0; i < l.length; i++) used[l[i].color] = 1;
         for (i = 0; i < COLORS.length; i++) if (!used[COLORS[i]]) { color = COLORS[i]; break; }
-        var p = { id: 'p' + n, name: cleanName(name), color: color };
+        // a user, unless no real admin exists yet (a new TV or phone: only the blank first profile)
+        var p = { id: 'p' + n, name: cleanName(name), color: color, role: realAdmin(l) ? 'user' : 'admin' };
         l.push(p);
         Store.rawSet(KEY, l);
         return p;
@@ -141,7 +146,7 @@ var Profiles = (function () {
     // Deletes a profile and all its data. The last profile cannot be deleted.
     function remove(id) {
         var l = list(), out = [];
-        if (l.length < 2) return false;
+        if (!canRemove(id)) return false;
         for (var i = 0; i < l.length; i++) if (l[i].id !== id) out.push(l[i]);
         Store.rawSet(KEY, out);
         Store.dropProfile(id);
@@ -149,6 +154,21 @@ var Profiles = (function () {
         return true;
     }
     function use(id) { if (find(id)) Store.setProfile(id); }
+
+    // Roles (owner decision): an admin installs and uninstalls apps, adds and removes users, changes roles and the
+    // TV-wide settings; a user only uses the apps and changes their own things (theme, background, home screen...).
+    // There is always at least one admin. The role is kept on this TV (arc_profiles, in the TV backup), not in the account.
+    function realAdmin(l) { for (var i = 0; i < l.length; i++) if (l[i].role === 'admin' && (l[i].user || l[i].name)) return true; return false; }
+    function admins() { var l = list(), n = 0; for (var i = 0; i < l.length; i++) if (l[i].role === 'admin') n++; return n; }
+    function isAdmin(id) { var p = id ? find(id) : current(); return !!(p && p.role === 'admin'); }
+    function setRole(id, role) {
+        var p = find(id);
+        if (!p || (role !== 'admin' && role !== 'user')) return false;
+        if (role === 'user' && p.role === 'admin' && admins() < 2) return false;      // never the last admin
+        edit(id, function (x) { x.role = role; });
+        return true;
+    }
+    function canRemove(id) { var p = find(id); return !!p && list().length > 1 && !(p.role === 'admin' && admins() < 2); }
     // Display name: an unnamed profile is "Player <n>"
     function name(p, playerWord) { p = p || current(); return p.name || (playerWord || 'Player') + ' ' + p.id.slice(1); }
 
@@ -156,5 +176,6 @@ var Profiles = (function () {
     if (!find(Store.profile())) Store.setProfile(list()[0].id);
 
     return { MAX: MAX, NAME_MAX: NAME_MAX, list: list, find: find, current: current, create: create, rename: rename, setPicture: setPicture,
-        setAccount: setAccount, setAsk: setAsk, setMeta: setMeta, remove: remove, use: use, name: name };
+        setAccount: setAccount, setAsk: setAsk, setMeta: setMeta, remove: remove, use: use, name: name,
+        isAdmin: isAdmin, setRole: setRole, admins: admins, canRemove: canRemove };
 })();

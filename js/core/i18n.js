@@ -427,8 +427,12 @@ var I18n = (function () {
         apply();
     }
 
+    // more strings from another file ({ en: {...}, fr: {...}, ... }); a key given here replaces the one above
+    function add(more) { for (var l in more) if (S[l]) for (var k in more[l]) S[l][k] = more[l][k]; }
+
     return {
-        LANGS: LANGS, NAMES: NAMES, t: t, pick: pick, apply: apply, setLang: setLang,
+        LANGS: LANGS, NAMES: NAMES, t: t, pick: pick, apply: apply, setLang: setLang, add: add,
+        raw: function (l, k) { return S[l] && S[l][k]; },
         lang: function () { return lang; }, rtl: function () { return lang === 'ar'; }
     };
 })();

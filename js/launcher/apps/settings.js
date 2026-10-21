@@ -1,6 +1,9 @@
-/* Settings app (Windows 11 style): pages on the left, rows on the right.
+/* Control Panel (was Settings; Windows 11 style). It opens on a grid of categories; a category shows the pages on the
+ * left and its rows on the right.
  * Remote: up/down moves, left/right changes a value (or goes back to the page list), OK picks,
- * Back goes from a row to the page list, then closes. */
+ * Back goes from a row to the page list, then to the grid, then closes.
+ * Roles (js/core/storage.js): the rows that change the whole TV are for an administrator; a user sees them as
+ * "Administrator only". Accounts > Other users (administrators): roles, add and remove users. */
 (function () {
     'use strict';
 
@@ -21,7 +24,7 @@
         { id: 'update', icon: 'reload', label: 'sysUpdate' }
     ];
 
-    var body, nav, main, page = 'system', rows = [];
+    var body, nav, main, home, page = null, rows = [], userId = null;
 
     function el(tag, cls, text) {
         var e = document.createElement(tag);
@@ -36,6 +39,8 @@
         if (sub === 'phonectrl' && id === 'devices') { phoneRows(out); return out; }
         if (sub === 'motionmoves' && id === 'devices') { movesRows(out); return out; }
         if (id === 'ai') { aiRows(out); return out; }
+        if (sub === 'users' && id === 'accounts') { usersRows(out); return out; }
+        if (sub === 'user' && id === 'accounts') { userRows(out); return out; }
         if (sub === 'padtest' && id === 'devices') {
             var pl = Input.pads();
             if (pl.length) out.push({ kind: 'padtest', pad: pl[0].index }); else out.push({ kind: 'text', value: t('devNoPad') });
@@ -49,6 +54,7 @@
             out.push({ kind: 'info', label: t('network'), value: t(navigator.onLine === false ? 'netOffShort' : 'netOnShort') });
             out.push({ kind: 'info', label: t('storage'), value: storageText() });
         } else if (id === 'personal') {
+            out.push({ kind: 'themes', label: t('theme'), desc: t('themeDesc') });
             out.push({ kind: 'wallpapers', label: t('background') });
         } else if (id === 'apps') {
             var inst = Desktop.installed();
@@ -69,9 +75,19 @@
             }
         } else if (id === 'accounts') {
             out.push({ kind: 'profile' });
+            out.push({ kind: 'select', label: t('theme'), value: function () { return t('th_' + Themes.current()); }, adjust: function (d) {
+                var l = Themes.LIST, k = 0;
+                for (var j = 0; j < l.length; j++) if (l[j].id === Themes.current()) k = j;
+                Themes.set(l[(k + d + l.length) % l.length].id);
+            } });
             accountRows(out);
             out.push({ kind: 'action', label: t('profilePicture'), desc: t('pictureHint'), run: function () { ProfilesUI.openPicker(true); } });
             out.push({ kind: 'action', label: t('manageProfiles'), desc: t('profilesHint'), run: function () { ProfilesUI.open(); } });
+            out.push({ kind: 'info', label: t('yourRole'), value: t(Profiles.isAdmin() ? 'roleAdmin' : 'roleUser'), desc: t('roleDesc') });
+            if (Profiles.isAdmin()) {
+                out.push({ kind: 'action', label: t('otherUsers'), desc: t('otherUsersDesc'), run: function () { sub = 'users'; var f = renderMain(1); if (f) Focus.focus(f); } });
+                if (!Profiles.current().user) out.push({ kind: 'text', value: t('adminNoPw') });
+            }
         } else if (id === 'sound') {
             out.push({ kind: 'slider', label: t('musicVol'), value: function () { return AudioPrefs.music(); }, adjust: function (d) { AudioPrefs.setMusic(AudioPrefs.music() + d); } });
             out.push({ kind: 'slider', label: t('sfxVol'), value: function () { return AudioPrefs.sfx(); }, adjust: function (d) { AudioPrefs.setSfx(AudioPrefs.sfx() + d); } });
@@ -90,9 +106,9 @@
                 App.confirm(t('resetTitle'), t('resetText'), function () { Store.clearPrefix('game_'); App.toast(t('resetDone')); });
             } });
         } else if (id === 'privacy') {
-            out.push({ kind: 'toggle', label: t('cloudBackup'), desc: t('cloudBackupDesc'), get: function () { return Backup.on(); }, set: function (v) { Backup.setOn(v); } });
-            out.push({ kind: 'toggle', label: t('worldShare'), desc: t('worldShareDesc'), get: function () { return World.on(); }, set: function (v) { World.setOn(v); } });
-            out.push({ kind: 'action', label: t('deleteBackup'), danger: true, run: function () {
+            admin(out, { kind: 'toggle', label: t('cloudBackup'), desc: t('cloudBackupDesc'), get: function () { return Backup.on(); }, set: function (v) { Backup.setOn(v); } });
+            admin(out, { kind: 'toggle', label: t('worldShare'), desc: t('worldShareDesc'), get: function () { return World.on(); }, set: function (v) { World.setOn(v); } });
+            admin(out, { kind: 'action', label: t('deleteBackup'), danger: true, run: function () {
                 App.confirm(t('deleteBackup') + '?', t('cloudBackupDesc'), function () {
                     Backup.erase(function (err) { App.toast(t(err ? 'cloudFail' : 'deleteBackupDone')); if (Win.current() === 'settings') { var f = renderMain(1); if (f) Focus.focus(f); } });
                 });
@@ -321,7 +337,54 @@
         }, function (e) { App.toast(t('aiTestFail').replace('%s', String(e && e.message || e).slice(0, 140))); });
     }
 
+    /* ---------- roles: what only an administrator changes, Other users (js/core/storage.js) ---------- */
+
+    // a row that changes the whole TV: an administrator gets it, a user sees it as "Administrator only"
+    function admin(out, r) {
+        if (Profiles.isAdmin()) out.push(r);
+        else out.push({ kind: 'info', label: r.label, value: t('adminOnlyShort'), desc: r.desc });
+    }
+    function again(idx) { if (Win.current() === 'settings' && page === 'accounts') { var f = renderMain(idx); if (f) Focus.focus(f); } }
+
+    // Other users: every profile of this TV with its role; OK opens it (role, remove), Add a user
+    function usersRows(out) {
+        out.push({ kind: 'action', label: t('back'), run: function () { leaveSub(); } });
+        out.push({ kind: 'text', value: t('roleDesc') });
+        Profiles.list().forEach(function (p) {
+            var me = p.id === Profiles.current().id;
+            out.push({ kind: 'action', label: ProfilesUI.nameOf(p) + (me ? ' (' + t('active') + ')' : ''),
+                       desc: t(p.role === 'admin' ? 'roleAdmin' : 'roleUser') + (p.user ? ' · @' + p.user : ' · ' + t('localAccount')),
+                       run: function () { sub = 'user'; userId = p.id; var f = renderMain(1); if (f) Focus.focus(f); } });
+        });
+        if (Profiles.list().length < Profiles.MAX) out.push({ kind: 'action', primary: true, label: t('addUser'), desc: t('addUserDesc'), run: function () { ProfilesUI.open(); } });
+    }
+    function userRows(out) {
+        var p = Profiles.find(userId);
+        out.push({ kind: 'action', label: t('back'), run: function () { leaveSub(); } });
+        if (!p || !Profiles.isAdmin()) return;
+        out.push({ kind: 'info', label: ProfilesUI.nameOf(p), value: p.user ? '@' + p.user : t('localAccount') });
+        out.push({ kind: 'select', label: t('role'), desc: t('roleDesc'), value: function () { return t(Profiles.isAdmin(userId) ? 'roleAdmin' : 'roleUser'); }, adjust: function () {
+            var to = Profiles.isAdmin(userId) ? 'user' : 'admin';
+            if (!Profiles.setRole(userId, to)) return App.toast(t('lastAdmin'));
+            App.toast(t('roleChanged').replace('%s', ProfilesUI.nameOf(p)).replace('%r', t(to === 'admin' ? 'roleAdmin' : 'roleUser')));
+            // an administrator who made themself a user: the Control Panel shows what a user may change
+            if (userId === Profiles.current().id && to === 'user') { sub = null; setTimeout(function () { var f = renderMain(0); if (f) Focus.focus(f); }, 0); }
+        } });
+        if (Profiles.canRemove(p.id) && p.id !== Profiles.current().id) {
+            out.push({ kind: 'action', label: t('removeUser'), danger: true, run: function () {
+                App.confirm(t('removeUser') + '?', t('removeUserText').replace('%s', ProfilesUI.nameOf(p)), function () {
+                    var n = ProfilesUI.nameOf(p);
+                    Accounts.forget(p.id);
+                    Profiles.remove(p.id);
+                    App.toast(t('userRemoved').replace('%s', n));
+                    sub = 'users'; again(1);
+                });
+            } });
+        }
+    }
+
     function leaveSub() {
+        if (sub === 'user') { sub = 'users'; var f0 = renderMain(1); if (f0) Focus.focus(f0); return; }
         var back = sub === 'motionmoves' ? 'phonectrl' : null;
         if (sub === 'motionmoves') { Controllers.monitor(null); monEl = null; }
         sub = back;
@@ -410,7 +473,59 @@
         return String(r.value());
     }
 
+    /* ---------- the home grid (like the Windows 11 Control Panel): a card per category ---------- */
+
+    function renderHome() {
+        home.innerHTML = '';
+        var p = Profiles.current(), card = el('div', 'set-user cp-user');
+        card.appendChild(ProfilesUI.avatar(p, 'avatar avatar-mid'));
+        var tx = el('div', 'set-user-text');
+        tx.appendChild(el('div', 'set-user-name', ProfilesUI.nameOf(p)));
+        tx.appendChild(el('div', 'set-user-sub', (p.user ? '@' + p.user + ' · ' : '') + t(Profiles.isAdmin() ? 'roleAdmin' : 'roleUser')));
+        card.appendChild(tx);
+        home.appendChild(card);
+        home.appendChild(el('h3', 'set-title cp-title', t('cpHint')));
+        var grid = el('div', 'cp-grid'), first = null;
+        for (var i = 0; i < PAGES.length; i++) {
+            var pg = PAGES[i], b = el('button', 'cp-tile');
+            b.setAttribute('data-focus', '');
+            b.setAttribute('data-page', pg.id);
+            var ic = el('span', 'cp-ic'); Icons.put(ic, pg.icon);
+            b.appendChild(ic);
+            var tt = el('span', 'cp-text');
+            tt.appendChild(el('span', 'cp-name', t(pg.label)));
+            tt.appendChild(el('span', 'cp-desc', t('cpd_' + pg.id)));
+            b.appendChild(tt);
+            b.setAttribute('aria-label', t(pg.label) + '. ' + t('cpd_' + pg.id));
+            b.onclick = (function (id) { return function () { openPage(id); }; })(pg.id);
+            grid.appendChild(b);
+            if (!first) first = b;
+        }
+        home.appendChild(grid);
+        return first;
+    }
+    function showHome(focusId) {
+        stopPadTest();
+        if (sub === 'motionmoves') { Controllers.monitor(null); monEl = null; }
+        page = null; sub = null;
+        nav.hidden = main.hidden = true;
+        home.hidden = false;
+        Win.setTitle(t('settings'));
+        var f = renderHome(), b = focusId && home.querySelector('[data-page="' + focusId + '"]');
+        return b || f;
+    }
+    function openPage(id) {
+        home.hidden = true;
+        nav.hidden = main.hidden = false;
+        renderNav();
+        page = id;
+        showPage(id);
+        if (!rows.length || !main.querySelector('[data-focus]')) Focus.focus(navBtn());
+        else focusFirstRow();
+    }
+
     function renderMain(focusIdx) {
+        if (!page) return null;
         main.innerHTML = '';
         var lbl = '';
         for (var i = 0; i < PAGES.length; i++) if (PAGES[i].id === page) lbl = t(PAGES[i].label);
@@ -420,6 +535,7 @@
         for (i = 0; i < rows.length; i++) {
             var r = rows[i], b;
             if (r.kind === 'wallpapers') { b = wallpaperRow(r); main.appendChild(b); if (i === focusIdx) target = b.querySelector('.on') || b.querySelector('button'); continue; }
+            if (r.kind === 'themes') { b = themeRow(r, i); main.appendChild(b); if (i === focusIdx) target = b.querySelector('.on') || b.querySelector('button'); continue; }
             if (r.kind === 'profile') { main.appendChild(profileCard()); continue; }
             if (r.kind === 'status') { main.appendChild(statusCard(r)); continue; }
             if (r.kind === 'padtest') { main.appendChild(padTestCard(r)); continue; }
@@ -513,6 +629,31 @@
         return box;
     }
 
+    // theme cards: a small picture of the theme's desktop (its background and its taskbar)
+    function themeRow(r, idx) {
+        var box = el('div', 'set-wps');
+        box.appendChild(el('div', 'set-row-name', r.label));
+        box.appendChild(el('div', 'set-row-desc', r.desc));
+        var list = el('div', 'set-wp-list'), cur = Themes.current();
+        Themes.LIST.forEach(function (th) {
+            var b = el('button', 'set-wp set-th wp-' + th.wp + (th.id === cur ? ' on' : ''));
+            b.setAttribute('data-focus', '');
+            b.setAttribute('data-theme', th.id);
+            b.setAttribute('aria-label', t('th_' + th.id) + (th.id === cur ? '. ' + t('active') : ''));
+            b.appendChild(el('span', 'set-th-bar set-th-' + th.id));
+            b.appendChild(el('span', 'set-wp-name', t('th_' + th.id)));
+            b.onclick = function () {
+                Themes.set(th.id);
+                var f = renderMain(idx);
+                if (f) Focus.focus(f);
+                A11y.announce(t('th_' + th.id));
+            };
+            list.appendChild(b);
+        });
+        box.appendChild(list);
+        return box;
+    }
+
     function activate(r, idx) {
         if (r.kind === 'select' || r.kind === 'slider') return change(idx, 1);
         if (r.kind === 'toggle') { r.set(!r.get()); return refresh(idx); }
@@ -545,10 +686,9 @@
     function column(dir) {
         var c = Focus.current(), box = inNav(c) ? nav : main;
         var list = box.querySelectorAll('[data-focus]'), i;
-        if (c && c.className.indexOf('set-wp') === 0) {
-            // wallpaper swatches: one row; up/down leave the row
-            list = Array.prototype.filter.call(list, function (x) { return x.className.indexOf('set-wp') !== 0 || x === c; });
-        }
+        // swatches (themes, backgrounds): a row of their own; up/down leave the row, and enter another on its chosen one
+        function rep(box2) { return box2.querySelector('.on') || box2.firstChild; }
+        list = Array.prototype.filter.call(list, function (x) { return x.className.indexOf('set-wp') !== 0 || x === c || (x === rep(x.parentNode) && !(c && x.parentNode === c.parentNode)); });
         for (i = 0; i < list.length; i++) if (list[i] === c) break;
         var n = list[i + (dir === 'down' ? 1 : -1)];
         if (n) Focus.focus(n);
@@ -559,6 +699,7 @@
         // its D-pad and stick still move through the page, so it can always be left
         if (padCard && dev && dev.indexOf('pad') === 0 && a !== 'up' && a !== 'down' && a !== 'left' && a !== 'right') return true;
         var c = Focus.current();
+        if (!page) return false;                    // the grid: moves on screen (Focus.move)
         if (a === 'up' || a === 'down') { if (inNav(c) || inMain(c)) { column(a); return true; } return false; }
         if (a === 'left' || a === 'right') {
             var rtl = I18n.rtl(), toNav = (a === 'left') !== rtl;
@@ -581,9 +722,11 @@
 
     function back() {
         var c = Focus.current();
+        if (!page) return false;                    // the grid: Back closes
         if (sub) { leaveSub(); return true; }
         if (inMain(c)) { Focus.focus(navBtn()); return true; }
-        return false;
+        Focus.focus(showHome(page));               // the page list: back to the grid
+        return true;
     }
 
     Win.register('settings', {
@@ -591,20 +734,24 @@
         title: function () { return t('settings'); },
         open: function (b, arg) {
             body = b;
-            page = arg || 'system';
+            page = arg || null;
+            sub = null;
             nav = el('nav', 'set-nav');
             main = el('div', 'set-main');
-            body.appendChild(nav); body.appendChild(main);
+            home = el('div', 'cp-home');
+            body.appendChild(nav); body.appendChild(main); body.appendChild(home);
             Updater.onChange(onUpdater);
             Input.onDevices(onDevices);
             Controllers.onChange(onCtrl);
+            if (!page) return showHome();
+            home.hidden = true;
             if (page === 'update') Updater.autoCheck();
             renderNav();
             renderMain();
             return navBtn();
         },
-        close: function () { Updater.offChange(onUpdater); Input.offDevices(onDevices); Controllers.offChange(onCtrl); Controllers.monitor(null); monEl = null; sub = null; Updater.cancel(); stopPadTest(); body = nav = main = null; rows = []; },
-        refresh: function () { if (nav) { renderNav(); renderMain(); } },
+        close: function () { Updater.offChange(onUpdater); Input.offDevices(onDevices); Controllers.offChange(onCtrl); Controllers.monitor(null); monEl = null; sub = null; Updater.cancel(); stopPadTest(); body = nav = main = home = null; rows = []; page = null; },
+        refresh: function () { if (!nav) return; if (!page) { var c = Focus.current(), id = c && c.getAttribute('data-page'); Focus.focus(showHome(id)); return; } renderNav(); renderMain(); },
         action: action,
         back: back
     });

@@ -150,7 +150,8 @@
         del.setAttribute('aria-label', t('storeUninstall') + ' ' + nameOf(a));
         open.onclick = function () { openApp(a); };
         del.onclick = function () { askUninstall(a); };
-        r.appendChild(open); r.appendChild(del);
+        r.appendChild(open);
+        if (Profiles.isAdmin()) r.appendChild(del);        // roles: only an admin uninstalls
         return r;
     }
 
@@ -180,7 +181,7 @@
         var first = renderActions();
         Win.setTitle(nameOf(a) + ' – ' + t('store'));
         A11y.announce(nameOf(a) + '. ' + kindOf(a) + '. ' + descOf(a));
-        Focus.focus(first);
+        Focus.focus(first || back);
     }
 
     function renderActions() {
@@ -201,9 +202,12 @@
             open.setAttribute('data-focus', ''); del.setAttribute('data-focus', '');
             open.onclick = function () { openApp(a); };
             del.onclick = function () { askUninstall(a); };
-            acts.appendChild(open); acts.appendChild(del);
+            acts.appendChild(open);
+            if (Profiles.isAdmin()) acts.appendChild(del);
             return open;
         }
+        // roles: a user sees what is in the store, an admin installs it for everyone on this TV
+        if (!Profiles.isAdmin()) { acts.appendChild(el('span', 'st-installing', t('adminOnlyInstall'))); return null; }
         var get = el('button', 'btn btn-primary', t('storeGet'));
         get.id = 'store-install';
         get.setAttribute('data-focus', '');
@@ -227,7 +231,7 @@
 
     // a short progress bar, like a real store (the app runs from its website: nothing to download)
     function install(a) {
-        if (installing) return;
+        if (installing || !Profiles.isAdmin()) return;
         installing = a.id;
         renderActions();
         A11y.announce(t('storeInstalling'));
@@ -247,6 +251,7 @@
     function openApp(a) { Desktop.play(Desktop.fromCloud(a)); }
 
     function askUninstall(a) {
+        if (!Profiles.isAdmin()) return App.toast(t('adminOnly'));
         App.confirm(t('storeUninstallTitle').replace('%s', nameOf(a)), t('storeUninstallText'), function () {
             Cloud.uninstall(a.id);
             App.toast(t('storeUninstalled').replace('%s', nameOf(a)));

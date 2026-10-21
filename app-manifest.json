@@ -1,9 +1,10 @@
 {
-  "build": 66,
-  "version": "2.19.0",
+  "build": 67,
+  "version": "2.20.0",
   "shell": 1,
   "css": [
-    "css/launcher.css"
+    "css/launcher.css",
+    "css/themes.css"
   ],
   "js": [
     "js/core/native.js",
@@ -26,6 +27,7 @@
     "js/core/accounts.js",
     "js/core/world.js",
     "js/core/i18n.js",
+    "js/core/i18n-users.js",
     "js/core/a11y.js",
     "js/core/scores.js",
     "js/core/audio.js",
@@ -34,6 +36,7 @@
     "js/core/focus.js",
     "js/launcher/icons.js",
     "js/launcher/keyboard.js",
+    "js/launcher/themes.js",
     "js/launcher/desktop.js",
     "js/launcher/window.js",
     "js/launcher/updater.js",

@@ -1,0 +1,191 @@
+/* Themes (js/launcher/themes.js): one class on <html>, th-<id>, chosen per profile. The default (th-win11) is
+   launcher.css itself: no rule here. Light on purpose for TVs: gradients and borders only, no images, no blur
+   (backdrop-filter), no web fonts, no animation. Uses what Chrome 108 has (:is(), custom properties, grid);
+   no CSS nesting. The 5 theme backgrounds are at the end (any profile can pick them in Personalization). */
+
+/* ---------- accent colour of each theme ---------- */
+html.th-win7 { --acc: #3a8ee6; --ink: #fff; }
+html.th-xp { --acc: #316ac5; --ink: #fff; }
+html.th-mac { --acc: #0a84ff; --ink: #fff; }
+html.th-android { --acc: #8ab4f8; --ink: #0b1b3a; }
+html.th-ios { --acc: #0a84ff; --ink: #fff; }
+:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios) :is(.btn-primary, .set-primary, .set-toggle.on, .pcard-tag) { background: var(--acc); color: var(--ink); }
+:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios) :is(.btn-primary, .set-primary):focus { background: var(--acc); filter: brightness(1.2); }
+:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios) .set-toggle.on { border-color: var(--acc); }
+:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios) .set-primary :is(.set-row-name, .set-chev) { color: var(--ink); }
+:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios) :is(.set-slider-fill, .set-nav-btn.on:before) { background: var(--acc); }
+:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios) .set-wp.on { border-color: var(--acc); }
+
+/* ---------- Windows 7 style: dark glass taskbar, round Start orb, glass title bars ---------- */
+.th-win7 .stage { font-family: "Segoe UI", Tahoma, Arial, sans-serif; }
+.th-win7 .taskbar { background: linear-gradient(180deg, rgba(70, 100, 135, 0.94) 0%, rgba(24, 40, 62, 0.95) 50%, rgba(10, 20, 35, 0.97) 100%);
+                    border-top: 1px solid rgba(255, 255, 255, 0.4); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15); }
+.th-win7 .tb-apps { left: 12px; transform: none; }
+[dir="rtl"].th-win7 .tb-apps { left: auto; right: 12px; }
+.th-win7 .tb-btn { border-radius: 6px; border: 1px solid transparent; }
+.th-win7 .tb-btn:focus { background: linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.08)); border-color: rgba(255, 255, 255, 0.65); }
+.th-win7 .tb-start { border-radius: 50%; border: 2px solid rgba(170, 215, 255, 0.85);
+                     background: radial-gradient(circle at 50% 30%, #9ad6ff 0%, #2f7fd6 45%, #0b3d8c 100%); box-shadow: 0 0 14px rgba(120, 190, 255, 0.6); }
+.th-win7 .tb-start:focus { background: radial-gradient(circle at 50% 30%, #c4e8ff 0%, #4d9cf0 45%, #1557b5 100%); border-color: #fff; }
+.th-win7 .start { left: 8px; margin-left: 0; width: 1040px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.45);
+                  background: linear-gradient(180deg, rgba(48, 78, 112, 0.98), rgba(18, 32, 52, 0.99)); }
+[dir="rtl"].th-win7 .start { left: auto; right: 8px; }
+.th-win7 .start-foot { background: rgba(0, 0, 0, 0.28); border-top: 1px solid rgba(255, 255, 255, 0.2); border-radius: 0 0 10px 10px; }
+.th-win7 .win-bar { background: linear-gradient(180deg, #5a8fc4 0%, #2f6297 50%, #1f4c7c 100%); border-bottom: 1px solid #0d2a4a; }
+.th-win7 .win-title { text-shadow: 0 0 8px rgba(255, 255, 255, 0.35); }
+.th-win7 .win-close { align-self: flex-start; width: 112px; height: 56px; margin-right: 16px; padding: 12px 38px; border-radius: 0 0 8px 8px;
+                      border: 1px solid rgba(0, 0, 0, 0.45); border-top: 0; background: linear-gradient(180deg, #e8a593, #c75050 50%, #b1291a); }
+.th-win7 .win-close:focus { background: linear-gradient(180deg, #ffbcae, #e64a4a 50%, #c42b1c); box-shadow: 0 0 0 3px #fff; }
+.th-win7 .dicon:focus { background: linear-gradient(180deg, rgba(160, 205, 255, 0.45), rgba(90, 150, 230, 0.3)); box-shadow: 0 0 0 3px rgba(200, 230, 255, 0.95); }
+
+/* ---------- Windows XP style: blue taskbar, green "start", light blue tray, white Start menu ---------- */
+.th-xp .stage { font-family: Tahoma, Verdana, "Segoe UI", Arial, sans-serif; }
+.th-xp .taskbar { background: linear-gradient(180deg, #3d95ff 0%, #2a6fe0 8%, #245edb 40%, #1f55c9 85%, #1941a5 100%); border-top: 2px solid #0c59b9; }
+.th-xp .tb-apps { left: 0; top: 0; height: 100%; transform: none; align-items: center; }
+[dir="rtl"].th-xp .tb-apps { left: auto; right: 0; }
+.th-xp .tb-btn { border-radius: 6px; }
+.th-xp .tb-btn:focus { background: rgba(255, 255, 255, 0.25); }
+.th-xp .tb-start { display: flex; align-items: center; width: auto; height: 100%; margin: 0 16px 0 0; padding: 0 34px 0 18px; border-radius: 0 26px 26px 0;
+                   background: linear-gradient(180deg, #6dbd63 0%, #3c9a3c 20%, #2f8a2f 70%, #3f9a3c 100%); box-shadow: inset -3px 0 4px rgba(0, 0, 0, 0.35); }
+.th-xp .tb-start svg { flex: none; width: 46px; height: 46px; }
+.th-xp .tb-start:after { content: attr(data-label); margin-left: 12px; font-size: 38px; font-style: italic; font-weight: 700; color: #fff; text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.5); }
+.th-xp .tb-start:focus { background: linear-gradient(180deg, #8ddb88 0%, #4fb54f 20%, #3aa33a 70%, #4fb54f 100%); box-shadow: inset 0 0 0 4px #fff; }
+.th-xp .tray { top: 0; right: 0; height: 100%; padding: 0 12px 0 20px; border-left: 2px solid #1a4ea3;
+               background: linear-gradient(180deg, #0c96ee 0%, #13a1f3 10%, #0f8fe0 85%, #0b7ad1 100%); box-shadow: inset 2px 0 2px rgba(255, 255, 255, 0.25); }
+[dir="rtl"].th-xp .tray { right: auto; left: 0; border-left: 0; border-right: 2px solid #1a4ea3; }
+.th-xp .tray-ver { color: rgba(255, 255, 255, 0.75); }
+.th-xp .start { left: 0; margin-left: 0; bottom: 96px; width: 1040px; height: 880px; padding-top: 116px; color: #000; background: #fff;
+                border: 3px solid #245edb; border-bottom: 0; border-radius: 14px 14px 0 0; box-shadow: 4px 0 18px rgba(0, 0, 0, 0.5); }
+[dir="rtl"].th-xp .start { left: auto; right: 0; }
+.compact.th-xp .start { bottom: 176px; }
+.th-xp .start:before { content: ''; position: absolute; left: 0; top: 0; width: 100%; height: 92px; border-radius: 10px 10px 0 0;
+                       background: linear-gradient(180deg, #3d95ff, #245edb 50%, #1f55c9); border-bottom: 3px solid #f0a33a; }
+.th-xp .start-h { color: #1f55c9; }
+.th-xp .srec-sub { color: #555; }
+.th-xp .start :is(.stile, .srec):focus { background: #dbe8fb; box-shadow: 0 0 0 4px #316ac5; }
+.th-xp .start-foot { color: #fff; border: 0; border-radius: 0; background: linear-gradient(180deg, #3d95ff, #245edb 50%, #1f55c9); }
+.th-xp .win-bar { border-bottom: 0; border-radius: 14px 14px 0 0; background: linear-gradient(180deg, #0997ff 0%, #0053ee 10%, #0050ee 50%, #0066ff 90%, #0055e5 100%); }
+.th-xp .win-title { font-size: 30px; font-weight: 700; text-shadow: 1px 1px 1px #0a1f5c; }
+.th-xp .win-close { width: 64px; height: 64px; margin-right: 16px; padding: 14px; border-radius: 8px; border: 2px solid #fff;
+                    background: linear-gradient(180deg, #e6764b, #d23c1d 60%, #c22e0c); }
+.th-xp .win-close:focus { background: linear-gradient(180deg, #ff9a6f, #ef5a37); box-shadow: 0 0 0 4px #ffd23f; }
+.th-xp .dicon:focus { background: rgba(49, 106, 197, 0.7); }
+.th-xp .dicon .lbl { text-shadow: 1px 1px 2px #000; }
+
+/* ---------- phone and Mac styles: no taskbar but a dock, the tray becomes a bar at the top ---------- */
+:is(.th-mac, .th-android, .th-ios) .taskbar { position: static; height: 0; border: 0; background: none; }
+:is(.th-mac, .th-android, .th-ios) .tb-apps { top: auto; bottom: 14px; padding: 8px 10px; z-index: 5; }
+:is(.th-mac, .th-android, .th-ios) .tray { top: 0; left: 0; right: auto; width: 1920px; height: 54px; padding: 0 24px; z-index: 5; }
+.compact:is(.th-mac, .th-android, .th-ios) .tray { top: 0; height: 84px; }
+:is(.th-mac, .th-android, .th-ios) .tray-ic { width: 28px; height: 28px; margin: 0 10px; }
+.compact:is(.th-mac, .th-android, .th-ios) .tray-ic { width: 44px; height: 44px; }
+:is(.th-mac, .th-android, .th-ios) .tray-clock { display: flex; align-items: center; height: 46px; padding: 0 14px; font-size: 22px; }
+.compact:is(.th-mac, .th-android, .th-ios) .tray-clock { height: 76px; font-size: 38px; }
+:is(.th-mac, .th-android, .th-ios) .tray-clock span { display: inline; margin: 0 6px; }
+:is(.th-mac, .th-android, .th-ios) .tray-ver { position: static; margin: 0 14px; font-size: 18px; }
+:is(.th-mac, .th-android, .th-ios) .desk-icons { top: 78px; height: 830px; }
+.compact:is(.th-mac, .th-android, .th-ios) .desk-icons { top: 104px; height: 760px; }
+:is(.th-mac, .th-android, .th-ios) .start { bottom: auto; top: 84px; }
+/* app icons sit on a light tile (the picture is drawn smaller: a transform, no relayout) */
+:is(.th-mac .dicon, .th-mac .stile, .th-android, .th-ios) .ic-app svg { transform: scale(0.66); }
+/* the Start button is an app grid (dots), like a launcher */
+:is(.th-mac, .th-android, .th-ios) .tb-start svg { display: none; }
+:is(.th-mac, .th-android, .th-ios) .tb-start { background: radial-gradient(circle, #fff 0 22%, rgba(255, 255, 255, 0) 26%) content-box 0 0 / 33.33% 33.33%,
+                                                        linear-gradient(160deg, #6b6b80, #34343f); }
+
+/* Mac style: menu bar, centred dock, traffic lights, Launchpad-like Start */
+.th-mac .stage { font-family: -apple-system, "SF Pro Text", "Helvetica Neue", "Segoe UI", Arial, sans-serif; }
+.th-mac .tray { background: rgba(22, 22, 28, 0.78); }
+.th-mac .tray:before { content: attr(data-title); margin-inline-end: auto; font-size: 24px; font-weight: 700; }
+.th-mac .tb-apps { background: rgba(235, 235, 245, 0.26); border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 28px; }
+.th-mac .tb-btn { border-radius: 18px; }
+.th-mac .tb-btn:focus { background: rgba(255, 255, 255, 0.28); transform: translateY(-10px); }
+.th-mac .desk-icons { left: auto; right: 24px; }
+[dir="rtl"].th-mac .desk-icons { right: auto; left: 24px; }
+.th-mac :is(.dicon, .stile) .ic-app { border-radius: 22%; background: linear-gradient(180deg, #fdfdff, #dcdce6); }
+.th-mac :is(.dicon, .stile) .ic-installed, .th-mac .dicon .ic { border-radius: 22%; }
+.th-mac .start { width: 1400px; margin-left: -700px; height: 860px; border-radius: 28px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(38, 38, 46, 0.96); }
+.th-mac .start-foot { border-radius: 0 0 28px 28px; }
+.th-mac .win-bar { padding-left: 0; background: #2a2a2e; border-bottom: 1px solid #111; }
+.th-mac .win-icon { display: none; }
+.th-mac .win-bar:before { content: ''; order: -1; flex: none; width: 92px; height: 36px; margin-right: 24px;
+                          background: radial-gradient(circle at 18px 50%, #febc2e 0 15px, rgba(0, 0, 0, 0) 16px), radial-gradient(circle at 72px 50%, #28c840 0 15px, rgba(0, 0, 0, 0) 16px); }
+.th-mac .win-close { order: -2; width: 72px; height: 88px; padding: 30px 22px; margin-left: 12px; background: radial-gradient(circle, #ff5f57 0 16px, rgba(0, 0, 0, 0) 17px); }
+.th-mac .win-close svg { opacity: 0; }
+.th-mac .win-close:focus { background: radial-gradient(circle, #ff5f57 0 22px, rgba(0, 0, 0, 0) 23px); }
+.th-mac .win-close:focus svg { opacity: 0.85; }
+.th-mac .win-title { margin-right: 216px; text-align: center; font-weight: 600; }
+
+/* Android style: status bar, round icons, floating dock, app drawer from the bottom */
+.th-android .stage { font-family: Roboto, "Google Sans", "Samsung One", Arial, sans-serif; }
+.th-android .tray { background: linear-gradient(180deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0)); }
+.th-android .tray-clock { order: -2; font-weight: 500; }
+.th-android #tray-date { display: none; }
+.th-android .tray-ver { order: -1; margin-inline-end: auto; }
+.th-android .tb-apps { padding: 10px 18px; background: rgba(40, 42, 54, 0.6); border-radius: 56px; }
+.th-android .tb-btn { border-radius: 50%; }
+.th-android .tb-btn:focus { background: rgba(255, 255, 255, 0.22); }
+.th-android .ic-app { border-radius: 50%; background: #e8eaf6; }
+.th-android :is(.dicon, .stile, .srec) .ic { border-radius: 50%; }
+.th-android .start { left: 0; margin-left: 0; top: auto; bottom: 0; width: 1920px; height: 900px; padding: 48px 240px 0; border: 0; border-radius: 44px 44px 0 0; background: #1f2026; }
+.th-android .start:before { content: ''; position: absolute; left: 50%; top: 16px; width: 96px; height: 8px; margin-left: -48px; border-radius: 4px; background: #5f6370; }
+.th-android .start-foot { border-radius: 0; background: #1a1b20; }
+.th-android .win-bar { background: #1f2026; border-bottom: 0; padding-left: 16px; }
+.th-android .win-icon { display: none; }
+.th-android .win-close { order: -1; width: 88px; height: 88px; padding: 26px; margin-right: 16px; border-radius: 50%; }
+.th-android .win-close:focus { background: rgba(255, 255, 255, 0.18); box-shadow: 0 0 0 4px #fff; }
+.th-android .win-title { font-size: 30px; font-weight: 500; }
+
+/* iOS style: status bar, rounded square icons, glass dock, App Library sheet */
+.th-ios .stage { font-family: -apple-system, "SF Pro Text", "Helvetica Neue", "Segoe UI", Arial, sans-serif; }
+.th-ios .tray-clock { order: -2; font-weight: 600; }
+.th-ios #tray-date { display: none; }
+.th-ios .tray-ver { order: -1; margin-inline-end: auto; }
+.th-ios .tb-apps { padding: 12px 18px; background: rgba(255, 255, 255, 0.24); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 40px; }
+.th-ios .tb-btn { border-radius: 22%; }
+.th-ios .tb-btn:focus { background: rgba(255, 255, 255, 0.3); }
+.th-ios .ic-app { border-radius: 22%; background: linear-gradient(180deg, #ffffff, #e4e4ec); }
+.th-ios :is(.dicon, .stile, .srec) .ic { border-radius: 22%; }
+.th-ios .dicon:focus { background: rgba(255, 255, 255, 0.2); }
+.th-ios .start { width: 1300px; margin-left: -650px; height: 880px; border: 0; border-radius: 40px; background: rgba(28, 28, 30, 0.97); }
+.th-ios .start-foot { border-radius: 0 0 40px 40px; background: #2c2c2e; border-top: 0; }
+.th-ios .win-bar { background: #1c1c1e; border-bottom: 1px solid #38383a; }
+.th-ios .win-icon { display: none; }
+.th-ios .win-title { margin-left: 128px; text-align: center; font-weight: 600; }
+.th-ios .win-close { width: 64px; height: 64px; margin-right: 32px; padding: 18px; border-radius: 50%; background: #3a3a3c; }
+.th-ios .win-close:focus { background: #0a84ff; box-shadow: 0 0 0 4px #fff; }
+
+/* ---------- theme cards in Personalization: the theme's taskbar ---------- */
+.set-th-win7 { background: linear-gradient(180deg, rgba(70, 100, 135, 0.95), rgba(10, 20, 35, 0.97)); }
+.set-th-xp { background: linear-gradient(180deg, #3d95ff, #245edb 40%, #1941a5); box-shadow: inset 40px 0 0 #3c9a3c; }
+.set-th-mac, .set-th-android, .set-th-ios { left: 30%; bottom: 4px; width: 40%; height: 12px; border-radius: 6px; }
+.set-th-mac { background: rgba(255, 255, 255, 0.5); box-shadow: 0 -86px 0 -2px rgba(22, 22, 28, 0.8); }
+.set-th-android { background: rgba(40, 42, 54, 0.75); }
+.set-th-ios { border-radius: 4px; background: rgba(255, 255, 255, 0.4); }
+
+/* ---------- the themes' backgrounds (CSS only) ---------- */
+.wp-aero { background-color: #0a3a78;
+    background-image: linear-gradient(115deg, rgba(255, 255, 255, 0) 38%, rgba(255, 255, 255, 0.12) 44%, rgba(255, 255, 255, 0) 50%),
+                      linear-gradient(115deg, rgba(255, 255, 255, 0) 52%, rgba(160, 230, 255, 0.14) 56%, rgba(255, 255, 255, 0) 60%),
+                      radial-gradient(55% 50% at 50% 45%, rgba(120, 200, 255, 0.85) 0%, rgba(30, 110, 200, 0.55) 40%, rgba(8, 40, 90, 0) 75%),
+                      linear-gradient(160deg, #06244f 0%, #0f5aa8 50%, #052048 100%); }
+.wp-hills { background-color: #4a8fe7;
+    background-image: radial-gradient(ellipse 95% 42% at 30% 100%, #78cf4c 0%, #4aa52a 60%, #3b8f1f 99%, rgba(59, 143, 31, 0) 100%),
+                      radial-gradient(ellipse 80% 34% at 85% 100%, #5fb83a 0%, #3c931f 99%, rgba(60, 147, 31, 0) 100%),
+                      radial-gradient(14% 7% at 22% 24%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 100%),
+                      radial-gradient(18% 8% at 70% 16%, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0) 100%),
+                      linear-gradient(180deg, #2f6fd8 0%, #5b9ef0 45%, #b9dcff 100%); }
+.wp-dunes { background-color: #8c3f6a;
+    background-image: radial-gradient(ellipse 80% 40% at 25% 100%, #3a2350 0%, #3a2350 98%, rgba(58, 35, 80, 0) 100%),
+                      radial-gradient(ellipse 90% 45% at 85% 100%, #6b2f5e 0%, #6b2f5e 98%, rgba(107, 47, 94, 0) 100%),
+                      radial-gradient(ellipse 100% 55% at 40% 100%, #b4556a 0%, #b4556a 98%, rgba(180, 85, 106, 0) 100%),
+                      linear-gradient(180deg, #f9d29d 0%, #f0a06c 40%, #d86a5c 70%, #8c3f6a 100%); }
+.wp-material { background-color: #1a1c2c;
+    background-image: radial-gradient(circle at 82% 22%, #7c4dff 0, #7c4dff 17%, rgba(124, 77, 255, 0) 17.3%),
+                      radial-gradient(circle at 12% 88%, #00bfa5 0, #00bfa5 24%, rgba(0, 191, 165, 0) 24.3%),
+                      radial-gradient(circle at 60% 110%, #ff6e40 0, #ff6e40 20%, rgba(255, 110, 64, 0) 20.3%),
+                      linear-gradient(160deg, #1a1c2c, #252848); }
+.wp-lagoon { background-color: #1e3c72;
+    background-image: radial-gradient(45% 40% at 75% 70%, rgba(54, 209, 220, 0.8) 0%, rgba(54, 209, 220, 0) 100%),
+                      radial-gradient(40% 35% at 20% 30%, rgba(255, 120, 200, 0.45) 0%, rgba(255, 120, 200, 0) 100%),
+                      linear-gradient(160deg, #141e48 0%, #2a5298 50%, #1c8fb0 100%); }

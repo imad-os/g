@@ -44,14 +44,18 @@ var ProfilesUI = (function () {
             b.appendChild(el('span', 'pcard-name', nameOf(p)));
             if (p.id === cur.id) b.appendChild(el('span', 'pcard-tag', I18n.t('active')));
             if (p.user) b.appendChild(el('span', 'pcard-user', '@' + p.user + (p.ask ? '  •  ' + I18n.t('pwLocked') : '')));
-            b.setAttribute('aria-label', nameOf(p) + (p.user ? '. ' + I18n.t('acctOf').replace('%s', p.user) : '') + (p.ask ? '. ' + I18n.t('pwLocked') : '') +
+            if (p.role === 'admin') b.appendChild(el('span', 'pcard-role', I18n.t('roleAdmin')));
+            b.setAttribute('aria-label', nameOf(p) + (p.role === 'admin' ? '. ' + I18n.t('roleAdmin') : '') + (p.user ? '. ' + I18n.t('acctOf').replace('%s', p.user) : '') + (p.ask ? '. ' + I18n.t('pwLocked') : '') +
                 (p.id === cur.id ? '. ' + I18n.t('active') : '. ' + I18n.t('switchHint')));
             b.onclick = (function (id) { return function () { pick(id); }; })(p.id);
             box.appendChild(b);
             if (p.id === cur.id) target = b;
         }
-        $('profile-new').hidden = $('profile-signin').hidden = l.length >= Profiles.MAX;
-        $('profile-delete').hidden = l.length < 2;
+        // only an admin adds and removes users (roles: js/core/storage.js)
+        var manage = Profiles.isAdmin() && !locked;
+        $('profile-new').hidden = $('profile-signin').hidden = l.length >= Profiles.MAX || !manage;
+        $('profile-delete').hidden = !manage || !Profiles.canRemove(cur.id);
+        $('profiles-adminonly').hidden = manage;
         // locked (the start asks for the password): only choosing a profile, or signing in
         $('profile-picture').hidden = $('profile-rename').hidden = locked;
         if (locked) $('profile-delete').hidden = true;
@@ -76,8 +80,14 @@ var ProfilesUI = (function () {
 
     function changed() { renderButton(); if (onChange) onChange(); }
 
+    // an admin's account always asks for its password when someone else switches to it (or the roles would mean nothing)
+    function needsPassword(id) {
+        if (Accounts.asks(id)) return true;
+        return Profiles.isAdmin(id) && !Profiles.isAdmin() && Accounts.isAccount(id);
+    }
+
     function pick(id) {
-        if (Accounts.asks(id) && !(id === Profiles.current().id && !locked)) {
+        if (needsPassword(id) && !(id === Profiles.current().id && !locked)) {
             return askPassword(id, function () {
                 if (id === Profiles.current().id) { locked = false; close(); return; }
                 locked = false; close(); Welcome.switchUser(id);
@@ -150,6 +160,9 @@ var ProfilesUI = (function () {
     // an account made on another TV or phone: it is added here with its progress
     function signIn(prefill) {
         askUser(t('signInAcct') + ': ' + t('username'), prefill || '', function (user) {
+            // a user may sign in again to an account that is already here; adding a new one is for an admin
+            var here = Profiles.list().some(function (p) { return p.user === user; });
+            if (!here && !Profiles.isAdmin()) return App.toast(t('adminOnly'));
             (function tryPw() {
                 askPw(t('password') + ' (' + user + ')', '', function (pw) {
                     App.toast(t('acctWorking'));
@@ -205,7 +218,7 @@ var ProfilesUI = (function () {
         return true;
     }
 
-    function create() { newAccount(null); }
+    function create() { if (!Profiles.isAdmin()) return App.toast(t('adminOnly')); newAccount(null); }
 
     function rename() {
         var p = Profiles.current();
@@ -218,7 +231,7 @@ var ProfilesUI = (function () {
 
     function del() {
         var p = Profiles.current();
-        if (Profiles.list().length < 2) return;
+        if (!Profiles.isAdmin() || !Profiles.canRemove(p.id)) return App.toast(t(Profiles.isAdmin() ? 'lastAdmin' : 'adminOnly'));
         App.confirm(I18n.t('deleteTitle'), I18n.t('deleteText').replace('%s', nameOf(p)) + (p.user ? ' ' + I18n.t('deleteAcctText') : ''), function () {
             Accounts.forget(p.id);
             Profiles.remove(p.id);

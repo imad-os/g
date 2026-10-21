@@ -115,7 +115,7 @@ MyPC.init({
     onDestroy: function () {},       // REQUIRED: stop everything: loops, timers, AudioContext.close()
     onInput:   function (action, pressed, repeat, dev) {},  // optional: one call per action change
     onMenu:    function (id) {},     // optional: one of your pause-menu items was chosen
-    onVolume:  function (v) {},      // optional: v = { music: 0..1, sfx: 0..1 } changed in Settings
+    onVolume:  function (v) {},      // optional: v = { music: 0..1, sfx: 0..1 } changed in the Control Panel
     ownMenu:   false                 // optional: true = gamepad Start (short press) sends you 'menu'
 });
 ```
@@ -506,7 +506,9 @@ Voice Guide announcements.
    in, paste the app address, press **Check**, then **Add to store** (or tick it under **Apps from
    imad-os** if the repository is named `g_…`).
 5. It is in the **App Store** of every My PC right away (Home shows the newest apps and the popular
-   ones). People install it there; it then appears on their desktop, in Start and in File Explorer.
+   ones). An **administrator** profile of a TV or phone installs it there (standard users only see it); it
+   then appears on the desktop of every user of that device, in Start and in File Explorer, and each user can
+   remove the shortcut from their own home screen. Your app does not need to do anything for this.
 
 **To update an app** (TVs get it the next time the app is opened, no need to restart My PC):
 1. Bump `version` in `mypc-app.json` (e.g. `1.2.0` -> `1.3.0`), and put that same version on every
@@ -558,7 +560,7 @@ is a magic-remote style pointer for the My PC screens only: your app never sees 
 usual actions), and `players` may report `'pointer'` for such a phone. **Buttons** has A B X Y where a Nintendo
 controller has them (A right, B bottom, X top, Y left), a **+** (Start) and a Home (Guide) button that My PC keeps for itself (your app never gets Home); the player may swap the stick for a D-pad (same `left` `right` `up` `down`). Each button sends exactly what the same
 button of a real Nintendo controller on the TV sends: A = `run` + `cancel`, B = OK / `jump`, X = `run`, Y = `run`, **+** = Start (`menu`), Home = Guide. How strong each move must be (per move, harder while running) and the repeat guard (one move,
-not two, for a step and its bounce back) are set by the player on the TV (Settings > Devices > Phone controller >
+not two, for a step and its bounce back) are set by the player on the TV (Control Panel > Devices > Phone controller >
 Motion moves) and apply to your app too; your own `define` rules still win for the moves they name. Actions may carry
 `gait` (`IDLE`, `WALK`, `RUN`).
 
@@ -670,10 +672,10 @@ var req = MyPC.net.fetch(url); req.abort();                 // stop a request
 ### `MyPC.ai`: AI for your app (Gemini, ChatGPT, Claude, NVIDIA, any OpenAI-compatible API)
 
 The store's owner sets the AI services once for every My PC in the **App Store Manager > AI services** (with their API
-keys; each TV, phone and computer copies them at start, and Settings > AI on the TV only shows them): Google Gemini, OpenAI (ChatGPT), Anthropic Claude,
+keys; each TV, phone and computer copies them at start, and Control Panel > AI on the TV only shows them): Google Gemini, OpenAI (ChatGPT), Anthropic Claude,
 NVIDIA, OpenRouter, Groq, Mistral, DeepSeek, xAI, Together, Ollama / LM Studio on a computer at home, or any custom
 OpenAI-compatible address with any model. **Your app never sees the keys.** The first AI request of an app asks the user
-"*<app> wants to use AI*" (Allow / Don't allow); the answer is kept until Settings > Privacy & security > *Forget what
+"*<app> wants to use AI*" (Allow / Don't allow); the answer is kept until Control Panel > Privacy & security > *Forget what
 apps were allowed*. If no service is set up you get `no-provider` (and the TV says to add one in the App Store Manager).
 
 ```js

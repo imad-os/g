@@ -205,9 +205,32 @@ svg { display: block; width: 100%; height: 100%; }
 .set-primary .set-row-name { color: #000; font-weight: 600; }
 .set-primary:focus { background: #7dd3ff; }
 .set-primary .set-chev { color: #000; }
-.set-wps { padding: 24px 32px; background: #2b2b2b; border-radius: 10px; }
-.set-wp-list { display: -webkit-box; display: -webkit-flex; display: flex; margin-top: 20px; }
-.set-wp { position: relative; display: block; width: 300px; height: 170px; margin-right: 24px; border-radius: 10px; border: 4px solid transparent; overflow: hidden; }
+.set-wps { padding: 24px 32px; margin-bottom: 6px; background: #2b2b2b; border-radius: 10px; }
+.set-wp-list { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin-top: 20px; }
+.set-wp { position: relative; display: block; width: 200px; height: 112px; margin: 0 16px 16px 0; border-radius: 10px; border: 4px solid transparent; overflow: hidden; }
+/* the theme cards: the background with a small taskbar of the theme (css/themes.css draws the bars) */
+.set-th-bar { position: absolute; left: 0; bottom: 0; width: 100%; height: 16px; background: #1c1c1c; }
+.set-th .set-wp-name { bottom: 16px; }
+
+/* ---------- Control Panel home: a grid of categories (Windows 11 style) ---------- */
+.cp-home { width: 1920px; height: 991px; padding: 40px 96px; overflow: hidden; }
+.cp-user { padding: 0 0 12px; }
+.cp-title { margin: 12px 0 24px; font-size: 34px; color: #c5c5c5; font-weight: 400; }
+.cp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.cp-tile { display: flex; align-items: center; height: 150px; padding: 0 28px; background: #2b2b2b; border-radius: 12px; text-align: start; }
+.cp-tile:focus { background: #353535; box-shadow: 0 0 0 4px #fff; }
+.cp-tile:hover { background: #333; }
+.cp-ic { display: block; flex: none; width: 64px; height: 64px; margin-inline-end: 24px; }
+.cp-text { display: block; min-width: 0; }
+.cp-name { display: block; font-size: 28px; font-weight: 600; }
+.cp-desc { display: block; margin-top: 6px; font-size: 20px; line-height: 1.3; color: #c5c5c5; max-height: 52px; overflow: hidden; }
+.compact .cp-grid { grid-template-columns: repeat(3, 1fr); }
+.compact .cp-tile { height: 190px; }
+.compact .cp-name { font-size: 36px; }
+.compact .cp-desc { display: none; }
+.compact .cp-ic { width: 88px; height: 88px; }
+.compact .cp-home { padding: 24px 48px; }
+.compact .cp-title { display: none; }
 .set-wp.on { border-color: #4cc2ff; }
 .set-wp-name { position: absolute; left: 0; bottom: 0; width: 100%; padding: 8px; font-size: 20px; background: rgba(0, 0, 0, 0.55); }
 
@@ -501,6 +524,8 @@ svg { display: block; width: 100%; height: 100%; }
 .pcard-user { display: block; margin-top: 6px; padding: 0 20px; color: #9aa4b8; font-size: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pcard-tag { position: absolute; top: 14px; right: 14px; padding: 4px 14px; border-radius: 16px; background: #4cc2ff; color: #000; font-size: 20px; font-weight: 700; }
 [dir="rtl"] .pcard-tag { right: auto; left: 14px; }
+.pcard-role { position: absolute; top: 14px; left: 14px; padding: 4px 14px; border-radius: 16px; background: #3a3a3a; color: #ffd23f; font-size: 20px; font-weight: 700; }
+[dir="rtl"] .pcard-role { left: auto; right: 14px; }
 .profiles-buttons .btn { margin-right: 24px; }
 [dir="rtl"] .profiles-buttons .btn { margin-right: 0; margin-left: 24px; }
 

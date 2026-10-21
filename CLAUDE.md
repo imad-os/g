@@ -35,6 +35,15 @@
   profiles, `game-host.js` (bundled games in a same-origin iframe; installed apps in a sandboxed
   cross-origin iframe through the SDK protocol), `main.js` (router: the only place handling Back).
 - **Profiles are users:** every profile has its own settings (language, clock, background, volumes, graphics, saves: `arc_<profile>_*`); only hardware facts and the top-10 records are TV-wide (`arc_dev_*`). Switching profile goes through `js/launcher/welcome.js` (sign-in screen, then the app restarts as that profile). Records are saved automatically under the profile name (no initials screen). A profile's picture (`av` drawn avatar from `js/launcher/avatars.js`, or `photo`) lives in `arc_profiles` and is backed up with it. `Welcome.afterBoot()` also shows "My PC is up to date" once per new build.
+- **Roles** (owner decision): each profile is `role: 'admin'` or `'user'` in `arc_profiles` (per TV, in the TV backup, never in
+  the account). Only an admin installs / uninstalls apps, adds / removes users, changes roles and the TV-wide rows of the
+  Control Panel (`admin()` in settings.js shows them as "Administrator only" to a user). Always at least one admin; profiles from
+  before roles: the first is admin. A new profile is a user once the TV has a named or signed-in admin. Switching from a user to an
+  admin that has an account asks its password. API: `Profiles.isAdmin(id?)`, `setRole`, `canRemove`; Control Panel > Accounts > Other users.
+- **Themes** (per profile, `Store` key `theme`): `js/launcher/themes.js` puts `th-<id>` on `<html>`; looks are CSS only in
+  `css/themes.css` (win11 = launcher.css itself, win7, xp, mac, android, ios; no images, no blur). Picking one also sets its wallpaper.
+- **Control Panel** (was Settings; the app id stays `settings`): opens on a grid of categories (`Win.open('settings')`), a page
+  with `Win.open('settings', '<page>')`; Back: row > page list > grid > close. Its strings, roles and themes are in `js/core/i18n-users.js` (`I18n.add`).
 - **Player accounts** (owner decision): a profile is created with a **unique username** (plain, like `imad12`, not tied to a TV) and a
   **required password**; Profiles > **Sign in** adds an existing account to a TV or phone with its progress. Per profile switch "Ask for the
   password" (Settings > Accounts). `js/core/accounts.js` = Firebase Auth REST (`<username>@players.mypc.app`), cloud copy Firestore
