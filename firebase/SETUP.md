@@ -86,12 +86,13 @@ use API keys with a spending limit (or a free tier) and replace a key in the pag
 | `appstats` | app id: `{ installs, opens }` | a TV, when an app is installed or opened | only +1 on one counter |
 | `tvs` | `tv-<hash of the TV's own id>` | the TV, a little after something changes | only that shape, backup ≤ 900 KB; anyone can `get`/`delete` one document by id, only admins can list them |
 | `records` | game id: `{ list: [{ n, s, d, tv }], updatedAt }` | a TV, after a new record | at most 10 small entries |
+| `errors` | random id: one error report (`app, kind, msg, stack, src, stage, appv, sdk, n, at, exp, tv, model, ver, build, lang, user, where, ua, url`) | any My PC, when an app (or My PC) fails to load, to start, or throws | only that shape, small fields; only admins read or delete (App Store Manager > Errors) |
 
 The TV id is a hash of the Samsung DUID (`webapis.productinfo.getDuid()`, needs the `productinfo`
 privilege in `config.xml`, so package 1.3.0 or newer); the DUID itself never leaves the TV. It stays
 the same after a factory reset. Without it (a PC browser, an older package) the TV uses a random id,
-which is lost when the app's data is deleted. People can turn the backup and the world records off,
-or delete their backup, in **Settings > Privacy & security**.
+which is lost when the app's data is deleted. People can turn the backup, the world records and the error reports
+off, or delete their backup, in **Settings > Privacy & security**.
 
 ## 4. Game documents (`games` collection, for later)
 The admin page writes these for you. This is the format, which the rules enforce:
@@ -163,3 +164,16 @@ there**. After publishing the new rules (step 1), do these two things in the con
 
 Cost: a room costs a few writes (heartbeat every 15 s while a host waits), requests are polled every 1.5-2 s. Both stop when
 the room closes or the app is closed. Rate limits (1 open room, 5 asks per minute per TV) are in `js/core/rooms.js`.
+
+## 4b. Error reports (`errors`): index and TTL (once)
+My PC saves why an app could not open or start, and what an app threw (`js/core/reports.js`, SDK `MyPC.report`), in
+`errors`; the App Store Manager shows them on its **Errors** page. After publishing the new rules (step 1):
+
+1. **Composite index** (the Errors page filtered by one app, newest first): collection ID `errors`, fields `app` Ascending,
+   `at` Descending, query scope **Collection**. (Or `firebase deploy --only firestore:indexes`.) Until it exists the page
+   reads the newest reports of every app and filters them itself.
+2. **TTL policy** so reports go away by themselves after 30 days: collection group `errors`, timestamp field `exp`.
+   (CLI: `gcloud firestore fields ttls update exp --collection-group=errors --enable-ttl`.)
+
+Cost: nothing while apps work. A TV sends at most 8 reports per app per page and 60 per day, the same error only once
+(repeats are a count), batched in one request a few seconds after it happens.

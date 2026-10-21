@@ -9,7 +9,7 @@
  *   Cloud.install(id) / uninstall(id) / isInstalled(id) / installedIds()
  *   Cloud.stats(cb)          { appId: { installs, opens } } from "appstats" (popular apps)
  *   Cloud.count(id, field)   +1 on "installs" or "opens" of an app
- * Generic REST helpers for the other modules (backup.js, world.js): Cloud.get / patch / batchGet / commit.
+ * Generic REST helpers for the other modules (backup.js, world.js, reports.js): Cloud.get / patch / batchGet / commit.
  * The web API key is an identifier, not a secret: firebase/firestore.rules decide what anyone may write. */
 var Cloud = (function () {
     'use strict';
@@ -244,6 +244,6 @@ var Cloud = (function () {
         onChange: function (fn) { listeners.push(fn); },
         stats: stats, statsCached: statsCached, count: count,
         key: CFG.apiKey, request: request,
-        get: get, patch: patch, patchMask: patchMask, query: query, now: function () { return Date.now() + (offset || 0); }, synced: function () { return offset !== null; }, remove: remove, removeKeep: removeKeep, batchGet: batchGet, commit: commit, toFields: toFields, fromFields: fromFields
+        get: get, patch: patch, patchMask: patchMask, query: query, now: function () { return Date.now() + (offset || 0); }, synced: function () { return offset !== null; }, remove: remove, removeKeep: removeKeep, batchGet: batchGet, commit: commit, docName: function (path) { return DB + '/' + path; }, toFields: toFields, fromFields: fromFields
     };
 })();

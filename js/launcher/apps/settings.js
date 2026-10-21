@@ -108,6 +108,7 @@
         } else if (id === 'privacy') {
             admin(out, { kind: 'toggle', label: t('cloudBackup'), desc: t('cloudBackupDesc'), get: function () { return Backup.on(); }, set: function (v) { Backup.setOn(v); } });
             admin(out, { kind: 'toggle', label: t('worldShare'), desc: t('worldShareDesc'), get: function () { return World.on(); }, set: function (v) { World.setOn(v); } });
+            admin(out, { kind: 'toggle', label: t('errReports'), desc: t('errReportsDesc'), get: function () { return Reports.on(); }, set: function (v) { Reports.setOn(v); } });
             admin(out, { kind: 'action', label: t('deleteBackup'), danger: true, run: function () {
                 App.confirm(t('deleteBackup') + '?', t('cloudBackupDesc'), function () {
                     Backup.erase(function (err) { App.toast(t(err ? 'cloudFail' : 'deleteBackupDone')); if (Win.current() === 'settings') { var f = renderMain(1); if (f) Focus.focus(f); } });

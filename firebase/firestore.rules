@@ -147,6 +147,28 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Error reports (js/core/reports.js, MyPC.report in the SDK): written by any My PC, read only by admins in the
+    // App Store Manager > Errors. Small, checked fields; each one expires (TTL policy on `exp`, see firebase/SETUP.md).
+    function validReport(d) {
+      return d.keys().hasAll(['app', 'kind', 'msg', 'n', 'at', 'exp', 'tv'])
+          && d.keys().hasOnly(['app', 'kind', 'msg', 'stack', 'src', 'stage', 'appv', 'sdk', 'n', 'at', 'exp', 'tv', 'model', 'ver',
+                               'build', 'lang', 'user', 'where', 'ua', 'url'])
+          && shortText(d.app, 40) && d.app.size() > 0
+          && d.kind in ['load', 'start', 'failed', 'error', 'rejection', 'resource', 'handler', 'report', 'shell']
+          && shortText(d.msg, 300) && d.msg.size() > 0
+          && (!('stack' in d) || shortText(d.stack, 1500)) && (!('src' in d) || shortText(d.src, 200))
+          && (!('stage' in d) || shortText(d.stage, 20)) && (!('appv' in d) || shortText(d.appv, 20))
+          && (!('sdk' in d) || d.sdk is int) && d.n is int && d.n >= 1 && d.n <= 1000000
+          && d.at is timestamp && d.exp is timestamp && d.exp < request.time + duration.value(32, 'd')
+          && shortText(d.tv, 48) && (!('model' in d) || shortText(d.model, 60)) && (!('ver' in d) || shortText(d.ver, 20))
+          && (!('build' in d) || d.build is int) && (!('lang' in d) || shortText(d.lang, 5)) && (!('user' in d) || shortText(d.user, 30))
+          && (!('where' in d) || d.where in ['tv', 'apk', 'web']) && (!('ua' in d) || shortText(d.ua, 160)) && (!('url' in d) || shortText(d.url, 200));
+    }
+    match /errors/{reportId} {
+      allow create: if reportId.matches('^[a-z0-9]{20}$') && validReport(request.resource.data);
+      allow read, delete: if isAdmin();
+    }
+
     // Rooms (lobbies) for apps and games: MyPC.rooms in the SDK. ONLY the My PC shell writes here (js/core/rooms.js);
     // apps never hold keys. There is no sign-in, so these documents are open to anyone who knows the project's web
     // config: keep them tiny, short-lived (every document has an `exp` timestamp, at most 90 s ahead, removed by TTL

@@ -22,6 +22,7 @@
  * Input actions: left right up down jump run confirm cancel pause menu
  *   Every controller button, trigger and stick: MyPC.gamepad (API 9). Game controllers come first: use all of them.
  * Web requests without CORS limits, AI services and the microphone: MyPC.net, MyPC.ai, MyPC.mic (API 10).
+ * Errors (uncaught, failed files, MyPC.fail, MyPC.report(error, data)) are saved by My PC for the App Store Manager (API 11).
  *   'menu' = gamepad Start or Select pressed alone; only sent to apps that init with { ownMenu: true }.
  *   Only the TV remote's Back, or holding Start + Select together 1 s, opens My PC's menu; Esc / Backspace are 'cancel'.
  * Written in ES5 so it loads anywhere; My PC itself supports Samsung TVs from 2024 (Tizen 8+).
@@ -29,7 +30,7 @@
 var MyPC = (function () {
     'use strict';
 
-    var VERSION = 1, HELLO_WAIT = 1200;
+    var VERSION = 1, API = 11, HELLO_WAIT = 1200;
     var handlers = {}, info = null, data = {}, started = false, destroyed = false, isReady = false;
     var hosted = false, hostWin = null, hostOrigin = '*', helloTimer = 0;
     var down = {};                       // action -> number of keys / buttons holding it
@@ -40,13 +41,66 @@ var MyPC = (function () {
         var f = handlers[name];
         if (typeof f !== 'function') return;
         try { return f.apply(null, Array.prototype.slice.call(arguments, 1)); }
-        catch (e) { try { console.error('[MyPC] ' + name + ': ' + (e && e.stack || e)); } catch (e2) {} }
+        catch (e) { try { console.error('[MyPC] ' + name + ': ' + (e && e.stack || e)); } catch (e2) {} report(e, null, 'handler', name); }
     }
 
     function post(type, d) {
         if (!hosted || !hostWin) return;
         try { hostWin.postMessage({ mypc: VERSION, type: type, data: d === undefined ? null : d }, hostOrigin); } catch (e) {}
     }
+
+    /* ---------------- error reports (API 11): My PC saves them for the App Store Manager (Errors page) ----------------
+     * Uncaught errors, unhandled promise rejections, files that fail to load (script, image, audio...), errors thrown
+     * by the handlers given to MyPC.init, MyPC.fail and MyPC.report. Listening starts as soon as this file runs, before
+     * MyPC.init: include the SDK first. Each distinct error is sent once; repeats are only counted (every 3 s), at most
+     * 20 distinct per page. Standalone (no My PC around) they only go to the console. */
+    var errSeen = {}, errKeys = 0, errWait = [], errTimer = 0, ERR_MAX = 20;
+    function framed() { try { return window.parent && window.parent !== window; } catch (e) { return true; } }
+    function errTarget() {
+        if (hosted && hostWin && info && !info.standalone) return hostOrigin;
+        try { var a = location.ancestorOrigins; if (a && a.length && !info) return a[0]; } catch (e) {}
+        return null;       // not known yet: kept until My PC answers (or dropped if it never does)
+    }
+    function errPost(m) {
+        var to = errTarget();
+        if (!to) { if (!info && errWait.length < ERR_MAX) errWait.push(m); return; }
+        try { window.parent.postMessage({ mypc: VERSION, type: 'err', data: m }, to); } catch (e) {}
+    }
+    function errFlushWait() { var l = errWait; errWait = []; for (var i = 0; i < l.length; i++) errPost(l[i]); }
+    function errRepeats() {
+        errTimer = 0;
+        for (var k in errSeen) if (errSeen[k].more) { var m = errSeen[k].m, r = { kind: m.kind, msg: m.msg, src: m.src, stack: '', n: errSeen[k].more, sdk: API }; errSeen[k].more = 0; errPost(r); }
+    }
+    function sendErr(kind, msg, stack, src) {
+        msg = String(msg === undefined || msg === null || msg === '' ? '(no message)' : msg).slice(0, 300);
+        src = String(src || '').slice(0, 200);
+        if (!framed() || (info && info.standalone)) return;                          // standalone: the console has it
+        var key = kind + '|' + msg + '|' + src, s = errSeen[key];
+        if (s) { s.more++; if (!errTimer) errTimer = setTimeout(errRepeats, 3000); return; }
+        if (errKeys >= ERR_MAX) return;
+        errKeys++;
+        var m = { kind: kind, msg: msg, stack: String(stack || '').slice(0, 1500), src: src, n: 1, sdk: API };
+        errSeen[key] = { m: m, more: 0 };
+        errPost(m);
+    }
+    function short(u) { return String(u || '').replace(/^https?:\/\/[^\/]+/, '').replace(/[?#].*$/, ''); }
+    // MyPC.report(error, data): data is any small JSON value (what the app was doing), kept with the report
+    function report(e, data, kind, where) {
+        var msg = e && e.message !== undefined ? e.message : e, extra = '';
+        if (data !== undefined && data !== null) { try { extra = ' | ' + JSON.stringify(data); } catch (x) { extra = ' | ' + String(data); } }
+        sendErr(kind || 'report', (where ? where + ': ' : '') + String(msg) + extra.slice(0, 200), e && e.stack, '');
+    }
+    try {
+        window.addEventListener('error', function (e) {
+            var t = e.target;
+            if (t && t !== window && t.tagName) { sendErr('resource', 'Could not load ' + String(t.tagName).toLowerCase() + ' ' + short(t.src || t.href || t.currentSrc), '', short(t.src || t.href)); return; }
+            sendErr('error', e.message || (e.error && e.error.message), e.error && e.error.stack, e.filename ? short(e.filename) + ':' + e.lineno + ':' + e.colno : '');
+        }, true);                                                                    // capture: also files that fail to load
+        window.addEventListener('unhandledrejection', function (e) {
+            var r = e.reason;
+            sendErr('rejection', 'Unhandled promise: ' + (r && r.message !== undefined ? r.message : String(r)), r && r.stack, '');
+        });
+    } catch (e) {}
 
     /* ---------------- input state ---------------- */
 
@@ -75,6 +129,7 @@ var MyPC = (function () {
                 if (info.rtl) document.documentElement.setAttribute('dir', 'rtl');
                 document.documentElement.setAttribute('lang', info.lang);
                 multiplayer._enable(d.mp === 1 ? 'shell' : 'none');       // false on an older My PC: apps hide the multiplayer feature
+                errFlushWait();
                 call('onInit', info);
                 break;
             case 'start': if (!started) { started = true; call('onStart'); } break;
@@ -128,6 +183,7 @@ var MyPC = (function () {
         hosted = false;
         var lang = (navigator.language || 'en').slice(0, 2);
         info = { standalone: true, lang: lang, rtl: lang === 'ar', volume: { music: 0.7, sfx: 0.8 }, profile: { id: 'local', name: '' }, quality: { tier: 'high' }, app: {} };
+        errWait = [];
         try { data = JSON.parse(localStorage.getItem('mypc_' + location.pathname) || '{}') || {}; } catch (e) { data = {}; }
         try { var m = /[?&]app_config=([^&#]*)/.exec(location.search); var c = m && JSON.parse(decodeURIComponent(m[1])); pub.app_config = plainObject(c) ? c : {}; } catch (e) { pub.app_config = {}; }
         document.addEventListener('keydown', function (e) { standaloneKey(e, true); });
@@ -150,7 +206,7 @@ var MyPC = (function () {
             // in a frame: say hello to My PC (it answers with "init"); keys pressed while the frame
             // has focus (mouse click on a PC) are forwarded so the host still gets Back, arrows...
             hosted = true; hostWin = window.parent;
-            post('hello', { sdk: VERSION, title: document.title, ownMenu: handlers.ownMenu === true, pad: handlers.pad === undefined ? null : handlers.pad });
+            post('hello', { sdk: VERSION, sdkApi: API, title: document.title, ownMenu: handlers.ownMenu === true, pad: handlers.pad === undefined ? null : handlers.pad });
             document.addEventListener('keydown', function (e) { forwardKey(e, true); });
             document.addEventListener('keyup', function (e) { forwardKey(e, false); });
             helloTimer = setTimeout(goStandalone, HELLO_WAIT);   // framed by something that is not My PC
@@ -1404,7 +1460,7 @@ var MyPC = (function () {
 
     var pub = {
         version: VERSION,
-        apiLevel: 10,                    // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report) (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,
@@ -1420,6 +1476,8 @@ var MyPC = (function () {
         ready: ready,
         progress: function (p) { if (hosted) post('progress', { p: Math.max(0, Math.min(1, +p || 0)) }); },
         fail: function (reason) { if (hosted) post('failed', { reason: String(reason || '') }); else try { console.error('[MyPC] ' + reason); } catch (e) {} },
+        // an error the app caught itself, saved by My PC with the device, versions and time (App Store Manager > Errors)
+        report: function (error, data) { try { console.warn('[MyPC] report: ' + (error && error.stack || error)); } catch (e) {} report(error, data); },
         info: function () { return info; },
         isDown: function (action) { return (down[action] || 0) > 0; },
         save: save,

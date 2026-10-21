@@ -157,7 +157,7 @@ async function fakeAuth(ctx, db) {
 }
 
 async function fakeFirestore(ctx, db) {
-    for (const c of ['apps', 'appstats', 'tvs', 'records', 'players']) db[c] = db[c] || {};
+    for (const c of ['apps', 'appstats', 'tvs', 'records', 'players', 'errors']) db[c] = db[c] || {};
     db._t = db._t || {}; db.log = db.log || []; db._n = db._n || 0;
     await fakeAuth(ctx, db);
     await ctx.route('https://firestore.googleapis.com/**', async (r) => {
@@ -178,6 +178,13 @@ async function fakeFirestore(ctx, db) {
         if (p === ':batchGet') return json(200, body.documents.map((n) => { const [col, id] = n.slice(FS_DB.length + 1).split('/'); return db[col] && db[col][id] ? { found: out(col, id) } : { missing: n }; }));
         if (p === ':commit') {
             for (const w of body.writes) {
+                if (w.update) {                                             // a new document (error reports): currentDocument.exists false
+                    const [col, id] = w.update.name.slice(FS_DB.length + 1).split('/');
+                    db[col] = db[col] || {};
+                    if (w.currentDocument && w.currentDocument.exists === false && db[col][id]) return json(409, { error: { code: 409, status: 'ALREADY_EXISTS' } });
+                    db[col][id] = fsPlain({ mapValue: { fields: w.update.fields } });
+                    continue;
+                }
                 const [col, id] = w.transform.document.slice(FS_DB.length + 1).split('/');
                 const d = (db[col][id] = db[col][id] || {});
                 for (const ft of w.transform.fieldTransforms) d[ft.fieldPath] = (d[ft.fieldPath] || 0) + parseInt(ft.increment.integerValue, 10);
@@ -1121,7 +1128,19 @@ async function main() {
                 export function collection(d, name) { return { name }; }
                 export function doc(d, col, id) { return { col, id }; }
                 export async function getDoc(r) { return { exists: () => !!(db[r.col] && db[r.col][r.id]), data: () => db[r.col][r.id] }; }
-                export async function getDocs(c) { return { docs: Object.entries(db[c.name] || {}).map(([id, x]) => ({ id, data: () => x })) }; }
+                export async function getDocs(c) {
+                    let docs = Object.entries(db[c.name] || {}).map(([id, x]) => ({ id, data: () => x }));
+                    for (const o of c.ops || []) {
+                        if (o.w) docs = docs.filter((d) => d.data()[o.w] === o.v);
+                        if (o.by) docs.sort((a, b) => (a.data()[o.by] < b.data()[o.by] ? -1 : 1) * (o.dir === 'desc' ? -1 : 1));
+                        if (o.lim) docs = docs.slice(0, o.lim);
+                    }
+                    return { docs };
+                }
+                export function query(c, ...ops) { return { name: c.name, ops }; }
+                export function where(w, op, v) { return { w, v }; }
+                export function orderBy(by, dir) { return { by, dir }; }
+                export function limit(lim) { return { lim }; }
                 export async function setDoc(r, data) { (db[r.col] = db[r.col] || {})[r.id] = data; }
                 export async function updateDoc(r, f) { Object.assign(db[r.col][r.id], f); }
                 export async function deleteDoc(r) { delete db[r.col][r.id]; }
@@ -1138,6 +1157,11 @@ async function main() {
                        'tv-1111222233334444555566667777': { tv: 'tv-1111222233334444555566667777', model: 'Browser', version: '2.8.0', build: 16, lang: 'en', src: 'random',
                          firstSeen: now - 90 * 86400000, lastSeen: now - 30 * 86400000, profiles: 1, names: ['Player 1'], installed: [], top: {}, blob: '{}', size: 512 } },
                 records: { jumper: { list: [{ n: 'Ana', s: 4321, d: 1, tv: 'tv-a' }, { n: 'Leo', s: 999, d: 2, tv: 'tv-b' }], updatedAt: 1 } },
+                errors: {
+                    e1: { app: 'app-old-game', kind: 'load', msg: 'timeout: the SDK never answered in 20 s', n: 1, at: now - 3600000, tv: 'tv-aaaabbbbccccddddeeeeffff0000', model: 'QE55Q80D', ver: '2.19.0', build: 67, appv: '1.0.0', user: 'Ana', where: 'tv', stage: 'loading' },
+                    e2: { app: 'app-old-game', kind: 'load', msg: 'timeout: the SDK never answered in 20 s', n: 2, at: now - 7200000, tv: 'tv-1111222233334444555566667777', model: 'Browser', ver: '2.18.0', build: 66, appv: '1.0.0', where: 'web' },
+                    e3: { app: 'jumper', kind: 'error', msg: 'TypeError: x is undefined', src: 'games/jumper/js/game.js:10:5', stack: 'TypeError: x is undefined\n    at step (game.js:10:5)', n: 5, at: now - 60000, tv: 'tv-aaaabbbbccccddddeeeeffff0000', model: 'QE55Q80D', ver: '2.19.0', where: 'tv' },
+                    e4: { app: 'jumper', kind: 'error', msg: 'old one', n: 1, at: now - 20 * 86400000, tv: 'tv-a', where: 'tv' } },
                 apps: {
                 'old-game': { id: 'old-game', name: 'Old Game', url: 'https://imad-os.github.io/g_oldgame/', entry: 'https://imad-os.github.io/g_oldgame/index.html', icon: '', type: 'game', version: '1.0.0', enabled: true, order: 0 } } };
         });
@@ -1162,9 +1186,9 @@ async function main() {
         check(rows.some((t) => /Star Catcher.*Not in store/.test(t)) && rows.some((t) => /Old Game.*In store/.test(t)) && rows.some((t) => /g_broken.*not a My PC app/.test(t)),
             'each app shows its status: not in the store, in the store, or not a My PC app');
         check(/App Store Manager/.test(await page.title()) && /App Store Manager/.test(await page.textContent('.brand')), 'the installer is now the App Store Manager');
-        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,AI services,Devices,World records'
+        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,AI services,Devices,World records,Errors'
             && document.querySelector('.nav a.on').dataset.page === 'add' && !document.querySelector('[data-view="add"]').hidden && document.querySelector('[data-view="overview"]').hidden),
-            'a menu with one page each: Overview, Apps, Add apps, AI services, Devices, World records');
+            'a menu with one page each: Overview, Apps, Add apps, AI services, Devices, World records, Errors');
         check(await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].find((r) => /Old Game/.test(r.textContent)).querySelector('input').disabled), 'installed apps cannot be selected again');
         await page.check('#sel-all');
         await page.click('#btn-install-sel');
@@ -1188,6 +1212,27 @@ async function main() {
         await page.waitForFunction(() => !document.querySelector('[data-view="device"]').hidden);
         const dev = await page.evaluate(() => ({ apps: document.getElementById('dd-apps').textContent, prof: document.getElementById('dd-profiles').textContent }));
         check(/Old Game/.test(dev.apps) && /2026/.test(dev.apps) && /Ana/.test(dev.prof) && /Sam/.test(dev.prof), 'a device page shows its profiles and its apps with the install date (' + dev.apps + ')');
+        // Errors: one row per problem (same app + kind + message), newest first; a row opens every report with its device and stack
+        await go('#errors');
+        await page.waitForFunction(() => document.querySelectorAll('#er-groups tr[data-err]').length > 0, null, { timeout: 4000 }).catch(() => {});
+        const eg = await page.evaluate(() => [...document.querySelectorAll('#er-groups tr[data-err]')].map((r) => r.textContent));
+        check(eg.length === 2 && /x is undefined/.test(eg[0]) && /Super Jumper/.test(eg[0]) && /SDK never answered/.test(eg[1]) && /Old Game/.test(eg[1]) && /could not open/.test(eg[1]) && /Old Game\s*3\s*2/.test(eg[1]),
+            'Errors groups the reports of the last 7 days by problem: the same timeout on 2 TVs is one row (3 times, 2 TVs); a 20-day-old one is not shown (' + eg.join(' | ') + ')');
+        await page.click('#er-groups tr[data-err]:has-text("x is undefined")');
+        const det = await page.textContent('#er-occ');
+        check(/QE55Q80D/.test(det) && /game\.js:10:5/.test(det) && /at step/.test(det) && /5 times/.test(det) && /2\.19\.0/.test(det), 'a problem shows each report: time, device, My PC version, place, count and stack');
+        await page.selectOption('#er-when', '30');
+        check(await page.evaluate(() => document.querySelectorAll('#er-groups tr[data-err]').length) === 3, 'the period filter shows older reports (30 days)');
+        await go('#app/old-game');
+        check(await page.getAttribute('#ad-errors', 'href') === '#errors/app-old-game', 'an app page links to its errors');
+        await go('#errors/app-old-game');
+        await page.waitForFunction(() => document.querySelectorAll('#er-groups tr[data-err]').length === 1 && document.getElementById('er-app').value === 'app-old-game', null, { timeout: 4000 }).catch(() => {});
+        check(await page.evaluate(() => document.querySelectorAll('#er-groups tr[data-err]').length === 1 && document.getElementById('er-app').value === 'app-old-game'), 'Errors for one app: only its reports, the app chosen in the filter');
+        page.once('dialog', (d) => d.accept());
+        await page.click('#er-groups tr[data-err]');
+        await page.click('#er-del');
+        await page.waitForFunction(() => !window.__db.errors.e1 && !window.__db.errors.e2, null, { timeout: 4000 }).catch(() => {});
+        check(await page.evaluate(() => !window.__db.errors.e1 && !window.__db.errors.e2 && !!window.__db.errors.e3), 'Delete these reports removes that problem\'s reports only');
         await go('#records');
         check(/Super Jumper.*Ana – 4321.*Leo – 999/.test(await page.textContent('#records')), 'World records are listed per game');
         // Apps: counters per app; an app's page lists the devices that installed it
@@ -3118,6 +3163,75 @@ async function main() {
         await page.evaluate(() => Win.close());
         check(await page.evaluate(() => !JSON.stringify(Backup.doc()).includes('secret')), 'AI keys are never in the cloud backup');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+    console.log('38. error reports: SDK errors (even before MyPC.init), load failures, dedupe, privacy switch');
+    {
+        const APP = 'https://apps.example.test/buggy/', STUCK = 'https://apps.example.test/stuck/';
+        const mk = (id, url) => ({ id, name: id, url, entry: url + 'index.html', icon: '', type: 'game', version: '2.0.1', enabled: true, order: 0, config: {} });
+        const page = await newPage(browser, base, { apps: { buggy: mk('buggy', APP), stuck: mk('stuck', STUCK) } });
+        await routeHosted(page, { offline: true });
+        await page.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+        // an app that throws before MyPC.init, misses a file, throws in onStart and reports a caught error; another one that never loads
+        const BUGGY = `<!doctype html><meta charset=utf-8><body><script src="${HOSTED}sdk/mypc-sdk.js"></script>
+            <script>window.early.boom = 1;</script><img src="missing.png">
+            <script>MyPC.init({ onInit: function () { MyPC.ready(); }, onStart: function () { throw new Error('start went wrong'); } });</script>`;
+        await page.context().route('https://apps.example.test/**', (r) => {
+            const u = r.request().url();
+            if (u.indexOf(APP + 'index.html') === 0) return r.fulfill({ status: 200, contentType: 'text/html', body: BUGGY });
+            r.fulfill({ status: 404, contentType: 'text/html', body: 'Not found' });
+        });
+        await page.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'buggy', at: 1 }, { id: 'stuck', at: 1 }])); });
+        await page.goto(base + 'index.html');
+        const icon = (id) => '#desk-icons [data-game="app-' + id + '"]';
+        await page.waitForSelector(icon('buggy'), { timeout: 10000 });
+        await page.focus(icon('buggy')); await page.keyboard.press('Enter');
+        await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 10000 });
+        const frame = page.frames().find((f) => f.url().indexOf(APP) === 0);
+        await frame.evaluate(() => { for (let i = 0; i < 5; i++) setTimeout(() => { throw new Error('loop error'); }, 0); MyPC.report(new Error('save failed'), { slot: 2 }); Promise.reject(new Error('no answer')); });
+        await page.waitForTimeout(3500);                         // repeats are counted every 3 s
+        await page.evaluate(() => Reports.flush());
+        await page.waitForFunction(() => true);
+        await page.waitForTimeout(400);
+        let reps = Object.values(page.fs.errors);
+        const by = (k, re) => reps.find((r) => r.app === 'app-buggy' && r.kind === k && re.test(r.msg));
+        check(by('error', /boom/) && by('error', /boom/).stage === 'loading', 'an error thrown before MyPC.init is saved (sent as soon as the SDK runs)');
+        check(by('resource', /missing\.png/), 'a file that fails to load is saved');
+        check(by('handler', /onStart: start went wrong/), 'an error thrown in an SDK callback (onStart) is saved');
+        check(by('report', /save failed \| \{"slot":2\}/), 'MyPC.report(error, data) is saved with its data');
+        check(by('rejection', /no answer/), 'an unhandled promise rejection is saved');
+        const loop = by('error', /loop error/);
+        check(loop && loop.n === 5 && reps.filter((r) => /loop error/.test(r.msg)).length === 1, 'the same error 5 times is one report with n = 5 (' + (loop && loop.n) + ')');
+        const one = by('error', /boom/) || {};
+        check(one.appv === '2.0.1' && one.sdk === 11 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
+            'each report has the app version, SDK level, TV id and model, My PC version and build, language, place, address, time and a 30-day expiry (' + JSON.stringify(one) + ')');
+        const keys = new Set(reps.flatMap((r) => Object.keys(r)));
+        const allowed = ['app', 'kind', 'msg', 'stack', 'src', 'stage', 'appv', 'sdk', 'n', 'at', 'exp', 'tv', 'model', 'ver', 'build', 'lang', 'user', 'where', 'ua', 'url'];
+        const rules = fs.readFileSync(path.join(ROOT, 'firebase/firestore.rules'), 'utf8');
+        check([...keys].every((k) => allowed.includes(k) && rules.includes("'" + k + "'")), 'reports only use the fields the Firestore rules allow (' + [...keys].join(',') + ')');
+        await frame.evaluate(() => MyPC.exit());
+        await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon'), null, { timeout: 8000 });
+        // an app whose page never answers: given up after 8 s with Back, the report says why
+        await page.waitForSelector(icon('stuck'), { timeout: 10000 });
+        await page.focus(icon('stuck')); await page.keyboard.press('Enter');
+        await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'loading', null, { timeout: 10000 });
+        await page.waitForTimeout(8300);
+        await page.evaluate(() => { const k = (d) => Input.onKey({ keyCode: 10009, repeat: false, preventDefault() {} }, d); k(true); k(false); });
+        await page.waitForFunction(() => !!document.querySelector('#desk-icons .dicon') && !/play=/.test(location.search), null, { timeout: 10000 });
+        await page.waitForFunction(() => !(Store.rawGet('arc_dev_reports_q') || []).length, null, { timeout: 9000 }).catch(() => {});      // saved by the app page, sent by the desktop page
+        await page.waitForTimeout(400);
+        reps = Object.values(page.fs.errors);
+        const stuck = reps.find((r) => r.app === 'app-stuck' && r.kind === 'load');
+        check(stuck && /closed while still loading/.test(stuck.msg) && /SDK never answered/.test(stuck.msg) && stuck.stage === 'loading', 'an app that never opens is reported when the user gives up, with the reason (' + (stuck && stuck.msg) + ')');
+        // Settings > Privacy & security > Send error reports: off means nothing is sent
+        await page.evaluate(() => Win.open('settings', 'privacy'));
+        await page.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Send error reports/.test(r.textContent)).click());
+        const before = Object.keys(page.fs.errors).length;
+        await page.evaluate(() => { Reports.add('mypc', { kind: 'shell', msg: 'test after off' }); Reports.flush(); });
+        await page.waitForTimeout(400);
+        check(await page.evaluate(() => !Reports.on()) && Object.keys(page.fs.errors).length === before, 'with Send error reports off nothing is sent');
+        check(/Error reports:/.test(await page.textContent('.set-main')), 'the privacy text explains the error reports');
+        await page.evaluate(() => Win.close());
         await page.context().close();
     }
     {

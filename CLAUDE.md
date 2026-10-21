@@ -106,6 +106,11 @@
   `MyPC.mic` (getUserMedia in the shell, privilege `mediacapture`, package 1.5.0). Shell side `js/core/web-proxy.js`, `ai.js`,
   `mic.js`, glue + permission prompts (`arc_dev_perm`, AI and mic once per app) in `js/launcher/bridges.js`. Standalone the SDK
   loads the same three core files from the hosted site. Docs: `sdk/GUIDE.md` section 14.
+- **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /
+  start failures and timeouts from `game-host.js` (with why: no SDK answer, no `ready()`, given up), uncaught errors of built-in games, the
+  SDK's reports (uncaught, rejections, failed files, handler throws, `MyPC.fail`, `MyPC.report`; sent even before `MyPC.init`), and My PC's
+  own errors (`mypc`). Deduped (one report + count), 8 per app per page, 60 per TV per day, batched, offline queue. Switch: Settings >
+  Privacy & security > Send error reports. Dashboard: App Store Manager > Errors (`#errors/<app id>`, store apps are `app-<id>`).
 - `sdk/`: `mypc-sdk.js` (protocol `{ mypc: 1, type, data }`), `GUIDE.md` (for building new apps
   in other repos), `example/`.
   **`sdk/GUIDE.md` is the one source of truth for app makers**: every change to the SDK, the protocol, the controller,

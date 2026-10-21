@@ -9,7 +9,8 @@
      to the My PC App Store (Firestore "apps"); each TV installs what its users pick in the App Store app.
      It also shows the statistics: TVs running My PC (their backup document), installs and opens per app,
      the devices that installed each app (date and profiles), world records. It also sets the AI services every My PC
-     uses for MyPC.ai (Firestore settings/ai). Pages: #overview #apps #app/<id> #add #ai #devices #device/<id> #records. -->
+     uses for MyPC.ai (Firestore settings/ai), and the error reports of apps and TVs (Firestore errors, js/core/reports.js).
+     Pages: #overview #apps #app/<id> #add #ai #devices #device/<id> #records #errors #errors/<app id>. -->
 <style>
   :root {
     color-scheme: dark;
@@ -145,6 +146,22 @@
   .warn { border-color: #5a4a1a; background: #221d10; }
   select { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: #0f1012; color: var(--text); font: inherit; }
 
+  /* error reports */
+  .scroll-x { overflow-x: auto; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .filters select { min-width: 0; max-width: 100%; }
+  .tag.k-load, .tag.k-start, .tag.k-failed { background: #45161c; color: #ffb3ba; }
+  .tag.k-error, .tag.k-rejection, .tag.k-handler, .tag.k-shell { background: #45360f; color: #ffd57a; }
+  .tag.k-resource, .tag.k-report { background: #14273b; color: #9fd0ff; }
+  .err-msg { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; word-break: break-word; }
+  tr.sel td { background: #20242b; }
+  .occ { padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .occ:last-child { border-bottom: 0; }
+  .occ .kv { grid-template-columns: 120px 1fr; font-size: 13px; margin-top: 8px; }
+  .occ .kv dd { word-break: break-word; }
+  pre.stack { margin: 8px 0 0; padding: 10px 12px; background: #0c0d0f; border-radius: 8px; font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto; }
+  @media (max-width: 600px) { .occ .kv { grid-template-columns: 1fr; gap: 0 0; } .occ .kv dt { margin-top: 6px; } }
+
   .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 10; }
   .modal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 26px; width: min(640px, 100%); max-height: 100%; overflow: auto; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6); }
   .modal h3 { margin: 0 0 4px; font-size: 18px; }
@@ -201,6 +218,7 @@
       <a href="#ai" data-page="ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>AI services</a>
       <a href="#devices" data-page="devices"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Devices<span class="count" id="nav-tvs"></span></a>
       <a href="#records" data-page="records"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5v1a3 3 0 0 0 3 3M16 6h3v1a3 3 0 0 1-3 3M12 13v4M8 21h8M9 17h6"/></svg>World records</a>
+      <a href="#errors" data-page="errors"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2.5 20h19z"/><path d="M12 10v4M12 17.2v.3"/></svg>Errors<span class="count" id="nav-errors"></span></a>
     </nav>
     <div class="side-foot">
       <span id="who" class="who"></span>
@@ -237,7 +255,7 @@
       <div class="crumb"><a href="#apps">Apps</a> › <span id="ad-crumb"></span></div>
       <div class="card"><div class="hero"><img id="ad-icon" class="ico big" alt="">
         <div class="grow"><h1 id="ad-name"></h1><div id="ad-meta" class="muted"></div><div id="ad-desc" style="margin-top:6px"></div></div>
-        <div class="row"><button id="ad-cfg">Config</button><a id="ad-open" class="btn" target="_blank" rel="noopener">Open site</a></div></div></div>
+        <div class="row"><button id="ad-cfg">Config</button><a id="ad-errors" class="btn">Errors</a><a id="ad-open" class="btn" target="_blank" rel="noopener">Open site</a></div></div></div>
       <div id="ad-tiles" class="tiles"></div>
       <div class="card flush">
         <div class="card-head"><h2 class="grow">Devices with this app</h2><span class="muted small">from each TV's last backup</span></div>
@@ -315,6 +333,26 @@
       <div class="row"><select id="ai-preset" aria-label="Service to add"></select><button id="ai-add">Add service</button><span class="grow"></span><span id="ai-msg" class="small"></span></div>
     </section>
 
+    <!-- Error reports -->
+    <section data-view="errors" hidden>
+      <div class="head"><div class="grow"><h1>Errors</h1><p>Why apps could not open or start, and what they threw, sent by every My PC. Kept 30 days.</p></div><button id="er-reload">Refresh</button></div>
+      <div class="filters">
+        <select id="er-app" aria-label="App"></select>
+        <select id="er-kind" aria-label="Kind"><option value="">Every kind</option><option value="open">Could not open or start</option><option value="code">Errors in the code</option><option value="report">Reported by the app</option></select>
+        <select id="er-when" aria-label="Period"><option value="1">Last 24 hours</option><option value="7" selected>Last 7 days</option><option value="30">Last 30 days</option></select>
+        <span id="er-msg" class="small"></span>
+      </div>
+      <div id="er-tiles" class="tiles"></div>
+      <div class="card flush">
+        <div class="card-head"><h2 class="grow">Problems</h2><span class="muted small">the same error on several TVs is one row</span></div>
+        <div class="scroll-x"><table><thead><tr><th>Problem</th><th>App</th><th class="num">Times</th><th class="num">TVs</th><th>Versions</th><th>Last seen</th></tr></thead><tbody id="er-groups"></tbody></table></div>
+      </div>
+      <div id="er-detail" class="card flush" hidden>
+        <div class="card-head"><h2 class="grow" id="er-dtitle">Reports</h2><button id="er-del" class="danger small">Delete these reports</button></div>
+        <div id="er-occ"></div>
+      </div>
+    </section>
+
     <!-- World records -->
     <section data-view="records" hidden>
       <div class="head"><div class="grow"><h1>World records</h1><p>The best scores of each game on every My PC.</p></div></div>
@@ -350,7 +388,7 @@
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js';
   import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider,
            signInWithPopup, signOut, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js';
-  import { getFirestore, collection, getDocs, doc, getDoc, setDoc, deleteDoc, updateDoc, serverTimestamp }
+  import { getFirestore, collection, getDocs, doc, getDoc, setDoc, deleteDoc, updateDoc, serverTimestamp, query, where, orderBy, limit }
            from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js';
 
   const app = initializeApp({
@@ -418,12 +456,13 @@
   function route() {
     const h = location.hash.replace(/^#/, '') || 'overview';
     const [page, arg] = h.split('/');
-    const view = { app: 'app', device: 'device' }[page] || (['overview', 'apps', 'add', 'ai', 'devices', 'records'].includes(page) ? page : 'overview');
+    const view = { app: 'app', device: 'device' }[page] || (['overview', 'apps', 'add', 'ai', 'devices', 'records', 'errors'].includes(page) ? page : 'overview');
     document.querySelectorAll('[data-view]').forEach((s) => { s.hidden = s.dataset.view !== view; });
     const navKey = view === 'app' ? 'apps' : view === 'device' ? 'devices' : view;
     document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('on', a.dataset.page === navKey));
     if (view === 'app') renderApp(decodeURIComponent(arg || ''));
     if (view === 'device') renderDevice(decodeURIComponent(arg || ''));
+    if (view === 'errors') openErrors(arg === undefined ? null : decodeURIComponent(arg));
     window.scrollTo(0, 0);
   }
   window.addEventListener('hashchange', route);
@@ -758,6 +797,7 @@
     $('ad-desc').textContent = a.description || '';
     $('ad-open').href = a.entry;
     $('ad-cfg').onclick = () => editConfig(a);
+    $('ad-errors').href = '#errors/' + encodeURIComponent('app-' + a.id);
     const people = list.reduce((n, x) => n + x.t.people.length, 0);
     $('ad-tiles').innerHTML = tile('installs (all time)', st.installs || 0) + tile('times opened', st.opens || 0) + tile('devices with it now', list.length) + tile('profiles on those devices', people);
     $('app-devices').innerHTML = list.length ? list.map(({ t, a: ia }) => '<tr class="click" data-tv="' + esc(t.id) + '"><td><span class="dot ' + activity(t) + '"></span>' + esc(tvName(t)) + '</td>' +
@@ -901,6 +941,117 @@
     } catch (e) { $('ai-save').disabled = false; say('ai-msg', fbErr(e), 'err'); }
   };
   window.addEventListener('beforeunload', (e) => { if (aiDirty) { e.preventDefault(); e.returnValue = ''; } });
+
+  /* ---------- Errors (Firestore "errors", written by js/core/reports.js on every My PC) ---------- */
+
+  const ER_MAX = 500;                       // newest reports read at once (one app, or all of them)
+  const ER_KINDS = { load: 'could not open', start: 'could not start', failed: 'app gave up (MyPC.fail)', error: 'uncaught error', rejection: 'unhandled promise',
+    resource: 'file did not load', handler: 'error in an SDK callback', report: 'MyPC.report', shell: 'My PC itself' };
+  const ER_GROUP = { open: ['load', 'start', 'failed'], code: ['error', 'rejection', 'handler', 'resource', 'shell'], report: ['report'] };
+  let errs = [], errApp = null, errLoaded = null, errSel = null, errNote = '';
+  const ms = (t) => !t ? 0 : typeof t === 'number' ? t : t.toMillis ? t.toMillis() : Date.parse(t) || 0;
+  const appLabel = (id) => id === 'mypc' ? 'My PC' : id.indexOf('app-') === 0 ? ((appById(id.slice(4)) || {}).name || id.slice(4)) : gameName(id);
+  const when = (t) => new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  async function loadErrors(app) {
+    say('er-msg', 'Loading…', 'muted');
+    errNote = '';
+    const col = collection(db, 'errors');
+    try {
+      let snap;
+      if (app) {
+        try { snap = await getDocs(query(col, where('app', '==', app), orderBy('at', 'desc'), limit(ER_MAX))); }
+        catch (e) {
+          if (e.code !== 'failed-precondition') throw e;                 // the index is not built yet (firebase/SETUP.md 4b)
+          snap = await getDocs(query(col, orderBy('at', 'desc'), limit(ER_MAX)));
+          errNote = 'The index for one app is not ready (firebase/SETUP.md, 4b): showing this app among the newest reports of every app.';
+        }
+      } else snap = await getDocs(query(col, orderBy('at', 'desc'), limit(ER_MAX)));
+      errs = snap.docs.map((d) => Object.assign({ id: d.id }, d.data(), { at: ms(d.data().at) })).filter((r) => !app || r.app === app);
+      errLoaded = app || '';
+      say('er-msg', errNote, errNote ? 'muted' : '');
+    } catch (e) { errs = []; errLoaded = null; say('er-msg', fbErr(e), 'err'); }
+  }
+
+  async function openErrors(app) {
+    if (app !== errApp) errSel = null;
+    errApp = app;
+    if (errLoaded !== (app || '')) await loadErrors(app);
+    renderErrors();
+  }
+
+  function errFiltered() {
+    const since = Date.now() - (+$('er-when').value || 7) * 86400000, k = $('er-kind').value;
+    return errs.filter((r) => r.at >= since && (!k || (ER_GROUP[k] || []).includes(r.kind)));
+  }
+
+  // the same problem (app + kind + message + place) on every TV and version is one row
+  function errGroups(list) {
+    const g = new Map();
+    list.forEach((r) => {
+      const key = r.app + '|' + r.kind + '|' + r.msg + '|' + (r.src || '');
+      let x = g.get(key);
+      if (!x) g.set(key, x = { key, app: r.app, kind: r.kind, msg: r.msg, src: r.src || '', list: [], n: 0, tvs: new Set(), appv: new Set(), ver: new Set(), last: 0 });
+      x.list.push(r); x.n += r.n || 1; x.tvs.add(r.tv); if (r.appv) x.appv.add(r.appv); if (r.ver) x.ver.add(r.ver); x.last = Math.max(x.last, r.at);
+    });
+    return [...g.values()].sort((a, b) => b.last - a.last);
+  }
+
+  function renderErrors() {
+    // the app filter: every app of the store, the built-in games and My PC, plus any id seen in the reports
+    const ids = new Set(['mypc', ...apps.map((a) => 'app-' + a.id), ...Object.keys(GAME_NAMES), ...errs.map((r) => r.app)]);
+    if (errApp) ids.add(errApp);
+    $('er-app').innerHTML = '<option value="">Every app</option>' + [...ids].sort((a, b) => appLabel(a).localeCompare(appLabel(b)))
+      .map((id) => '<option value="' + esc(id) + '"' + (id === errApp ? ' selected' : '') + '>' + esc(appLabel(id)) + '</option>').join('');
+    const list = errFiltered(), groups = errGroups(list), day = Date.now() - 86400000;
+    const tvsAll = new Set(list.map((r) => r.tv));
+    $('er-tiles').innerHTML = tile('problems', groups.length) + tile('times they happened', list.reduce((n, r) => n + (r.n || 1), 0)) +
+      tile('TVs affected', tvsAll.size) + tile('apps affected', new Set(list.map((r) => r.app)).size) + tile('reports in the last 24 h', list.filter((r) => r.at >= day).length);
+    if (!errApp && errLoaded === '') $('nav-errors').textContent = errs.filter((r) => r.at >= Date.now() - 7 * 86400000).length || '';
+    $('er-groups').innerHTML = groups.length ? groups.map((x) => '<tr class="click' + (x.key === errSel ? ' sel' : '') + '" data-err="' + esc(x.key) + '"><td><span class="err-msg">' + esc(x.msg) + '</span>' +
+      '<span class="sub"><span class="tag k-' + esc(x.kind) + '" style="margin-left:0">' + esc(ER_KINDS[x.kind] || x.kind) + '</span>' + (x.src ? ' ' + esc(x.src) : '') + '</span></td>' +
+      '<td>' + esc(appLabel(x.app)) + '</td><td class="num">' + x.n + '</td><td class="num">' + x.tvs.size + '</td>' +
+      '<td>' + esc([...x.appv].slice(0, 3).map((v) => 'v' + v).join(', ') || '–') + '<span class="sub">My PC ' + esc([...x.ver].slice(0, 3).join(', ') || '?') + '</span></td>' +
+      '<td>' + esc(ago(x.last)) + '</td></tr>').join('')
+      : '<tr><td colspan="6" class="empty">' + (errLoaded === null ? 'Could not read the reports.' : 'No errors in this period.') + '</td></tr>';
+    renderErrorDetail(groups.find((x) => x.key === errSel));
+  }
+
+  function renderErrorDetail(g) {
+    $('er-detail').hidden = !g;
+    if (!g) return;
+    $('er-dtitle').textContent = appLabel(g.app) + ': ' + g.list.length + ' report' + (g.list.length === 1 ? '' : 's');
+    const tvLink = (id) => tvs.some((t) => t.id === id) ? '<a href="#device/' + encodeURIComponent(id) + '">' + esc(id.slice(3, 11)) + '</a>' : esc(String(id || '').slice(3, 11) || '–');
+    $('er-occ').innerHTML = g.list.slice(0, 100).map((r) => '<div class="occ"><div class="row"><b>' + esc(when(r.at)) + '</b><span class="muted small">' + esc(ago(r.at)) + '</span>' +
+      (r.n > 1 ? '<span class="tag cnt">' + r.n + ' times</span>' : '') + '</div>' +
+      '<dl class="kv">' + [['Message', esc(r.msg)], ['Kind', esc(ER_KINDS[r.kind] || r.kind) + (r.stage ? ' · while ' + esc(r.stage) : '')], ['Place', esc(r.src || '–')],
+        ['App version', esc(r.appv || '–') + (r.sdk ? ' · SDK API ' + esc(r.sdk) : '')], ['Address', esc(r.url || '–')],
+        ['Device', esc(r.model || '?') + ' · ' + tvLink(r.tv) + ' · ' + esc({ tv: 'TV', apk: 'Android app', web: 'browser' }[r.where] || r.where || '?')],
+        ['My PC', esc(r.ver || '?') + ' (build ' + esc(r.build || '?') + ')'], ['Profile', esc(r.user || '–') + ' · ' + esc(r.lang || '')], ['Browser', '<span class="small muted">' + esc(r.ua || '–') + '</span>']]
+        .map(([k, v]) => '<dt>' + k + '</dt><dd>' + v + '</dd>').join('') + '</dl>' +
+      (r.stack ? '<pre class="stack">' + esc(r.stack) + '</pre>' : '') + '</div>').join('') +
+      (g.list.length > 100 ? '<p class="empty">and ' + (g.list.length - 100) + ' more</p>' : '');
+    $('er-del').onclick = async () => {
+      if (!confirm('Delete these ' + g.list.length + ' reports? New ones will come if the problem happens again.')) return;
+      try {
+        for (let i = 0; i < g.list.length; i += 20) await Promise.all(g.list.slice(i, i + 20).map((r) => deleteDoc(doc(db, 'errors', r.id))));
+        const gone = new Set(g.list.map((r) => r.id));
+        errs = errs.filter((r) => !gone.has(r.id));
+        errSel = null; toast('Reports deleted.'); renderErrors();
+      } catch (e) { toast(fbErr(e)); }
+    };
+  }
+
+  $('er-groups').addEventListener('click', (e) => {
+    const r = e.target.closest('tr[data-err]');
+    if (!r) return;
+    errSel = errSel === r.dataset.err ? null : r.dataset.err;
+    renderErrors();
+    if (errSel) $('er-detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  $('er-app').onchange = () => { location.hash = $('er-app').value ? '#errors/' + encodeURIComponent($('er-app').value) : '#errors'; };
+  $('er-kind').onchange = $('er-when').onchange = () => { errSel = null; renderErrors(); };
+  $('er-reload').onclick = async () => { await loadErrors(errApp); renderErrors(); };
 </script>
 </body>
 </html>

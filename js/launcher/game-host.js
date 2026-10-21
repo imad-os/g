@@ -22,6 +22,7 @@ var GameHost = (function () {
     var game = null, base = '', triedBundled = false;
     var iframe = null, api = null, gameWin = null, loadTimer = 0, onExitCb = null;
     var pauseItems = [], loadSeq = 0;
+    var said = { hello: 0, progress: 0, at: 0, sdk: 0 };      // how far the app got (error reports when it does not open)
 
     function $(id) { return document.getElementById(id); }
 
@@ -37,6 +38,32 @@ var GameHost = (function () {
     function abs(u) { var a = document.createElement('a'); a.href = u; return a.href; }
 
     function title() { return game ? I18n.pick(game.manifest.title) : ''; }
+
+    /* ---------- error reports (js/core/reports.js -> App Store Manager > Errors) ---------- */
+
+    function appVersion() { return game ? String(game.remote ? game.remote.version || '' : (game.manifest && game.manifest.build) || '') : ''; }
+    function report(r) {
+        if (!game || typeof Reports === 'undefined') return;
+        r.stage = r.stage || state;
+        r.appv = appVersion();
+        r.sdk = said.sdk;
+        if (!r.url) r.url = game.remote ? game.remote.entry : base + 'games/' + game.id + '/';
+        Reports.add(game.id, r);
+    }
+    // why an app did not open, in words the App Store Manager shows
+    function loadReason(reason) {
+        var secs = Math.round((Date.now() - said.at) / 100) / 10;
+        if (reason !== 'timeout') return reason + ' (after ' + secs + ' s)';
+        if (!game.remote) return 'timeout: the game did not report loaded in ' + secs + ' s (progress ' + Math.round(said.progress * 100) + '%)';
+        if (!said.hello) return 'timeout: the SDK never answered in ' + secs + ' s (page missing or offline, a script error before MyPC.init, or MyPC.init not called)';
+        return 'timeout: MyPC.ready() was not called in ' + secs + ' s (progress ' + Math.round(said.progress * 100) + '%)';
+    }
+    // same-origin built-in games: their own uncaught errors
+    function watchFrame(win) {
+        function onErr(e) { var er = e.error; report({ kind: 'error', msg: e.message || String(er), stack: er && er.stack, src: e.filename ? String(e.filename).replace(/^.*\/games\//, 'games/') + ':' + e.lineno + ':' + e.colno : '' }); }
+        function onRej(e) { var er = e.reason; report({ kind: 'rejection', msg: 'Unhandled promise: ' + (er && er.message || String(er)), stack: er && er.stack }); }
+        try { win.addEventListener('error', onErr); win.addEventListener('unhandledrejection', onRej); } catch (e) {}
+    }
 
     /* ---------- phone sensors (Controllers, sensor modes): the running app's moves, metrics and raw samples ---------- */
     var sensorsOn = false, sensorsWatch = null;
@@ -74,7 +101,7 @@ var GameHost = (function () {
             announce: function (text) { A11y.announce(text); },
             save: function (k, v) { return Store.set('game_' + id + '_' + k, v); },
             load: function (k, def) { return Store.get('game_' + id + '_' + k, def); },
-            progress: function (p) { setProgress(p); },
+            progress: function (p) { said.progress = +p || 0; setProgress(p); },
             loaded: onLoaded,
             failed: function (msg) { fail(msg || 'game reported failure'); },
             pause: function () { openPause(); },
@@ -176,6 +203,7 @@ var GameHost = (function () {
             switch (m.type) {
                 case 'hello':
                     win = e.source;
+                    said.hello = Date.now(); said.sdk = +d.sdkApi || +d.sdk || 0;
                     remote.ownMenu = !!d.ownMenu;          // the app has its own menu on gamepad Start
                     if (typeof TouchPad !== 'undefined') { TouchPad.app(d.pad); TouchPad.relay(function (m) { send('pad', m); }); }      // MyPC.init({ pad }); presses of the app's own pad go back to it
                     send('init', {
@@ -217,9 +245,14 @@ var GameHost = (function () {
                     if (typeof TouchPad === 'undefined') break;
                     if (d.settings) TouchPad.settings(); else TouchPad.own(!!d.own, d.cfg);
                     break;
-                case 'progress': if (state === 'loading') setProgress(+d.p || 0); break;
+                case 'progress': if (state === 'loading') { said.progress = +d.p || 0; setProgress(+d.p || 0); } break;
                 case 'ready': onLoaded(); break;
                 case 'failed': fail('app: ' + d.reason); break;
+                case 'err':                                                    // MyPC.report and the app's uncaught errors (sent by the SDK, even before MyPC.init)
+                    if (e.origin !== origin) break;
+                    if (!said.sdk && +d.sdk) said.sdk = +d.sdk;
+                    report({ kind: String(d.kind || 'error'), msg: String(d.msg || ''), stack: String(d.stack || ''), src: String(d.src || ''), n: +d.n || 1 });
+                    break;
                 case 'menu':
                     items = [];
                     for (var i = 0; d.items && i < d.items.length && i < 6; i++) {
@@ -298,6 +331,7 @@ var GameHost = (function () {
         var build = game.manifest.build || 0;
         clearTimeout(loadTimer);
         loadTimer = setTimeout(function () { fail('timeout'); }, LOAD_TIMEOUT_MS);
+        said = { hello: 0, progress: 0, at: Date.now(), sdk: 0 };
         var token = ++loadSeq;
         if (game.remote) return loadRemote(token);
 
@@ -317,6 +351,7 @@ var GameHost = (function () {
             try {
                 var doc = iframe.contentWindow.document;
                 doc.open();
+                watchFrame(iframe.contentWindow);       // after open(): it clears the window's listeners
                 doc.write(html);
                 doc.close();
             } catch (e) { fail('write: ' + e); }
@@ -334,16 +369,22 @@ var GameHost = (function () {
         screenSaver(false);
         $('game-layer').setAttribute('aria-label', title());
         $('game-layer').focus();
-        try { api.start(); } catch (e) { fail('start: ' + e); }
+        try { api.start(); } catch (e) { report({ kind: 'start', msg: 'start() threw: ' + (e && e.message || e), stack: e && e.stack, stage: 'loading' }); fail('start: ' + e); }
     }
 
     function fail(reason) {
-        if (state !== 'loading') { try { console.warn('[GameHost] ' + reason); } catch (e) {} return; }
+        if (state !== 'loading') {
+            try { console.warn('[GameHost] ' + reason); } catch (e) {}
+            if (/^app: /.test(reason) && game) report({ kind: 'failed', msg: reason.slice(5) || 'MyPC.fail()' });
+            return;
+        }
         try { console.warn('[GameHost] ' + game.id + ' failed: ' + reason); } catch (e) {}
+        var fallback = !triedBundled && game.bundledBase && game.bundledBase !== base;
+        if (!/^start: /.test(reason)) report({ kind: /^app: /.test(reason) ? 'failed' : 'load', msg: loadReason(reason) + (fallback ? ' [hosted copy; trying the built-in one]' : ''), stage: 'loading' });
         clearTimeout(loadTimer);
         teardown();
         // A hosted game that fails falls back to the bundled copy of the same game, if any.
-        if (!triedBundled && game.bundledBase && game.bundledBase !== base) {
+        if (fallback) {
             triedBundled = true;
             base = game.bundledBase;
             game.manifest = game.bundledManifest || game.manifest;
@@ -461,6 +502,8 @@ var GameHost = (function () {
 
     function exit() {
         if (state === 'idle') return;
+        // given up while it was still loading (slow, or stuck): worth a report too
+        if (state === 'loading' && game && Date.now() - said.at > 8000) report({ kind: 'load', msg: 'closed while still loading: ' + loadReason('timeout').slice(9), stage: 'loading' });
         loadSeq++;
         clearTimeout(loadTimer);
         teardown();

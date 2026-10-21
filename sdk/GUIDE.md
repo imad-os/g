@@ -142,7 +142,7 @@ After `onPause` the game **MUST NOT** move or make sound until `onResume`.
 itself. Your app only sees `info.profile` and keeps progress with `MyPC.save` / `MyPC.load`, which are already per
 profile and backed up. **Never** build your own login, accounts, cloud saves, name entry for scores, Firebase or backend.
 
-Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad) and hide the feature
+Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports) and hide the feature
 when it is missing.
 
 ### App config: `MyPC.app_config`
@@ -296,7 +296,8 @@ Rules for app authors:
 |---|---|
 | `MyPC.progress(p)` | loading progress 0..1 (My PC shows its own loading bar until `ready()`) |
 | `MyPC.ready()` | **MUST** be called once, when the first screen can be shown. Then `onStart` comes. |
-| `MyPC.fail(reason)` | loading failed: My PC shows Retry / Back |
+| `MyPC.fail(reason)` | loading failed: My PC shows Retry / Back (and saves `reason` as an error report, section 15) |
+| `MyPC.report(error, data)` | an error you caught yourself: My PC saves it with the device, versions and time for the App Store Manager (section 15); `data` = a small JSON value |
 | `MyPC.isDown(action)` | `true` while an action is held (read it in your fixed-step update) |
 | `MyPC.save(key, value)` | save JSON data (per My PC profile; 64 KB per app in total) |
 | `MyPC.load(key, default)` | read saved data (synchronous; available from `onInit`) |
@@ -543,6 +544,7 @@ the World records.
 - [ ] texts in `en` (and `fr`, `es`, `ar` if possible), using `info.lang`
 - [ ] works standalone: open `index.html` in Chrome, play with the arrows + Enter, Esc pauses
 - [ ] requests to other sites through `MyPC.net`, AI through `MyPC.ai`, the microphone through `MyPC.mic` (section 14): no own proxy, AI SDK or `getUserMedia`; each error code handled (`denied`, `no-provider`...)
+- [ ] the SDK `<script>` is the **first** script of the page (so errors of your own scripts are reported, section 15); errors you catch that matter go to `MyPC.report`
 - [ ] served over https with CORS (GitHub Pages)
 - [ ] every own script, stylesheet and asset is loaded with `?v=<version>`, the same as `version` in `mypc-app.json` (bumped for every release)
 
@@ -805,3 +807,42 @@ App → My PC: `{ mypc: 1, type: 'net' | 'ai' | 'mic', data: { rid, op, req | op
 and for the microphone `{ ev: 'data' | 'level' | 'end', of: rid, ... }`. ArrayBuffers are transferred, not copied.
 The init message carries `bridges: { net: 1, ai: 1, mic: 0 | 1 }` (`MyPC.info().bridges`).
 My PC side: `js/core/web-proxy.js`, `js/core/ai.js`, `js/core/mic.js`, `js/launcher/bridges.js`.
+
+## 15. Errors and reports (API level 11)
+
+When something goes wrong on a TV, the App Store Manager (page **Errors**) shows it: which app, what happened, when, on
+which device (model, TV code, TV / Android app / browser), the My PC version and build, the app version (`version` of
+the store), the SDK level, the profile, the language and the stack. Nothing to set up: **load the SDK first** and it is on.
+
+What is saved, with no code of yours:
+
+| Kind | When |
+|---|---|
+| `load` | the app never opened: no answer from the SDK (page missing, offline, a script error before `MyPC.init`, `MyPC.init` not called), `MyPC.ready()` not called within 20 s, or the user gave up while it was still loading (after 8 s). The reason says which, with the progress reached |
+| `failed` | the app called `MyPC.fail(reason)` |
+| `error` | an uncaught error (file, line and column, stack), also before `MyPC.init` |
+| `rejection` | a promise rejected with no `catch` |
+| `resource` | a script, picture, sound or stylesheet of the page that did not load |
+| `handler` | one of your `MyPC.init` handlers (`onInit`, `onStart`, `onInput`...) threw: the SDK catches it so the app keeps going, and reports it |
+| `report` | your own `MyPC.report(error, data)` |
+
+Built-in games are covered the same way (their uncaught errors and failed loads), and so is My PC itself (`mypc`).
+
+```js
+try { level = JSON.parse(text); }
+catch (e) { MyPC.report(e, { level: n }); level = DEFAULT; }   // keep going; the owner sees it with { "level": 3 }
+```
+
+Rules, to stay cheap on small TVs (the SDK and My PC enforce them):
+- The same error (kind + message + place) is sent **once**; repeats only add to its count (`n`). An error in your game loop
+  is one report, not one per frame. Still, **fix errors in the loop**: catching and re-throwing every frame costs time.
+- At most 20 different errors per page from the SDK, 8 reports per app per page and 60 per TV per day are saved.
+- Reports are batched (one request a few seconds after the first one), queued while offline and expire after 30 days.
+- Never put personal data, keys or passwords in a message or in `data` (the stack and message are saved as they are).
+- Opened standalone (in a browser, outside My PC) nothing is sent: errors stay in the console.
+- Users can turn reports off: Settings > Privacy & security > Send error reports.
+
+Protocol (for reference): app → My PC `{ mypc: 1, type: 'err', data: { kind, msg, stack, src, n, sdk } }`, sent even
+before `hello` (to `location.ancestorOrigins[0]`); `hello` carries `sdkApi`. My PC side: `js/core/reports.js` (Firestore
+`errors`, rules in `firebase/firestore.rules`), `js/launcher/game-host.js`; dashboard: `installer/index.html#errors`.
+
