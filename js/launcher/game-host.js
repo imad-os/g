@@ -406,7 +406,10 @@ var GameHost = (function () {
         var extra = [];
         try { extra = (api && api.menuItems && api.menuItems()) || []; } catch (e) {}
         pauseItems = pauseItems.concat(extra);
-        if (typeof TouchPad !== 'undefined' && TouchPad.available()) pauseItems.push({ id: '_touchpad', label: I18n.t('padSettings') });      // touch devices
+        if (typeof TouchPad !== 'undefined' && TouchPad.canShow()) {          // touch devices
+            if (TouchPad.available()) pauseItems.push({ id: '_touchpad', label: I18n.t('padSettings') });
+            pauseItems.push({ id: '_padshow', label: I18n.t(TouchPad.hidden() ? 'padShow' : 'padHide') });
+        }
         pauseItems.push({ id: '_quit', label: I18n.t('quitToMenu') });
         var target = null;
         for (var i = 0; i < pauseItems.length; i++) {
@@ -487,7 +490,8 @@ var GameHost = (function () {
         if (id === '_quit') return exit();
         if (id === '_touchpad') return TouchPad.settings();           // the pause menu stays; the pad's own panel opens over it
         var r;
-        try { r = api.onMenu(id); } catch (e) {}
+        if (id === '_padshow') { TouchPad.setHidden(!TouchPad.hidden()); r = 'stay'; }
+        else try { r = api.onMenu(id); } catch (e) {}
         if (r === 'stay') {
             Focus.pop();
             var t = renderPause(id);

@@ -2319,7 +2319,7 @@ async function main() {
             const root = [...document.body.children].find((e) => e.style && e.style.zIndex === '99999');
             if (!root) return null;
             const r = (e) => { const b = e.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height }; };
-            const out = { stick: r(root.querySelector('#vp-stick')), labels: {}, panel: null };
+            const out = { stick: r(root.querySelector('#vp-stick') || root.querySelector('#vp-dpad')), labels: {}, panel: null };
             [...root.querySelectorAll('div')].forEach((e) => { const t = e.textContent; if (!e.children.length && t && t.length <= 3 && e.style.position === 'absolute' && e.style.display !== 'none') out.labels[t] = r(e); });
             const panel = [...root.children].find((e) => e.style.position === 'fixed' && e.style.inset === '0px');
             out.panel = !!panel && panel.style.display === 'block';
@@ -2402,6 +2402,31 @@ async function main() {
         await openApp(P, 'pad-def');                                   // loads the page again: the saved layout comes back
         pad = await padOf(P);
         check(!!pad && !!pad.labels.X, 'after a reload the customized layout is back');
+        // the panel: Stick / D-pad (no left-half zone with the D-pad), + and Home are buttons like the others; hide / show from the pause menu
+        const zone = () => P.evaluate(() => { const r = [...document.body.children].find((e) => e.style && e.style.zIndex === '99999'); return !!r && [...r.children].some((e) => e.style.width === '50%'); });
+        check(await zone() && !(await P.evaluate(() => document.getElementById('vp-home').style.display !== 'none')), 'the stick has its left-half zone; Home is offered but hidden at first');
+        await P.evaluate(() => VirtualPad.openSettings()); await wait(P);
+        const chip = (t) => P.evaluate((t) => { [...document.querySelectorAll('div')].find((e) => !e.children.length && e.textContent === t && e.style.cursor === 'pointer').click(); }, t);
+        await chip('D-pad'); await wait(P);
+        check(await P.evaluate(() => !!document.getElementById('vp-dpad') && !document.getElementById('vp-stick')) && !(await zone()) && (await padOf(P)).panel === true && await P.evaluate(() => GameHost.state() === 'paused'),
+            'D-pad: drawn in place of the stick, the left half is free for taps, the panel stays open and the game stays paused');
+        await chip('⌂'); await chip('Close'); await wait(P);
+        check(await P.evaluate(() => GameHost.state() === 'running' && document.getElementById('vp-home').style.display === 'flex' && JSON.parse(localStorage.getItem('vpad:app:app-pad-def')).dp === true), 'Home added from the panel; the D-pad choice is saved with the layout');
+        const hb2 = await P.evaluate(() => { const r = document.getElementById('vp-home').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
+        await P.waitForTimeout(450); await tap(P, hb2[0], hb2[1]);
+        check(await P.evaluate(() => GameHost.state() === 'paused'), 'Home opens My PC\'s menu (like a pad\'s Guide button)');
+        const item = (t) => P.evaluate((t) => { const b = [...document.querySelectorAll('#pause-items button')].find((b) => b.textContent === t); if (b) b.click(); return !!b; }, t);
+        check(await item('Hide touch pad'), 'the pause menu has "Hide touch pad"');
+        check(await P.evaluate(() => [...document.querySelectorAll('#pause-items button')].some((b) => b.textContent === 'Show touch pad') && ![...document.querySelectorAll('#pause-items button')].some((b) => b.textContent === 'Touch pad settings')), 'then "Show touch pad" (and no pad settings while hidden)');
+        await item('Resume'); await wait(P);
+        check(!(await padOf(P)) && await P.evaluate(() => GameHost.state() === 'running' && Store.rawGet('arc_dev_padhide')['app-pad-def'] === 1), 'hidden: the game runs with no pad, kept for this app');
+        await P.evaluate(() => GameHost.openPause()); await wait(P);
+        await item('Show touch pad'); await item('Resume'); await wait(P);
+        check(!!(await padOf(P)) && await P.evaluate(() => !!document.getElementById('vp-dpad')), 'shown again from the pause menu, with the D-pad');
+        await P.evaluate(() => VirtualPad.openSettings()); await wait(P);
+        await chip('Hide the pad'); await wait(P);
+        check(!(await padOf(P)) && await P.evaluate(() => GameHost.state() === 'running' && TouchPad.hidden()), '"Hide the pad" in the panel hides it and the game goes on');
+        await P.evaluate(() => TouchPad.setHidden(false)); await wait(P);
         // quitting removes the pad
         await P.evaluate(() => { GameHost.openPause(); }); await wait(P);
         await P.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });

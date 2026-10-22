@@ -145,7 +145,7 @@ var Input = (function () {
     var touchHeld = {};             // pad action -> true
     function touch(action, down) {
         var acts = TOUCH[action], i;
-        if (action === 'menu' || action === 'pause') {
+        if (action === 'menu' || action === 'pause' || action === 'guide') {
             if (down) { emit(action, true, false, 'touch'); emit(action, false, false, 'touch'); }
             return;
         }

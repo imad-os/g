@@ -179,9 +179,11 @@ MyPC.app_config.speed      // e.g. 2
 
 My PC also runs on phones and tablets. **On a touch device My PC draws a customizable virtual pad above every app and game by
 itself, so your app needs no touch code.** The pad is a joystick plus buttons; the player customizes it (gear button: add or hide
-buttons, resize, drag anywhere, reset) and the layout is saved per app on the device (`vpad:app:<app id>`). It is never drawn on
+buttons, including **+** and **Home**, resize, drag anywhere, Stick or **D-pad**, reset) and the layout is saved per app on the device
+(`vpad:app:<app id>`). With the D-pad nothing takes the left half of the screen, so taps there reach your app. It is never drawn on
 a TV, and not while a gamepad is the active input. It is hidden while My PC's own screens are open (pause menu, multiplayer, dialogs)
-and the pause menu gets a **Touch pad settings** entry on touch devices.
+and the pause menu gets **Touch pad settings** and **Hide touch pad** / **Show touch pad** entries on touch devices (the player may
+hide the pad for one app, e.g. to play it by tapping; kept per app on the device). Do not rely on the pad being shown.
 
 What the pad sends (the same actions the TV remote and gamepads send, device `'touch'`):
 
@@ -192,7 +194,8 @@ What the pad sends (the same actions the TV remote and gamepads send, device `'t
 | button **B** (bottom, default) | `confirm` **and** `jump` (like the remote's OK; what B does on a real Nintendo controller) |
 | button **X** (top, in the catalog) | `run` (like the real X) |
 | button **Y** (left, in the catalog) | `run` (like the real Y) |
-| **+** button (top centre) | My PC's pause menu |
+| **+** button (top centre, movable) | My PC's pause menu |
+| **Home** button (hidden at first, the player can add it) | My PC's pause menu (like a pad's Guide / Home button) |
 
 **Owner rule: the buttons are always called and placed A B X Y like a Nintendo controller (A right, B bottom, X top, Y left).
 Never A B C, never a menu symbol (&#9776;) or the word "Menu" as a button. Pause / menu is the Nintendo-style **+** button.** The phone and the touch pad send exactly what the same button of a real Nintendo controller connected to the TV sends (My PC reads a pad by position:

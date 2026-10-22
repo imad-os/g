@@ -13,6 +13,9 @@
  *   TouchPad.app(padOption) / .own(bool)                from the app (hello, 'pad' message)
  *   TouchPad.state(s)                                   game-host state: shown only while 'running' (or while its settings are open)
  *   TouchPad.available() / .settings()                  pause menu entry "Touch pad settings"
+ *   TouchPad.canShow() / .hidden() / .setHidden(bool)   pause menu entry "Hide / Show touch pad": the player hides it for this app
+ *                                                       (e.g. to play by tapping), kept per app on the device (arc_dev_padhide)
+ * The settings panel also offers Stick / D-pad (the D-pad leaves the left half free for taps), and + and Home as movable buttons.
  *   TouchPad.clean(t)                                   validates a "touch" value (also used on what the store delivers) */
 var TouchPad = (function () {
     'use strict';
@@ -93,12 +96,22 @@ var TouchPad = (function () {
         return coarse() && !window.tizen && Input.device() !== 'pad';
     }
 
-    function want() { return !!(cur && ((own && ownCfg) || (cur.cfg && !cur.cfg.off && !own && deviceWants()))); }
+    function canShow() { return !!(cur && ((own && ownCfg) || (cur.cfg && !cur.cfg.off && !own && deviceWants()))); }
+    function hiddenMap() { var m = Store.rawGet('arc_dev_padhide'); return m && typeof m === 'object' ? m : {}; }
+    function isHidden() { return !!(cur && hiddenMap()[cur.id]); }
+    function setHidden(v) {
+        if (!cur) return;
+        var m = hiddenMap();
+        if (v) m[cur.id] = 1; else delete m[cur.id];
+        Store.rawSet('arc_dev_padhide', m);
+        sync();
+    }
+    function want() { return canShow() && !isHidden(); }
 
     function onAction(action, down) {
         if (fromPause) return;
         if (own) { if (relay) relay({ action: action, down: down }); }
-        else Input.touch(action, down);
+        else Input.touch(action === 'home' ? 'guide' : action, down);     // Home = a pad's Guide button: My PC's menu
     }
     function onKey(code, down) { if (!fromPause && own && relay) relay({ key: code, down: down }); }
     function onSettings(open) {
@@ -109,6 +122,7 @@ var TouchPad = (function () {
     function build() {
         var c = own ? ownCfg : cur.cfg;
         VirtualPad.init({ storage: PAD_STORE, id: 'app:' + cur.id + (own ? ':own' : ''), buttons: c.buttons, catalog: c.catalog, scale: c.scale, force: true, onAction: onAction, onSettings: onSettings,
+                          dpadSwitch: true, onHide: function () { setHidden(true); },
                           send: own ? onKey : undefined, pause: own ? c.pause : undefined, customize: own ? c.customize : undefined });
     }
     function sync() {
@@ -137,6 +151,9 @@ var TouchPad = (function () {
         },
         state: function (s) { gameState = s; sync(); },
         available: function () { return want(); },
+        canShow: canShow,
+        hidden: isHidden,
+        setHidden: setHidden,
         settings: function () { if (!want()) return; fromPause = true; sync(); VirtualPad.openSettings(); }
     };
 })();

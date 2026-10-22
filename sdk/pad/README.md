@@ -59,12 +59,14 @@ VirtualPad.init({
 | `scale` | `{}` | starting size multipliers `{ stick, btn }`, e.g. `{ stick: 1.35, btn: 1.25 }` for a pure controller |
 | `onAction` | none | `function (action, down)`: call your own input system (see above) |
 | `send` | none | `function (keyCode, down)`: route key codes somewhere else (e.g. over the network) instead of pressing keys |
-| `pause` | `true` | `false` hides the pause button |
+| `pause` | `true` | `false` removes the + (pause) button; otherwise the player can hide, move and size it in the settings panel like the other buttons |
 | `customize` | `true` | `false` hides the gear (settings) button |
 | `onSettings` | none | `function (open)`: the settings panel opened (`true`) or closed (`false`) *(My PC addition)* |
 | `floating` | `true` | a touch anywhere in the left half puts the stick under the finger (back to its place on release); `false` = fixed stick *(My PC addition)* |
 | `dpad` | `false` | `true`: a D-pad (four arrows, diagonals when two are pressed) in place of the stick, at its place and size; it does not float *(My PC addition)* |
-| `home` | `false` | `true`: a round Home button below and left of the face buttons, action `'home'` (key 36) *(My PC addition)* |
+| `home` | not set | `true`: a round Home button below and left of the face buttons, action `'home'` (key 36), shown; not set: offered in the settings panel, hidden at first; `false`: never *(My PC addition)* |
+| `dpadSwitch` | `false` | `true`: the settings panel offers **Stick / D-pad**; the choice is saved with the layout and wins over `dpad`. The D-pad does not take the left half of the screen, so taps there reach the game *(My PC addition)* |
+| `onHide` | none | `function ()`: the settings panel gets a **Hide the pad** button that calls it (your host shows the pad again) *(My PC addition)* |
 | `storage` | none | `{ get(key), set(key, value) }`: where the layout is saved besides `localStorage` *(My PC addition)* |
 | `force` | `false` | show the pad anywhere; by default only on touch devices when running standalone (not inside My PC) |
 
