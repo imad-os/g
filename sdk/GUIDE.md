@@ -129,8 +129,8 @@ source, the PC window is minimized or another window is clicked, the phone goes 
 game (`onPause`) and shows its menu (with a short sound, like every time the menu opens); the player picks **Resume** (`onResume`). Nothing to do in your app.
 An app that must keep going in the background (a music player, a timer, a live multiplayer host) asks the owner to set
 `"allow_background_running": true` in its config (`MyPC.app_config`, App Store Manager > Config, or the default in
-`mypc-app.json` `"config"`): My PC then only shows its menu and the app gets **no** `onPause` / `onResume` (and no
-input while the menu is open). Standalone, outside My PC, the SDK does not do this.
+`mypc-app.json` `"config"`): My PC then leaves it alone (no menu, no `onPause` / `onResume`). The browser or TV may
+still slow down a hidden page by itself. Standalone, outside My PC, the SDK does not do this.
 
 ### `info` (given to `onInit`, also `MyPC.info()`)
 
@@ -171,7 +171,7 @@ MyPC.app_config.speed      // e.g. 2
 - Put sensible defaults in `mypc-app.json` as `"config": { ... }`; the App Store Manager uses them
   when the app is added, and updates never overwrite what the owner has set.
 - My PC itself reads one key: `"allow_background_running": true` keeps the app running when My PC loses the focus
-  (only its menu shows; see the lifecycle above).
+  (no menu; see the lifecycle above).
 - Standalone (opened directly in a browser) it is `{}` unless you add `?app_config={"speed":2}`
   to the address, which lets you test different configs.
 

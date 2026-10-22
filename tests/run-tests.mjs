@@ -1107,15 +1107,15 @@ async function main() {
         const f2 = page.frames().find((f) => f.url().indexOf(APP) === 0);
         check(await f2.evaluate(() => MyPC.app_config.speed) === 3, 'the config is read again from Firebase before the app opens (the saved copy was older)');
         check(/[?&]mypc_v=1\.0\.1(&|$)/.test(f2.url()), 'a new version published in the store opens at once: its version is in the address, so the TV cache is skipped (' + f2.url() + ')');
-        // "allow_background_running": true in the config: only the menu shows, the app keeps running (no onPause / onResume)
+        // "allow_background_running": true in the config: losing the focus does nothing (no menu, no onPause)
         await f2.evaluate(() => { window.__life = []; window.addEventListener('message', (e) => { if (e.data && e.data.mypc === 1 && /^(pause|resume)$/.test(e.data.type)) __life.push(e.data.type); }); });
         await loseFocus();
-        check(await page.evaluate(() => window.GameHost.state() === 'paused' && !document.getElementById('pause').hidden) && (await f2.evaluate(() => __life.length)) === 0,
-            'allow_background_running: losing the focus shows My PC\'s menu but does not pause the app');
-        check(await page.evaluate(() => { const t = document.getElementById('pause-bg'); return t.classList.contains('on') && t.textContent === 'Background: on'; }), 'the menu shows a green "Background: on" tag');
+        check(await page.evaluate(() => window.GameHost.state() === 'running' && document.getElementById('pause').hidden) && (await f2.evaluate(() => __life.length)) === 0,
+            'allow_background_running: losing the focus leaves the app running, no menu');
+        await tvBack(page);
+        check(await page.evaluate(() => { const t = document.getElementById('pause-bg'); return t.classList.contains('on') && t.textContent === 'Background: on'; }), 'the menu (opened with Back) shows a green "Background: on" tag');
         await page.evaluate(() => document.querySelector('#pause-items button').click());
         await page.waitForTimeout(150);
-        check(await page.evaluate(() => window.GameHost.state()) === 'running' && (await f2.evaluate(() => __life.length)) === 0, 'Resume closes the menu without a resume message');
         liveBg = false;
         await f2.evaluate(() => MyPC.exit());
         check(await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body, null, { timeout: 4000 }).then(() => true, () => false), 'MyPC.exit() closes the app');

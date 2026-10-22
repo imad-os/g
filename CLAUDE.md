@@ -71,8 +71,8 @@
   (update `validMyPc` in the rules). Manager pages: a nav link `data-page` + a `<section data-view>` of the same name; it works on phones.
 - **Background pause** (owner decision): My PC losing the focus (TV other app/source, PC window blurred or minimized, phone app
   switched; `main.js` visibilitychange + window blur checked with `document.hasFocus()`) calls `GameHost.background()`: the game
-  pauses under My PC's menu. Config `"allow_background_running": true` (store app config or game-manifest.json): menu only, no
-  pause / resume. The menu plays `AudioPrefs.chime()` (tiny WAV in one `<audio>`, no AudioContext) every time it opens.
+  pauses under My PC's menu. Config `"allow_background_running": true` (store app config or game-manifest.json): nothing happens
+  (no menu, owner decision); the menu's tag shows Background on (green) / off (grey). The menu plays `AudioPrefs.chime()` (tiny WAV in one `<audio>`, no AudioContext) every time it opens.
 - **App config:** each store app has a `config` object (Firestore `apps/<id>`, edited with the
   App Store Manager's Config button). The TV re-reads the app's document before it opens
   (`Cloud.fetchApp`, 2.5 s, falls back to the saved list) and the app gets it as `MyPC.app_config`.

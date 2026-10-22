@@ -260,7 +260,7 @@ var App = (function () {
 
         // Multitasking: My PC goes to the background (TV: another app or source; PC: window minimized or another window
         // focused; phone: another app) -> the game pauses (and its audio) under My PC's menu, Resume brings it back.
-        // Apps with "allow_background_running": true keep running under the menu (GameHost.background).
+        // Apps with "allow_background_running": true keep running, no menu (GameHost.background).
         document.addEventListener('visibilitychange', function () {
             if (document.hidden) {
                 Input.releaseAll();
