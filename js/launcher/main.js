@@ -19,8 +19,18 @@ var App = (function () {
         for (var i = 0; i < fitTimers.length; i++) clearTimeout(fitTimers[i]);
         fitTimers = [setTimeout(fit, 100), setTimeout(fit, 300), setTimeout(fit, 700)];
     }
+    // the phone's keyboard opening (same width, a text field focused, much less height) leaves the screen as it is: no shrinking
+    // into the space left above the keyboard; the page keeps its full height (a WebView resizes the window for the keyboard)
+    var full = null;
+    function keyboardUp(w, h) {
+        var a = document.activeElement, t = a && (a.tagName === 'TEXTAREA' || a.isContentEditable || (a.tagName === 'INPUT' && !/^(button|checkbox|radio|range|submit|reset|file|color|image|hidden)$/i.test(a.type || '')));
+        return !!(t && full && Math.abs(w - full[0]) < 2 && h < full[1] - 80);
+    }
     function fit() {
-        var vs = viewSize(), w = vs[0], h = vs[1];
+        var vs = viewSize(), w = vs[0], h = vs[1], de = document.documentElement;
+        if (keyboardUp(w, h)) { de.style.height = document.body.style.height = full[1] + 'px'; return; }
+        if (de.style.height) de.style.height = document.body.style.height = '';
+        full = [w, h];
         if (window.scrollX || window.scrollY) window.scrollTo(0, 0);         // a rotation can leave the page scrolled
         var s = Math.min(w / 1920, h / 1080), st = $('stage');
         var tr = Math.abs(s - 1) < 0.01 ? '' : 'scale(' + s + ')';

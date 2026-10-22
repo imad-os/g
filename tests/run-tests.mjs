@@ -2562,6 +2562,14 @@ async function main() {
         await ph.keyboard.press('Backspace');
         const st = await ph.evaluate(() => ({ v: document.querySelector('.gc-code').value, open: Win.isOpen(), f: document.activeElement === document.querySelector('.gc-code') }));
         check(st.v.toLowerCase() === 'bwasdz' && st.open && st.f, 'B, W A S D, Z, X type into the field and Backspace erases, nothing goes back (' + st.v + ')');
+        const scaleNow = () => ph.evaluate(() => document.getElementById('stage').style.transform + '|' + document.getElementById('stage').style.top);
+        const before = await scaleNow();
+        await ph.setViewportSize({ width: 844, height: 190 }); await ph.waitForTimeout(800);       // the phone's keyboard takes the lower half
+        const during = await scaleNow();
+        check(before === during && await ph.evaluate(() => document.body.style.height === '390px'), 'the phone keyboard opening leaves the screen as it is (no shrinking into the space above it): ' + before + ' / ' + during);
+        await ph.setViewportSize({ width: 844, height: 390 }); await ph.waitForTimeout(800);
+        check(await scaleNow() === before && await ph.evaluate(() => !document.body.style.height), 'and the keyboard closing changes nothing');
+        await ph.focus('.gc-code');
         await ph.keyboard.press('Escape');
         await ph.waitForFunction(() => document.activeElement !== document.querySelector('.gc-code'), null, { timeout: 2000 });
         check(await ph.evaluate(() => Win.isOpen()), 'Esc (the keyboard closing) leaves the field without going back');
