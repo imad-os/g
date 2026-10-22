@@ -592,6 +592,16 @@ async function main() {
         check(await page.evaluate(() => window.GameHost.state() === 'paused' && window.__menuSeen === 2), 'letting go after the hold sends nothing more');
         await tap(0, 9);
         check(await page.evaluate(() => window.GameHost.state()) === 'running', 'Start closes My PC\'s menu again');
+        // My PC loses the focus (PC window in the background, TV on another app): the game pauses under My PC's menu
+        await page.evaluate(() => { window.__chimes = 0; const c = AudioPrefs.chime; AudioPrefs.chime = function () { window.__chimes++; return c(); }; document.hasFocus = () => false; window.dispatchEvent(new Event('blur')); });
+        await page.waitForTimeout(300);
+        check(await page.evaluate(() => window.GameHost.state() === 'paused' && !document.getElementById('pause').hidden), 'My PC losing the focus pauses the game and shows the menu');
+        check(await page.evaluate(() => window.__chimes === 1), 'the menu plays its sound when it shows');
+        await page.evaluate(() => { delete document.hasFocus; document.querySelector('#pause-items button').click(); });
+        check(await page.evaluate(() => window.GameHost.state()) === 'running', 'Resume brings it back');
+        await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+        await page.waitForTimeout(300);
+        check(await page.evaluate(() => window.GameHost.state()) === 'running', 'a blur that leaves the focus in the page (a click into the game frame) does not pause');
         await page.evaluate(() => { window.__pads[1].connected = false; window.dispatchEvent(new Event('gamepaddisconnected')); });
         await page.waitForTimeout(300);
         check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'unplugging a gamepad pauses the game');
@@ -983,11 +993,12 @@ async function main() {
             if (!fs.existsSync(p)) return r.fulfill({ status: 404, body: '' });
             r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || (p.endsWith('.svg') ? 'image/svg+xml' : 'text/plain'), headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(p) });
         });
-        let firestoreUp = true, liveSpeed = 1, liveVersion = '1.0.0', removed = false;
+        let firestoreUp = true, liveSpeed = 1, liveVersion = '1.0.0', removed = false, liveBg = false;
         // the app's config as Firestore stores it: nested map, list, null
-        const cfgValue = (speed) => ({ mapValue: { fields: { speed: { integerValue: String(speed) },
+        const cfgValue = (speed) => ({ mapValue: { fields: Object.assign({ speed: { integerValue: String(speed) },
             levels: { arrayValue: { values: [{ integerValue: '1' }, { stringValue: 'a' }] } },
-            nested: { mapValue: { fields: { on: { booleanValue: true }, none: { nullValue: null } } } } } } });
+            nested: { mapValue: { fields: { on: { booleanValue: true }, none: { nullValue: null } } } } }, liveBg ? { allow_background_running: { booleanValue: true } } : {}) } });
+        const loseFocus = async () => { await page.evaluate(() => { document.hasFocus = () => false; window.dispatchEvent(new Event('blur')); }); await page.waitForTimeout(300); await page.evaluate(() => { delete document.hasFocus; }); };
         const doc = { fields: { id: { stringValue: 'star-catcher' }, name: { stringValue: 'Star Catcher' }, description: { stringValue: 'Catch stars' },
             url: { stringValue: APP }, entry: { stringValue: APP + 'index.html' }, icon: { stringValue: APP + 'icon.svg' }, type: { stringValue: 'game' },
             version: { stringValue: '1.0.0' }, scores: { booleanValue: true }, enabled: { booleanValue: true }, order: { integerValue: '0' },
@@ -1036,6 +1047,13 @@ async function main() {
         await page.keyboard.down('ArrowRight'); await page.waitForTimeout(150);
         check(await frame.evaluate(() => MyPC.isDown('right')), 'held keys are held actions (MyPC.isDown)');
         await page.keyboard.up('ArrowRight');
+        await frame.evaluate(() => { window.__life = []; window.addEventListener('message', (e) => { if (e.data && e.data.mypc === 1 && /^(pause|resume)$/.test(e.data.type)) __life.push(e.data.type); }); });
+        await loseFocus();
+        check(await page.evaluate(() => window.GameHost.state() === 'paused' && !document.getElementById('pause').hidden) && (await frame.evaluate(() => __life.join())) === 'pause',
+            'My PC losing the focus pauses the app (onPause) under My PC\'s menu');
+        await page.evaluate(() => document.querySelector('#pause-items button').click());
+        await page.waitForTimeout(150);
+        check(await frame.evaluate(() => __life.join()) === 'pause,resume', 'Resume resumes it (onResume)');
         await frame.evaluate(() => MyPC.save('best', 7));
         await page.waitForTimeout(100);
         check(await page.evaluate(() => Store.get('game_app-star-catcher_data', {}).best === 7), 'MyPC.save stores data in the active profile');
@@ -1082,12 +1100,21 @@ async function main() {
         check(await page.evaluate(() => document.querySelectorAll('iframe').length === 0 && document.activeElement.getAttribute('data-game') === 'app-star-catcher'), 'quitting removes the iframe and returns to its desktop icon');
         check(await page.evaluate(() => Controllers.sensorConfig() === null), 'quitting the app stops its sensor setup (phones go back to the default moves)');
         // the owner changes the config in the installer: the next launch gets it (the saved list still has the old one)
-        liveSpeed = 3; liveVersion = '1.0.1';
+        liveSpeed = 3; liveVersion = '1.0.1'; liveBg = true;
         await page.focus(icon); await page.keyboard.press('Enter');
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 10000 });
         const f2 = page.frames().find((f) => f.url().indexOf(APP) === 0);
         check(await f2.evaluate(() => MyPC.app_config.speed) === 3, 'the config is read again from Firebase before the app opens (the saved copy was older)');
         check(/[?&]mypc_v=1\.0\.1(&|$)/.test(f2.url()), 'a new version published in the store opens at once: its version is in the address, so the TV cache is skipped (' + f2.url() + ')');
+        // "allow_background_running": true in the config: only the menu shows, the app keeps running (no onPause / onResume)
+        await f2.evaluate(() => { window.__life = []; window.addEventListener('message', (e) => { if (e.data && e.data.mypc === 1 && /^(pause|resume)$/.test(e.data.type)) __life.push(e.data.type); }); });
+        await loseFocus();
+        check(await page.evaluate(() => window.GameHost.state() === 'paused' && !document.getElementById('pause').hidden) && (await f2.evaluate(() => __life.length)) === 0,
+            'allow_background_running: losing the focus shows My PC\'s menu but does not pause the app');
+        await page.evaluate(() => document.querySelector('#pause-items button').click());
+        await page.waitForTimeout(150);
+        check(await page.evaluate(() => window.GameHost.state()) === 'running' && (await f2.evaluate(() => __life.length)) === 0, 'Resume closes the menu without a resume message');
+        liveBg = false;
         await f2.evaluate(() => MyPC.exit());
         check(await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body, null, { timeout: 4000 }).then(() => true, () => false), 'MyPC.exit() closes the app');
         // uninstalled meanwhile: opening it sends you straight back to the desktop

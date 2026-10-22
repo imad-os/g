@@ -258,13 +258,26 @@ var App = (function () {
         $('dialog-yes').onclick = function () { var cb = dialogYes; closeDialog(); if (cb) cb(); };
         $('dialog-no').onclick = dialogRefused;
 
-        // Multitasking: pause the game (and its audio) when the app goes to the background.
+        // Multitasking: My PC goes to the background (TV: another app or source; PC: window minimized or another window
+        // focused; phone: another app) -> the game pauses (and its audio) under My PC's menu, Resume brings it back.
+        // Apps with "allow_background_running": true keep running under the menu (GameHost.background).
         document.addEventListener('visibilitychange', function () {
             if (document.hidden) {
                 Input.releaseAll();
-                if (GameHost.state() === 'running') GameHost.openPause();
+                GameHost.background();
             }
         });
+        // a blur also fires when the focus only moves into the game's own frame (a click on a PC): then the page still has it
+        var blurTimer = 0;
+        window.addEventListener('blur', function () {
+            clearTimeout(blurTimer);
+            blurTimer = setTimeout(function () {
+                if (document.hasFocus && document.hasFocus()) return;
+                Input.releaseAll();
+                GameHost.background();
+            }, 150);
+        });
+        window.addEventListener('focus', function () { clearTimeout(blurTimer); });
 
         var playId = param('play');
         if (playId) return startGame(playId);

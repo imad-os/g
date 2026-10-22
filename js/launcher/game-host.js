@@ -22,6 +22,7 @@ var GameHost = (function () {
     var game = null, base = '', triedBundled = false;
     var iframe = null, api = null, gameWin = null, loadTimer = 0, onExitCb = null;
     var pauseItems = [], loadSeq = 0;
+    var bgRun = false;          // the pause menu is open over a game that keeps running (allow_background_running)
     var said = { hello: 0, progress: 0, at: 0, sdk: 0 };      // how far the app got (error reports when it does not open)
 
     function $(id) { return document.getElementById(id); }
@@ -421,16 +422,33 @@ var GameHost = (function () {
         return target || box.firstChild;
     }
 
+    // the app may keep running while My PC is in the background: "allow_background_running": true in its config
+    // (App Store Manager > Config, or a built-in game's game-manifest.json)
+    function runsInBackground() {
+        var c = game && (game.remote ? game.remote.config : game.manifest);
+        return !!(c && c.allow_background_running === true);
+    }
+
+    // My PC lost the focus (TV: another app or source; PC: window minimized or another window; phone: app switched):
+    // the game pauses and My PC's menu shows to resume it; an app allowed to run in the background only gets the menu
+    function background() {
+        if (state !== 'running') return;
+        if (!runsInBackground()) return openPause();
+        bgRun = true;
+        openPause();
+    }
+
     function openPause(focusId) {
         if (state !== 'running') return;
         setState('paused');
-        try { api.pause(); } catch (e) {}
+        if (!bgRun) try { api.pause(); } catch (e) {}
         Input.releaseAll();
-        Input.setExternalPoll(false);   // the game loop is stopped: the launcher reads the gamepads
-        screenSaver(true);
+        Input.setExternalPoll(false);   // the game loop is stopped (or under the menu): the launcher reads the gamepads
+        if (!bgRun) screenSaver(true);
         var first = renderPause(typeof focusId === 'string' ? focusId : undefined);
         $('pause').hidden = false;
         Focus.push($('pause'), first);
+        AudioPrefs.chime();
         A11y.announce(I18n.t('paused'));
     }
 
@@ -462,7 +480,9 @@ var GameHost = (function () {
         Input.setExternalPoll(!game.remote);
         screenSaver(false);
         $('game-layer').focus();
-        try { api.resume(); } catch (e) {}
+        var wasRunning = bgRun;
+        bgRun = false;
+        if (!wasRunning) try { api.resume(); } catch (e) {}
     }
 
     function pauseAction(id) {
@@ -508,6 +528,7 @@ var GameHost = (function () {
         clearTimeout(loadTimer);
         teardown();
         setState('idle');
+        bgRun = false;
         $('pause').hidden = true;
         $('game-error').hidden = true;
         hideLoading();
@@ -595,7 +616,7 @@ var GameHost = (function () {
     }
 
     return {
-        init: init, launch: launch, exit: exit, onAction: onAction, openPause: openPause, hold: hold, release: release,
+        init: init, launch: launch, exit: exit, onAction: onAction, openPause: openPause, background: background, hold: hold, release: release,
         active: function () { return state !== 'idle'; },
         state: function () { return state; },
         frame: function () { return iframe; }
