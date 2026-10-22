@@ -174,6 +174,9 @@ async function fakeFirestore(ctx, db) {
             const tok = (req.headers()['authorization'] || '').replace('Bearer ', ''), uid = p.split('/')[2];
             db.playerAuth = db.playerAuth || []; db.playerAuth.push(tok);
             if (tok.split('-')[1] !== uid) return json(403, { error: { code: 403, status: 'PERMISSION_DENIED' } });
+            // rules not published again after a change of shape: data / settings are refused
+            const pb = req.postData() ? JSON.parse(req.postData()) : null;
+            if (db.oldPlayerRules && method === 'PATCH' && pb && pb.fields && pb.fields.data) return json(403, { error: { code: 403, status: 'PERMISSION_DENIED' } });
         }
         const body = req.postData() ? JSON.parse(req.postData()) : null;
         if (p === ':batchGet') return json(200, body.documents.map((n) => { const [col, id] = n.slice(FS_DB.length + 1).split('/'); return db[col] && db[col][id] ? { found: out(col, id) } : { missing: n }; }));
@@ -3012,7 +3015,10 @@ async function main() {
         await tv.waitForFunction(() => true);
         await tv.waitForTimeout(300);
         check(!!uid && await tv.evaluate(() => Profiles.current().id === 'p1' && Profiles.current().user === 'imad12'), 'the account imad12 is created in Firebase Authentication and linked to this profile');
-        check(!!db.players[uid] && JSON.parse(db.players[uid].blob).game_snake_lvl === '5' && db.players[uid].user === 'imad12', 'the profile\'s saves are in players/<uid>');
+        check(!!db.players[uid] && db.players[uid].data.snake.lvl === '5' && db.players[uid].user === 'imad12', 'the profile\'s saves are in players/<uid> (data.<game>.<key>)');
+        check(typeof db.players[uid].settings === 'object' && !Object.keys(db.players[uid].settings).some((k) => /^game_/.test(k)) && db.players[uid].blob === 'in data',
+            'other keys are in settings; blob is only a mark older builds cannot read');
+        check(await tv.evaluate(() => { try { JSON.parse('in data'); return false; } catch (e) { return true; } }), 'an older build fails to parse the mark (so it never applies an empty copy)');
         check(db.playerAuth.every((t) => t.indexOf('id-' + uid) === 0), 'players/<uid> is only reached with that account\'s token');
         const ls = await tv.evaluate(() => Object.keys(localStorage).map((k) => k + '=' + localStorage.getItem(k)).join('\n'));
         check(ls.indexOf('Secret#1') < 0 && JSON.stringify(db.players[uid]).indexOf('Secret#1') < 0, 'the password is stored nowhere in plain text');
@@ -3044,11 +3050,30 @@ async function main() {
         check(await ph.evaluate(() => Profiles.current().user === 'imad12' && Store.get('game_snake_lvl') === 5), 'on the phone the profile comes with its progress (level 5)');
         await ph.evaluate(() => Store.set('game_snake_lvl', 9));
         await ph.evaluate(() => new Promise((res) => Accounts.upload(Store.profile(), res)));
-        check(JSON.parse(db.players[uid].blob).game_snake_lvl === '9', 'progress made on the phone goes to the account');
+        check(db.players[uid].data.snake.lvl === '9', 'progress made on the phone goes to the account');
         // the TV starts again: the newer copy comes back
         await tv.reload();
         await signedIn(tv);
         check(await tv.evaluate(() => Store.get('game_snake_lvl')) === 9 && db.authLog.includes('refresh'), 'the TV picks up the phone\'s progress at the next start (token refreshed)');
+        // a copy written by an older build (one "blob" string) still comes back, and the next upload moves it to data
+        db.players[uid] = { user: 'imad12', name: 'imad12', color: '#4cd97b', size: 0, at: Date.now() + 60000, from: 'old build',
+            blob: JSON.stringify({ 'game_snake_lvl': '11', 'game_app-real-soccer-6_data': '{"goals":3}', theme: '"win11"' }) };
+        await tv.reload();
+        await signedIn(tv);
+        check(await tv.evaluate(() => Store.get('game_snake_lvl') === 11 && Store.get('game_app-real-soccer-6_data').goals === 3), 'an old single-blob copy is still read (no save lost)');
+        await tv.evaluate(() => new Promise((res) => Accounts.upload(Store.profile(), res)));
+        check(db.players[uid].data.snake.lvl === '11' && db.players[uid].data['app-real-soccer-6'].data === '{"goals":3}' && db.players[uid].settings.theme === '"win11"' && db.players[uid].blob === 'in data',
+            'the next upload writes it as data.<game>.<key> + settings');
+        // rules not published again yet: the upload falls back to the old shape instead of failing
+        db.oldPlayerRules = true;
+        await tv.evaluate(() => Store.set('game_snake_lvl', 12));
+        const old = await tv.evaluate(() => new Promise((res) => Accounts.upload(Store.profile(), res)));
+        check(old === null && !db.players[uid].data && JSON.parse(db.players[uid].blob).game_snake_lvl === '12', 'with the old rules the copy is saved in the old shape');
+        db.oldPlayerRules = false;
+        await tv.evaluate(() => new Promise((res) => Accounts.upload(Store.profile(), res)));
+        check(db.players[uid].data.snake.lvl === '12', 'and in the new shape once the rules are published');
+        const prules = fs.readFileSync(path.join(ROOT, 'firebase/firestore.rules'), 'utf8');
+        check(/d\.data is map/.test(prules) && /shortText\(d\.blob, 20\)/.test(prules), 'the rules want data as a map and refuse a whole-profile blob');
 
         // "Ask for the password": the start shows the password screen first
         await tv.evaluate(() => { Profiles.setAsk('p1', true); sessionStorage.clear(); });

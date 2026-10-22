@@ -127,18 +127,47 @@ var Accounts = (function () {
         } catch (e) {}
         return out;
     }
-    function docFor(pid) {
-        var p = Profiles.find(pid) || {}, blob = JSON.stringify(snapshot(pid));
-        var d = { user: p.user || '', name: p.name || '', color: p.color || '', blob: blob, size: blob.length, at: Date.now(), from: Device.model() };
+    /* The cloud copy is browsable in the Firebase console: data.<game id>.<key> holds a game's saves (localStorage
+     * "game_<id>_<key>", the value as stored), settings.<key> the rest of the profile. Older builds wrote all of it
+     * as one JSON string "blob": it is still read, and a new copy keeps blob = OLD_MARK, which those builds cannot
+     * parse, so they never apply an empty copy over a profile (and the rules refuse their whole-blob writes). */
+    var GAME_KEY = /^game_([a-z0-9-]+)_(.+)$/, RESERVED = /^__.*__$/, OLD_MARK = 'in data';
+    function split(keys) {
+        var data = {}, settings = {}, m;
+        for (var k in keys) {
+            if ((m = GAME_KEY.exec(k)) && !RESERVED.test(m[2])) (data[m[1]] = data[m[1]] || {})[m[2]] = keys[k];
+            else if (!RESERVED.test(k)) settings[k] = keys[k];      // Firestore refuses field names like __x__
+        }
+        return { data: data, settings: settings };
+    }
+    // the profile's keys from a cloud copy, new or old shape (null: nothing usable)
+    function keysOf(d) {
+        var out = {}, k, id;
+        if (d.data && typeof d.data === 'object') {
+            var st = d.settings && typeof d.settings === 'object' ? d.settings : {};
+            for (k in st) out[k] = st[k];
+            for (id in d.data) {
+                var g = d.data[id];
+                if (g && typeof g === 'object') for (k in g) out['game_' + id + '_' + k] = g[k];
+            }
+            return out;
+        }
+        try { out = JSON.parse(d.blob || '{}'); } catch (e) { return null; }
+        return out && typeof out === 'object' ? out : null;
+    }
+    function docFor(pid, legacy) {
+        var p = Profiles.find(pid) || {}, keys = snapshot(pid), size = JSON.stringify(keys).length;
+        var d = { user: p.user || '', name: p.name || '', color: p.color || '', size: size, at: Date.now(), from: Device.model() };
+        if (legacy) d.blob = JSON.stringify(keys);
+        else { var s = split(keys); d.data = s.data; d.settings = s.settings; d.blob = OLD_MARK; }
         if (p.av) d.av = p.av;
         if (p.photo) d.photo = p.photo;
         return d;
     }
     // puts a cloud copy in place of this profile's data (without the write hooks: it is not a local change)
     function apply(pid, data) {
-        var keys = null;
-        try { keys = JSON.parse(data.blob || '{}'); } catch (e) {}
-        if (!keys || typeof keys !== 'object') return false;
+        var keys = keysOf(data);
+        if (!keys) return false;
         var pre = prefix(pid);
         try {
             var drop = [];
@@ -159,7 +188,9 @@ var Accounts = (function () {
         if (d.size > MAX_BLOB) return cb('too big');
         token(pid, function (err, t) {
             if (err) return cb(err);
-            Cloud.patch('players/' + s.uid, d, null, 10000, function (e2) {
+            Cloud.patch('players/' + s.uid, d, null, 10000, function done(e2) {
+                // rules from before data / settings (not published again yet): the old single-blob shape
+                if (e2 === 'http 403' && d.data) { var at = d.at; d = docFor(pid, true); d.at = at; return Cloud.patch('players/' + s.uid, d, null, 10000, done, t); }
                 if (e2) return cb(e2 === 'network' ? 'offline' : e2);
                 var now = sec(pid);
                 if (now) { now.at = d.at; setSec(pid, now); }

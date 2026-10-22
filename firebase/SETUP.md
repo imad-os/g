@@ -129,8 +129,12 @@ e-mail is), so it needs **Email/Password** enabled (step 2, already on for the A
 - Firebase checks and stores the password (hashed). The TV keeps the refresh token and a salted, iterated
   SHA-256 check code of the password (for "Ask for the password" offline) in `arc_dev_acct`, which is never
   copied to the `tvs` backup.
-- `players/<uid>`: `{ user, name, color, av?, photo?, blob, size, at, from }`. `blob` holds the profile's
-  own keys (settings and saves, ≤ 900 KB). Only the signed-in account can read, write or delete it.
+- `players/<uid>`: `{ user, name, color, av?, photo?, data, settings, blob, size, at, from }`. `data.<game id>.<key>`
+  holds each game's saves (browsable in the console), `settings.<key>` the rest of the profile (≤ 900 KB in all).
+  `blob` is only the short mark `in data`: copies from older builds kept everything in one `blob` string; My PC
+  still reads those and rewrites them in the new shape. Only the signed-in account can read, write or delete it.
+- **After the data / settings update (build 71), publish `firestore.rules` again.** Until then My PC keeps
+  saving in the old shape, so nothing is lost either way.
 - **After this update, publish `firestore.rules` again** (it adds `players`).
 - Player accounts are **Authentication → Users** like the admins, but they are not in `admins`, so the
   App Store Manager gives them nothing. To remove an account, delete the user there and its `players` doc.

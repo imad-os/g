@@ -222,11 +222,14 @@ service cloud.firestore {
 
     // Player accounts (js/core/accounts.js): a profile signed in with Firebase Authentication (username@players.mypc.app
     // + password). Only that account reads or writes its own copy: settings, saves and picture of the profile.
+    // data.<game id>.<key> = a game's saves, settings.<key> = the rest. blob is only the short mark that stops builds
+    // from before data / settings from reading the copy; their whole-profile blob writes are refused.
     function validPlayer(d) {
-      return d.keys().hasOnly(['user', 'name', 'color', 'av', 'photo', 'blob', 'size', 'at', 'from'])
+      return d.keys().hasOnly(['user', 'name', 'color', 'av', 'photo', 'blob', 'data', 'settings', 'size', 'at', 'from'])
           && shortText(d.user, 16) && shortText(d.name, 24) && shortText(d.color, 9)
           && (!('av' in d) || shortText(d.av, 20)) && (!('photo' in d) || shortText(d.photo, 30000))
-          && shortText(d.from, 48) && d.blob is string && d.blob.size() <= 900000 && d.size is int && d.at is int;
+          && shortText(d.from, 48) && d.data is map && (!('settings' in d) || d.settings is map)
+          && (!('blob' in d) || shortText(d.blob, 20)) && d.size is int && d.size <= 900000 && d.at is int;
     }
     match /players/{uid} {
       allow get, delete: if signedIn() && request.auth.uid == uid;

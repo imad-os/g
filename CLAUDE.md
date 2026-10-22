@@ -47,7 +47,7 @@
 - **Player accounts** (owner decision): a profile is created with a **unique username** (plain, like `imad12`, not tied to a TV) and a
   **required password**; Profiles > **Sign in** adds an existing account to a TV or phone with its progress. Per profile switch "Ask for the
   password" (Settings > Accounts). `js/core/accounts.js` = Firebase Auth REST (`<username>@players.mypc.app`), cloud copy Firestore
-  `players/<uid>` (only that account), secrets in `arc_dev_acct` (never in the TV backup), newest copy wins (pulled at start, pushed
+  `players/<uid>` (only that account) as `data.<game id>.<key>` + `settings.<key>` (old builds' single `blob` string is still read; `blob` is now only a mark they can't parse; upload falls back to the old shape on 403 until the rules are republished), secrets in `arc_dev_acct` (never in the TV backup), newest copy wins (pulled at start, pushed
   after changes). Old local profiles keep working; Settings > Accounts > "Create an account for this profile" turns one into an account.
 - **Game controllers first** (owner decision): apps must use every controller button. `Input.onPadRaw` reports every button / axis
   change; `game-host.js` forwards it to installed apps (`gp` messages, only while running) as `MyPC.gamepad` (API 9; standalone the
