@@ -107,17 +107,130 @@ var Desktop = (function () {
 
     /* ---------------- desktop icons ---------------- */
 
+    // the shortcuts a profile removed from its home screen (they stay in Start): ids as in data-app / data-game
+    function hiddenList() { var l = Store.get('home_hidden', []); return Array.isArray(l) ? l : []; }
+    function onHome(id) { return id === 'getapp' || hiddenList().indexOf(id) < 0; }
+    function setOnHome(id, on) {
+        var l = hiddenList(), i = l.indexOf(id);
+        if (id === 'getapp' || (on ? i < 0 : i >= 0)) return;
+        if (on) l.splice(i, 1); else l.push(id);
+        Store.set('home_hidden', l);
+        renderIcons();
+    }
+
     function renderIcons() {
         var box = $('desk-icons'), i;
+        function add(kind, item) { if (item && onHome(item.id)) box.appendChild(button('dicon', kind, item, true)); }
         box.innerHTML = '';
-        box.appendChild(button('dicon', 'app', appById('explorer'), true));
-        box.appendChild(button('dicon', 'app', appById('browser'), true));
-        box.appendChild(button('dicon', 'app', appById('store'), true));
-        if (appById('gamepad')) box.appendChild(button('dicon', 'app', appById('gamepad'), true));   // phones and tablets only
+        add('app', appById('explorer'));
+        add('app', appById('browser'));
+        add('app', appById('store'));
+        add('app', appById('gamepad'));          // phones and tablets only
         box.appendChild(apkButton());
-        for (i = 0; i < games.length; i++) box.appendChild(button('dicon', 'game', games[i], true));
-        for (i = 0; i < installed.length; i++) box.appendChild(button('dicon', 'game', installed[i], true));
-        box.appendChild(button('dicon', 'app', appById('scores'), true));
+        for (i = 0; i < games.length; i++) add('game', games[i]);
+        for (i = 0; i < installed.length; i++) add('game', installed[i]);
+        add('app', appById('scores'));
+    }
+
+    /* ---------------- shortcut menu: hold OK, long-press or right-click a desktop icon or a Start tile ----------------
+     * Open / Remove from (or Add to) the home screen / Uninstall (installed apps; admins only once roles exist). */
+    var HOLD_MS = 600, holdEl = null, holdTimer = 0, pTimer = 0, px = 0, py = 0, swallowClick = false;
+
+    function shortcutOf(node) {
+        while (node && node.nodeType === 1) {
+            if (/(^| )(dicon|stile)( |$)/.test(node.className)) return node;
+            node = node.parentNode;
+        }
+        return null;
+    }
+    function shortcutId(b) { return b.getAttribute('data-app') || b.getAttribute('data-game'); }
+    function canUninstall() { return typeof Profiles === 'undefined' || typeof Profiles.isAdmin !== 'function' || Profiles.isAdmin(); }
+    function menuOpen() { return !$('dmenu-wrap').hidden; }
+
+    function openMenu(b) {
+        var id = shortcutId(b), g = b.getAttribute('data-game') ? gameById(id) : null, inStart = $('start').contains(b);
+        var label = g ? I18n.pick(g.manifest.title) : ((b.querySelector('.lbl') || b).textContent || '');
+        if (!id) return;
+        if (!inStart) closeStart(true);
+        var wrap = $('dmenu-wrap'), m = $('dmenu');
+        m.innerHTML = '';
+        m.setAttribute('aria-label', label);
+        m.appendChild(el('div', 'dm-title', label));
+        function item(text, cls, fn) {
+            var x = el('button', 'dm-item' + (cls ? ' ' + cls : ''), text);
+            x.setAttribute('data-focus', '');
+            x.setAttribute('role', 'menuitem');
+            x.onclick = fn;
+            m.appendChild(x);
+        }
+        item(I18n.t('storeOpen'), '', function () { closeMenu(); b.click(); });
+        if (id !== 'getapp') {
+            if (!inStart) item(I18n.t('homeRemove'), '', function () {
+                var list = $('desk-icons').children, at = Array.prototype.indexOf.call(list, b);
+                closeMenu();
+                setOnHome(id, false);
+                Focus.focus(list[Math.min(at, list.length - 1)]);
+                App.toast(I18n.t('homeRemoved').replace('%s', label));
+            });
+            else if (!onHome(id)) item(I18n.t('homeAdd'), '', function () {
+                closeMenu();
+                setOnHome(id, true);
+                App.toast(I18n.t('homeAdded').replace('%s', label));
+            });
+        }
+        if (g && g.installed && canUninstall()) item(I18n.t('storeUninstall'), 'dm-danger', function () {
+            closeMenu();
+            App.confirm(I18n.t('storeUninstallTitle').replace('%s', label), I18n.t('storeUninstallText'), function () {
+                Cloud.uninstall(id.replace(/^app-/, ''));       // the desktop and Start redraw through Cloud.onChange
+                App.toast(I18n.t('storeUninstalled').replace('%s', label));
+                if (startOpen()) { renderStart(); Focus.focus($('start-pinned').firstChild); }
+                else Focus.focus(firstIcon());
+            });
+        });
+        wrap.hidden = false;
+        // beside the shortcut (stage pixels: the stage is scaled to the window), kept above the taskbar
+        var sr = $('stage').getBoundingClientRect(), k = sr.width / 1920 || 1, r = b.getBoundingClientRect();
+        var x = (r.right - sr.left) / k + 8, y = (r.top - sr.top) / k, w = m.offsetWidth, h = m.offsetHeight;
+        var rtl = document.documentElement.getAttribute('dir') === 'rtl';
+        if (rtl || x + w > 1904) x = (r.left - sr.left) / k - w - 8;
+        if (x < 16) x = Math.min(1904 - w, (r.right - sr.left) / k + 8);
+        y = Math.max(16, Math.min(y, 1080 - $('taskbar').offsetHeight - h - 16));
+        m.style.left = Math.round(x) + 'px';
+        m.style.top = Math.round(y) + 'px';
+        Focus.focus(b);
+        Focus.push(m, m.querySelector('.dm-item'));
+        A11y.announce(label);
+    }
+    function closeMenu() {
+        if (!menuOpen()) return;
+        $('dmenu-wrap').hidden = true;
+        $('dmenu').innerHTML = '';
+        Focus.pop();
+    }
+    function cancelHold() { clearTimeout(holdTimer); holdTimer = 0; holdEl = null; clearTimeout(pTimer); pTimer = 0; }
+
+    // touch and mouse: a long press (or a right click) opens the menu and the click that follows is swallowed
+    function bindHold(box) {
+        box.addEventListener('pointerdown', function (e) {
+            var b = e.button ? null : shortcutOf(e.target);
+            clearTimeout(pTimer); pTimer = 0;
+            if (!b) return;
+            px = e.clientX; py = e.clientY;
+            pTimer = setTimeout(function () { pTimer = 0; swallowClick = true; openMenu(b); }, HOLD_MS);
+        });
+        box.addEventListener('pointermove', function (e) {
+            if (pTimer && Math.abs(e.clientX - px) + Math.abs(e.clientY - py) > 16) { clearTimeout(pTimer); pTimer = 0; }
+        });
+        function stop() { clearTimeout(pTimer); pTimer = 0; }
+        box.addEventListener('pointerup', stop);
+        box.addEventListener('pointercancel', stop);      // the list started scrolling
+        box.addEventListener('contextmenu', function (e) {
+            var b = shortcutOf(e.target);
+            if (!b) return;
+            e.preventDefault();
+            stop();
+            if (!menuOpen()) openMenu(b);
+        });
     }
 
     // Get the app: on every device (owner decision), a shortcut to the latest My PC APK (android-controller/).
@@ -269,6 +382,8 @@ var Desktop = (function () {
         Focus.set($('desktop'), focusEl || tileFor(lastPlayed) || firstIcon());
     }
     function hide() {
+        cancelHold();
+        closeMenu();
         closeStart(true);
         $('desktop').hidden = true;
         stopClock();
@@ -308,13 +423,29 @@ var Desktop = (function () {
         if (keep && $(keep) && !$('desktop').hidden) Focus.focus($(keep));
     }
 
-    // router (main.js): the desktop and the Start menu
-    function action(a, repeat) {
+    // router (main.js): the desktop, the Start menu and the shortcut menu. pressed === false: OK was let go
+    // (OK on a shortcut opens it when let go; held for HOLD_MS it opens the shortcut menu instead)
+    function action(a, repeat, pressed) {
+        if (pressed === false) {
+            if (a !== 'confirm' || !holdTimer) return;
+            var h = holdEl;
+            cancelHold();
+            if (h && h.parentNode) h.click();
+            return;
+        }
         if (a === 'left' || a === 'right' || a === 'up' || a === 'down') Focus.move(a);
-        else if (a === 'confirm' && !repeat) { var c = Focus.current(); if (c) c.click(); }
-        else if (a === 'guide' && !repeat) toggleStart();                 // the Guide key = the Windows key
+        else if (a === 'confirm' && !repeat) {
+            var c = Focus.current();
+            cancelHold();
+            if (c && !menuOpen() && shortcutOf(c) === c) {
+                holdEl = c;
+                holdTimer = setTimeout(function () { var b = holdEl; holdTimer = 0; holdEl = null; if (b && b.parentNode) openMenu(b); }, HOLD_MS);
+            } else if (c) c.click();
+        }
+        else if (a === 'guide' && !repeat) { closeMenu(); toggleStart(); }   // the Guide key = the Windows key
         else if ((a === 'back' || a === 'cancel') && !repeat) {
-            if (startOpen()) closeStart();
+            if (menuOpen()) closeMenu();
+            else if (startOpen()) closeStart();
             else App.confirm(I18n.t('exitTitle'), I18n.t('exitText'), App.exitApp);
         }
     }
@@ -325,6 +456,15 @@ var Desktop = (function () {
         onPlay = playCb;
         lastPlayed = Store.get('last_game', null);
         render();
+        bindHold($('desk-icons'));
+        bindHold($('start-pinned'));
+        $('dmenu-wrap').addEventListener('click', function (e) { if (e.target === this) closeMenu(); });
+        document.addEventListener('pointerdown', function () { swallowClick = false; }, true);
+        document.addEventListener('click', function (e) {
+            if (!swallowClick) return;
+            swallowClick = false;
+            e.preventDefault(); e.stopPropagation();
+        }, true);
         // the Windows key (PC keyboards) opens Start
         document.addEventListener('keydown', function (e) {
             if ((e.keyCode === 91 || e.keyCode === 92) && !$('desktop').hidden && !GameHost.active()) { e.preventDefault(); toggleStart(); }
@@ -338,6 +478,7 @@ var Desktop = (function () {
         init: init, show: show, hide: hide, render: render, action: action, play: play,
         releaseImages: releaseImages, restoreImages: restoreImages, tileFor: tileFor, iconForApp: iconForApp,
         startOpen: startOpen, openStart: openStart, closeStart: closeStart, profileChanged: profileChanged,
+        onHome: onHome, setOnHome: setOnHome, openMenu: openMenu, closeMenu: closeMenu, menuOpen: menuOpen,
         updateTray: updateTray, tick: tick, wallpaper: wallpaper, setWallpaper: setWallpaper, WALLPAPERS: WALLPAPERS,
         APPS: APPS, appById: appById, coverUrl: coverUrl, dateText: dateText, timeText: timeText, locale: locale,
         setInstalled: setInstalled, fromCloud: fromCloud,

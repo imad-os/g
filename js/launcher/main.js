@@ -127,7 +127,11 @@ var App = (function () {
         if (GameHost.active()) return GameHost.onAction(action, pressed, repeat, dev);
 
         if (action === 'padLost') { toast(I18n.t('padOff').split('.')[0]); return; }
-        if (!pressed) return;
+        if (!pressed) {
+            // OK let go on the desktop: opens the shortcut (held long, it showed the shortcut menu instead)
+            if (action === 'confirm' && !Keyboard.isOpen() && !ProfilesUI.screenOpen() && !Win.isOpen()) Desktop.action(action, repeat, false);
+            return;
+        }
 
         // top to bottom: keyboard over everything, profiles overlay, the open app, the desktop
         if (Keyboard.isOpen()) return Keyboard.action(action, repeat);

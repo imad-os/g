@@ -869,6 +869,42 @@ async function main() {
         check(await page.evaluate(() => Desktop.startOpen() && document.querySelectorAll('#start-pinned [data-focus]').length === 14), 'Start menu lists 7 apps (with the App Store) and 7 games');
         await key('Escape');
         check(await page.evaluate(() => !Desktop.startOpen() && document.activeElement.id === 'tb-start'), 'Back closes Start');
+        // shortcut menu: hold OK on a shortcut (a short press still opens it), a long press with the mouse or a finger, a right click
+        await page.focus('#desk-icons [data-game="parchis"]');
+        await page.keyboard.down('Enter'); await page.waitForTimeout(800); await page.keyboard.up('Enter');
+        check(await page.evaluate(() => Desktop.menuOpen() && GameHost.state() === 'idle' && [...document.querySelectorAll('#dmenu .dm-item')].map((b) => b.textContent).join('|') === 'Open|Remove from home screen' && document.activeElement.textContent === 'Open'),
+            'holding OK on a shortcut opens its menu instead of the game (Open, Remove; no Uninstall for a built-in game)');
+        await key('ArrowDown', 'Enter');
+        check(await page.evaluate(() => !Desktop.menuOpen() && !document.querySelector('#desk-icons [data-game="parchis"]') && !Desktop.onHome('parchis') && Store.get('home_hidden', []).indexOf('parchis') >= 0 && document.activeElement.classList.contains('dicon')),
+            'Remove from home screen hides the shortcut for this profile; the focus stays on the desktop');
+        await page.focus('#tb-start'); await key('Enter');
+        const tbox = await (await page.$('#start-pinned [data-game="parchis"]')).boundingBox();
+        await page.mouse.move(tbox.x + tbox.width / 2, tbox.y + tbox.height / 2); await page.mouse.down(); await page.waitForTimeout(800); await page.mouse.up();
+        check(await page.evaluate(() => Desktop.menuOpen() && Desktop.startOpen() && GameHost.state() === 'idle' && [...document.querySelectorAll('#dmenu .dm-item')].map((b) => b.textContent).join('|') === 'Open|Add to home screen'),
+            'a long press on a Start tile shows its menu with Add to home screen, and does not open the game');
+        await page.click('#dmenu button:nth-of-type(2)');
+        check(await page.evaluate(() => !Desktop.menuOpen() && Desktop.startOpen() && Desktop.onHome('parchis') && !!document.querySelector('#desk-icons [data-game="parchis"]')), 'Add to home screen brings the shortcut back');
+        await key('Escape');
+        await page.click('#desk-icons [data-app="explorer"]', { button: 'right' });
+        check(await page.evaluate(() => Desktop.menuOpen() && document.querySelectorAll('#dmenu .dm-item').length === 2), 'a right click opens the menu too');
+        await key('Escape');
+        check(await page.evaluate(() => !Desktop.menuOpen() && document.activeElement.getAttribute('data-app') === 'explorer' && document.getElementById('window').hidden), 'Back closes the menu and goes back to the shortcut');
+        await key('Enter');
+        check(await page.evaluate(() => Win.current() === 'explorer'), 'a short OK still opens the shortcut');
+        await key('Escape');
+        // many shortcuts on a small screen: the icons scroll sideways, the focus brings the last one into view
+        await page.setViewportSize({ width: 740, height: 360 });
+        await page.waitForTimeout(150);
+        await page.evaluate(() => { Desktop.setInstalled(Array.from({ length: 60 }, (x, i) => ({ id: 'many' + i, name: 'App ' + i, type: 'game' }))); });
+        const fits = await page.evaluate(() => {
+            const box = document.getElementById('desk-icons'), l = box.querySelectorAll('.dicon'), last = l[l.length - 1];
+            last.focus();
+            const r = last.getBoundingClientRect(), b = box.getBoundingClientRect();
+            return JSON.stringify({ ok: box.scrollWidth > box.clientWidth && box.scrollLeft > 0 && r.left >= b.left - 1 && r.right <= b.right + 1, sw: box.scrollWidth, cw: box.clientWidth, sl: box.scrollLeft, r: [r.left, r.right], b: [b.left, b.right], a: document.activeElement === last });
+        });
+        check(JSON.parse(fits).ok, fits + ' ' + 'on a small screen, many shortcuts scroll sideways and the focused one is in view');
+        await page.evaluate(() => Desktop.setInstalled(Cloud.apps()));
+        await page.setViewportSize({ width: 1280, height: 720 });
         // calculator from the taskbar, with the remote
         await page.focus('#tb-calculator'); await key('Enter');
         check(await page.evaluate(() => !document.getElementById('window').hidden && document.getElementById('desktop').hidden), 'an app opens full screen and the desktop is hidden');
@@ -1082,6 +1118,16 @@ async function main() {
         await sp.keyboard.press('Enter'); await sp.waitForTimeout(200);
         check(await sp.evaluate(() => document.getElementById('msg').textContent === ''), 'standalone (no My PC): the SDK reads the keyboard itself');
         await sp.close();
+        // the shortcut menu (hold OK) of an installed app: Open, Remove from home screen, Uninstall (asks first)
+        await page.focus(icon);
+        await page.keyboard.down('Enter'); await page.waitForTimeout(800); await page.keyboard.up('Enter');
+        check(await page.evaluate(() => Desktop.menuOpen() && GameHost.state() === 'idle' && [...document.querySelectorAll('#dmenu .dm-item')].map((b) => b.textContent).join('|') === 'Open|Remove from home screen|Uninstall'),
+            'holding OK on an installed app shows Open, Remove from home screen and Uninstall');
+        await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
+        check(await page.evaluate(() => App.dialogOpen() && /Uninstall Star Catcher/.test(document.getElementById('dialog-title').textContent)), 'Uninstall asks first');
+        await page.click('#dialog-yes');
+        await page.waitForFunction((s) => !document.querySelector(s), icon, { timeout: 3000 }).catch(() => {});
+        check(await page.evaluate((s) => !document.querySelector(s) && !Cloud.isInstalled('star-catcher') && document.activeElement.classList.contains('dicon'), icon), 'Uninstall from the shortcut menu removes the app from this TV');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }

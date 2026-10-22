@@ -59,6 +59,10 @@
   `tools/gen-levels.mjs`; after any change to chunks, the generator or the hero's physics
   (`Actors.TUNE` in `games/jumper/js/actors.js`) run `node tools/play-levels.mjs`: it plays every stage
   with a handicapped hero and must finish all of them with no traps.
+- **Home screen shortcuts**: hold OK (600 ms), long-press or right-click a desktop icon or Start tile -> menu Open / Remove from
+  (or Add to) home screen / Uninstall (installed apps, admins only: `Profiles.isAdmin()`). Short OK on a shortcut opens it on release
+  (`main.js` passes the OK release to `Desktop.action`). Removed ids per profile in `home_hidden` (`Desktop.onHome` / `setOnHome`);
+  too many icons scroll sideways in `#desk-icons`.
 - `apps/store.js`: the App Store app (Home / Games / Apps / Library / Search, Install / Open / Uninstall).
 - **App config:** each store app has a `config` object (Firestore `apps/<id>`, edited with the
   App Store Manager's Config button). The TV re-reads the app's document before it opens
