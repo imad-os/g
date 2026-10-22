@@ -365,6 +365,7 @@ var GameHost = (function () {
         hideLoading();
         setState('running');
         Input.setExternalPoll(!game.remote);    // an installed app cannot poll: the launcher reads the pads
+        AudioPrefs.prepareChime();
         screenSaver(false);     // the game polls gamepads at the start of each frame
         screenSaver(false);
         $('game-layer').setAttribute('aria-label', title());

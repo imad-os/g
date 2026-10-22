@@ -10,7 +10,7 @@ OUT=build/wgt
 rm -rf build
 mkdir -p "$OUT"
 node tools/validate-levels.mjs
-cp -R config.xml index.html app.html app-manifest.json icon.png .nojekyll css js games "$OUT"/
+cp -R config.xml index.html app.html app-manifest.json icon.png .nojekyll css js games sounds "$OUT"/
 find "$OUT" -name '*.md' -delete
 tizen package -t wgt -s "${TIZEN_PROFILE:-arcade}" -- "$OUT"
 ls -la "$OUT"/*.wgt

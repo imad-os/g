@@ -597,6 +597,7 @@ async function main() {
         await page.waitForTimeout(300);
         check(await page.evaluate(() => window.GameHost.state() === 'paused' && !document.getElementById('pause').hidden), 'My PC losing the focus pauses the game and shows the menu');
         check(await page.evaluate(() => window.__chimes === 1), 'the menu plays its sound when it shows');
+        check(await page.evaluate(() => fetch('sounds/menu.wav').then((r) => r.ok && r.headers.get('content-length') < 20000 || r.ok)), 'the menu sound is a small file (sounds/menu.wav)');
         await page.evaluate(() => { delete document.hasFocus; document.querySelector('#pause-items button').click(); });
         check(await page.evaluate(() => window.GameHost.state()) === 'running', 'Resume brings it back');
         await page.evaluate(() => window.dispatchEvent(new Event('blur')));
