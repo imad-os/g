@@ -425,8 +425,8 @@ var GameHost = (function () {
     // the app may keep running while My PC is in the background: "allow_background_running": true in its config
     // (App Store Manager > Config, or a built-in game's game-manifest.json)
     function runsInBackground() {
-        var c = game && (game.remote ? game.remote.config : game.manifest);
-        return !!(c && c.allow_background_running === true);
+        var c = game && (game.remote ? game.remote.config : game.manifest), v = c && c.allow_background_running;
+        return v === true || v === 'true' || v === 1;       // a JSON typed by hand may give "true"
     }
 
     // My PC lost the focus (TV: another app or source; PC: window minimized or another window; phone: app switched):
@@ -446,6 +446,9 @@ var GameHost = (function () {
         Input.setExternalPoll(false);   // the game loop is stopped (or under the menu): the launcher reads the gamepads
         if (!bgRun) screenSaver(true);
         var first = renderPause(typeof focusId === 'string' ? focusId : undefined);
+        var bg = runsInBackground(), tag = $('pause-bg');
+        tag.className = 'pause-bg' + (bg ? ' on' : '');
+        tag.textContent = I18n.t(bg ? 'bgOn' : 'bgOff');
         $('pause').hidden = false;
         Focus.push($('pause'), first);
         AudioPrefs.chime();

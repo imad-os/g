@@ -1051,6 +1051,7 @@ async function main() {
         await loseFocus();
         check(await page.evaluate(() => window.GameHost.state() === 'paused' && !document.getElementById('pause').hidden) && (await frame.evaluate(() => __life.join())) === 'pause',
             'My PC losing the focus pauses the app (onPause) under My PC\'s menu');
+        check(await page.evaluate(() => { const t = document.getElementById('pause-bg'); return !t.classList.contains('on') && t.textContent === 'Background: off'; }), 'the menu shows a grey "Background: off" tag');
         await page.evaluate(() => document.querySelector('#pause-items button').click());
         await page.waitForTimeout(150);
         check(await frame.evaluate(() => __life.join()) === 'pause,resume', 'Resume resumes it (onResume)');
@@ -1111,6 +1112,7 @@ async function main() {
         await loseFocus();
         check(await page.evaluate(() => window.GameHost.state() === 'paused' && !document.getElementById('pause').hidden) && (await f2.evaluate(() => __life.length)) === 0,
             'allow_background_running: losing the focus shows My PC\'s menu but does not pause the app');
+        check(await page.evaluate(() => { const t = document.getElementById('pause-bg'); return t.classList.contains('on') && t.textContent === 'Background: on'; }), 'the menu shows a green "Background: on" tag');
         await page.evaluate(() => document.querySelector('#pause-items button').click());
         await page.waitForTimeout(150);
         check(await page.evaluate(() => window.GameHost.state()) === 'running' && (await f2.evaluate(() => __life.length)) === 0, 'Resume closes the menu without a resume message');
