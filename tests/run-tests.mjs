@@ -3079,9 +3079,8 @@ async function main() {
         await tv.waitForTimeout(300);
         check(!!uid && await tv.evaluate(() => Profiles.current().id === 'p1' && Profiles.current().user === 'imad12'), 'the account imad12 is created in Firebase Authentication and linked to this profile');
         check(!!db.players[uid] && db.players[uid].data.snake.lvl === '5' && db.players[uid].user === 'imad12', 'the profile\'s saves are in players/<uid> (data.<game>.<key>)');
-        check(typeof db.players[uid].settings === 'object' && !Object.keys(db.players[uid].settings).some((k) => /^game_/.test(k)) && db.players[uid].blob === 'in data',
-            'other keys are in settings; blob is only a mark older builds cannot read');
-        check(await tv.evaluate(() => { try { JSON.parse('in data'); return false; } catch (e) { return true; } }), 'an older build fails to parse the mark (so it never applies an empty copy)');
+        check(typeof db.players[uid].settings === 'object' && !Object.keys(db.players[uid].settings).some((k) => /^game_/.test(k)) && !('blob' in db.players[uid]),
+            'other keys are in settings; no old blob field');
         check(db.playerAuth.every((t) => t.indexOf('id-' + uid) === 0), 'players/<uid> is only reached with that account\'s token');
         const ls = await tv.evaluate(() => Object.keys(localStorage).map((k) => k + '=' + localStorage.getItem(k)).join('\n'));
         check(ls.indexOf('Secret#1') < 0 && JSON.stringify(db.players[uid]).indexOf('Secret#1') < 0, 'the password is stored nowhere in plain text');
@@ -3125,8 +3124,23 @@ async function main() {
         await signedIn(tv);
         check(await tv.evaluate(() => Store.get('game_snake_lvl') === 11 && Store.get('game_app-real-soccer-6_data').goals === 3), 'an old single-blob copy is still read (no save lost)');
         await tv.evaluate(() => new Promise((res) => Accounts.upload(Store.profile(), res)));
-        check(db.players[uid].data.snake.lvl === '11' && db.players[uid].data['app-real-soccer-6'].data === '{"goals":3}' && db.players[uid].settings.theme === '"win11"' && db.players[uid].blob === 'in data',
-            'the next upload writes it as data.<game>.<key> + settings');
+        await tv.waitForFunction(() => true); await tv.waitForTimeout(300);
+        check(db.players[uid].data.snake.lvl === '11' && db.players[uid].data['app-real-soccer-6'].data === '{"goals":3}' && db.players[uid].settings.theme === '"win11"' && !('blob' in db.players[uid]),
+            'the next upload writes it as data.<game>.<key> + settings and removes the old blob');
+        // a copy with both shapes (old blob left next to data): merged, nothing lost, then the blob goes
+        db.players[uid].blob = JSON.stringify({ 'game_hopper_best': '[7]', 'game_snake_lvl': '1' });
+        await tv.evaluate(() => Store.remove('game_hopper_best'));
+        const merged = await tv.evaluate(() => new Promise((res) => Accounts.pull(Store.profile(), 3000, res)));
+        await tv.waitForTimeout(300);
+        check(await tv.evaluate(() => Store.get('game_snake_lvl') === 11 && JSON.stringify(Store.get('game_hopper_best')) === '[7]') && merged === true,
+            'old blob keys this device lacks are merged in (hopper), the newer value wins (snake 11)');
+        check(!('blob' in db.players[uid]) && db.players[uid].data.hopper.best === '[7]' && db.players[uid].data.snake.lvl === '11', 'then the doc is written in the new shape without the blob');
+        // a newer copy that lacks a key never wipes this device's progress
+        await tv.evaluate(() => Store.set('game_merge_best', 4096));
+        db.players[uid] = Object.assign({}, db.players[uid], { at: Date.now() + 120000, data: { snake: { lvl: '13' } } });
+        const pr = await tv.evaluate(() => new Promise((res) => Accounts.pull(Store.profile(), 3000, res)));
+        const kept = await tv.evaluate(() => [Store.get('game_snake_lvl'), Store.get('game_merge_best'), JSON.stringify(Store.get('game_hopper_best'))].join());
+        check(kept === '13,4096,[7]', 'a newer copy (another device) wins over an older local change, updates what it has and keeps what it lacks (' + kept + ')');
         // rules not published again yet: the upload falls back to the old shape instead of failing
         db.oldPlayerRules = true;
         await tv.evaluate(() => Store.set('game_snake_lvl', 12));
@@ -3134,7 +3148,7 @@ async function main() {
         check(old === null && !db.players[uid].data && JSON.parse(db.players[uid].blob).game_snake_lvl === '12', 'with the old rules the copy is saved in the old shape');
         db.oldPlayerRules = false;
         await tv.evaluate(() => new Promise((res) => Accounts.upload(Store.profile(), res)));
-        check(db.players[uid].data.snake.lvl === '12', 'and in the new shape once the rules are published');
+        check(db.players[uid].data.snake.lvl === '12' && !('blob' in db.players[uid]), 'and in the new shape (old blob removed) once the rules are published');
         const prules = fs.readFileSync(path.join(ROOT, 'firebase/firestore.rules'), 'utf8');
         check(/d\.data is map/.test(prules) && /shortText\(d\.blob, 20\)/.test(prules), 'the rules want data as a map and refuse a whole-profile blob');
 

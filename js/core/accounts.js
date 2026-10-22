@@ -129,9 +129,9 @@ var Accounts = (function () {
     }
     /* The cloud copy is browsable in the Firebase console: data.<game id>.<key> holds a game's saves (localStorage
      * "game_<id>_<key>", the value as stored), settings.<key> the rest of the profile. Older builds wrote all of it
-     * as one JSON string "blob": it is still read, and a new copy keeps blob = OLD_MARK, which those builds cannot
-     * parse, so they never apply an empty copy over a profile (and the rules refuse their whole-blob writes). */
-    var GAME_KEY = /^game_([a-z0-9-]+)_(.+)$/, RESERVED = /^__.*__$/, OLD_MARK = 'in data';
+     * as one JSON string "blob". A copy that still has one is merged (no key lost: the new fields win on the same
+     * key, this device keeps what the copy does not have) and the next upload writes it without the blob. */
+    var GAME_KEY = /^game_([a-z0-9-]+)_(.+)$/, RESERVED = /^__.*__$/;
     function split(keys) {
         var data = {}, settings = {}, m;
         for (var k in keys) {
@@ -140,44 +140,63 @@ var Accounts = (function () {
         }
         return { data: data, settings: settings };
     }
-    // the profile's keys from a cloud copy, new or old shape (null: nothing usable)
+    // the old single string, if the copy still has a real one (null: none, or the short mark of build 71)
+    function legacyOf(d) {
+        var o = null;
+        if (typeof d.blob !== 'string' || d.blob.charAt(0) !== '{') return null;
+        try { o = JSON.parse(d.blob); } catch (e) { return null; }
+        return o && typeof o === 'object' ? o : null;
+    }
+    // the profile's keys from a cloud copy, old and new shape merged (null: nothing usable in it)
     function keysOf(d) {
-        var out = {}, k, id;
+        var out = legacyOf(d), k, id, any = !!out;
+        out = out || {};
+        if (d.settings && typeof d.settings === 'object') { any = true; for (k in d.settings) out[k] = d.settings[k]; }
         if (d.data && typeof d.data === 'object') {
-            var st = d.settings && typeof d.settings === 'object' ? d.settings : {};
-            for (k in st) out[k] = st[k];
+            any = true;
             for (id in d.data) {
                 var g = d.data[id];
                 if (g && typeof g === 'object') for (k in g) out['game_' + id + '_' + k] = g[k];
             }
-            return out;
         }
-        try { out = JSON.parse(d.blob || '{}'); } catch (e) { return null; }
-        return out && typeof out === 'object' ? out : null;
+        return any ? out : null;
     }
     function docFor(pid, legacy) {
         var p = Profiles.find(pid) || {}, keys = snapshot(pid), size = JSON.stringify(keys).length;
         var d = { user: p.user || '', name: p.name || '', color: p.color || '', size: size, at: Date.now(), from: Device.model() };
         if (legacy) d.blob = JSON.stringify(keys);
-        else { var s = split(keys); d.data = s.data; d.settings = s.settings; d.blob = OLD_MARK; }
+        else { var s = split(keys); d.data = s.data; d.settings = s.settings; }
         if (p.av) d.av = p.av;
         if (p.photo) d.photo = p.photo;
         return d;
     }
-    // puts a cloud copy in place of this profile's data (without the write hooks: it is not a local change)
+    // a time in ms (not "| 0": that cuts it to 32 bits, and a cut time against a whole one picks the wrong copy)
+    function ms(v) { v = +v; return v > 0 ? v : 0; }
+    function okKey(k, v) { return typeof v === 'string' && /^[a-z0-9_.-]{1,80}$/i.test(k); }
+    // puts a newer cloud copy over this profile's data (without the write hooks: it is not a local change).
+    // Keys this device has and the copy lacks are kept, so a copy that misses something never wipes progress.
     function apply(pid, data) {
         var keys = keysOf(data);
         if (!keys) return false;
         var pre = prefix(pid);
         try {
-            var drop = [];
-            for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf(pre) === 0) drop.push(k); }
-            for (i = 0; i < drop.length; i++) localStorage.removeItem(drop[i]);
-            for (var key in keys) if (typeof keys[key] === 'string' && /^[a-z0-9_.-]{1,80}$/i.test(key)) localStorage.setItem(pre + key, keys[key]);
+            for (var key in keys) if (okKey(key, keys[key])) localStorage.setItem(pre + key, keys[key]);
             localStorage.setItem('arc_dev_backup_dirty', '1');          // the TV backup copies it later
         } catch (e2) {}
         Profiles.setMeta(pid, data);
         return true;
+    }
+    // an older copy that still has the old blob: what this device lacks comes from it (this device wins), then
+    // the next upload writes the merged profile in the new shape, without the blob. 0: no blob, -1: nothing added
+    function migrate(pid, data) {
+        if (!legacyOf(data)) return 0;
+        var keys = keysOf(data), pre = prefix(pid), added = 0;
+        try {
+            for (var key in keys) if (okKey(key, keys[key]) && localStorage.getItem(pre + key) === null) { localStorage.setItem(pre + key, keys[key]); added++; }
+            if (added) localStorage.setItem('arc_dev_backup_dirty', '1');
+        } catch (e) {}
+        setDirty(pid, Date.now());                 // uploaded soon (also after a reload: Accounts.start)
+        return added || -1;
     }
 
     function upload(pid, cb) {
@@ -213,12 +232,14 @@ var Accounts = (function () {
                 var mine = dirtyMap()[pid] || 0;
                 if (e2 === 'notfound') { upload(pid); return finish(false); }
                 if (e2 || !data) return finish(false);
-                if ((data.at | 0) > (s.at | 0) && !(mine && mine > (data.at | 0))) {
+                if (ms(data.at) > ms(s.at) && !(mine && mine > ms(data.at))) {
                     var ok = apply(pid, data);
                     var cur = sec(pid);
-                    if (ok && cur) { cur.at = data.at | 0; setSec(pid, cur); setDirty(pid, 0); }
+                    if (ok && cur) { cur.at = ms(data.at); setSec(pid, cur); setDirty(pid, legacyOf(data) ? Date.now() : 0); }
                     return finish(ok);
                 }
+                var added = migrate(pid, data);
+                if (added) { upload(pid); return finish(added > 0); }
                 if (mine) schedule(pid, 3000);
                 finish(false);
             }, t);
@@ -287,12 +308,13 @@ var Accounts = (function () {
             }
             var before = sec(pid);
             link(pid, user, pw, r);
-            if (before && before.uid === r.localId) { var s = sec(pid); s.at = before.at | 0; setSec(pid, s); }
+            if (before && before.uid === r.localId) { var s = sec(pid); s.at = ms(before.at); setSec(pid, s); }
             Cloud.get('players/' + r.localId, 8000, function (e2, data) {
                 var cur = sec(pid);
-                if (!e2 && data && cur && ((data.at | 0) > (cur.at | 0) || fresh) && !((dirtyMap()[pid] || 0) > (data.at | 0))) {
-                    if (apply(pid, data)) { cur.at = data.at | 0; setSec(pid, cur); setDirty(pid, 0); }
-                } else if (e2 === 'notfound' || (cur && dirtyMap()[pid])) upload(pid);
+                if (!e2 && data && cur && (ms(data.at) > ms(cur.at) || fresh) && !((dirtyMap()[pid] || 0) > ms(data.at))) {
+                    if (apply(pid, data)) { cur.at = ms(data.at); setSec(pid, cur); setDirty(pid, 0); }
+                    if (legacyOf(data)) upload(pid);                     // written again without the old blob
+                } else if (e2 === 'notfound' || (cur && dirtyMap()[pid]) || (!e2 && data && migrate(pid, data))) upload(pid);
                 cb(null, pid);
             }, r.idToken);
         });
@@ -305,7 +327,7 @@ var Accounts = (function () {
         if (!p || !p.user) return cb(false, 'wrong');
         auth('signInWithPassword', { email: email(p.user), password: pw }, function (err, r) {
             if (err) return cb(false, err === 'offline' && s && s.h ? 'wrong' : err);
-            var keep = s && s.uid === r.localId ? s.at | 0 : 0;
+            var keep = s && s.uid === r.localId ? ms(s.at) : 0;
             link(pid, p.user, pw, r);
             var n = sec(pid); n.at = keep; setSec(pid, n);
             cb(true);
@@ -320,7 +342,7 @@ var Accounts = (function () {
             if (err) return cb(err);
             auth('update', { idToken: r.idToken, password: pw }, function (e2, r2) {
                 if (e2) return cb(e2);
-                var keep = (sec(pid) || {}).at | 0;
+                var keep = ms((sec(pid) || {}).at);
                 link(pid, p.user, pw, { localId: r.localId, refreshToken: r2.refreshToken || r.refreshToken, idToken: r2.idToken || r.idToken, expiresIn: r2.expiresIn });
                 var n = sec(pid); n.at = keep; setSec(pid, n);
                 cb(null);

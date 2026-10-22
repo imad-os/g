@@ -222,8 +222,8 @@ service cloud.firestore {
 
     // Player accounts (js/core/accounts.js): a profile signed in with Firebase Authentication (username@players.mypc.app
     // + password). Only that account reads or writes its own copy: settings, saves and picture of the profile.
-    // data.<game id>.<key> = a game's saves, settings.<key> = the rest. blob is only the short mark that stops builds
-    // from before data / settings from reading the copy; their whole-profile blob writes are refused.
+    // data.<game id>.<key> = a game's saves, settings.<key> = the rest. The old whole-profile blob string is refused
+    // (My PC merges an old one into data and writes the doc again without it).
     function validPlayer(d) {
       return d.keys().hasOnly(['user', 'name', 'color', 'av', 'photo', 'blob', 'data', 'settings', 'size', 'at', 'from'])
           && shortText(d.user, 16) && shortText(d.name, 24) && shortText(d.color, 9)
