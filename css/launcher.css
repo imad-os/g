@@ -48,6 +48,7 @@ svg { display: block; width: 100%; height: 100%; }
     background-image: radial-gradient(35% 40% at 50% 75%, rgba(255, 190, 90, 0.95) 0%, rgba(255, 110, 90, 0.6) 45%, rgba(42, 15, 46, 0) 100%),
                       radial-gradient(70% 40% at 50% 100%, rgba(255, 90, 120, 0.6) 0%, rgba(42, 15, 46, 0) 100%),
                       linear-gradient(180deg, #120a2a 0%, #4a1748 50%, #7a2a48 100%); }
+.wp-img { background-color: #07122a; background-size: cover; background-position: center; }
 .wp-night { background-color: #03040c;
     background-image: radial-gradient(2px 2px at 20% 30%, #fff 50%, rgba(255, 255, 255, 0) 100%), radial-gradient(2px 2px at 70% 20%, #fff 50%, rgba(255, 255, 255, 0) 100%),
                       radial-gradient(2px 2px at 40% 60%, #cfe3ff 50%, rgba(255, 255, 255, 0) 100%), radial-gradient(3px 3px at 85% 55%, #fff 50%, rgba(255, 255, 255, 0) 100%),
@@ -245,6 +246,7 @@ svg { display: block; width: 100%; height: 100%; }
 .compact .cp-ic { width: 88px; height: 88px; }
 .compact .cp-home { padding: 24px 48px; }
 .compact .cp-title { display: none; }
+.set-wp-img { background-color: #1b1b1b; background-size: cover; background-position: center; }
 .set-wp.on { border-color: #4cc2ff; }
 .set-wp-name { position: absolute; left: 0; bottom: 0; width: 100%; padding: 8px; font-size: 20px; background: rgba(0, 0, 0, 0.55); }
 

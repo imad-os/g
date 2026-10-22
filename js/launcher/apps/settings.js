@@ -463,6 +463,10 @@
         page = id; sub = null;
         stopPadTest();
         if (id === 'update') Updater.autoCheck();
+        if (id === 'personal' && typeof GlobalSettings !== 'undefined') GlobalSettings.sync(function (e, changed) {
+            Desktop.paintWallpaper();
+            if (changed && Win.current() === 'settings' && page === 'personal' && !(Focus.current() && inMain(Focus.current()))) renderMain();
+        });
         if (id === 'ai') Bridges.syncAi(function () { if (Win.current() === 'settings' && page === 'ai' && !(Focus.current() && inMain(Focus.current()))) renderMain(); });
         var btns = nav.querySelectorAll('.set-nav-btn');
         for (var i = 0; i < btns.length; i++) btns[i].className = 'set-nav-btn' + (btns[i].getAttribute('data-page') === id ? ' on' : '');
@@ -611,21 +615,27 @@
     function wallpaperRow(r) {
         var box = el('div', 'set-wps');
         box.appendChild(el('div', 'set-row-name', r.label));
-        var list = el('div', 'set-wp-list'), cur = Desktop.wallpaper();
-        for (var i = 0; i < Desktop.WALLPAPERS.length; i++) {
-            var w = Desktop.WALLPAPERS[i], b = el('button', 'set-wp wp-' + w + (w === cur ? ' on' : ''));
+        var list = el('div', 'set-wp-list'), cur = Desktop.wallpaper(), all = Desktop.wallpapers();
+        function mark() {
+            var bs = list.querySelectorAll('.set-wp'), now = Desktop.wallpaper();
+            for (var k = 0; k < bs.length; k++) {
+                var on = bs[k].getAttribute('data-wp') === now;
+                bs[k].className = bs[k].className.replace(/ on$/, '') + (on ? ' on' : '');
+                bs[k].setAttribute('aria-label', bs[k].getAttribute('data-name') + (on ? '. ' + t('active') : ''));
+            }
+        }
+        for (var i = 0; i < all.length; i++) {
+            var w = all[i], b = el('button', 'set-wp ' + (w.url ? 'set-wp-img' : 'wp-' + w.id));
             b.setAttribute('data-focus', '');
-            b.setAttribute('data-wp', w);
-            b.setAttribute('aria-label', t('wp_' + w) + (w === cur ? '. ' + t('active') : ''));
-            b.appendChild(el('span', 'set-wp-name', t('wp_' + w)));
-            b.onclick = (function (name) { return function () {
-                Desktop.setWallpaper(name);
-                var all = list.querySelectorAll('.set-wp');
-                for (var k = 0; k < all.length; k++) all[k].className = 'set-wp wp-' + all[k].getAttribute('data-wp') + (all[k].getAttribute('data-wp') === name ? ' on' : '');
-                A11y.announce(t('wp_' + name));
-            }; })(w);
+            b.setAttribute('data-wp', w.id);
+            b.setAttribute('data-name', w.title);
+            // a picture added in the App Store Manager: its small version when there is one (cheaper to decode)
+            if (w.url) b.style.backgroundImage = 'url("' + (w.thumb || w.url) + '")';
+            b.appendChild(el('span', 'set-wp-name', w.title));
+            b.onclick = (function (id, title) { return function () { Desktop.setWallpaper(id); mark(); A11y.announce(title); }; })(w.id, w.title);
             list.appendChild(b);
         }
+        mark();
         box.appendChild(list);
         return box;
     }

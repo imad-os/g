@@ -6,6 +6,7 @@
 //      at 60 Hz (browser) and 100 Hz (Android app)
 //   4. Android controller app bridge (android-controller/app/src/main/assets/bridge.js)
 //   5. app bridges: WebProxy (local network check, base64, .wav) and AI (request shapes for Gemini, OpenAI-compatible, Claude, NVIDIA speech)
+//   6. GlobalSettings: titles taken from a picture's address, cleaning of settings/mypc
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -403,6 +404,19 @@ console.log('5. app bridges: WebProxy and AI request formats');
         'tasks per service: NVIDIA speaks through its Magpie function (editable, can be cleared), transcribes only once a function is set');
     A.remove('nvidia');
     check(A.defaultId() === 'gemini' && A.list().length === 1, 'removing the default service makes the next one the default');
+}
+
+console.log('6. GlobalSettings (settings of every My PC)');
+{
+    const G = load('js/core/global-settings.js', vm.createContext({ JSON, Array, String, Object, decodeURIComponent, localStorage: { getItem: () => null, setItem() {} } })).GlobalSettings;
+    check(G.titleFromUrl('https://x.com/pics/blue-lake_2.jpg?w=1920') === 'Blue lake 2' && G.titleFromUrl('https://x.com/a/Sunset%20Beach.webp#x') === 'Sunset Beach' &&
+        G.titleFromUrl('https://images.example.com/3f9a7c1e2b4d6f8a0c1e') === 'Images.example.com' && G.titleFromUrl('https://www.site.org/') === 'Site.org',
+        'a title from the address: the file name without extension and separators, else the site');
+    const c = G.clean({ wallpaper: 'u:https://a.b/1.jpg', wallpapers: [{ url: 'https://a.b/1.jpg', title: '' }, { url: 'https://a.b/1.jpg', title: 'Twice' },
+        { url: 'http://a.b/2.jpg' }, { url: 'https://a.b/3.jpg', title: '  Lake ', thumb: 'javascript:alert(1)' }, { url: 'https://a.b/x".jpg' }, null] });
+    check(c.wallpapers.length === 2 && c.wallpapers[0].title === '1' && c.wallpapers[1].title === 'Lake' && !c.wallpapers[1].thumb && c.wallpaper === 'u:https://a.b/1.jpg',
+        'only https pictures are kept, once each, with a safe address; an empty title is filled');
+    check(G.clean(null).wallpapers.length === 0 && G.clean({ wallpapers: 'x' }).wallpaper === '', 'a missing or broken document gives empty settings');
 }
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall unit checks passed');
 process.exit(failures ? 1 : 0);

@@ -80,6 +80,13 @@ The App Store Manager's **AI services** page writes one document, `settings/ai`:
 TVs never sign in, so this document is readable by anyone with the project's web key, like the catalog:
 use API keys with a spending limit (or a free tier) and replace a key in the page if it leaks.
 
+## 3a+. Settings for every My PC (`settings/mypc`)
+The App Store Manager's **Settings** page writes `settings/mypc`:
+`{ wallpapers: [{ url, title, thumb }], wallpaper, updatedAt, updatedBy }` (at most 40 pictures, https only).
+`wallpaper` is the background new profiles get (a built-in one like `bloom`, or `u:<picture url>`).
+Every My PC reads it at start and when Settings > Personalization opens (`js/core/global-settings.js`) and keeps a copy
+(`arc_dev_global`, not in the TV backup). **Publish the rules again** after this update (the `settings` block).
+
 ## 3b. What the TVs write
 | collection | document | written by | rules |
 |---|---|---|---|

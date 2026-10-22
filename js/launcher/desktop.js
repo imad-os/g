@@ -1,5 +1,5 @@
 /* The desktop: wallpaper, desktop icons (apps and games), taskbar with clock, and the Start menu.
- * Light on purpose for TVs: the wallpaper is CSS (no image), the clock ticks once a minute and
+ * Light on purpose for TVs: the built-in wallpapers are CSS (admins can add pictures for every My PC), the clock ticks once a minute and
  * only while the desktop is on screen, and game covers are released while an app or game runs. */
 var Desktop = (function () {
     'use strict';
@@ -356,8 +356,35 @@ var Desktop = (function () {
 
     /* ---------------- wallpaper ---------------- */
 
-    function wallpaper() { var w = Store.get('wallpaper', 'bloom'); return WALLPAPERS.indexOf(w) >= 0 ? w : 'bloom'; }
-    function setWallpaper(w) { Store.set('wallpaper', w); $('wallpaper').className = 'wp wp-' + wallpaper(); }
+    // built-in CSS ones + the pictures admins add for every My PC (App Store Manager > Settings, js/core/global-settings.js)
+    function wallpapers() {
+        var out = [], i;
+        for (i = 0; i < WALLPAPERS.length; i++) out.push({ id: WALLPAPERS[i], title: I18n.t('wp_' + WALLPAPERS[i]) });
+        var pics = typeof GlobalSettings !== 'undefined' ? GlobalSettings.wallpapers() : [];
+        for (i = 0; i < pics.length; i++) out.push(pics[i]);
+        return out;
+    }
+    function findWallpaper(id) { var l = wallpapers(); for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
+    function wallpaper() {
+        var def = typeof GlobalSettings !== 'undefined' ? GlobalSettings.defaultWallpaper() : '';
+        if (!findWallpaper(def)) def = 'bloom';
+        var w = Store.get('wallpaper', def);
+        return findWallpaper(w) ? w : def;
+    }
+    function setWallpaper(w) { Store.set('wallpaper', w); paintWallpaper(); }
+    // a picture shows only once it loaded (the Bloom colours meanwhile, and if the address is broken)
+    var wpShown = '';
+    function paintWallpaper() {
+        var box = $('wallpaper'), w = findWallpaper(wallpaper());
+        if (!box || !w || wpShown === w.id) return;
+        wpShown = w.id;
+        if (!w.url) { box.className = 'wp wp-' + w.id; box.style.backgroundImage = ''; return; }
+        if (box.className.indexOf('wp-img') < 0) { box.className = 'wp wp-bloom'; box.style.backgroundImage = ''; }
+        var im = new Image(), id = w.id;
+        im.onload = function () { if (wpShown !== id) return; box.className = 'wp wp-img'; box.style.backgroundImage = 'url("' + w.url + '")'; };
+        im.onerror = function () { if (wpShown === id) { box.className = 'wp wp-bloom'; box.style.backgroundImage = ''; } };
+        im.src = w.url;
+    }
 
     /* ---------------- show / hide ---------------- */
 
@@ -365,7 +392,7 @@ var Desktop = (function () {
         renderIcons();
         renderTaskbar();
         if (startOpen()) renderStart();
-        $('wallpaper').className = 'wp wp-' + wallpaper();
+        paintWallpaper();
         I18n.apply($('desktop'));
         Themes.apply();
     }
@@ -479,7 +506,7 @@ var Desktop = (function () {
         releaseImages: releaseImages, restoreImages: restoreImages, tileFor: tileFor, iconForApp: iconForApp,
         startOpen: startOpen, openStart: openStart, closeStart: closeStart, profileChanged: profileChanged,
         onHome: onHome, setOnHome: setOnHome, openMenu: openMenu, closeMenu: closeMenu, menuOpen: menuOpen,
-        updateTray: updateTray, tick: tick, wallpaper: wallpaper, setWallpaper: setWallpaper, WALLPAPERS: WALLPAPERS,
+        updateTray: updateTray, tick: tick, wallpaper: wallpaper, setWallpaper: setWallpaper, wallpapers: wallpapers, paintWallpaper: paintWallpaper, WALLPAPERS: WALLPAPERS,
         APPS: APPS, appById: appById, coverUrl: coverUrl, dateText: dateText, timeText: timeText, locale: locale,
         setInstalled: setInstalled, fromCloud: fromCloud,
         games: all, builtIn: function () { return games; }, installed: function () { return installed; },

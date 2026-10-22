@@ -322,6 +322,7 @@ var App = (function () {
             Accounts.start();
             World.flush();
             Bridges.syncAi();                                    // the AI services set in the App Store Manager
+            GlobalSettings.sync(function (e, changed) { if (changed) Desktop.paintWallpaper(); });   // its Settings (backgrounds)
             // One-time device benchmark while the menu is idle.
             setTimeout(function () {
                 if (!GameHost.active()) benchCancel = Perf.benchmark(function () { benchCancel = null; });

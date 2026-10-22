@@ -9,8 +9,10 @@
      to the My PC App Store (Firestore "apps"); each TV installs what its users pick in the App Store app.
      It also shows the statistics: TVs running My PC (their backup document), installs and opens per app,
      the devices that installed each app (date and profiles), world records. It also sets the AI services every My PC
-     uses for MyPC.ai (Firestore settings/ai), and the error reports of apps and TVs (Firestore errors, js/core/reports.js).
-     Pages: #overview #apps #app/<id> #add #ai #devices #device/<id> #records #errors #errors/<app id>. -->
+     uses for MyPC.ai (Firestore settings/ai), the error reports of apps and TVs (Firestore errors, js/core/reports.js) and the
+     Settings of every My PC (settings/mypc: backgrounds...).
+     Pages: #overview #apps #app/<id> #add #ai #settings #devices #device/<id> #records #errors #errors/<app id>.
+     A new page = a nav link (data-page) + a <section data-view> with the same name; route() finds both. -->
 <style>
   :root {
     color-scheme: dark;
@@ -63,7 +65,7 @@
   button.ghost:hover { background: var(--hover); color: var(--text); }
   button:disabled { opacity: 0.45; cursor: default; }
   button.icon { padding: 6px 9px; }
-  input[type=text], input[type=email], input[type=password], input:not([type]) { width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line); background: #0f1012; color: var(--text); font: inherit; }
+  input[type=text], input[type=email], input[type=password], input[type=url], input:not([type]) { width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line); background: #0f1012; color: var(--text); font: inherit; }
   input:focus, textarea:focus, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); flex: none; }
   label { display: block; margin: 12px 0 5px; color: var(--text-2); font-size: 13px; }
@@ -125,7 +127,7 @@
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px; border-radius: 14px; background: var(--panel-2); font-size: 12.5px; }
   .chip i { display: inline-block; width: 20px; height: 20px; border-radius: 50%; background: #3a4a66; color: #fff; font-style: normal; font-size: 11px; font-weight: 700; text-align: center; line-height: 20px; }
-  .recs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .recs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 12px; }
   .rec ol { margin: 8px 0 0; padding-left: 22px; }
   .rec li { padding: 2px 0; }
   .rec li span { float: right; font-variant-numeric: tabular-nums; color: var(--text-2); }
@@ -140,7 +142,7 @@
   .svc:last-child { border-bottom: 0; }
   .svc-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .svc-head b { font-size: 15px; }
-  .svc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0 16px; }
+  .svc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 0 16px; }
   .svc-grid .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
   .keybox { display: flex; gap: 6px; }
   .warn { border-color: #5a4a1a; background: #221d10; }
@@ -167,11 +169,59 @@
   .modal h3 { margin: 0 0 4px; font-size: 18px; }
   .toast { position: fixed; right: 24px; bottom: 24px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; box-shadow: 0 8px 30px rgba(0,0,0,.5); z-index: 20; }
 
+  /* Settings: backgrounds */
+  .wp-row { display: grid; grid-template-columns: 176px 1fr auto; gap: 16px; align-items: start; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+  .wp-row:last-child { border-bottom: 0; }
+  .wp-thumb { aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: #0f1012; border: 1px solid var(--line); margin-top: 6px; }
+  .wp-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .wp-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 0 14px; }
+  .wp-fields label { margin-top: 0; }
+  .wp-acts { display: flex; gap: 6px; margin-top: 24px; }
+
+  /* tablets and phones: the side bar becomes a top bar with a row of tabs that scrolls sideways */
   @media (max-width: 900px) {
-    .shell { grid-template-columns: 1fr; }
-    .side { position: static; height: auto; }
+    .shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+    .side, main { min-width: 0; }
+    .side { position: sticky; top: 0; z-index: 5; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; align-content: flex-start; padding: 8px 12px 0;
+            border-right: 0; border-bottom: 1px solid var(--line); }
+    .brand { flex: 1; min-width: 0; padding: 2px 4px 8px; }
+    .side-foot { margin: 0 0 8px; padding: 0; border-top: 0; display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .side-foot .who { margin: 0; max-width: 40vw; }
+    .brand b { white-space: nowrap; }
+    .nav { order: 3; flex: 1 0 100%; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; margin: 0 -12px; padding: 0 8px; }
+    .nav::-webkit-scrollbar { display: none; }
+    .nav a { flex: none; margin: 0; padding: 10px 12px; border-radius: 8px 8px 0 0; }
+    .nav a.on::before { left: 10px; right: 10px; top: auto; bottom: 0; width: auto; height: 3px; }
+    .nav .count { margin-left: 4px; }
     .grid.two { grid-template-columns: 1fr; }
-    main { padding: 20px 16px 40px; }
+    main { padding: 18px 16px 40px; }
+    .head { flex-wrap: wrap; align-items: center; gap: 10px; }
+    .head h1 { font-size: 22px; }
+    .card { padding: 16px; }
+    .card.flush { padding: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .card.flush table { min-width: 620px; }
+    .card-head { flex-wrap: wrap; }
+    .hero { flex-wrap: wrap; }
+    .kv { grid-template-columns: 1fr; gap: 2px; }
+    .kv dd { margin-bottom: 8px; }
+    .bar-row { grid-template-columns: minmax(80px, 34%) 1fr 44px; }
+    .tiles { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+    .app { flex-wrap: wrap; }
+    .app .acts { flex: 1 0 100%; justify-content: flex-start; }
+    .preview { flex-wrap: wrap; }
+    .wp-row { grid-template-columns: 1fr; gap: 10px; }
+    .wp-thumb { max-width: 220px; }
+    .wp-acts { margin-top: 0; }
+    .modal { padding: 10px; }
+    .modal .box { padding: 18px 16px; }
+    .toast { left: 12px; right: 12px; bottom: 12px; }
+  }
+  @media (max-width: 520px) { .side-foot .who { display: none; } }
+  /* touch screens: bigger targets, and 16px text so phones do not zoom into a field */
+  @media (pointer: coarse) {
+    button, .btn { min-height: 40px; }
+    input, select, textarea { font-size: 16px !important; }
+    input[type=checkbox] { width: 20px; height: 20px; }
   }
 </style>
 </head>
@@ -216,6 +266,7 @@
       <a href="#apps" data-page="apps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8V7a6 6 0 0 1 12 0v1"/><path d="M3.5 8h17l-1.4 12a2 2 0 0 1-2 1.8H6.9a2 2 0 0 1-2-1.8z"/></svg>Apps<span class="count" id="nav-apps"></span></a>
       <a href="#add" data-page="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Add apps</a>
       <a href="#ai" data-page="ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>AI services</a>
+      <a href="#settings" data-page="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</a>
       <a href="#devices" data-page="devices"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Devices<span class="count" id="nav-tvs"></span></a>
       <a href="#records" data-page="records"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5v1a3 3 0 0 0 3 3M16 6h3v1a3 3 0 0 1-3 3M12 13v4M8 21h8M9 17h6"/></svg>World records</a>
       <a href="#errors" data-page="errors"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2.5 20h19z"/><path d="M12 10v4M12 17.2v.3"/></svg>Errors<span class="count" id="nav-errors"></span></a>
@@ -353,6 +404,28 @@
       </div>
     </section>
 
+    <!-- Settings of every My PC -->
+    <section data-view="settings" hidden>
+      <div class="head"><div class="grow"><h1>Settings</h1><p>The same for every user of every My PC. Each TV, phone and computer gets them at its next start
+        (and when Settings &gt; Personalization opens).</p></div>
+        <button id="gs-save" class="primary" disabled>Save</button></div>
+      <p id="gs-msg" class="small"></p>
+      <div class="card flush">
+        <div class="card-head"><div class="grow"><h2>Backgrounds</h2>
+          <span class="muted small">Pictures every profile can pick in Settings &gt; Personalization, next to the built-in ones. https addresses only;
+            a 1920 × 1080 JPEG is best for TVs. Leave the title empty to take it from the address.</span></div></div>
+        <div id="gs-wps"></div>
+        <div class="row" style="padding:12px 18px;border-top:1px solid var(--line)">
+          <button id="gs-add">Add background</button><span class="grow"></span><span id="gs-count" class="muted small"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Background of new profiles</h2>
+        <p class="muted small" style="margin:0 0 8px">Also used by profiles that never picked one.</p>
+        <select id="gs-default" aria-label="Background of new profiles"></select>
+      </div>
+    </section>
+
     <!-- World records -->
     <section data-view="records" hidden>
       <div class="head"><div class="grow"><h1>World records</h1><p>The best scores of each game on every My PC.</p></div></div>
@@ -384,6 +457,7 @@
 
 <script src="installer-lib.js"></script>
 <script src="../js/core/ai.js"></script>
+<script src="../js/core/global-settings.js"></script>
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js';
   import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider,
@@ -456,9 +530,9 @@
   function route() {
     const h = location.hash.replace(/^#/, '') || 'overview';
     const [page, arg] = h.split('/');
-    const view = { app: 'app', device: 'device' }[page] || (['overview', 'apps', 'add', 'ai', 'devices', 'records', 'errors'].includes(page) ? page : 'overview');
+    const view = document.querySelector('[data-view="' + CSS.escape(page || '') + '"]') ? page : 'overview';
     document.querySelectorAll('[data-view]').forEach((s) => { s.hidden = s.dataset.view !== view; });
-    const navKey = view === 'app' ? 'apps' : view === 'device' ? 'devices' : view;
+    const navKey = { app: 'apps', device: 'devices' }[view] || view;
     document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('on', a.dataset.page === navKey));
     if (view === 'app') renderApp(decodeURIComponent(arg || ''));
     if (view === 'device') renderDevice(decodeURIComponent(arg || ''));
@@ -480,6 +554,10 @@
       try { const a = await getDoc(doc(db, 'settings', 'ai')); ai = a.exists() ? { list: (a.data().list || []).map(AI.clean), def: a.data().def || '' } : { list: [], def: '' }; aiErr = ''; }
       catch (e) { aiErr = fbErr(e); }
     }
+    if (!gsDirty) {
+      try { const g = await getDoc(doc(db, 'settings', 'mypc')); gs = GlobalSettings.clean(g.exists() ? g.data() : {}); gsErr = ''; }
+      catch (e) { gsErr = fbErr(e); }
+    }
     $('nav-apps').textContent = apps.length || '';
     $('nav-tvs').textContent = tvs.length || '';
     render();
@@ -488,6 +566,7 @@
     renderDevices();
     renderRecords();
     renderAi();
+    renderGs();
     route();
   }
 
@@ -940,7 +1019,6 @@
       toast('AI services saved');
     } catch (e) { $('ai-save').disabled = false; say('ai-msg', fbErr(e), 'err'); }
   };
-  window.addEventListener('beforeunload', (e) => { if (aiDirty) { e.preventDefault(); e.returnValue = ''; } });
 
   /* ---------- Errors (Firestore "errors", written by js/core/reports.js on every My PC) ---------- */
 
@@ -1052,6 +1130,91 @@
   $('er-app').onchange = () => { location.hash = $('er-app').value ? '#errors/' + encodeURIComponent($('er-app').value) : '#errors'; };
   $('er-kind').onchange = $('er-when').onchange = () => { errSel = null; renderErrors(); };
   $('er-reload').onclick = async () => { await loadErrors(errApp); renderErrors(); };
+
+  /* ---------- Settings of every My PC (Firestore settings/mypc, read by every My PC: js/core/global-settings.js) ---------- */
+
+  let gs = { wallpapers: [], wallpaper: '' }, gsDirty = false, gsErr = '';
+  const BUILT_IN = [['bloom', 'Bloom'], ['aurora', 'Aurora'], ['sunset', 'Sunset'], ['night', 'Night sky'], ['aero', 'Glass'], ['hills', 'Green hills'], ['dunes', 'Dunes'], ['material', 'Material'], ['lagoon', 'Lagoon']];
+  function gsChanged() { gsDirty = true; $('gs-save').disabled = false; say('gs-msg', 'Not saved yet', 'muted'); }
+  function renderGsDefault() {
+    const pics = gs.wallpapers.filter((w) => /^https:\/\//.test(w.url));
+    if (gs.wallpaper && !BUILT_IN.some((b) => b[0] === gs.wallpaper) && !pics.some((w) => 'u:' + w.url === gs.wallpaper)) gs.wallpaper = '';
+    $('gs-default').innerHTML = BUILT_IN.map((b) => '<option value="' + b[0] + '">' + b[1] + ' (built in)</option>').join('') +
+      pics.map((w) => '<option value="u:' + esc(w.url) + '">' + esc(w.title || GlobalSettings.titleFromUrl(w.url)) + '</option>').join('');
+    $('gs-default').value = gs.wallpaper || 'bloom';
+  }
+  function renderGs() {
+    if (gsErr) say('gs-msg', gsErr, 'err');
+    $('gs-count').textContent = gs.wallpapers.length + ' / 40';
+    $('gs-add').disabled = gs.wallpapers.length >= 40;
+    $('gs-wps').innerHTML = gs.wallpapers.length ? gs.wallpapers.map((w, i) =>
+      '<div class="wp-row" data-i="' + i + '">' +
+        '<div class="wp-thumb">' + (/^https:\/\//.test(w.thumb || w.url) ? '<img alt="" loading="lazy" src="' + esc(w.thumb || w.url) + '">' : '') + '</div>' +
+        '<div class="wp-fields">' +
+          '<div><label for="gs-' + i + '-url">Picture address</label><input id="gs-' + i + '-url" type="url" inputmode="url" spellcheck="false" data-f="url" value="' + esc(w.url) + '" placeholder="https://…/picture.jpg"></div>' +
+          '<div><label for="gs-' + i + '-title">Title</label><input id="gs-' + i + '-title" data-f="title" maxlength="60" value="' + esc(w.title) + '" placeholder="' + esc(w.url ? GlobalSettings.titleFromUrl(w.url) : 'From the address') + '"></div>' +
+          '<div><label for="gs-' + i + '-thumb">Small picture (optional)</label><input id="gs-' + i + '-thumb" type="url" inputmode="url" spellcheck="false" data-f="thumb" value="' + esc(w.thumb || '') + '" placeholder="About 400 × 225, for the previews"></div>' +
+        '</div>' +
+        '<div class="wp-acts"><button class="icon small" data-mv="-1" aria-label="Move up"' + (i ? '' : ' disabled') + '>↑</button>' +
+          '<button class="icon small" data-mv="1" aria-label="Move down"' + (i < gs.wallpapers.length - 1 ? '' : ' disabled') + '>↓</button>' +
+          '<button class="small danger" data-del>Remove</button></div>' +
+      '</div>').join('') : '<div class="empty">No background added yet. Every My PC shows its built-in ones.</div>';
+    renderGsDefault();
+  }
+  $('gs-wps').addEventListener('input', (e) => {
+    const t = e.target, row = t.closest('.wp-row');
+    if (!t.dataset.f || !row) return;
+    const w = gs.wallpapers[+row.dataset.i];
+    w[t.dataset.f] = t.value.trim();
+    if (t.dataset.f === 'url') { const ti = row.querySelector('[data-f="title"]'); ti.placeholder = w.url ? GlobalSettings.titleFromUrl(w.url) : 'From the address'; }
+    if (t.dataset.f !== 'title') {
+      const src = w.thumb || w.url, box = row.querySelector('.wp-thumb');
+      box.innerHTML = /^https:\/\/\S+$/.test(src) ? '<img alt="" src="' + esc(src) + '">' : '';
+    }
+    gsChanged(); renderGsDefault();
+  });
+  $('gs-wps').addEventListener('click', (e) => {
+    const b = e.target.closest('button'), row = b && b.closest('.wp-row');
+    if (!row) return;
+    const i = +row.dataset.i;
+    if (b.dataset.mv) {
+      const j = i + +b.dataset.mv;
+      if (j < 0 || j >= gs.wallpapers.length) return;
+      const x = gs.wallpapers[i]; gs.wallpapers[i] = gs.wallpapers[j]; gs.wallpapers[j] = x;
+      gsChanged(); return renderGs();
+    }
+    if (b.dataset.del !== undefined) {
+      const w = gs.wallpapers[i];
+      if (w.url && !confirm('Remove "' + (w.title || GlobalSettings.titleFromUrl(w.url)) + '"? Profiles using it go back to the background of new profiles after you save.')) return;
+      gs.wallpapers.splice(i, 1);
+      gsChanged(); renderGs();
+    }
+  });
+  $('gs-default').onchange = () => { gs.wallpaper = $('gs-default').value === 'bloom' ? '' : $('gs-default').value; gsChanged(); };
+  $('gs-add').onclick = () => {
+    if (gs.wallpapers.length >= 40) return;
+    gs.wallpapers.push({ url: '', title: '' });
+    gsChanged(); renderGs();
+    $('gs-' + (gs.wallpapers.length - 1) + '-url').focus();
+  };
+  $('gs-save').onclick = async () => {
+    const list = gs.wallpapers.filter((w) => w.url || w.title || w.thumb);
+    const bad = list.find((w) => !/^https:\/\/[^\s"'()\\]+$/i.test(w.url) || (w.thumb && !/^https:\/\/[^\s"'()\\]+$/i.test(w.thumb)));
+    if (bad) return say('gs-msg', (bad.title || bad.url || 'A background') + ': addresses must start with https:// (no spaces or quotes).', 'err');
+    const urls = list.map((w) => w.url);
+    if (urls.some((u, i) => urls.indexOf(u) !== i)) return say('gs-msg', 'The same picture is in the list twice.', 'err');
+    $('gs-save').disabled = true;
+    try {
+      // an empty title is filled from the address, so every My PC shows the same name
+      const clean = GlobalSettings.clean({ wallpapers: list, wallpaper: gs.wallpaper });
+      await setDoc(doc(db, 'settings', 'mypc'), { wallpapers: clean.wallpapers, wallpaper: clean.wallpaper, updatedAt: serverTimestamp(), updatedBy: (user && user.email) || '' });
+      gs = clean; gsDirty = false;
+      renderGs();
+      say('gs-msg', 'Saved. Each My PC uses it from its next start (or when Settings > Personalization opens).', 'ok');
+      toast('Settings saved');
+    } catch (e) { $('gs-save').disabled = false; say('gs-msg', fbErr(e), 'err'); }
+  };
+  window.addEventListener('beforeunload', (e) => { if (aiDirty || gsDirty) { e.preventDefault(); e.returnValue = ''; } });
 </script>
 </body>
 </html>

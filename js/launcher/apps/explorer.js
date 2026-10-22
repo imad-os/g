@@ -90,12 +90,12 @@
             for (i = 0; i < apps.length; i++) out.push(item(apps[i].icon, t(apps[i].label), t('app'), openApp(apps[i].id)));
             for (i = 0; i < games.length; i++) if (games[i].kind === 'app') out.push(item('folder', I18n.pick(games[i].manifest.title), t('installedFrom') + ' ' + games[i].url, playGame(games[i]), Desktop.coverUrl(games[i])));
         } else if (id === 'pictures') {
-            var curWp = Desktop.wallpaper();
-            for (i = 0; i < Desktop.WALLPAPERS.length; i++) {
-                var w = Desktop.WALLPAPERS[i];
-                out.push(item('wp-' + w, t('wp_' + w) + '.jpg', w === curWp ? t('currentBackground') : t('setBackground'), (function (name) {
-                    return function () { Desktop.setWallpaper(name); App.toast(t('backgroundSet')); render(); };
-                })(w)));
+            var curWp = Desktop.wallpaper(), wps = Desktop.wallpapers();
+            for (i = 0; i < wps.length; i++) {
+                var w = wps[i];
+                out.push(item('wp-' + (w.url ? 'img' : w.id), w.title + '.jpg', w.id === curWp ? t('currentBackground') : t('setBackground'), (function (wid) {
+                    return function () { Desktop.setWallpaper(wid); App.toast(t('backgroundSet')); render(); };
+                })(w.id), w.url ? (w.thumb || w.url) : ''));
             }
         } else if (id === 'documents') {
             var p = 'arc_' + Store.profile() + '_game_';

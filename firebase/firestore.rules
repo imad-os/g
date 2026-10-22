@@ -88,9 +88,18 @@ service cloud.firestore {
           && (!('updatedAt' in d) || d.updatedAt is timestamp)
           && (!('updatedBy' in d) || (d.updatedBy is string && d.updatedBy.size() <= 120));
     }
+    // Settings for every My PC (App Store Manager > Settings, js/core/global-settings.js): backgrounds added by admins
+    // and the one new profiles get. Read by every TV at start.
+    function validMyPc(d) {
+      return d.keys().hasOnly(['wallpapers', 'wallpaper', 'updatedAt', 'updatedBy'])
+          && d.wallpapers is list && d.wallpapers.size() <= 40
+          && (!('wallpaper' in d) || (d.wallpaper is string && d.wallpaper.size() <= 1002))
+          && (!('updatedAt' in d) || d.updatedAt is timestamp)
+          && (!('updatedBy' in d) || (d.updatedBy is string && d.updatedBy.size() <= 120));
+    }
     match /settings/{name} {
-      allow get: if name == 'ai';
-      allow create, update: if isAdmin() && name == 'ai' && validAi(request.resource.data);
+      allow get: if name == 'ai' || name == 'mypc';
+      allow create, update: if isAdmin() && ((name == 'ai' && validAi(request.resource.data)) || (name == 'mypc' && validMyPc(request.resource.data)));
       allow delete: if isAdmin();
     }
 

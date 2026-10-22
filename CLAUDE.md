@@ -64,6 +64,11 @@
   (`main.js` passes the OK release to `Desktop.action`). Removed ids per profile in `home_hidden` (`Desktop.onHome` / `setOnHome`);
   too many icons scroll sideways in `#desk-icons`.
 - `apps/store.js`: the App Store app (Home / Games / Apps / Library / Search, Install / Open / Uninstall).
+- **Settings of every My PC** (owner decision): App Store Manager > Settings writes Firestore `settings/mypc` (admins only, read by
+  every TV): backgrounds (`wallpapers: [{ url, title, thumb }]`, an empty title is taken from the address) and the background of new
+  profiles (`wallpaper`). `js/core/global-settings.js` copies it at start into `arc_dev_global` (not in the backup); `Desktop.wallpapers()`
+  = the built-in CSS ones + these pictures (a picture shows once loaded, Bloom if it fails). New global settings go in the same document
+  (update `validMyPc` in the rules). Manager pages: a nav link `data-page` + a `<section data-view>` of the same name; it works on phones.
 - **App config:** each store app has a `config` object (Firestore `apps/<id>`, edited with the
   App Store Manager's Config button). The TV re-reads the app's document before it opens
   (`Cloud.fetchApp`, 2.5 s, falls back to the saved list) and the app gets it as `MyPC.app_config`.

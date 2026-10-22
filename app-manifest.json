@@ -1,5 +1,5 @@
 {
-  "build": 69,
+  "build": 70,
   "version": "2.20.0",
   "shell": 1,
   "css": [
@@ -12,6 +12,7 @@
     "js/core/storage.js",
     "js/core/cloud.js",
     "js/core/reports.js",
+    "js/core/global-settings.js",
     "js/core/rooms.js",
     "js/core/netlink.js",
     "js/core/sensor-proto.js",

@@ -34,6 +34,7 @@
 //  23. Boot screen: black, inline logo, orbit dots, fades out; no logo when opening a game
 //  34. phone controller (the existing virtual pad) as P1 / P2;  35. its sensor modes (moves, metrics, raw, live / debug screens)
 //  37. app bridges: MyPC.net, MyPC.ai (Gemini, NVIDIA, Magpie speech), MyPC.mic, permission prompts, Settings > AI; update screen on a phone
+//  40. settings of every My PC (App Store Manager > Settings, settings/mypc): backgrounds on the TV
 //  Unit tests without a browser (Bluetooth heart-rate bridge, controller protocol, motion engine): node tests/unit-tests.mjs
 //
 //  CHROMIUM_PATH=/path/to/chrome uses an existing Chromium instead of Playwright's download.
@@ -1232,9 +1233,9 @@ async function main() {
         check(rows.some((t) => /Star Catcher.*Not in store/.test(t)) && rows.some((t) => /Old Game.*In store/.test(t)) && rows.some((t) => /g_broken.*not a My PC app/.test(t)),
             'each app shows its status: not in the store, in the store, or not a My PC app');
         check(/App Store Manager/.test(await page.title()) && /App Store Manager/.test(await page.textContent('.brand')), 'the installer is now the App Store Manager');
-        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,AI services,Devices,World records,Errors'
+        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,AI services,Settings,Devices,World records,Errors'
             && document.querySelector('.nav a.on').dataset.page === 'add' && !document.querySelector('[data-view="add"]').hidden && document.querySelector('[data-view="overview"]').hidden),
-            'a menu with one page each: Overview, Apps, Add apps, AI services, Devices, World records, Errors');
+            'a menu with one page each: Overview, Apps, Add apps, AI services, Settings, Devices, World records, Errors');
         check(await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].find((r) => /Old Game/.test(r.textContent)).querySelector('input').disabled), 'installed apps cannot be selected again');
         await page.check('#sel-all');
         await page.click('#btn-install-sel');
@@ -1341,6 +1342,41 @@ async function main() {
         await page.click('#ai-list button[data-del="0"]'); await page.click('#ai-save');
         await page.waitForFunction(() => window.__db.settings.ai.list.length === 1);
         check(await page.evaluate(() => window.__db.settings.ai.def === 'gemini'), 'Remove (after a question) takes a service out for every My PC');
+        // Settings of every My PC (Firestore settings/mypc): backgrounds
+        await page.route('https://pics.example/**', (r) => r.fulfill({ status: 404, body: '' }));
+        await go('#settings');
+        check(await page.evaluate(() => !document.querySelector('[data-view="settings"]').hidden && document.querySelector('.nav a.on').dataset.page === 'settings' &&
+            /No background added yet/.test(document.getElementById('gs-wps').textContent) && document.getElementById('gs-save').disabled), 'Settings: a page of its own, no background yet, nothing to save');
+        await page.click('#gs-add');
+        check(await page.evaluate(() => document.activeElement.id === 'gs-0-url'), 'Add background puts the cursor in its address');
+        await page.fill('#gs-0-url', 'https://pics.example/walls/blue-lake_at-night.jpg?w=1920');
+        check(await page.getAttribute('#gs-0-title', 'placeholder') === 'Blue lake at night', 'an empty title shows the one taken from the address');
+        await page.click('#gs-add');
+        await page.fill('#gs-1-url', 'https://pics.example/dunes.png'); await page.fill('#gs-1-title', 'Golden dunes'); await page.fill('#gs-1-thumb', 'https://pics.example/dunes-small.png');
+        await page.click('#gs-add');
+        await page.fill('#gs-2-url', 'http://pics.example/x.jpg');
+        await page.click('#gs-save');
+        check(/https/.test(await page.textContent('#gs-msg')) && !(await page.evaluate(() => window.__db.settings.mypc)), 'an address that is not https:// is refused before saving');
+        page.once('dialog', (d) => d.accept());
+        await page.click('.wp-row[data-i="2"] button[data-del]');
+        await page.selectOption('#gs-default', 'u:https://pics.example/dunes.png');
+        await page.click('.wp-row[data-i="1"] button[data-mv="-1"]');
+        await page.click('#gs-save');
+        await page.waitForFunction(() => window.__db.settings.mypc);
+        const gm = await page.evaluate(() => window.__db.settings.mypc);
+        check(gm.wallpapers.length === 2 && gm.wallpapers[0].title === 'Golden dunes' && gm.wallpapers[0].thumb === 'https://pics.example/dunes-small.png' &&
+            gm.wallpapers[1].title === 'Blue lake at night' && gm.wallpaper === 'u:https://pics.example/dunes.png' && gm.updatedBy === 'owner@example.com' && /Saved/.test(await page.textContent('#gs-msg')),
+            'Save writes the backgrounds in their order (empty titles filled from the address) and the one of new profiles into settings/mypc');
+        // phone sized: a top bar with the tabs, nothing wider than the screen
+        await page.setViewportSize({ width: 390, height: 844 });
+        let wide = [];
+        for (const h of ['#overview', '#apps', '#add', '#ai', '#settings', '#devices', '#records', '#errors']) {
+            await go(h);
+            if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)) wide.push(h);
+        }
+        check(wide.length === 0 && await page.evaluate(() => { const r = document.querySelector('.nav').getBoundingClientRect(); return r.top < 140 && r.width >= 380; }),
+            'on a phone every page fits the screen width and the tabs are a row at the top (' + wide.join() + ')');
+        await page.setViewportSize({ width: 1280, height: 800 });
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }
@@ -3351,6 +3387,39 @@ async function main() {
         await page.evaluate(() => Themes.set('mac'));
         await page.evaluate(() => { Store.setProfile('p1'); Desktop.render(); });
         check(await page.evaluate(() => Themes.current() === 'win11' && document.documentElement.classList.contains('th-win11')), 'each profile has its own theme');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('40. settings of every My PC: backgrounds added in the App Store Manager');
+    {
+        const db = { settings: { mypc: { wallpaper: 'u:https://pics.example/dunes.png', wallpapers: [
+            { url: 'https://pics.example/dunes.png', title: 'Golden dunes', thumb: 'https://pics.example/dunes-small.png' },
+            { url: 'https://pics.example/broken.jpg', title: '' }, { url: 'http://pics.example/plain.jpg', title: 'Not https' }] } } };
+        const page = await newPage(browser, base, db);
+        const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+        await page.context().route('https://pics.example/**', (r) => /broken/.test(r.request().url()) ? r.fulfill({ status: 404, body: '' }) : r.fulfill({ status: 200, contentType: 'image/png', body: PNG }));
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon');
+        await page.waitForFunction(() => document.getElementById('wallpaper').className === 'wp wp-img', null, { timeout: 8000 });
+        check(await page.evaluate(() => /dunes\.png/.test(document.getElementById('wallpaper').style.backgroundImage) && JSON.parse(localStorage.getItem('arc_dev_global')).wallpapers.length === 2),
+            'My PC copies settings/mypc at start: a new profile gets the background chosen for new profiles (only https pictures are kept)');
+        check(await page.evaluate(() => Desktop.wallpapers().map((w) => w.title).join() === 'Bloom,Aurora,Sunset,Night sky,Glass,Green hills,Dunes,Material,Lagoon,Golden dunes,Broken'),
+            'the pictures come after the built-in backgrounds, a missing title taken from the address');
+        await page.evaluate(() => Win.open('settings', 'personal'));
+        await page.waitForSelector('.set-wp[data-wp="u:https://pics.example/broken.jpg"]');
+        check(await page.evaluate(() => { const b = document.querySelector('.set-wp[data-wp].on'); return b && b.getAttribute('data-wp') === 'u:https://pics.example/dunes.png' && /dunes-small/.test(b.style.backgroundImage) && document.querySelectorAll('.set-wp[data-wp]').length === 11; }),
+            'Settings > Personalization shows the pictures (their small version), the one in use marked');
+        await page.evaluate(() => document.querySelector('.set-wp[data-wp="u:https://pics.example/broken.jpg"]').click());
+        await page.waitForTimeout(300);
+        check(await page.evaluate(() => Store.get('wallpaper') === 'u:https://pics.example/broken.jpg' && document.getElementById('wallpaper').className === 'wp wp-bloom'),
+            'a picture that does not load leaves the Bloom colours on screen');
+        // the admin removes that picture: the profile goes back to the background of new profiles
+        db.settings.mypc.wallpapers.splice(1, 1);
+        await page.evaluate(() => new Promise((r) => GlobalSettings.sync(() => { Desktop.paintWallpaper(); r(); })));
+        check(await page.evaluate(() => Desktop.wallpaper() === 'u:https://pics.example/dunes.png'), 'a picture taken out in the App Store Manager falls back to the background of new profiles');
+        check(await page.evaluate(() => !!localStorage.getItem('arc_dev_global') && !('arc_dev_global' in Backup.snapshot())), 'the copy of the settings is not in the TV backup');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }
