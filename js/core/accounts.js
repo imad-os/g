@@ -175,12 +175,13 @@ var Accounts = (function () {
     function okKey(k, v) { return typeof v === 'string' && /^[a-z0-9_.-]{1,80}$/i.test(k); }
     // puts a newer cloud copy over this profile's data (without the write hooks: it is not a local change).
     // Keys this device has and the copy lacks are kept, so a copy that misses something never wipes progress.
-    function apply(pid, data) {
+    // skip: parts changed here and not uploaded yet (they stay as they are on this device)
+    function apply(pid, data, skip) {
         var keys = keysOf(data);
         if (!keys) return false;
         var pre = prefix(pid);
         try {
-            for (var key in keys) if (okKey(key, keys[key])) localStorage.setItem(pre + key, keys[key]);
+            for (var key in keys) if (okKey(key, keys[key]) && !(skip && inParts(skip, key))) localStorage.setItem(pre + key, keys[key]);
             localStorage.setItem('arc_dev_backup_dirty', '1');          // the TV backup copies it later
         } catch (e2) {}
         Profiles.setMeta(pid, data);
@@ -193,33 +194,105 @@ var Accounts = (function () {
         var keys = keysOf(data), pre = prefix(pid), added = 0;
         try {
             for (var key in keys) if (okKey(key, keys[key]) && localStorage.getItem(pre + key) === null) { localStorage.setItem(pre + key, keys[key]); added++; }
+            var cur = sec(pid);
+            if (cur && cur.v2) { cur.v2 = false; setSec(pid, cur); }          // the next upload writes the whole merged copy
             if (added) localStorage.setItem('arc_dev_backup_dirty', '1');
         } catch (e) {}
         setDirty(pid, Date.now());                 // uploaded soon (also after a reload: Accounts.start)
         return added || -1;
     }
 
+    /* What changed on this device since the last upload, per profile (arc_dev_acct_parts, kept over page changes:
+     * the game page writes, the desktop uploads): { g: { <game id>: 1 }, s: { <settings key>: 1 } }. An upload writes
+     * only those (updateMask data.<id> / settings.<key>), so an old copy of another game here never overwrites the
+     * cloud. The whole document is written only when it does not exist yet or still has the old blob. */
+    var PARTS = 'arc_dev_acct_parts';
+    function partsMap() { var m = Store.rawGet(PARTS); return m && typeof m === 'object' ? m : {}; }
+    function getParts(pid) { var p = partsMap()[pid]; return p && typeof p === 'object' ? { g: p.g || {}, s: p.s || {} } : { g: {}, s: {} }; }
+    function setParts(pid, v) { var m = partsMap(); if (v) m[pid] = v; else delete m[pid]; try { localStorage.setItem(PARTS, JSON.stringify(m)); } catch (e) {} }
+    function addParts(pid, more) {
+        var p = getParts(pid), k;
+        for (k in more.g) p.g[k] = 1;
+        for (k in more.s) p.s[k] = 1;
+        setParts(pid, p);
+    }
+    function partOf(key) {
+        var m = GAME_KEY.exec(key);
+        if (m && !RESERVED.test(m[2])) return { g: m[1] };
+        return RESERVED.test(key) ? null : { s: key };
+    }
+    function inParts(parts, key) { var w = partOf(key); return !!w && (w.g ? !!parts.g[w.g] : !!parts.s[w.s]); }
+    function quote(name) { return '`' + String(name).replace(/[\\`]/g, '\\$&') + '`'; }
+    var META = ['user', 'name', 'color', 'av', 'photo', 'size', 'at', 'from'];
+
+    // newer cloud copy -> this device; what changed here since the last upload is kept when it is newer still
+    function take(pid, data) {
+        var mine = dirtyMap()[pid] || 0, keep = mine > ms(data.at) ? getParts(pid) : null;
+        if (!apply(pid, data, keep)) return false;
+        var cur = sec(pid);
+        if (cur) { cur.at = ms(data.at); cur.v2 = !legacyOf(data); setSec(pid, cur); }
+        if (legacyOf(data)) setDirty(pid, Date.now());          // written again in the new shape, without the blob
+        else if (!keep) { setParts(pid, null); setDirty(pid, 0); }
+        return true;
+    }
+
     function upload(pid, cb) {
         cb = cb || function () {};
         var s = sec(pid);
         if (!s || !s.uid) return cb('signedout');
-        var d = docFor(pid), started = Date.now();
-        if (d.size > MAX_BLOB) return cb('too big');
+        var parts = getParts(pid), started = Date.now();
+        setParts(pid, null);
+        function fail(e) { addParts(pid, parts); cb(e === 'network' ? 'offline' : e); }
         token(pid, function (err, t) {
-            if (err) return cb(err);
-            Cloud.patch('players/' + s.uid, d, null, 10000, function done(e2) {
-                // rules from before data / settings (not published again yet): the old single-blob shape
-                if (e2 === 'http 403' && d.data) { var at = d.at; d = docFor(pid, true); d.at = at; return Cloud.patch('players/' + s.uid, d, null, 10000, done, t); }
-                if (e2) return cb(e2 === 'network' ? 'offline' : e2);
+            if (err) return fail(err);
+            var path = 'players/' + s.uid;
+            function saved(d, v2) {
                 var now = sec(pid);
-                if (now) { now.at = d.at; setSec(pid, now); }
+                if (now) { now.at = d.at; now.v2 = v2; setSec(pid, now); }
                 if ((dirtyMap()[pid] || 0) <= started) setDirty(pid, 0);
                 cb(null);
+            }
+            function whole() {
+                var d = docFor(pid);
+                if (d.size > MAX_BLOB) return fail('too big');
+                Cloud.patch(path, d, null, 10000, function (e2) {
+                    // rules from before data / settings (not published again): the old single-blob shape
+                    if (e2 === 'http 403') {
+                        var old = docFor(pid, true); old.at = d.at;
+                        return Cloud.patch(path, old, null, 10000, function (e3) { if (e3) return fail(e3); saved(old, false); }, t);
+                    }
+                    if (e2) return fail(e2);
+                    saved(d, true);
+                }, t);
+            }
+            function some() {
+                var keys = snapshot(pid), full = docFor(pid), d = {}, fields = META.slice(), i, k, w;
+                if (full.size > MAX_BLOB) return fail('too big');
+                for (i = 0; i < META.length; i++) if (full[META[i]] !== undefined) d[META[i]] = full[META[i]];
+                d.data = {}; d.settings = {};
+                for (k in parts.g) { fields.push('data.' + quote(k)); if (full.data[k]) d.data[k] = full.data[k]; }
+                for (k in parts.s) { fields.push('settings.' + quote(k)); if (keys[k] !== undefined && (w = partOf(k)) && w.s) d.settings[k] = keys[k]; }
+                if (!Object.keys(d.data).length) delete d.data;              // nothing in the body that is not in the mask
+                if (!Object.keys(d.settings).length) delete d.settings;
+                Cloud.patchMask(path, d, fields, { exists: true }, 10000, function (e2) {
+                    if (e2 === 'notfound' || e2 === 'http 403') return whole();
+                    if (e2) return fail(e2);
+                    saved(d, true);
+                }, t);
+            }
+            if (s.v2) return some();
+            // first upload from this device: is the cloud copy already in the new shape?
+            Cloud.get(path, 8000, function (e2, data) {
+                if (e2 === 'notfound') return whole();
+                if (e2 || !data) return fail(e2 || 'error');
+                if (!legacyOf(data) && data.data) return some();
+                if (ms(data.at) > ms(s.at)) take(pid, data); else migrate(pid, data);
+                whole();
             }, t);
         });
     }
 
-    // newer copy in the cloud (played on another device) -> it replaces this one; a newer local change wins
+    // newer copy in the cloud (played on another device) -> it comes here (except what changed here after it)
     function pull(pid, timeout, cb) {
         var s = sec(pid);
         if (!s || !s.uid || !s.rt) return cb(false);
@@ -229,18 +302,18 @@ var Accounts = (function () {
             if (err) return finish(false);
             Cloud.get('players/' + s.uid, 8000, function (e2, data) {
                 if (done) return;
-                var mine = dirtyMap()[pid] || 0;
                 if (e2 === 'notfound') { upload(pid); return finish(false); }
                 if (e2 || !data) return finish(false);
-                if (ms(data.at) > ms(s.at) && !(mine && mine > ms(data.at))) {
-                    var ok = apply(pid, data);
-                    var cur = sec(pid);
-                    if (ok && cur) { cur.at = ms(data.at); setSec(pid, cur); setDirty(pid, legacyOf(data) ? Date.now() : 0); }
+                var cur = sec(pid);
+                if (cur && !legacyOf(data) && data.data && !cur.v2) { cur.v2 = true; setSec(pid, cur); }
+                if (ms(data.at) > ms(s.at)) {
+                    var ok = take(pid, data);
+                    if (dirtyMap()[pid]) schedule(pid, 3000);
                     return finish(ok);
                 }
                 var added = migrate(pid, data);
                 if (added) { upload(pid); return finish(added > 0); }
-                if (mine) schedule(pid, 3000);
+                if (dirtyMap()[pid]) schedule(pid, 3000);
                 finish(false);
             }, t);
         });
@@ -260,6 +333,8 @@ var Accounts = (function () {
     Store.onWrite(function (k) {
         var m = /^arc_(p\d+)_/.exec(k), pid = m ? m[1] : (k === 'arc_profiles' ? Store.profile() : null);
         if (!pid || !sec(pid) || /_cloud_apps$/.test(k)) return;
+        var w = m ? partOf(k.slice(m[0].length)) : null;
+        if (w) { var p = getParts(pid); if (w.g) p.g[w.g] = 1; else p.s[w.s] = 1; setParts(pid, p); }
         var d = dirtyMap()[pid] || 0, now = Date.now();
         if (now - d > 2000) setDirty(pid, now);
         if (pid === Store.profile()) schedule(pid);
@@ -311,9 +386,9 @@ var Accounts = (function () {
             if (before && before.uid === r.localId) { var s = sec(pid); s.at = ms(before.at); setSec(pid, s); }
             Cloud.get('players/' + r.localId, 8000, function (e2, data) {
                 var cur = sec(pid);
-                if (!e2 && data && cur && (ms(data.at) > ms(cur.at) || fresh) && !((dirtyMap()[pid] || 0) > ms(data.at))) {
-                    if (apply(pid, data)) { cur.at = ms(data.at); setSec(pid, cur); setDirty(pid, 0); }
-                    if (legacyOf(data)) upload(pid);                     // written again without the old blob
+                if (!e2 && data && cur && (ms(data.at) > ms(cur.at) || fresh)) {
+                    take(pid, data);
+                    if (dirtyMap()[pid]) upload(pid);
                 } else if (e2 === 'notfound' || (cur && dirtyMap()[pid]) || (!e2 && data && migrate(pid, data))) upload(pid);
                 cb(null, pid);
             }, r.idToken);

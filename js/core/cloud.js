@@ -99,11 +99,12 @@ var Cloud = (function () {
         });
     }
     // Writes only some fields of a document (updateMask). pre: { exists: true } fails when the document is gone.
-    function patchMask(path, data, fields, pre, timeout, cb) {
+    // token: a signed-in player's ID token (their own document only)
+    function patchMask(path, data, fields, pre, timeout, cb, token) {
         var q = '?', i;
         for (i = 0; i < fields.length; i++) q += 'updateMask.fieldPaths=' + encodeURIComponent(fields[i]) + '&';
         if (pre && pre.exists === true) q += 'currentDocument.exists=true&';
-        request('PATCH', ROOT + '/' + path + q.slice(0, -1), { fields: toFields(data) }, timeout, function (err, r) { cb(err, r ? r.updateTime : null); });
+        request('PATCH', ROOT + '/' + path + q.slice(0, -1), { fields: toFields(data) }, timeout, function (err, r) { cb(err, r ? r.updateTime : null); }, token);
     }
     // Structured query (needs a limit: the rules ask for one). parent '' = top level, or 'rooms/abc' for a subcollection.
     // cb(err, [{ id, data }])

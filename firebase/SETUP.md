@@ -131,7 +131,8 @@ e-mail is), so it needs **Email/Password** enabled (step 2, already on for the A
   copied to the `tvs` backup.
 - `players/<uid>`: `{ user, name, color, av?, photo?, data, settings, blob, size, at, from }`. `data.<game id>.<key>`
   holds each game's saves (browsable in the console), `settings.<key>` the rest of the profile (≤ 900 KB in all).
-  Copies from older builds kept everything in one `blob` string: My PC merges it into the profile (nothing is
+  A device uploads only the games / settings it changed (one field each), so it never overwrites another
+  game's newer save. Copies from older builds kept everything in one `blob` string: My PC merges it into the profile (nothing is
   lost) and writes the doc again in the new shape, without `blob`. Only the signed-in account can read, write or delete it.
 - **After the data / settings update (build 71), publish `firestore.rules` again.** Until then My PC keeps
   saving in the old shape, so nothing is lost either way.

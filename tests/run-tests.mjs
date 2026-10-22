@@ -176,7 +176,7 @@ async function fakeFirestore(ctx, db) {
             if (tok.split('-')[1] !== uid) return json(403, { error: { code: 403, status: 'PERMISSION_DENIED' } });
             // rules not published again after a change of shape: data / settings are refused
             const pb = req.postData() ? JSON.parse(req.postData()) : null;
-            if (db.oldPlayerRules && method === 'PATCH' && pb && pb.fields && pb.fields.data) return json(403, { error: { code: 403, status: 'PERMISSION_DENIED' } });
+            if (db.oldPlayerRules && method === 'PATCH' && pb && pb.fields && (pb.fields.data || pb.fields.settings || u.searchParams.getAll('updateMask.fieldPaths').length)) return json(403, { error: { code: 403, status: 'PERMISSION_DENIED' } });
         }
         const body = req.postData() ? JSON.parse(req.postData()) : null;
         if (p === ':batchGet') return json(200, body.documents.map((n) => { const [col, id] = n.slice(FS_DB.length + 1).split('/'); return db[col] && db[col][id] ? { found: out(col, id) } : { missing: n }; }));
@@ -242,6 +242,21 @@ async function fakeFirestore(ctx, db) {
             const exists = u.searchParams.get('currentDocument.exists'), ut = u.searchParams.get('currentDocument.updateTime');
             if (exists === 'false' && db[col][id]) return json(409, { error: { code: 409, status: 'ALREADY_EXISTS' } });
             if (ut && stamp(col + '/' + id) !== ut) return json(400, { error: { code: 400, status: 'FAILED_PRECONDITION' } });
+            const mask = u.searchParams.getAll('updateMask.fieldPaths');
+            if (exists === 'true' && !db[col][id]) return json(404, { error: { code: 404, status: 'NOT_FOUND' } });
+            if (mask.length) {                                             // field paths like data.`app-x` (players)
+                const plain = fsPlain({ mapValue: { fields: body.fields } }), d = db[col][id] = db[col][id] || {};
+                db.masks = db.masks || []; db.masks.push({ col, id, mask });
+                for (const f of mask) {
+                    const seg = (f.match(/`(?:[^`\\]|\\.)*`|[^.]+/g) || []).map((x) => x[0] === '`' ? x.slice(1, -1).replace(/\\(.)/g, '$1') : x);
+                    let src = plain, dst = d;
+                    for (let i = 0; i < seg.length - 1; i++) { src = src && src[seg[i]]; dst = dst[seg[i]] = dst[seg[i]] && typeof dst[seg[i]] === 'object' ? dst[seg[i]] : {}; }
+                    const last = seg[seg.length - 1], v = src ? src[last] : undefined;
+                    if (v === undefined) delete dst[last]; else dst[last] = v;
+                }
+                delete db._t[col + '/' + id];
+                return json(200, out(col, id));
+            }
             db[col][id] = fsPlain({ mapValue: { fields: body.fields } });
             delete db._t[col + '/' + id];
             return json(200, out(col, id));
@@ -327,10 +342,10 @@ async function main() {
     console.log('3. broken hosted build is blacklisted');
     {
         const page = await newPage(browser, base);
-        await routeHosted(page, { manifest: { build: 77 }, breakFile: 'js/launcher/main.js' });
+        await routeHosted(page, { manifest: { build: 9077 }, breakFile: 'js/launcher/main.js' });
         await page.goto(base + 'index.html');
         await page.waitForFunction(() => window.AppBoot && AppBoot.source() === 'local' && document.querySelector('.dicon'), null, { timeout: 20000 });
-        check(await page.evaluate(() => localStorage.getItem('boot_bad_build')) === '77', 'build 77 recorded as bad');
+        check(await page.evaluate(() => localStorage.getItem('boot_bad_build')) === '9077', 'build 9077 recorded as bad');
         check(await playable(page), 'bundled copy is playable after the fallback');
         await page.reload();
         await page.waitForSelector('.dicon', { timeout: 15000 });
@@ -3149,6 +3164,24 @@ async function main() {
         db.oldPlayerRules = false;
         await tv.evaluate(() => new Promise((res) => Accounts.upload(Store.profile(), res)));
         check(db.players[uid].data.snake.lvl === '12' && !('blob' in db.players[uid]), 'and in the new shape (old blob removed) once the rules are published');
+        // back from a game: only that game goes up (another game's newer saves in the cloud stay as they are)
+        db.players[uid].data.hopper = { best: '[99]' };                   // played on the phone meanwhile
+        db.masks = [];
+        await tv.evaluate(() => Store.set('game_snake_lvl', 20));
+        await tv.evaluate(() => new Promise((res) => Accounts.upload(Store.profile(), res)));
+        const m1 = (db.masks.pop() || { mask: [] }).mask;
+        check(db.players[uid].data.snake.lvl === '20' && db.players[uid].data.hopper.best === '[99]' && m1.filter((f) => /^data\./.test(f)).join() === 'data.`snake`',
+            'an upload writes only the game that changed (data.`snake`); hopper\'s newer cloud save is kept: ' + m1.join(' '));
+        await tv.evaluate(() => Store.set('game_app-real-soccer-6_data', { goals: 5 }));
+        await tv.evaluate(() => new Promise((res) => Accounts.upload(Store.profile(), res)));
+        check(db.players[uid].data['app-real-soccer-6'].data === '{"goals":5}' && db.players[uid].data.snake.lvl === '20', 'a store app id with dashes is written as its own field');
+        // a newer cloud copy at the start: other games come from it, a game changed here after it stays
+        db.players[uid].at = Date.now(); db.players[uid].data.snake = { lvl: '30' }; db.players[uid].data.merge = { best: '1' };
+        await tv.waitForTimeout(20);
+        await tv.evaluate(() => Store.set('game_merge_best', 5000));
+        await tv.evaluate(() => new Promise((res) => Accounts.pull(Store.profile(), 3000, res)));
+        const both = await tv.evaluate(() => [Store.get('game_snake_lvl'), Store.get('game_merge_best')].join());
+        check(both === '30,5000', 'a newer cloud copy brings the other games, the game changed here after it is kept (' + both + ')');
         const prules = fs.readFileSync(path.join(ROOT, 'firebase/firestore.rules'), 'utf8');
         check(/d\.data is map/.test(prules) && /shortText\(d\.blob, 20\)/.test(prules), 'the rules want data as a map and refuse a whole-profile blob');
 
