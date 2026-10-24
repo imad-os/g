@@ -223,8 +223,10 @@ var Input = (function () {
 
     // A phone controller in pad mode is a virtual standard gamepad (index 100 + player): the phone sends raw button bits and
     // stick axes, and everything downstream (actions, Start / Select, MyPC.gamepad, padN devices) treats it like a real pad.
-    var vpads = {}, vpadN = 0;
-    function virtualPad(player, mask, x, y, name) {
+    // 18 buttons like a Switch Pro controller in Chrome (17 = Capture); rx, ry = right stick (axes 2 / 3, keyboard mode).
+    var vpads = {}, vpadN = 0, VP_BUTTONS = 18;
+    function axis(v) { v = +v || 0; return v > 1 ? 1 : v < -1 ? -1 : v; }
+    function virtualPad(player, mask, x, y, name, rx, ry) {
         var p = vpads[player], j;
         if (mask === null) {
             if (!p) return;
@@ -234,12 +236,12 @@ var Input = (function () {
         }
         if (!p) {
             p = vpads[player] = { index: 100 + player, id: (name || 'Phone') + ' (STANDARD GAMEPAD Vendor: 0000 Product: 0000)', connected: true, mapping: 'standard', buttons: [], axes: [0, 0, 0, 0] };
-            for (j = 0; j < 17; j++) p.buttons.push({ pressed: false, value: 0 });
+            for (j = 0; j < VP_BUTTONS; j++) p.buttons.push({ pressed: false, value: 0 });
             vpadN++;
             refreshPads();
         }
-        for (j = 0; j < 17; j++) { var on = (mask >> j) & 1; p.buttons[j].pressed = !!on; p.buttons[j].value = on; }
-        p.axes[0] = +x || 0; p.axes[1] = +y || 0;
+        for (j = 0; j < VP_BUTTONS; j++) { var on = (mask >> j) & 1; p.buttons[j].pressed = !!on; p.buttons[j].value = on; }
+        p.axes[0] = axis(x); p.axes[1] = axis(y); p.axes[2] = axis(rx); p.axes[3] = axis(ry);
         poll();
     }
 
@@ -422,7 +424,7 @@ var Input = (function () {
     return {
         init: init,
         onKey: onKey,                        // game iframes forward their key events here
-        virtualPad: virtualPad,              // a phone controller as a real gamepad: virtualPad(player, buttonBits, x, y, name); (player, null) removes it
+        virtualPad: virtualPad,              // a phone controller as a real gamepad: virtualPad(player, buttonBits, x, y, name, rx, ry); (player, null) removes it
         remote: remote,                      // a phone controller's actions: remote(player 1|2, action, down)
         releaseRemote: releaseRemote,
         touch: touch,                        // the touch pad's actions (left right up down ok run cancel menu pause)

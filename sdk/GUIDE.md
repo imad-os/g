@@ -341,7 +341,7 @@ make sure it still works with the other inputs. Players should never have to fig
   You still receive their button events, but don't give them an essential job of their own.
 - Never call `navigator.getGamepads()` or listen to `gamepadconnected` yourself: on the TV your page has no focus and gets
   nothing. The SDK does it for you (also standalone, where it reads the pads itself, so you can test with a pad on a PC).
-- Physical controllers only: the TV remote, the keyboard, the touch pad send actions (a phone in Buttons mode is a real gamepad: `MyPC.gamepad` sees it as a standard pad, device `pad101` / `pad102`)
+- Physical controllers only: the TV remote, the keyboard, the touch pad send actions (a phone in Buttons or Keyboard mode is a real gamepad: `MyPC.gamepad` sees it as a standard pad with 18 buttons like a Switch Pro controller, device `pad101` / `pad102`)
   (`onInput`), so the game must also be playable with `left right up down` + `confirm` (see the rules below).
 
 ```js
@@ -574,7 +574,12 @@ metrics if you want them) and **Motion data** (raw sensor samples at the rate yo
 is a magic-remote style pointer for the My PC screens only: your app never sees it (its A / B buttons arrive as the
 usual actions), and `players` may report `'pointer'` for such a phone. **Buttons** has A B X Y where a Nintendo
 controller has them (A right, B bottom, X top, Y left), a **+** (Start) and a Home (Guide) button that My PC keeps for itself (your app never gets Home); the player may swap the stick for a D-pad (same `left` `right` `up` `down`). Each button sends exactly what the same
-button of a real Nintendo controller on the TV sends: A = `run` + `cancel`, B = OK / `jump`, X = `run`, Y = `run`, **+** = Start (`menu`), Home = Guide. How strong each move must be (per move, harder while running) and the repeat guard (one move,
+button of a real Nintendo controller on the TV sends: A = `run` + `cancel`, B = OK / `jump`, X = `run`, Y = `run`, **+** = Start (`menu`), Home = Guide. The pad's gear can also add L, R, ZL, ZR, −, Capture and the stick clicks (standard buttons 4 to 11 and 17).
+**Keyboard** mode: a keyboard plugged into the phone (USB or Bluetooth) is a whole Switch Pro style controller: the
+player maps each key to a control (every button, the D-pad and both sticks; ZQSD = D-pad, arrows = left stick, numeric
+keypad = right stick, I J K L = X Y B A by default) and your app gets **gamepad buttons and axes, never keys**: the same
+standard pad as Buttons mode, with the right stick on axes 2 / 3 and Capture as button 17. `players` reports
+`'keyboard'` for such a phone. How strong each move must be (per move, harder while running) and the repeat guard (one move,
 not two, for a step and its bounce back) are set by the player on the TV (Control Panel > Devices > Phone controller >
 Motion moves) and apply to your app too; your own `define` rules still win for the moves they name. Actions may carry
 `gait` (`IDLE`, `WALK`, `RUN`).

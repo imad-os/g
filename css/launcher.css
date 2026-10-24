@@ -714,6 +714,24 @@ svg { display: block; width: 100%; height: 100%; }
 .gc-pbtn.on { background: rgba(255,255,255,0.45); }
 .gc-pa { grid-column: 2; grid-row: 1; }
 .gc-pb { grid-column: 1; grid-row: 2; }
+/* Keyboard mode: the controller picture (plain shapes) with each control's key; a pressed control lights up, the one waiting for a key blinks */
+.gc-kb { position: fixed; inset: 0; z-index: 50; background: #101226; color: #fff; display: flex; flex-direction: column; padding: calc(calc(6px * var(--k, 1)) + env(safe-area-inset-top)) calc(calc(10px * var(--k, 1)) + env(safe-area-inset-right)) calc(8px * var(--k, 1)) calc(calc(10px * var(--k, 1)) + env(safe-area-inset-left)); overflow: hidden; }
+.gc-kb[hidden] { display: none; }
+.gc-kpic { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.gc-kpic svg { width: 100%; height: 100%; max-height: 100%; }
+.gc-kpic .body { fill: #23264d; stroke: #3a3f8f; stroke-width: 3; }
+.gc-kpic .base { fill: #181a38; stroke: #3a3f8f; stroke-width: 2; }
+.gc-kpic .s { fill: #34397a; stroke: #5b63ff; stroke-width: 2; transition: fill .06s; }
+.gc-kpic text { fill: #fff; font-family: sans-serif; font-weight: 800; text-anchor: middle; pointer-events: none; }
+.gc-kpic text.k { fill: #ffd23f; font-weight: 700; }
+.gc-kpic [data-k] { cursor: pointer; }
+.gc-kpic [data-k].on .s { fill: #ffd23f; stroke: #fff; }
+.gc-kpic [data-k].on text { fill: #101226; }
+.gc-kpic [data-k].wait .s { animation: gckwait .8s ease-in-out infinite alternate; }
+@keyframes gckwait { from { fill: #34397a; } to { fill: #4d4; } }
+.gc-kcue { flex: none; text-align: center; font-size: calc(15px * var(--k, 1)); min-height: 1.3em; opacity: .9; }
+.gc-kacts { justify-content: center; flex: none; }
+.gc-kacts .btn[hidden] { display: none; }
 /* Game controller: checkboxes drawn at a finger's size (the browser's own are tiny on the scaled 1920 x 1080 screen) */
 .gc input[type=checkbox] { -webkit-appearance: none; appearance: none; flex: none; margin: 0; width: calc(30px * var(--k, 1)); height: calc(30px * var(--k, 1)); border-radius: calc(8px * var(--k, 1)); border: 2px solid #5b63ff; background: #101226; display: inline-grid; place-content: center; cursor: pointer; }
 .gc input[type=checkbox]::after { content: ''; display: none; width: calc(8px * var(--k, 1)); height: calc(15px * var(--k, 1)); border: solid #fff; border-width: 0 calc(3px * var(--k, 1)) calc(3px * var(--k, 1)) 0; transform: translateY(-12%) rotate(45deg); }

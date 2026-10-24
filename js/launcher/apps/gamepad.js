@@ -2,7 +2,7 @@
  * The TV side is js/launcher/controllers.js (Settings > Devices > Phone controller shows the code). Signalling goes through
  * Firestore (js/core/rooms.js, app 'controller'), everything else through a direct WebRTC channel on the same Wi-Fi
  * (js/core/netlink.js). When the TV changes page (opens a game, quits) the link drops and this app reconnects by itself.
- * Four modes, picked before connecting:
+ * Five modes, picked before connecting:
  *   pad             the virtual pad My PC already draws over games (js/core/virtual-pad.js: stick, A B X Y in the Nintendo
  *                   diamond, gear to customize, pause), here full screen as a controller: { t: 'k', a, d } per press / release
  *   sensor-actions  the phone in the right hand, the player facing the TV: moves (LEFT RIGHT JUMP DUCK DUCK_END, or what the game
@@ -14,6 +14,10 @@
  *                   gyroscope and accelerometer and smooths -> { t: 'pm', x, y }). Its screen has no stick: big A (OK on what
  *                   the pointer is on) and B (back), Center ({ t: 'pc' }), Calibrate (fixes reversed directions) and the
  *                   tuning settings (smoothness, speed, steady zone, swap left / right, swap up / down), kept on the phone
+ *   keyboard        a keyboard plugged into the phone (USB / Bluetooth) is a whole Nintendo Switch Pro style controller: the player
+ *                   maps each key to a control (A B X Y, L R ZL ZR, − +, Home, Capture, D-pad, both sticks and their clicks;
+ *                   ZQSD = D-pad by default), kept on the phone; it sends the same gamepad message as pad mode (with the right
+ *                   stick), never keys. The screen shows the controller with each control's key; a pressed control lights up
  * Phone settings (Settings button on every screen, kept on the phone in arc_dev_ctrlphone.opt): Auto rotate, Stay awake,
  * Background (the Android app keeps the link with the screen off) and GamePad (a D-pad in place of the stick). The Android
  * app (MyPCNative 3+) applies the first three natively; in a browser Auto rotate and Stay awake use the Screen Orientation
@@ -22,8 +26,20 @@
 (function () {
     'use strict';
 
+    // Keyboard mode strings
+    I18n.add({
+        en: { gcModeKeys: 'Keyboard', gcKHelp: 'Plug a keyboard into this phone (USB or Bluetooth): each key presses the controller button that shows it. Tap a button to give it another key.', gcKMap: 'Map keys', gcKDefault: 'Default keys', gcKSkip: 'Skip', gcKClear: 'No key', gcKStop: 'Done', gcKPress: 'Press a key for %s', gcKNone: 'no key',
+              gcKDpad: 'D-pad', gcKLs: 'Left stick', gcKRs: 'Right stick', gcKLclick: 'Left stick click', gcKRclick: 'Right stick click', gcKHome: 'Home', gcKCapture: 'Capture' },
+        fr: { gcModeKeys: 'Clavier', gcKHelp: 'Branchez un clavier sur ce téléphone (USB ou Bluetooth) : chaque touche appuie sur le bouton de la manette qui l’affiche. Touchez un bouton pour lui donner une autre touche.', gcKMap: 'Assigner les touches', gcKDefault: 'Touches par défaut', gcKSkip: 'Passer', gcKClear: 'Aucune touche', gcKStop: 'Terminé', gcKPress: 'Appuyez sur une touche pour %s', gcKNone: 'aucune touche',
+              gcKDpad: 'Croix', gcKLs: 'Joystick gauche', gcKRs: 'Joystick droit', gcKLclick: 'Clic du joystick gauche', gcKRclick: 'Clic du joystick droit', gcKHome: 'Accueil', gcKCapture: 'Capture' },
+        es: { gcModeKeys: 'Teclado', gcKHelp: 'Conecta un teclado a este teléfono (USB o Bluetooth): cada tecla pulsa el botón del mando que la muestra. Toca un botón para darle otra tecla.', gcKMap: 'Asignar teclas', gcKDefault: 'Teclas por defecto', gcKSkip: 'Saltar', gcKClear: 'Sin tecla', gcKStop: 'Listo', gcKPress: 'Pulsa una tecla para %s', gcKNone: 'sin tecla',
+              gcKDpad: 'Cruceta', gcKLs: 'Joystick izquierdo', gcKRs: 'Joystick derecho', gcKLclick: 'Clic del joystick izquierdo', gcKRclick: 'Clic del joystick derecho', gcKHome: 'Inicio', gcKCapture: 'Captura' },
+        ar: { gcModeKeys: 'لوحة المفاتيح', gcKHelp: 'صِل لوحة مفاتيح بهذا الهاتف (USB أو بلوتوث): كل مفتاح يضغط زر اليد الذي يظهر عليه. المس زراً لتعطيه مفتاحاً آخر.', gcKMap: 'تعيين المفاتيح', gcKDefault: 'المفاتيح الافتراضية', gcKSkip: 'تخطي', gcKClear: 'بلا مفتاح', gcKStop: 'تم', gcKPress: 'اضغط مفتاحاً لـ %s', gcKNone: 'بلا مفتاح',
+              gcKDpad: 'أزرار الاتجاه', gcKLs: 'العصا اليسرى', gcKRs: 'العصا اليمنى', gcKLclick: 'ضغط العصا اليسرى', gcKRclick: 'ضغط العصا اليمنى', gcKHome: 'الرئيسية', gcKCapture: 'التقاط' }
+    });
+
     var KEY = 'arc_dev_ctrlphone', REC_MAX = 60 * 120;      // 2 minutes at 60 Hz
-    var MODES = ['pad', 'sensor-actions', 'sensor-raw', 'pointer'], MODE_NAMES = ['gcModePad', 'gcModeActions', 'gcModeRaw', 'gcModePointer'];
+    var MODES = ['pad', 'sensor-actions', 'sensor-raw', 'pointer', 'keyboard'], MODE_NAMES = ['gcModePad', 'gcModeActions', 'gcModeRaw', 'gcModePointer', 'gcModeKeys'];
     // the pad layout (buttons, sizes, places) is kept in My PC's store too, so it is never lost between opens
     var PAD_STORE = { get: function (k) { return Store.rawGet('arc_dev_' + k); }, set: function (k, v) { Store.rawSet('arc_dev_' + k, v); } };
     // A B X Y in the Nintendo places, sending EXACTLY what the same button of a real Nintendo controller on the TV sends (owner
@@ -34,8 +50,11 @@
                 { label: 'X', key: 77, action: 'g3', place: 'top' }, { label: 'Y', key: 90, action: 'g2', place: 'left' }];
     // Pad mode is a real gamepad: the phone sends raw button bits of the W3C standard layout (g0..g3 = buttons 0..3, + = 9, Home = 16,
     // D-pad = 12..15) and the stick as axes; the TV makes a virtual gamepad of it (Input.virtualPad).
-    var GBTN = { g0: 0, g1: 1, g2: 2, g3: 3, menu: 9, guide: 16 }, DPAD = { up: 12, down: 13, left: 14, right: 15 }, gpBits = 0, gpHeld = {}, gpSent = '';
-    var PAD = { buttons: ABXY, catalog: ABXY };
+    // The pad's gear can also add the other buttons of a Switch Pro controller (L R ZL ZR, −, Capture, stick clicks)
+    ABXY.extra = [{ label: 'L', key: 76, action: 'l' }, { label: 'R', key: 82, action: 'r' }, { label: 'ZL', key: 75, action: 'zl' }, { label: 'ZR', key: 84, action: 'zr' },
+                  { label: '−', key: 189, action: 'minus' }, { label: '●', key: 67, action: 'capture' }, { label: 'L3', key: 49, action: 'ls' }, { label: 'R3', key: 50, action: 'rs' }];
+    var GBTN = { g0: 0, g1: 1, g2: 2, g3: 3, l: 4, r: 5, zl: 6, zr: 7, minus: 8, menu: 9, ls: 10, rs: 11, guide: 16, capture: 17 }, DPAD = { up: 12, down: 13, left: 14, right: 15 }, gpBits = 0, gpHeld = {}, gpSent = '';
+    var PAD = { buttons: ABXY, catalog: ABXY.concat(ABXY.extra) };
     var root = null, code = '', player = 1, mode = 'pad', run = false, busy = false, conn = null, linked = false, sess = null, retry = 0, wait = 0, curReq = null, offerObj = null;
     var want = {}, sent = {}, ui = {}, saved = {}, cid = '', inPad = false, wl = null, session = '';
     // sensor modes
@@ -59,7 +78,7 @@
     function native(fn, v) { try { if (window.MyPCNative && typeof window.MyPCNative[fn] === 'function') { window.MyPCNative[fn](v); return true; } } catch (e) {} return false; }
     function name() { return /Android/i.test(navigator.userAgent) ? 'Android' : /iPhone|iPad/i.test(navigator.userAgent) ? 'iPhone' : 'Phone'; }
     function prefs() { var p = saved.prefs || {}; return { profile: SensorProto.profile(p.profile), sensitivity: +p.sensitivity || 1, stride: +p.stride || 1, swap: !!p.swap }; }
-    function save() { Store.rawSet(KEY, { cid: cid, code: code, p: player, mode: mode, prefs: saved.prefs || {}, ptr: saved.ptr || {}, opt: saved.opt || {}, paired: !!saved.paired }); }
+    function save() { Store.rawSet(KEY, { cid: cid, code: code, p: player, mode: mode, prefs: saved.prefs || {}, ptr: saved.ptr || {}, opt: saved.opt || {}, keys: saved.keys || null, paired: !!saved.paired }); }
     function opts() { var o = saved.opt || {}, r = {}; for (var k in OPT_DEF) r[k] = typeof o[k] === 'boolean' ? o[k] : OPT_DEF[k]; return r; }
     function nativeV() { try { return window.MyPCNative && typeof MyPCNative.version === 'function' ? +MyPCNative.version() || 0 : 0; } catch (e) { return 0; } }
     // owner decision: every setting is always shown, no conditions (an old app or a browser simply ignores what it cannot do)
@@ -87,20 +106,24 @@
         if (ui.sDot) ui.sDot.className = 'gc-dot' + (ok ? ' ok' : '');
         if (ui.pState) ui.pState.textContent = text;
         if (ui.pDot) ui.pDot.className = 'gc-dot' + (ok ? ' ok' : '');
+        if (ui.kState) ui.kState.textContent = text;
+        if (ui.kDot) ui.kDot.className = 'gc-dot' + (ok ? ' ok' : '');
     }
-    function pick(p) { player = p; ui.p1.className = 'btn' + (p === 1 ? ' btn-primary' : ''); ui.p2.className = 'btn' + (p === 2 ? ' btn-primary' : ''); if (ui.badge) ui.badge.textContent = 'P' + p; if (ui.sBadge) ui.sBadge.textContent = 'P' + p; if (ui.pBadge) ui.pBadge.textContent = 'P' + p; }
+    function pick(p) { player = p; ui.p1.className = 'btn' + (p === 1 ? ' btn-primary' : ''); ui.p2.className = 'btn' + (p === 2 ? ' btn-primary' : ''); if (ui.badge) ui.badge.textContent = 'P' + p; if (ui.sBadge) ui.sBadge.textContent = 'P' + p; if (ui.pBadge) ui.pBadge.textContent = 'P' + p; if (ui.kBadge) ui.kBadge.textContent = 'P' + p; }
     function pickMode(m) { mode = MODES.indexOf(m) >= 0 ? m : 'pad'; for (var i = 0; i < MODES.length; i++) ui['m' + i].className = 'btn' + (MODES[i] === mode ? ' btn-primary' : ''); }
     function pointing() { return mode === 'pointer' && !!(cfg && cfg.pointer); }
     function show(on) {
         inPad = on; ui.join.hidden = on;
-        var padUi = on && mode === 'pad', ptrUi = on && mode === 'pointer';
+        var padUi = on && mode === 'pad', ptrUi = on && mode === 'pointer', kbUi = on && mode === 'keyboard', senseUi = on && !padUi && !ptrUi && !kbUi;
         ui.bar.hidden = ui.padBg.hidden = ui.setBtn.hidden = !padUi;
         ui.ptr.hidden = !ptrUi;
-        ui.sense.hidden = !(on && !padUi && !ptrUi);
+        ui.kb.hidden = !kbUi;
+        ui.sense.hidden = !senseUi;
         if (padUi) VirtualPad.init({ storage: PAD_STORE, id: 'controller2', force: true, scale: { stick: 1.35, btn: 1.15 }, buttons: PAD.buttons, catalog: PAD.catalog, onAction: padAction, dpad: opts().dpad, home: true });
         else if (VirtualPad.active()) VirtualPad.hide();
         if (ptrUi) paintPtr();
-        if (on && !padUi && !ptrUi) { ui.modeName.textContent = t(mode === 'sensor-raw' ? 'gcModeRaw' : 'gcModeActions'); setTab('live'); }
+        if (kbUi) { kStop(); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); }   // keys go to the controller, not to a button
+        if (senseUi) { ui.modeName.textContent = t(mode === 'sensor-raw' ? 'gcModeRaw' : 'gcModeActions'); setTab('live'); }
         if (!on && ui.go) Focus.focus(ui.go);
     }
 
@@ -169,7 +192,7 @@
         run = true; session = SensorProto.session(); cfg = null;
         sess = new Rooms.Session('controller', name(), onEvent);
         show(true); state(t('gcConnecting'), false); lock(); wake(); native('active', true);
-        if (mode !== 'pad') sensorsOn();                           // the tap on Connect also answers the motion permission prompt (iPhone)
+        if (mode !== 'pad' && mode !== 'keyboard') sensorsOn();     // the tap on Connect also answers the motion permission prompt (iPhone)
         attempt();
     }
     function stop() {
@@ -204,8 +227,167 @@
         gpSent = k;
         send({ t: 'gp', b: gpBits, x: x, y: y });
     }
-    function release() { gpBits = 0; gpHeld = {}; sync(); for (var a in want) if (want[a]) padAction(a, false); }
+    function release() { gpBits = 0; gpHeld = {}; if (mode === 'keyboard') kbRelease(); else sync(); for (var a in want) if (want[a]) padAction(a, false); }
     function onVis() { if (document.hidden) release(); else if (run) wake(); }
+    function onBlur() { if (mode === 'keyboard') kbRelease(); }        // a key let go elsewhere never comes back as keyup
+
+    /* ---------- keyboard mode: a keyboard plugged into this phone is a whole Nintendo Switch Pro style controller ---------- */
+    // Every control of the pad: [id, standard gamepad button (or -1 for a stick direction), stick, direction]. Each key the
+    // player maps presses ONE control; the phone sends the same { t: 'gp' } as Buttons mode (bits 0-17, left and right stick),
+    // never keystrokes. Mapping kept on the phone (arc_dev_ctrlphone.keys: control id -> key name).
+    var KCTL = [['up', 12], ['down', 13], ['left', 14], ['right', 15],
+                ['lsUp', -1, 'l', 'up'], ['lsDown', -1, 'l', 'down'], ['lsLeft', -1, 'l', 'left'], ['lsRight', -1, 'l', 'right'], ['ls', 10],
+                ['rsUp', -1, 'r', 'up'], ['rsDown', -1, 'r', 'down'], ['rsLeft', -1, 'r', 'left'], ['rsRight', -1, 'r', 'right'], ['rs', 11],
+                ['a', 1], ['b', 0], ['x', 3], ['y', 2], ['l', 4], ['r', 5], ['zl', 6], ['zr', 7],
+                ['minus', 8], ['plus', 9], ['home', 16], ['capture', 17]];
+    // ZQSD = D-pad (an AZERTY keyboard's W A S D), arrows = left stick, numeric keypad = right stick, I J K L = X Y B A
+    var KDEF = { up: 'z', down: 's', left: 'q', right: 'd', lsUp: 'ArrowUp', lsDown: 'ArrowDown', lsLeft: 'ArrowLeft', lsRight: 'ArrowRight', ls: 'f',
+                 rsUp: 'Numpad8', rsDown: 'Numpad5', rsLeft: 'Numpad4', rsRight: 'Numpad6', rs: 'm', a: 'l', b: 'k', x: 'i', y: 'j',
+                 l: 'u', r: 'o', zl: 'a', zr: 'p', minus: 'Backspace', plus: 'Enter', home: 'h', capture: 'c' };
+    var KSHORT = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Backspace: '⌫', Enter: '⏎', Space: '␣', Escape: 'Esc', Shift: '⇧', Control: 'Ctrl', Delete: 'Del', PageUp: 'PgUp', PageDown: 'PgDn' };
+    var kHeld = {}, kWait = null, kWizard = -1;
+    function kLabel(id) {
+        var arrow = { Up: '↑', Down: '↓', Left: '←', Right: '→' }, m = /^(ls|rs)(Up|Down|Left|Right)$/.exec(id);
+        if (m) return t(m[1] === 'ls' ? 'gcKLs' : 'gcKRs') + ' ' + arrow[m[2]];
+        if (DPAD.hasOwnProperty(id)) return t('gcKDpad') + ' ' + arrow[id.charAt(0).toUpperCase() + id.slice(1)];
+        return { ls: t('gcKLclick'), rs: t('gcKRclick'), minus: '−', plus: '+', home: t('gcKHome'), capture: t('gcKCapture') }[id] || id.toUpperCase();
+    }
+    // a key's name: the letter as printed (so ZQSD on an AZERTY keyboard is Z Q S D), the numeric keypad apart from the digits
+    function keyId(e) {
+        if (/^Numpad/.test(e.code || '')) return e.code;
+        var k = e.key;
+        if (!k || k === 'Unidentified' || k === 'Dead') return e.code || '';
+        return k === ' ' ? 'Space' : k.length === 1 ? k.toLowerCase() : k;
+    }
+    function keyName(k, full) {
+        if (!k) return full ? t('gcKNone') : '';
+        if (/^Numpad/.test(k)) return (full ? 'Num ' : 'N') + k.slice(6);
+        if (k.length === 1) return k.toUpperCase();
+        return full ? k : KSHORT[k] || k.slice(0, 4);
+    }
+    function keys() {
+        var s = saved.keys, r = {}, i, id;
+        for (i = 0; i < KCTL.length; i++) { id = KCTL[i][0]; r[id] = s && typeof s === 'object' && typeof s[id] === 'string' ? s[id] : KDEF[id]; }
+        return r;
+    }
+    function keyMap() { var k = keys(), m = {}; for (var id in k) if (k[id]) m[k[id]] = id; return m; }
+    // one key -> one control: a key given to a control is taken from the control that had it
+    function setKey(id, key) {
+        var k = keys(), o;
+        if (key) for (o in k) if (k[o] === key && o !== id) k[o] = '';
+        k[id] = key; saved.keys = k; save(); kbPaint();
+    }
+    function kbOn() { return !!root && inPad && mode === 'keyboard'; }
+    function kbSend() {
+        var b = 0, s = { l: [0, 0], r: [0, 0] }, i, c, v;
+        for (i = 0; i < KCTL.length; i++) {
+            c = KCTL[i]; if (!kHeld[c[0]]) continue;
+            if (c[1] >= 0) b |= 1 << c[1];
+            else { v = s[c[2]]; if (c[3] === 'left') v[0] -= 1; else if (c[3] === 'right') v[0] += 1; else if (c[3] === 'up') v[1] -= 1; else v[1] += 1; }
+        }
+        for (c in s) { v = s[c]; v[0] = Math.max(-1, Math.min(1, v[0])); v[1] = Math.max(-1, Math.min(1, v[1])); if (v[0] && v[1]) { v[0] *= 0.7071; v[1] *= 0.7071; } }
+        var k = b + ',' + s.l + ',' + s.r;
+        if (k === gpSent) return;
+        gpSent = k;
+        send({ t: 'gp', b: b, x: s.l[0], y: s.l[1], rx: s.r[0], ry: s.r[1] });
+        kbKnobs(s);
+    }
+    // keys reach the controller before anything else on the page (capture phase): no focus moves, no Back, no button clicks
+    function kbKey(e) {
+        if (!kbOn() || ui.modes) return;
+        var down = e.type === 'keydown', k = keyId(e);
+        e.preventDefault(); e.stopPropagation();
+        if (!k) return;
+        if (kWait) { if (down && !e.repeat) { var id = kWait; setKey(id, k); kNext(id); } return; }
+        var c = keyMap()[k];
+        if (!c || e.repeat || !!kHeld[c] === down) return;
+        kHeld[c] = down;
+        if (ui.kEls[c]) ui.kEls[c].classList.toggle('on', down);
+        kbSend();
+    }
+    function kbRelease() { kHeld = {}; if (ui.kEls) for (var id in ui.kEls) ui.kEls[id].classList.remove('on'); kbSend(); }
+    // mapping: tap a control on the picture (that one), or Map keys (every control in turn); Skip, No key, Stop
+    function kMap(id) { kWait = id; kbPaint(); }
+    function kNext(done) {
+        if (kWizard < 0) { kWait = null; kbPaint(); return; }
+        kWizard = KCTL.findIndex(function (c) { return c[0] === done; }) + 1;
+        if (kWizard >= KCTL.length) return kStop();
+        kMap(KCTL[kWizard][0]);
+    }
+    function kStop() { kWait = null; kWizard = -1; kbPaint(); }
+    function kbPaint() {
+        if (!ui.kb) return;
+        var k = keys(), id;
+        for (id in ui.kKeys) ui.kKeys[id].textContent = keyName(k[id]);
+        for (id in ui.kEls) ui.kEls[id].classList.toggle('wait', id === kWait);
+        ui.kMapBtn.hidden = !!kWait; ui.kDef.hidden = !!kWait; ui.kSkip.hidden = ui.kClear.hidden = ui.kStop.hidden = !kWait;
+        ui.kCue.textContent = kWait ? t('gcKPress').replace('%s', kLabel(kWait)) + ' (' + keyName(k[kWait], true) + ')' + (kWizard >= 0 ? '  ' + (kWizard + 1) + ' / ' + KCTL.length : '') : t('gcKHelp');
+    }
+    function kbKnobs(s) {
+        if (!ui.kKnob) return;
+        ui.kKnob.l.setAttribute('transform', 'translate(' + (s.l[0] * 16).toFixed(1) + ' ' + (s.l[1] * 16).toFixed(1) + ')');
+        ui.kKnob.r.setAttribute('transform', 'translate(' + (s.r[0] * 16).toFixed(1) + ' ' + (s.r[1] * 16).toFixed(1) + ')');
+    }
+    // the controller picture (drawn here, plain shapes): every control carries its key; a pressed one lights up
+    function kbPicture() {
+        var h = [], NS = 'http://www.w3.org/2000/svg';
+        function txt(x, y, s, cls, v) { return '<text x="' + x + '" y="' + y + '" font-size="' + s + '"' + (cls ? ' class="' + cls + '"' : '') + '>' + (v || '') + '</text>'; }
+        function g(id, inner) { h.push('<g data-k="' + id + '">' + inner + '</g>'); }
+        function chip(id, x, y) { g(id, '<circle class="s" cx="' + x + '" cy="' + y + '" r="14"/>' + txt(x, y + 4, 12, 'k')); }
+        function stick(p, cx, cy) {
+            h.push('<circle class="base" cx="' + cx + '" cy="' + cy + '" r="40"/>');
+            g(p, '<g class="knob"><circle class="s" cx="' + cx + '" cy="' + cy + '" r="27"/>' + txt(cx, cy - 4, 13, '', p === 'ls' ? 'L' : 'R') + txt(cx, cy + 12, 11, 'k') + '</g>');
+            chip(p + 'Up', cx, cy - 58); chip(p + 'Down', cx, cy + 58); chip(p + 'Left', cx - 58, cy); chip(p + 'Right', cx + 58, cy);
+        }
+        function shoulder(id, x, y, w, hh, name) { g(id, '<rect class="s" x="' + x + '" y="' + y + '" width="' + w + '" height="' + hh + '" rx="10"/>' + txt(x + 26, y + hh / 2 + 5, 14, '', name) + txt(x + w - 22, y + hh / 2 + 4, 12, 'k')); }
+        function face(id, x, y, name) { g(id, '<circle class="s" cx="' + x + '" cy="' + y + '" r="23"/>' + txt(x, y + 1, 17, '', name) + txt(x, y + 15, 10, 'k')); }
+        function arm(id, x, y) { g(id, '<rect class="s" x="' + (x - 15) + '" y="' + (y - 15) + '" width="30" height="30" rx="5"/>' + txt(x, y + 4, 12, 'k')); }
+        function small(id, x, y, shape, name) { g(id, shape + txt(x, y + 5, 14, '', name) + txt(x, y + 30, 11, 'k')); }
+        h.push('<path class="body" d="M120 74C170 52 470 52 520 74C590 104 632 262 606 322C586 360 520 356 490 310L456 270L184 270L150 310C120 356 54 360 34 322C8 262 50 104 120 74Z"/>');
+        shoulder('zl', 92, 6, 112, 26, 'ZL'); shoulder('l', 108, 36, 112, 22, 'L');
+        shoulder('zr', 436, 6, 112, 26, 'ZR'); shoulder('r', 420, 36, 112, 22, 'R');
+        stick('ls', 165, 146);
+        arm('up', 245, 196); arm('down', 245, 256); arm('left', 215, 226); arm('right', 275, 226);
+        stick('rs', 400, 226);
+        face('x', 478, 104, 'X'); face('a', 520, 146, 'A'); face('b', 478, 188, 'B'); face('y', 436, 146, 'Y');
+        small('minus', 262, 98, '<rect class="s" x="246" y="88" width="32" height="20" rx="6"/>', '−');
+        small('plus', 378, 98, '<rect class="s" x="362" y="88" width="32" height="20" rx="6"/>', '+');
+        small('capture', 292, 140, '<rect class="s" x="281" y="129" width="22" height="22" rx="4"/>', '●');
+        small('home', 348, 140, '<circle class="s" cx="348" cy="140" r="13"/>', '⌂');
+        var box = el('div', 'gc-kpic'), svg = document.createElementNS(NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 640 370'); svg.setAttribute('aria-hidden', 'true');
+        svg.innerHTML = h.join('');
+        box.appendChild(svg);
+        ui.kEls = {}; ui.kKeys = {};
+        [].forEach.call(svg.querySelectorAll('[data-k]'), function (n) {
+            var id = n.getAttribute('data-k');
+            ui.kEls[id] = n; ui.kKeys[id] = n.querySelector('.k');
+            n.addEventListener('click', function () { kWizard = -1; kMap(id); });
+        });
+        ui.kKnob = { l: ui.kEls.ls.querySelector('.knob'), r: ui.kEls.rs.querySelector('.knob') };
+        return box;
+    }
+    function buildKeys() {
+        var s = el('div', 'gc-kb'), top = el('div', 'gc-stop');
+        s.hidden = true;
+        ui.kDot = el('span', 'gc-dot'); ui.kBadge = el('span', 'gc-badge', 'P1'); ui.kState = el('span', 'gc-state');
+        [ui.kDot, ui.kBadge, el('span', 'gc-mode', t('gcModeKeys')), ui.kState, el('span', 'gc-grow')].forEach(function (x) { top.appendChild(x); });
+        top.appendChild(btn('gc-modebtn', t('gcMode'), openModes)); top.appendChild(btn('gc-modebtn', t('gcSettings'), openPhone)); top.appendChild(btn('gc-leave2', t('gcLeave'), function () { stop(); }));
+        s.appendChild(top);
+        ui.kb = s;
+        s.appendChild(kbPicture());
+        ui.kCue = el('div', 'gc-kcue'); ui.kCue.setAttribute('role', 'status'); ui.kCue.setAttribute('aria-live', 'polite'); s.appendChild(ui.kCue);
+        var acts = el('div', 'gc-row gc-acts gc-kacts');
+        ui.kMapBtn = btn('btn-primary', t('gcKMap'), function () { kWizard = 0; kMap(KCTL[0][0]); });
+        ui.kDef = btn('', t('gcKDefault'), function () { saved.keys = null; save(); kbPaint(); });
+        ui.kSkip = btn('', t('gcKSkip'), function () { kNext(kWait); });
+        ui.kClear = btn('', t('gcKClear'), function () { var id = kWait; setKey(id, ''); kNext(id); });
+        ui.kStop = btn('btn-primary', t('gcKStop'), kStop);
+        [ui.kMapBtn, ui.kDef, ui.kSkip, ui.kClear, ui.kStop].forEach(function (b) { acts.appendChild(b); });
+        s.appendChild(acts);
+        kbPaint();
+        return s;
+    }
 
     /* ---------- sensor modes ---------- */
     function applyCfg() {
@@ -836,6 +1018,8 @@
         root.appendChild(ui.sense);
         ui.ptr = buildPointer();
         root.appendChild(ui.ptr);
+        ui.kb = buildKeys();
+        root.appendChild(ui.kb);
         body.appendChild(root);
     }
 
@@ -846,7 +1030,7 @@
             saved = Store.rawGet(KEY) || {};
             cid = typeof saved.cid === 'string' && /^[a-z0-9]{6,24}$/.test(saved.cid) ? saved.cid : '';
             if (!cid) for (var i = 0; i < 12; i++) cid += 'abcdefghijklmnopqrstuvwxyz0123456789'.charAt(Math.floor(Math.random() * 36));
-            want = {}; sent = {}; gpBits = 0; gpHeld = {}; gpSent = ""; ui = {}; inPad = false; aimLast = 0; calib = null; log = []; plot = []; seq = 0; acks = {}; rtt = 0; lastAction = null; rawSent = 0; rawLast = 0; cfg = null; perm = 'unknown';
+            want = {}; sent = {}; kHeld = {}; kWait = null; kWizard = -1; gpBits = 0; gpHeld = {}; gpSent = ""; ui = {}; inPad = false; aimLast = 0; calib = null; log = []; plot = []; seq = 0; acks = {}; rtt = 0; lastAction = null; rawSent = 0; rawLast = 0; cfg = null; perm = 'unknown';
             diag = { acked: 0, tvDuplicate: 0, tvStale: 0, unacked: 0 };
             build(body);
             readable(); window.addEventListener('resize', readable); setTimeout(readable, 350);
@@ -857,14 +1041,15 @@
             pickMode(saved.mode);
             applyOpts();
             document.addEventListener('visibilitychange', onVis);
+            window.addEventListener('keydown', kbKey, true); window.addEventListener('keyup', kbKey, true); window.addEventListener('blur', onBlur);
             fromQr = false; triedOther = false;
             if (arg && typeof arg.pair === 'string' && codeFrom(arg.pair)) setTimeout(function () { if (root) pairWith(codeFrom(arg.pair)); }, 0);
             else if (saved.paired && codeFrom(saved.code || '')) setTimeout(function () { if (root && !run) start(); }, 0);   // the TV it was paired with: connects by itself
-            window.GamepadApp = { scanCode: function (text) { var c = codeFrom(text); if (c) pairWith(c); return c; }, linked: function () { return linked; }, send: function (m) { return send(m); }, running: function () { return run; }, mode: function () { return mode; }, pointing: pointing, aim: function () { return aim; }, calibrate: calibrate,
+            window.GamepadApp = { scanCode: function (text) { var c = codeFrom(text); if (c) pairWith(c); return c; }, linked: function () { return linked; }, send: function (m) { return send(m); }, running: function () { return run; }, mode: function () { return mode; }, keys: function () { return keys(); }, pointing: pointing, aim: function () { return aim; }, calibrate: calibrate,
                                   engine: function () { return eng; }, feed: function (s) { onMotion(s); }, config: function () { return cfg; }, log: function () { return log.slice(); } };
             return ui.go;                                          // Connect, not the code box (no phone keyboard popping up)
         },
-        back: function () { if (ui.modes) { closeModes(); return true; } if (scan) { stopScan(); return true; } if (!inPad) return false; stop(); return true; },
+        back: function () { if (ui.modes) { closeModes(); return true; } if (kWait) { kStop(); return true; } if (scan) { stopScan(); return true; } if (!inPad) return false; stop(); return true; },
         close: function () {
             stopScan();
             stop();
@@ -872,6 +1057,7 @@
             clearInterval(liveTimer); liveTimer = 0;
             if (VirtualPad.active()) VirtualPad.hide();
             document.removeEventListener('visibilitychange', onVis);
+            window.removeEventListener('keydown', kbKey, true); window.removeEventListener('keyup', kbKey, true); window.removeEventListener('blur', onBlur);
             window.removeEventListener('resize', readable);
             unwake(); root = null; ui = {}; eng = null;
             delete window.GamepadApp;

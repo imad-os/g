@@ -12,6 +12,7 @@ camera app. Typing the code, picking **P1** / **P2** and a mode, then **Connect*
 | Mode | What the phone does | What the TV / game gets |
 |---|---|---|
 | **Buttons** (`pad`) | The virtual pad My PC already draws over games (`js/core/virtual-pad.js`): stick, **A B X Y where a Nintendo controller has them** (A right, B bottom, X top, Y left), a **+** button (top centre, Start), a round **Home** button below and left of A B X Y (like a Nintendo Switch's), and the gear to hide buttons, resize and move everything (saved on the phone as `vpad:controller2`). With **GamePad** on (phone Settings) a D-pad replaces the stick. | **The phone is a real gamepad.** It sends the raw buttons of the W3C standard layout (`{ t: 'gp', b: bit mask, x, y }`: B bottom = 0, A right = 1, Y left = 2, X top = 3, **+** = Start 9, **Home** = Guide 16, D-pad 12-15 when GamePad is on, otherwise the stick = axes 0 / 1) and the TV shows it as a virtual standard gamepad (`Input.virtualPad`, device `pad101` for player 1, `pad102` for player 2, listed with the real pads). Actions, Start / Select logic, `MyPC.gamepad` and per-pad logic in games are exactly those of a Nintendo pad. A test compares each phone button with a fake pad. |
+| **Keyboard** (`keyboard`) | A keyboard plugged into the phone (USB or Bluetooth) is a whole **Nintendo Switch Pro style controller**. The screen shows the controller (A B X Y, L R ZL ZR, − +, Home, Capture, D-pad, both sticks and their clicks) with each control's key; a pressed control lights up. Tap a control then press a key to map it, or **Map keys** to go through every control (Skip, No key, Done); **Default keys** = ZQSD D-pad, arrows left stick, numeric keypad right stick (8 4 5 6), I J K L = X Y B A, U O = L R, A P = ZL ZR, Backspace = −, Enter = +, H = Home, C = Capture, F M = stick clicks. One key per control; kept on the phone (`arc_dev_ctrlphone.keys`, control id -> key name: the letter as printed, `Numpad8`, `ArrowUp`...). While this screen is up every key goes to the controller (none reaches the phone's own screens). | Exactly what Buttons mode gives, **never keys**: `{ t: 'gp', b, x, y, rx, ry }` with every standard button 0-17 (L 4, R 5, ZL 6, ZR 7, − 8, + 9, stick clicks 10 / 11, D-pad 12-15, Home 16, Capture 17) and both sticks (axes 0-3). The TV's virtual gamepad has 18 buttons. |
 | **Motion moves** (`sensor-actions`) | The player faces the TV, phone in the right hand. The phone detects moves and sends **only the moves the game asked for**, plus metrics if asked. | `MyPC.sensors` events in the game. With no game listening, moves drive the TV: LEFT / RIGHT = left / right, JUMP = OK, DUCK … DUCK_END = down held. |
 | **Motion data** (`sensor-raw`) | Sends the sensor samples themselves at the rate the game asks for. | `raw` events; the game does its own detection. |
 | **Pointer** (`pointer`) | A TV pointer like a magic remote, on the My PC screens: see below. | The pointer moves; A = OK on what it points at, B = back. Nothing on a game's page. |
@@ -77,7 +78,7 @@ MyPC.sensors.on('action', function (ev, player) {   // { type: 'action', action:
 });
 MyPC.sensors.on('metrics', function (m, player) {}); // { gait: 'RUN', cadence: 162, speed_kmh: 8.4, pace_sec_per_km: 428, distance_m: 325.6, steps }
 MyPC.sensors.on('raw', function (r, player) {});     // { hz, s: [[dt, ax, ay, az, gx, gy, gz, ra, rb, rg], ...] }
-MyPC.sensors.on('players', function (modes) {});     // { 1: 'sensor-actions', 2: null } when phones come and go ('pad', 'sensor-actions', 'sensor-raw', 'pointer')
+MyPC.sensors.on('players', function (modes) {});     // { 1: 'sensor-actions', 2: null } when phones come and go ('pad', 'sensor-actions', 'sensor-raw', 'pointer', 'keyboard')
 MyPC.sensors.on('config', function (cfg) {});        // what the phones were actually sent (unknown moves removed)
 MyPC.sensors.stop();
 ```
@@ -139,7 +140,10 @@ when the two clocks differ. Older phones without `proto` / `mode` are treated as
 // phone -> TV: pointer mode while config.pointer: 50 messages a second at most, only while moving
 { "t": "pm", "x": -125, "y": 30 }    // turned by x, y hundredths of a degree since the last one (right / down positive, 90 at most)
 { "t": "pc" }                        // Center: the pointer back in the middle
-// pad mode (also the pointer's A / B); a: left right up down ok b run cancel menu pause (b = run + cancel)
+// pad and keyboard modes: the raw buttons of the standard layout (bits 0-17, 17 = Capture) and the sticks (-1..1;
+// rx / ry only in keyboard mode); sent on every change
+{ "t": "gp", "b": 4098, "x": 0, "y": -1, "rx": 0, "ry": 0 }
+// the pointer's A / B; a: left right up down ok b run cancel menu pause (b = run + cancel)
 { "t": "k", "a": "ok", "d": 1 }
 ```
 

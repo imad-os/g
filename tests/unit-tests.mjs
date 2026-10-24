@@ -185,6 +185,7 @@ load('js/core/aim.js', ctxP);
 {
     const A = ctxP.Aim;
     check(P.config({ pointer: true }).pointer === true && P.config({}).pointer === false && P.MODES.indexOf('pointer') >= 0 && P.hello({ t: 'hi', mode: 'pointer' }).mode === 'pointer', 'Pointer is its own mode; config.pointer is only on when the TV says so');
+    check(P.hello({ t: 'hi', mode: 'keyboard' }).mode === 'keyboard', 'Keyboard is a mode the TV accepts (a gamepad, like pad)');
     const tu = P.tune({ sensitivity: 9, scales: { JUMP: 1.5, LEFT: 'x', SPIN: 2, bad: 3 }, run_scale: 2, guard_ms: 99999 });
     check(tu.sensitivity === 2 && tu.scales.JUMP === 1.5 && tu.scales.LEFT === 1 && tu.scales.SPIN === 2 && tu.scales.bad === undefined && tu.run_scale === 2 && tu.guard_ms === 1500 && P.config({}).tune.guard_ms === 500,
         'the TV\'s move settings (tune) are validated and always sent, with defaults');

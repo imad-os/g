@@ -2703,7 +2703,7 @@ async function main() {
             await press(P2, name, false);
             await tv.waitForFunction(() => __held('pad102') === '', null, { timeout: 3000 });
         }
-        check(await tv.evaluate(() => Input.pads().some((q) => q.index === 102 && q.standard && q.buttons === 17)), 'the phone is a standard gamepad (pad102, 17 buttons) in the TV\'s pad list, like a real controller');
+        check(await tv.evaluate(() => Input.pads().some((q) => q.index === 102 && q.standard && q.buttons === 18)), 'the phone is a standard gamepad (pad102, 18 buttons like a Switch Pro controller) in the TV\'s pad list, like a real controller');
         // + = Start (menu), Home = Guide: the same actions a real pad's Start and Home give
         await tv.evaluate(() => { window.__seen = []; const r = Input.virtualPad; Input.virtualPad = function (p, m) { if (m & (1 << 9)) __seen.push('menu'); if (m & (1 << 16)) __seen.push('guide'); return r.apply(this, arguments); }; });
         const [px, py] = await P2.evaluate(() => { const e = [...document.querySelectorAll('div')].find((d) => d.textContent === '+'); const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
@@ -2974,6 +2974,66 @@ async function main() {
         check(true, 'and back to buttons from the motion screen');
         check(Q.errors.length === 0, 'no page errors on the scanning phone ' + Q.errors.join('; '));
         await Q.context().close();
+        await tv.waitForFunction(() => Controllers.players()[1] === null, null, { timeout: 15000 });
+        // Keyboard mode: a keyboard plugged into the phone is a whole Switch Pro style controller; keys are mapped to controls
+        // (kept on the phone) and the TV gets gamepad buttons (18, Capture = 17) and both sticks, never keys
+        const K = await newPage(browser, base, db, { phone: true, viewport: { width: 844, height: 390 } });
+        await K.goto(base + 'index.html');
+        await K.waitForFunction(() => window.Win && document.querySelector('[data-game]'), null, { timeout: 20000 });
+        await K.evaluate(() => Win.open('gamepad'));
+        await K.fill('.gc-code', code);
+        await K.click('.gc-modes .btn:nth-of-type(5)');
+        await K.click('.gc-go');
+        await K.waitForFunction(() => window.GamepadApp && GamepadApp.linked() && GamepadApp.mode() === 'keyboard', null, { timeout: 40000 });
+        await tv.waitForFunction(() => Controllers.modes()[1] === 'keyboard', null, { timeout: 10000 });
+        check(await K.evaluate(() => !document.querySelector('.gc-kb').hidden && !VirtualPad.active() && document.querySelectorAll('.gc-kpic [data-k]').length === 26
+            && ['A', 'B', 'X', 'Y', 'L', 'R', 'ZL', 'ZR', '+', '−'].every((l) => [...document.querySelectorAll('.gc-kpic text')].some((x) => x.textContent === l))
+            && !/\bC\b/.test([...document.querySelectorAll('.gc-kpic text:not(.k)')].map((x) => x.textContent).join(' '))), 'Keyboard mode shows the controller (every Switch Pro control: A B X Y, L R ZL ZR, − +, Home, Capture, D-pad, both sticks), no virtual pad');
+        await tv.evaluate(() => { window.__vp = null; const r = Input.virtualPad; Input.virtualPad = function (p, m, x, y, n, rx, ry) { if (p === 1 && m !== null) __vp = { m, x, y, rx, ry }; return r.apply(this, arguments); }; });
+        await K.keyboard.down('z');
+        await tv.waitForFunction(() => Input.isDownDev('pad101', 'up'), null, { timeout: 3000 });
+        check(await K.evaluate(() => document.querySelector('[data-k=up]').classList.contains('on')) && await tv.evaluate(() => __vp.m === 1 << 12), 'Z (default) = D-pad up on the TV (button 12), lit on the phone');
+        await K.keyboard.up('z');
+        await tv.waitForFunction(() => !Input.isDownDev('pad101', 'up'), null, { timeout: 3000 });
+        check(await K.evaluate(() => !document.querySelector('[data-k=up]').classList.contains('on')), 'letting go of the key releases the button and its light');
+        await K.keyboard.down('l');
+        await tv.waitForFunction(() => Input.isDownDev('pad101', 'run') && Input.isDownDev('pad101', 'cancel'), null, { timeout: 3000 });
+        await K.keyboard.up('l');
+        await K.keyboard.down('k');
+        await tv.waitForFunction(() => Input.isDownDev('pad101', 'jump') && Input.isDownDev('pad101', 'confirm'), null, { timeout: 3000 });
+        await K.keyboard.up('k');
+        check(true, 'L key = A (right: run + back), K key = B (bottom: OK / jump), like a Nintendo pad');
+        for (const [key, bit, name] of [['u', 4, 'L'], ['o', 5, 'R'], ['a', 6, 'ZL'], ['p', 7, 'ZR'], ['Backspace', 8, '−'], ['Enter', 9, '+'], ['f', 10, 'left stick click'], ['m', 11, 'right stick click'], ['h', 16, 'Home'], ['c', 17, 'Capture']]) {
+            await K.keyboard.down(key);
+            await tv.waitForFunction((b) => __vp && __vp.m === 1 << b, bit, { timeout: 3000 });
+            await K.keyboard.up(key);
+            await tv.waitForFunction(() => __vp && __vp.m === 0, null, { timeout: 3000 });
+        }
+        check(true, 'every other Switch Pro button reaches the TV as its standard gamepad button (L 4, R 5, ZL 6, ZR 7, − 8, + 9, stick clicks 10 / 11, Home 16, Capture 17)');
+        await K.keyboard.down('Numpad6'); await K.keyboard.down('ArrowLeft');
+        await tv.waitForFunction(() => __vp && __vp.rx === 1 && __vp.x === -1, null, { timeout: 3000 });
+        check(await tv.evaluate(() => { const p = Input.pads().find((q) => q.index === 101); return p && p.buttons === 18 && p.axes === 4 && Input.isDownDev('pad101', 'left'); }), 'arrows = left stick (axes 0 / 1), numeric keypad = right stick (axes 2 / 3); the phone is an 18-button standard pad on the TV');
+        await K.keyboard.up('Numpad6'); await K.keyboard.up('ArrowLeft');
+        // mapping: tap a control on the picture, press a key; a key belongs to one control only; kept on the phone
+        await K.click('.gc-kpic [data-k=x]');
+        check(await K.evaluate(() => document.querySelector('[data-k=x]').classList.contains('wait') && /X/.test(document.querySelector('.gc-kcue').textContent)), 'tapping X waits for its key');
+        await K.keyboard.press('w');
+        check(await K.evaluate(() => GamepadApp.keys().x === 'w' && Store.rawGet('arc_dev_ctrlphone').keys.x === 'w' && document.querySelector('[data-k=x] .k').textContent === 'W'), 'the key is mapped, shown on the button and kept on the phone');
+        await K.keyboard.down('w');
+        await tv.waitForFunction(() => __vp && __vp.m === 1 << 3, null, { timeout: 3000 });
+        await K.keyboard.up('w');
+        await K.click('.gc-kpic [data-k=y]'); await K.keyboard.press('w');
+        check(await K.evaluate(() => GamepadApp.keys().y === 'w' && GamepadApp.keys().x === ''), 'a key given to Y is taken from X (one key, one control)');
+        await K.click('.gc-kacts .btn-primary');                   // Map keys: every control in turn
+        await K.keyboard.press('e');
+        check(await K.evaluate(() => GamepadApp.keys().up === 'e' && document.querySelector('[data-k=down]').classList.contains('wait')), 'Map keys asks for every control in turn (D-pad up, then down…)');
+        await K.click('.gc-kacts .btn-primary:not([hidden])');      // Done
+        await K.click('.gc-kacts .btn:nth-of-type(2)');             // Default keys
+        check(await K.evaluate(() => GamepadApp.keys().up === 'z' && GamepadApp.keys().x === 'i' && GamepadApp.keys().y === 'j'), 'Default keys: ZQSD = D-pad, I = X, J = Y');
+        await K.keyboard.down('Escape'); await K.keyboard.up('Escape');
+        check(await K.evaluate(() => GamepadApp.running() && GamepadApp.linked()), 'keys never reach the phone\'s own screens (Esc does not leave the controller)');
+        check(K.errors.length === 0, 'no page errors on the keyboard phone ' + K.errors.join('; '));
+        await K.context().close();
         await tv.waitForFunction(() => Controllers.players()[1] === null, null, { timeout: 15000 });
         // the Android app (android-controller/): window.MyPCNative + assets/bridge.js; ?ctrl=1 opens the Game controller,
         // its own QR scanner answers, native motion samples replace devicemotion, the app is told when the link runs

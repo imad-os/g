@@ -5,7 +5,8 @@
  *   - Link: the same WebRTC data channel as multiplayer (js/core/netlink.js); presses never go through Firebase.
  *   - Player 1 = the 'keys' device (like the remote / keyboard), player 2 = 'keys2': every game already reads both (Input.remote).
  *   - A phone is trusted by a random id. New phones are accepted only for 5 minutes after "Pair a phone" in Settings > Devices.
- * Pad mode sends { t: 'gp', b: bit mask of the standard gamepad buttons 0-16, x, y: stick }: the TV makes a virtual gamepad of it.
+ * Pad and keyboard modes send { t: 'gp', b: bit mask of the standard gamepad buttons 0-17 (17 = Capture), x, y: left stick, rx, ry: right
+ *   stick (keyboard mode) }: the TV makes a virtual gamepad of it (a Nintendo Switch Pro controller's buttons, read by position).
  * Phone -> TV: { t: 'hi', p: 1|2, cid, name, proto, mode, session, caps, now } then { t: 'k', a: action, d: 1|0 } (pad mode).
  * TV -> phone: { t: 'ok', p, proto, session } | { t: 'no', why: 'busy'|'locked' }.
  * Sensor modes ('sensor-actions', 'sensor-raw'; protocol js/core/sensor-proto.js, docs/phone-controller.md): the TV sends the
@@ -42,6 +43,8 @@ var Controllers = (function () {
         return { on: c.on === true, code: typeof c.code === 'string' && /^[a-z0-9]{6,16}$/.test(c.code) ? c.code : '', ok: c.ok instanceof Array ? c.ok : [] };
     }
     function save(c) { Store.rawSet(KEY, c); }
+    // Buttons and Keyboard modes: the phone is a gamepad (no sensor config, no moves)
+    function padLike(slot) { return slot.mode === 'pad' || slot.mode === 'keyboard'; }
     function makeCode() {
         var out = '', b = new Uint8Array(8), i;
         try { (window.crypto || window.msCrypto).getRandomValues(b); } catch (e) { for (i = 0; i < 8; i++) b[i] = Math.floor(Math.random() * 256); }
@@ -85,15 +88,15 @@ var Controllers = (function () {
                          offset: h.now ? Date.now() - h.now : null, seen: SensorProto.tracker(), stats: { actions: 0, duplicate: 0, stale: 0, invalid: 0, metrics: 0, raw: 0 } };
                 slots[p] = slot;
                 conn.send({ t: 'ok', p: p, proto: SensorProto.VERSION, session: slot.session });
-                if (slot.mode !== 'pad') sendConfig(slot);
+                if (!padLike(slot)) sendConfig(slot);
                 say(I18n.t('ctrlOn').replace('%s', slot.name).replace('%n', p));
                 report();
                 return;
             }
             if (m.t === 'gp') {                                                // pad mode: raw buttons + stick, a virtual gamepad
-                if (slot.mode !== 'pad' || typeof m.b !== 'number') return;
+                if (!padLike(slot) || typeof m.b !== 'number') return;
                 if (m.b && Pointer.visible()) Pointer.hide();
-                Input.virtualPad(slot.p, m.b | 0, m.x, m.y, slot.name);
+                Input.virtualPad(slot.p, m.b | 0, m.x, m.y, slot.name, m.rx, m.ry);
                 return;
             }
             if (m.t === 'k') {
@@ -110,7 +113,7 @@ var Controllers = (function () {
                 if (!a) slot.stats.invalid++; else if (a.t === 'pc') Pointer.center(); else Pointer.move(a.x, a.y);
                 return;
             }
-            if (slot.mode !== 'pad') sensorMessage(slot, m);
+            if (!padLike(slot)) sensorMessage(slot, m);
         });
         conn.onClose(function () { clearTimeout(t); if (slot) drop(slot.p, slot); });
     }
@@ -187,7 +190,7 @@ var Controllers = (function () {
     function schedule(ms) { clearTimeout(timer); timer = setTimeout(open, ms); }
 
     function tune() { return SensorProto.tune(Store.rawGet(TUNE_KEY)); }
-    function resend() { for (var p = 1; p <= 2; p++) if (slots[p] && slots[p].mode !== 'pad') sendConfig(slots[p]); }
+    function resend() { for (var p = 1; p <= 2; p++) if (slots[p] && !padLike(slots[p])) sendConfig(slots[p]); }
 
     function closePhones() { for (var p = 1; p <= 2; p++) if (slots[p]) { var s = slots[p]; slots[p] = null; Input.releaseRemote(p); Input.virtualPad(p, null); s.conn.close(); } }
 
