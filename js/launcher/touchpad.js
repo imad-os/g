@@ -110,10 +110,11 @@ var TouchPad = (function () {
 
     function onAction(action, down) {
         if (fromPause) return;
+        if (down) Haptics.buzz();                          // Vibration 0..3, set on the phone (js/core/haptics.js)
         if (own) { if (relay) relay({ action: action, down: down }); }
         else Input.touch(action === 'home' ? 'guide' : action, down);     // Home = a pad's Guide button: My PC's menu
     }
-    function onKey(code, down) { if (!fromPause && own && relay) relay({ key: code, down: down }); }
+    function onKey(code, down) { if (!fromPause && own && relay) { if (down) Haptics.buzz(); relay({ key: code, down: down }); } }
     function onSettings(open) {
         settingsOpen = open;
         if (open) held = GameHost.hold();                  // the game waits while the player arranges the pad

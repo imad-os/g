@@ -2641,6 +2641,7 @@ async function main() {
         check(/^[a-z0-9]{8}$/.test(code) && db.rooms && db.rooms[code] && db.rooms[code].app === 'controller' && db.rooms[code].max === 3, 'a room "controller" is open under the TV\'s code');
         // Settings > Devices: the phone controller has its own page with the pairing QR code
         await tv.evaluate(() => Win.open('settings', 'devices'));
+        check(!(await tv.evaluate(() => [...document.querySelectorAll('.set-row')].some((r) => /Auto rotate|Vibration/.test(r.textContent)))), 'the TV\'s Devices page has no phone rows (Auto rotate, Vibration)');
         await tv.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Phone controller/.test(r.textContent)).click());
         await tv.waitForSelector('.set-qr svg path', { timeout: 3000 });
         const qr = await tv.evaluate(() => ({ url: Controllers.pairUrl(), code: document.querySelector('.set-qr-code').textContent, toggle: [...document.querySelectorAll('.set-row')].some((r) => /Phone controller/.test(r.textContent)), focus: document.activeElement.textContent }));
@@ -2739,6 +2740,13 @@ async function main() {
         await P2.mouse.move(hb[0], hb[1]); await P2.mouse.down(); await P2.mouse.up();
         await tv.waitForFunction(() => __seen.join() === 'menu,guide', null, { timeout: 3000 });
         check(true, 'phone + sets button 9 (a pad\'s Start) and Home sets button 16 (a pad\'s Guide button) of the virtual gamepad');
+        // L and R are on the pad at first: shoulder pills at the top corners, L = button 4 and R = button 5 like a Switch Pro controller
+        const sh = await P2.evaluate(() => { const c = {}; for (const l of ['L', 'R', 'ZL', 'ZR']) { const d = [...document.querySelectorAll('div')].find((e) => e.textContent === l && /px$/.test(e.style.borderRadius) && e.style.position === 'absolute'); const r = d && d.getBoundingClientRect(); c[l] = d && d.style.display === 'flex' ? [r.left + r.width / 2, r.top + r.height / 2, r.width, r.height] : null; } return c; });
+        check(sh.L && sh.R && !sh.ZL && !sh.ZR && sh.L[0] < 844 / 3 && sh.R[0] > 844 * 2 / 3 && sh.L[1] < dia.X[1] && sh.R[1] < dia.X[1] && Math.abs(sh.L[1] - sh.R[1]) < 2 && sh.L[2] > sh.L[3], 'L and R are shown at first, as pills at the top left and top right (ZL / ZR only from the gear) (' + JSON.stringify(sh) + ')');
+        await tv.evaluate(() => { window.__lr = []; const r = Input.virtualPad; Input.virtualPad = function (p, m) { if (m & (1 << 4)) __lr.push('L'); if (m & (1 << 5)) __lr.push('R'); return r.apply(this, arguments); }; });
+        for (const l of ['L', 'R']) { const q = sh[l]; await P2.mouse.move(q[0], q[1]); await P2.mouse.down(); await P2.mouse.up(); }
+        await tv.waitForFunction(() => __lr.indexOf('L') >= 0 && __lr.indexOf('R') >= 0, null, { timeout: 3000 });
+        check(true, 'phone L sets button 4 and R sets button 5 of the virtual gamepad (a Switch Pro controller\'s L and R)');
         await tv.evaluate(() => { __gp.buttons[16] = { pressed: true, value: 1 }; });
         await tv.waitForFunction(() => Input.isDownDev('pad0', 'guide'), null, { timeout: 3000 });
         check(true, 'a real pad\'s Home button is the same Guide action');
@@ -2748,7 +2756,7 @@ async function main() {
         await P2.click('.gc-setbtn');
         const ps = await P2.evaluate(() => ({ opts: [...document.querySelectorAll('.gc-phoneset input[type=checkbox]')].map((c) => c.getAttribute('data-opt') + ':' + c.checked), pad: VirtualPad.active(),
             size: document.querySelector('.gc-phoneset input[type=checkbox]').getBoundingClientRect().height }));
-        check(ps.opts.indexOf('dpad:false') >= 0 && ps.opts.join() === 'rotate:true,awake:true,bg:true,dpad:false' && !ps.pad, 'Settings (top right) always lists Auto rotate, Stay awake, Background and GamePad, even in a browser, over a hidden pad (' + ps.opts + ')');
+        check(ps.opts.indexOf('dpad:false') >= 0 && ps.opts.join() === 'rotate:false,awake:true,bg:true,dpad:false' && !ps.pad, 'Settings (top right) always lists Auto rotate (off at first: the screen never turns), Stay awake, Background and GamePad, even in a browser, over a hidden pad (' + ps.opts + ')');
         check(ps.size >= 24, 'the checkboxes are finger-sized (' + Math.round(ps.size) + ' px)');
         await P2.click('.gc-phoneset [data-opt=dpad]');
         await P2.click('.gc-phoneset .btn-primary');
@@ -3067,19 +3075,33 @@ async function main() {
         // its own QR scanner answers, native motion samples replace devicemotion, the app is told when the link runs
         const A = await newPage(browser, base, db, { phone: true, viewport: { width: 844, height: 390 } });
         await A.addInitScript(() => { window.__nat = []; window.MyPCNative = { caps: () => '{"motion":true,"linear":true,"gyro":true}',
-            motion: (on) => __nat.push('motion:' + on), active: (on) => __nat.push('active:' + on), scanQr: () => __nat.push('scan'), version: () => 3, settings: (j) => __nat.push('settings:' + j) }; });
+            motion: (on) => __nat.push('motion:' + on), active: (on) => __nat.push('active:' + on), scanQr: () => __nat.push('scan'), version: () => 3, settings: (j) => __nat.push('settings:' + j) };
+            navigator.vibrate = (ms) => { __nat.push('vib:' + ms); return true; }; });
         await A.addInitScript({ path: path.join(ROOT, 'android-controller/app/src/main/assets/bridge.js') });
+        // an older app saved Auto rotate on (the old default): My PC holds the side anyway, for the whole app, from the start
+        await A.addInitScript(() => { if (!localStorage.getItem('arc_dev_ctrlphone')) localStorage.setItem('arc_dev_ctrlphone', JSON.stringify({ opt: { rotate: true, awake: true, bg: true, dpad: false } })); });
         await A.goto(base + 'index.html?ctrl=1');
         await A.waitForFunction(() => window.GamepadApp && !!document.querySelector('.gc-scanbtn'), null, { timeout: 20000 });
-        check(await A.evaluate(() => __nat.indexOf('settings:{"rotate":true,"awake":true,"bg":true}') >= 0), 'Android app: the phone settings (all on by default) go to the app when the Game controller opens');
+        check(await A.evaluate(() => __nat[0] === 'settings:{"rotate":false}'), 'Android app: My PC tells the app at start to hold the screen on its side (Auto rotate off, even over an old saved default) (' + await A.evaluate(() => __nat.join()) + ')');
+        check(await A.evaluate(() => __nat.indexOf('settings:{"rotate":false,"awake":true,"bg":true}') >= 0), 'Android app: the phone settings (Auto rotate off, the others on) go to the app when the Game controller opens');
         await A.click('.gc-phonebtn');
-        check(await A.evaluate(() => [...document.querySelectorAll('.gc-phoneset input')].map((c) => c.getAttribute('data-opt')).join() === 'rotate,awake,bg,dpad'), 'Android app: Settings has Auto rotate, Stay awake, Background and GamePad');
+        check(await A.evaluate(() => [...document.querySelectorAll('.gc-phoneset input')].map((c) => c.getAttribute('data-opt')).join() === 'rotate,awake,bg,dpad,vib'), 'Android app: Settings has Auto rotate, Stay awake, Background, GamePad and Vibration');
+        // Vibration: a 0..3 slider (2 at first); each press buzzes at that strength, 0 never buzzes
+        check(await A.evaluate(() => document.querySelector('.gc-phoneset .gc-range').value === '2' && document.querySelector('.gc-phoneset .gc-range').max === '3'), 'Android app: Settings has a Vibration slider from 0 to 3, at 2 at first');
+        await A.click('.gc-vib .gc-step:last-of-type');
+        check(await A.evaluate(() => Store.rawGet('arc_dev_ctrlphone').opt.vib === 3 && Haptics.level() === 3 && __nat[__nat.length - 1] === 'vib:40' && document.querySelector('.gc-vibval').textContent === '3'), 'Android app: + sets Vibration to 3 (strongest), buzzes so it can be felt, keeps it on the phone (' + await A.evaluate(() => __nat.slice(-2).join()) + ')');
+        await A.evaluate(() => { const s = document.querySelector('.gc-phoneset .gc-range'); s.value = '0'; s.dispatchEvent(new Event('change')); });
+        check(await A.evaluate(() => Store.rawGet('arc_dev_ctrlphone').opt.vib === 0 && document.querySelector('.gc-vibval').textContent === 'Off'), 'Android app: the slider at 0 turns Vibration off');
+        await A.evaluate(() => { __nat.length = 0; Haptics.buzz(); });
+        check(await A.evaluate(() => !__nat.some((x) => /^vib/.test(x))), 'Android app: Vibration 0 never buzzes');
+        await A.evaluate(() => { const s = document.querySelector('.gc-phoneset .gc-range'); s.value = '1'; s.dispatchEvent(new Event('change')); __nat.length = 0; Haptics.buzz(); });
+        check(await A.evaluate(() => __nat.join() === 'vib:10'), 'Android app: Vibration 1 is a light buzz (' + await A.evaluate(() => __nat.join()) + ')');
         await A.click('.gc-phoneset [data-opt=rotate]'); await A.click('.gc-phoneset [data-opt=bg]');
         await A.click('.gc-phoneset .btn-primary');
-        check(await A.evaluate(() => __nat[__nat.length - 1] === 'settings:{"rotate":false,"awake":true,"bg":false}' && Store.rawGet('arc_dev_ctrlphone').opt.rotate === false), 'Android app: turning Auto rotate and Background off tells the app at once and is kept on the phone');
+        check(await A.evaluate(() => __nat[__nat.length - 1] === 'settings:{"rotate":true,"awake":true,"bg":false}' && Store.rawGet('arc_dev_ctrlphone').opt.rotate === true), 'Android app: turning Auto rotate on and Background off tells the app at once and is kept on the phone');
         await A.reload();
         await A.waitForFunction(() => window.GamepadApp && !!document.querySelector('.gc-scanbtn'), null, { timeout: 20000 });
-        check(await A.evaluate(() => __nat.indexOf('settings:{"rotate":false,"awake":true,"bg":false}') >= 0), 'Android app: the settings are still there after the app restarts');
+        check(await A.evaluate(() => __nat[0] === 'settings:{"rotate":true}' && __nat.indexOf('settings:{"rotate":true,"awake":true,"bg":false}') >= 0 && Haptics.level() === 1), 'Android app: the settings (Auto rotate chosen on, Vibration 1) are still there after the app restarts');
         await A.click('.gc-phonebtn');
         await A.click('.gc-phoneset [data-opt=rotate]'); await A.click('.gc-phoneset [data-opt=bg]');
         await A.click('.gc-phoneset .btn-primary');
@@ -3117,6 +3139,16 @@ async function main() {
         check(tr.report.length === 1 && tr.report[0].move === 'LEFT' && tr.define.LEFT && tr.define.LEFT.below < 0, 'Android app: the Train tab records a move 5 times and sets its limit (' + JSON.stringify(tr.report) + ')');
         await A.evaluate(() => document.querySelector('.gc-leave2').click());
         check(await A.evaluate(() => __nat.slice(-2).sort().join() === 'active:false,motion:false'), 'Android app: leaving stops the native sensors and the keep-awake (' + await A.evaluate(() => __nat.join()) + ')');
+        // Control Panel > Devices on the phone: the same Auto rotate and Vibration (for the whole My PC app on this phone)
+        await A.evaluate(() => { Win.close(); Win.open('settings', 'devices'); });
+        await A.waitForFunction(() => [...document.querySelectorAll('.set-row')].some((r) => /Vibration/.test(r.textContent)), null, { timeout: 5000 });
+        const cpRows = await A.evaluate(() => [...document.querySelectorAll('.set-row')].map((r) => r.querySelector('.set-row-name') ? r.querySelector('.set-row-name').textContent : '').filter((x) => /Auto rotate|Vibration/.test(x)));
+        check(cpRows.join() === 'Auto rotate,Vibration', 'Android app: Control Panel > Devices has Auto rotate and Vibration (' + cpRows + ')');
+        await A.evaluate(() => { __nat.length = 0; [...document.querySelectorAll('.set-row')].find((r) => /Auto rotate/.test(r.textContent)).click(); });
+        check(await A.evaluate(() => __nat.join() === 'settings:{"rotate":true}' && Store.rawGet('arc_dev_ctrlphone').opt.rotate === true), 'Android app: Auto rotate on in Control Panel tells the app at once (' + await A.evaluate(() => __nat.join()) + ')');
+        await A.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Vibration/.test(r.textContent)).click());
+        check(await A.evaluate(() => Haptics.level() === 2 && __nat[__nat.length - 1] === 'vib:22'), 'Android app: OK on Vibration in Control Panel goes one step stronger and buzzes (' + await A.evaluate(() => __nat.join()) + ')');
+        await A.evaluate(() => Win.close());
         check(A.errors.length === 0, 'no page errors in the Android app ' + A.errors.join('; '));
         await A.context().close();
         // the Android app opens My PC itself: phone-sized taskbar and icons, a Game controller shortcut, the phone's Back is the

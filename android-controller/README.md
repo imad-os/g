@@ -31,7 +31,7 @@ browser tab does badly:
 | QR pairing | `BarcodeDetector` where Chrome has it | native scanner (zxing) on every phone |
 | Screen off | link and sensors stop | foreground service + partial wake lock keep both running while connected (Background on) |
 | Screen | wake lock when the browser allows it | kept on while connected or in a game, full screen, landscape |
-| Phone settings | Auto rotate and Stay awake where the browser allows | Auto rotate, Stay awake, Background (the Game controller's Settings, `MyPCNative.settings`, kept in the app's preferences) |
+| Phone settings | Auto rotate and Stay awake where the browser allows | Auto rotate (off by default: the screen stays on its side; My PC sends it at every start, `js/core/haptics.js`), Stay awake, Background (the Game controller's Settings, `MyPCNative.settings`, kept in the app's preferences); Vibration uses the WebView's `navigator.vibrate` (permission VIBRATE) |
 | Back / exit | browser history | the phone's Back is the TV remote's Back (`Input.systemBack`); exit closes the app (`MyPCNative.exit`) |
 
 Files: `MainActivity.java` (WebView, navigation limited to My PC, Back, QR), `Bridge.java` (`window.MyPCNative`),

@@ -19,6 +19,7 @@ var PWA = (function () {
         catch (e) { return false; }
     }
     function lock() {
+        if (window.Haptics) { Haptics.apply(); return; }    // held on the side it is on unless Auto rotate is on (js/core/haptics.js)
         try {
             var o = screen.orientation;
             if (o && o.lock) { var p = o.lock('landscape'); if (p && p.catch) p.catch(function () {}); }

@@ -100,8 +100,10 @@
   **A B X Y in the Nintendo places** (pad button option `place`) ****the phone IS a virtual standard gamepad on the TV (`Input.virtualPad`, message `gp`: raw button bits + stick axes, device `pad10<player>`), never high-level actions** (owner rule, games must see exactly a real pad; Input.PAD_BUTTONS reads by position): A right = `b` (run + cancel), B bottom = `ok` (jump + confirm), X top and Y left = run, the + button = `menu` (Start), Home (pad option `home`) = `guide`**; same mapping in the shell's touch pad and the SDK's `MyPC.pad`.
   **Keyboard mode** (`keyboard`): a keyboard plugged into the phone is a whole Switch Pro style controller; keys mapped per control on the phone
   (`arc_dev_ctrlphone.keys`, ZQSD = D-pad by default), sends the same `gp` message (18 buttons, Capture = 17, `rx` / `ry` right stick), never keys;
-  the screen draws the controller and lights the pressed control. The Buttons pad's gear can add L R ZL ZR − Capture L3 R3 too.
-  **Phone settings** (Game controller > Settings, `arc_dev_ctrlphone.opt`): Auto rotate, Stay awake, Background (native in the APK 2.1.0+ via
+  the screen draws the controller and lights the pressed control. The Buttons pad shows L and R by default (shoulder pills, VirtualPad `place: 'l' | 'r' | 'zl' | 'zr'`); its gear adds ZL ZR − Capture L3 R3.
+  **Phone settings** (Game controller > Settings, `arc_dev_ctrlphone.opt`): Auto rotate (owner decision: off by default, the screen never turns
+  even when the phone is flipped; whole app, also in Control Panel > Devices on a phone), Vibration 0-3 (`vib`, buzz per press, also the shell's touch pad;
+  both in `js/core/haptics.js`, which re-applies Auto rotate at every start, so no APK rebuild was needed), Stay awake, Background (native in the APK 2.1.0+ via
   `MyPCNative.settings`; always shown, no conditions) and GamePad (pad option `dpad`: a D-pad in place of the stick); Disconnect / Forget TV; a paired TV is reconnected by itself
   when the Game controller opens (`paired`); it opens on Connect, never auto-focusing the code box.
   Motion modes `sensor-actions` / `sensor-raw`: protocol `js/core/sensor-proto.js`, detection `js/core/motion.js` (moves are data rules,

@@ -18,7 +18,8 @@
  *                   maps each key to a control (A B X Y, L R ZL ZR, − +, Home, Capture, D-pad, both sticks and their clicks;
  *                   ZQSD = D-pad by default), kept on the phone; it sends the same gamepad message as pad mode (with the right
  *                   stick), never keys. The screen shows the controller with each control's key; a pressed control lights up
- * Phone settings (Settings button on every screen, kept on the phone in arc_dev_ctrlphone.opt): Auto rotate, Stay awake,
+ * Phone settings (Settings button on every screen, kept on the phone in arc_dev_ctrlphone.opt): Auto rotate (off by default),
+ * Vibration 0..3 (both shared with My PC itself through js/core/haptics.js), Stay awake,
  * Background (the Android app keeps the link with the screen off) and GamePad (a D-pad in place of the stick). The Android
  * app (MyPCNative 3+) applies the first three natively; in a browser Auto rotate and Stay awake use the Screen Orientation
  * and Wake Lock APIs where the browser has them; all four settings are always shown.
@@ -26,15 +27,19 @@
 (function () {
     'use strict';
 
-    // Keyboard mode strings
+    // Keyboard mode and Vibration / Auto rotate strings (the last ones also in Control Panel > Devices)
     I18n.add({
-        en: { gcModeKeys: 'Keyboard', gcKHelp: 'Plug a keyboard into this phone (USB or Bluetooth): each key presses the controller button that shows it. Tap a button to give it another key.', gcKMap: 'Map keys', gcKDefault: 'Default keys', gcKSkip: 'Skip', gcKClear: 'No key', gcKStop: 'Done', gcKPress: 'Press a key for %s', gcKNone: 'no key',
+        en: { gcVib: 'Vibration', gcVibDesc: 'A short buzz on every button press: 0 = off, 3 = strongest. Also used by the touch pad over games on this phone.', gcRotateDesc: 'Off: the screen stays on the side it is on, even when the phone is turned over. For the whole My PC app on this phone.',
+              gcModeKeys: 'Keyboard', gcKHelp: 'Plug a keyboard into this phone (USB or Bluetooth): each key presses the controller button that shows it. Tap a button to give it another key.', gcKMap: 'Map keys', gcKDefault: 'Default keys', gcKSkip: 'Skip', gcKClear: 'No key', gcKStop: 'Done', gcKPress: 'Press a key for %s', gcKNone: 'no key',
               gcKDpad: 'D-pad', gcKLs: 'Left stick', gcKRs: 'Right stick', gcKLclick: 'Left stick click', gcKRclick: 'Right stick click', gcKHome: 'Home', gcKCapture: 'Capture' },
-        fr: { gcModeKeys: 'Clavier', gcKHelp: 'Branchez un clavier sur ce téléphone (USB ou Bluetooth) : chaque touche appuie sur le bouton de la manette qui l’affiche. Touchez un bouton pour lui donner une autre touche.', gcKMap: 'Assigner les touches', gcKDefault: 'Touches par défaut', gcKSkip: 'Passer', gcKClear: 'Aucune touche', gcKStop: 'Terminé', gcKPress: 'Appuyez sur une touche pour %s', gcKNone: 'aucune touche',
+        fr: { gcVib: 'Vibration', gcVibDesc: 'Une courte vibration à chaque bouton : 0 = désactivée, 3 = la plus forte. Aussi pour la manette tactile sur les jeux de ce téléphone.', gcRotateDesc: 'Désactivée : l’écran reste du côté où il est, même si le téléphone est retourné. Pour toute l’appli My PC sur ce téléphone.',
+              gcModeKeys: 'Clavier', gcKHelp: 'Branchez un clavier sur ce téléphone (USB ou Bluetooth) : chaque touche appuie sur le bouton de la manette qui l’affiche. Touchez un bouton pour lui donner une autre touche.', gcKMap: 'Assigner les touches', gcKDefault: 'Touches par défaut', gcKSkip: 'Passer', gcKClear: 'Aucune touche', gcKStop: 'Terminé', gcKPress: 'Appuyez sur une touche pour %s', gcKNone: 'aucune touche',
               gcKDpad: 'Croix', gcKLs: 'Joystick gauche', gcKRs: 'Joystick droit', gcKLclick: 'Clic du joystick gauche', gcKRclick: 'Clic du joystick droit', gcKHome: 'Accueil', gcKCapture: 'Capture' },
-        es: { gcModeKeys: 'Teclado', gcKHelp: 'Conecta un teclado a este teléfono (USB o Bluetooth): cada tecla pulsa el botón del mando que la muestra. Toca un botón para darle otra tecla.', gcKMap: 'Asignar teclas', gcKDefault: 'Teclas por defecto', gcKSkip: 'Saltar', gcKClear: 'Sin tecla', gcKStop: 'Listo', gcKPress: 'Pulsa una tecla para %s', gcKNone: 'sin tecla',
+        es: { gcVib: 'Vibración', gcVibDesc: 'Una vibración corta en cada botón: 0 = desactivada, 3 = la más fuerte. También para el mando táctil sobre los juegos en este teléfono.', gcRotateDesc: 'Desactivado: la pantalla se queda del lado en que está, aunque se dé la vuelta al teléfono. Para toda la app My PC en este teléfono.',
+              gcModeKeys: 'Teclado', gcKHelp: 'Conecta un teclado a este teléfono (USB o Bluetooth): cada tecla pulsa el botón del mando que la muestra. Toca un botón para darle otra tecla.', gcKMap: 'Asignar teclas', gcKDefault: 'Teclas por defecto', gcKSkip: 'Saltar', gcKClear: 'Sin tecla', gcKStop: 'Listo', gcKPress: 'Pulsa una tecla para %s', gcKNone: 'sin tecla',
               gcKDpad: 'Cruceta', gcKLs: 'Joystick izquierdo', gcKRs: 'Joystick derecho', gcKLclick: 'Clic del joystick izquierdo', gcKRclick: 'Clic del joystick derecho', gcKHome: 'Inicio', gcKCapture: 'Captura' },
-        ar: { gcModeKeys: 'لوحة المفاتيح', gcKHelp: 'صِل لوحة مفاتيح بهذا الهاتف (USB أو بلوتوث): كل مفتاح يضغط زر اليد الذي يظهر عليه. المس زراً لتعطيه مفتاحاً آخر.', gcKMap: 'تعيين المفاتيح', gcKDefault: 'المفاتيح الافتراضية', gcKSkip: 'تخطي', gcKClear: 'بلا مفتاح', gcKStop: 'تم', gcKPress: 'اضغط مفتاحاً لـ %s', gcKNone: 'بلا مفتاح',
+        ar: { gcVib: 'الاهتزاز', gcVibDesc: 'اهتزاز قصير عند كل ضغطة زر: 0 = متوقف، 3 = الأقوى. يُستخدم أيضاً لذراع اللمس فوق الألعاب على هذا الهاتف.', gcRotateDesc: 'متوقف: تبقى الشاشة على الجهة التي هي عليها حتى لو قُلب الهاتف. لكل تطبيق My PC على هذا الهاتف.',
+              gcModeKeys: 'لوحة المفاتيح', gcKHelp: 'صِل لوحة مفاتيح بهذا الهاتف (USB أو بلوتوث): كل مفتاح يضغط زر اليد الذي يظهر عليه. المس زراً لتعطيه مفتاحاً آخر.', gcKMap: 'تعيين المفاتيح', gcKDefault: 'المفاتيح الافتراضية', gcKSkip: 'تخطي', gcKClear: 'بلا مفتاح', gcKStop: 'تم', gcKPress: 'اضغط مفتاحاً لـ %s', gcKNone: 'بلا مفتاح',
               gcKDpad: 'أزرار الاتجاه', gcKLs: 'العصا اليسرى', gcKRs: 'العصا اليمنى', gcKLclick: 'ضغط العصا اليسرى', gcKRclick: 'ضغط العصا اليمنى', gcKHome: 'الرئيسية', gcKCapture: 'التقاط' }
     });
 
@@ -51,10 +56,11 @@
     // Pad mode is a real gamepad: the phone sends raw button bits of the W3C standard layout (g0..g3 = buttons 0..3, + = 9, Home = 16,
     // D-pad = 12..15) and the stick as axes; the TV makes a virtual gamepad of it (Input.virtualPad).
     // The pad's gear can also add the other buttons of a Switch Pro controller (L R ZL ZR, −, Capture, stick clicks)
-    ABXY.extra = [{ label: 'L', key: 76, action: 'l' }, { label: 'R', key: 82, action: 'r' }, { label: 'ZL', key: 75, action: 'zl' }, { label: 'ZR', key: 84, action: 'zr' },
+    // L and R are shown at first (shoulder pills at the top corners); the gear adds the rest
+    ABXY.extra = [{ label: 'L', key: 76, action: 'l', place: 'l' }, { label: 'R', key: 82, action: 'r', place: 'r' }, { label: 'ZL', key: 75, action: 'zl', place: 'zl' }, { label: 'ZR', key: 84, action: 'zr', place: 'zr' },
                   { label: '−', key: 189, action: 'minus' }, { label: '●', key: 67, action: 'capture' }, { label: 'L3', key: 49, action: 'ls' }, { label: 'R3', key: 50, action: 'rs' }];
     var GBTN = { g0: 0, g1: 1, g2: 2, g3: 3, l: 4, r: 5, zl: 6, zr: 7, minus: 8, menu: 9, ls: 10, rs: 11, guide: 16, capture: 17 }, DPAD = { up: 12, down: 13, left: 14, right: 15 }, gpBits = 0, gpHeld = {}, gpSent = '';
-    var PAD = { buttons: ABXY, catalog: ABXY.concat(ABXY.extra) };
+    var PAD = { buttons: ABXY.concat(ABXY.extra.slice(0, 2)), catalog: ABXY.concat(ABXY.extra) };
     var root = null, code = '', player = 1, mode = 'pad', run = false, busy = false, conn = null, linked = false, sess = null, retry = 0, wait = 0, curReq = null, offerObj = null;
     var want = {}, sent = {}, ui = {}, saved = {}, cid = '', inPad = false, wl = null, session = '';
     // sensor modes
@@ -68,8 +74,8 @@
     // pointer mode (js/core/aim.js): settings kept on the phone; calibration steps
     var PTR_DEF = { smooth: 5, speed: 1, steady: 1.5, swapX: false, swapY: false };
     var aim = null, aimLast = 0, calib = null;
-    // phone settings (all on except GamePad)
-    var OPT_DEF = { rotate: true, awake: true, bg: true, dpad: false }, OPT_NAMES = [['rotate', 'gcRotate'], ['awake', 'gcAwake'], ['bg', 'gcBackground'], ['dpad', 'gcDpad']];
+    // phone settings (Stay awake and Background on, Auto rotate and GamePad off) and Vibration 0..3 (js/core/haptics.js)
+    var OPT_DEF = { rotate: false, awake: true, bg: true, dpad: false }, OPT_NAMES = [['rotate', 'gcRotate'], ['awake', 'gcAwake'], ['bg', 'gcBackground'], ['dpad', 'gcDpad']];
 
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
     function t(k) { return I18n.t(k); }
@@ -79,11 +85,21 @@
     function name() { return /Android/i.test(navigator.userAgent) ? 'Android' : /iPhone|iPad/i.test(navigator.userAgent) ? 'iPhone' : 'Phone'; }
     function prefs() { var p = saved.prefs || {}; return { profile: SensorProto.profile(p.profile), sensitivity: +p.sensitivity || 1, stride: +p.stride || 1, swap: !!p.swap }; }
     function save() { Store.rawSet(KEY, { cid: cid, code: code, p: player, mode: mode, prefs: saved.prefs || {}, ptr: saved.ptr || {}, opt: saved.opt || {}, keys: saved.keys || null, paired: !!saved.paired }); }
-    function opts() { var o = saved.opt || {}, r = {}; for (var k in OPT_DEF) r[k] = typeof o[k] === 'boolean' ? o[k] : OPT_DEF[k]; return r; }
+    // Auto rotate counts only when chosen since it became off by default (rv: 2, see js/core/haptics.js)
+    function opts() {
+        var o = saved.opt || {}, r = {};
+        for (var k in OPT_DEF) r[k] = typeof o[k] === 'boolean' ? o[k] : OPT_DEF[k];
+        r.rotate = o.rv === 2 && o.rotate === true;
+        r.vib = o.vib === 0 || o.vib === 1 || o.vib === 2 || o.vib === 3 ? o.vib : Haptics.level();
+        return r;
+    }
     function nativeV() { try { return window.MyPCNative && typeof MyPCNative.version === 'function' ? +MyPCNative.version() || 0 : 0; } catch (e) { return 0; } }
     // owner decision: every setting is always shown, no conditions (an old app or a browser simply ignores what it cannot do)
     function setOpt(k, v) {
-        var o = opts(); o[k] = !!v; saved.opt = o; save();
+        var o = opts();
+        if (k === 'vib') o.vib = Math.max(0, Math.min(Haptics.MAX, Math.round(+v) || 0)); else o[k] = !!v;
+        o.rv = 2; saved.opt = o; save();
+        if (k === 'vib') { Haptics.buzz(); return; }                    // feel the new strength
         applyOpts();
         if (k === 'dpad' && VirtualPad.active()) VirtualPad.hide();            // drawn again with or without the D-pad on close
     }
@@ -209,7 +225,7 @@
     /* ---------- pad mode: the existing virtual pad ---------- */
     function padAction(a, down) {
         if (mode === 'pointer') {                                          // the pointer screen's A / B: plain actions
-            if (!!want[a] !== down) { want[a] = down; send({ t: 'k', a: a, d: down ? 1 : 0 }); if (down && navigator.vibrate) { try { navigator.vibrate(8); } catch (e) {} } }
+            if (!!want[a] !== down) { want[a] = down; send({ t: 'k', a: a, d: down ? 1 : 0 }); if (down) Haptics.buzz(); }
             return;
         }
         a = a === 'pause' ? 'menu' : a === 'home' ? 'guide' : a;       // + = Start, Home = Guide, like a real pad
@@ -217,7 +233,7 @@
         if (i >= 0) { if (down) gpBits |= 1 << i; else gpBits &= ~(1 << i); }
         else if (DPAD.hasOwnProperty(a)) gpHeld[a] = down;               // the stick: axes
         else return;
-        if (down && navigator.vibrate) { try { navigator.vibrate(8); } catch (e) {} }
+        if (down) Haptics.buzz();
         sync();
     }
     function sync() {
@@ -454,7 +470,7 @@
         var m = { type: 'action', action: name, timestamp: Date.now(), sequence: ++seq, confidence: info.confidence, gait: info.gait };
         if (send(m)) { acks[m.sequence] = performance.now(); note('sent', name + ' #' + m.sequence + ' ' + Math.round(info.confidence * 100) + '%'); }
         else note('offline', name);
-        if (navigator.vibrate) { try { navigator.vibrate(15); } catch (e) {} }
+        Haptics.buzz(15);
         flash();
     }
     function onAck(a) {
@@ -618,7 +634,7 @@
             scan.timer = setInterval(function () {
                 if (!scan || video.readyState < 2) return;
                 det.detect(video).then(function (codes) {
-                    for (var i = 0; i < codes.length; i++) { var c = codeFrom(codes[i].rawValue); if (c) { stopScan(); if (navigator.vibrate) { try { navigator.vibrate(30); } catch (e) {} } pairWith(c); return; } }
+                    for (var i = 0; i < codes.length; i++) { var c = codeFrom(codes[i].rawValue); if (c) { stopScan(); Haptics.buzz(30); pairWith(c); return; } }
                 }, function () {});
             }, 250);
         }, function () { stopScan(); ui.err.textContent = t('gcScanDenied'); });
@@ -665,6 +681,7 @@
             r.appendChild(el('span', 'gc-grow', t(n[1]))); r.appendChild(c); box.appendChild(r);
             if (!first) first = c;
         });
+        box.appendChild(vibRow(o.vib));
         box.appendChild(el('div', 'gc-line', t('gcPhoneSaved')));
         // the TV this phone connects to by itself: Disconnect (for now) and Forget TV (no more connecting by itself)
         var tvRow = el('div', 'gc-row');
@@ -675,6 +692,22 @@
         box.appendChild(cl);
         root.appendChild(box); ui.modes = box;
         Focus.focus(first || cl);
+    }
+    // Vibration: a slider 0 (off) .. 3 (strongest), with − / + for the TV remote's arrows and big fingers
+    function vibRow(v) {
+        var r = el('div', 'gc-srow gc-vib'), val = el('span', 'gc-vibval'), s = el('input');
+        s.type = 'range'; s.min = 0; s.max = Haptics.MAX; s.step = 1; s.value = v; s.className = 'gc-range'; s.setAttribute('data-opt', 'vib'); s.setAttribute('aria-label', t('gcVib'));
+        function paint(n) { s.value = n; val.textContent = n ? String(n) : t('off'); }
+        function to(n) { n = Math.max(0, Math.min(Haptics.MAX, n)); paint(n); setOpt('vib', n); }
+        s.oninput = function () { paint(+s.value); };
+        s.onchange = function () { to(+s.value); };
+        r.appendChild(el('span', 'gc-grow', t('gcVib')));
+        r.appendChild(btn('gc-step', '−', function () { to(+s.value - 1); }));
+        r.appendChild(s);
+        r.appendChild(btn('gc-step', '+', function () { to(+s.value + 1); }));
+        r.appendChild(val);
+        paint(v);
+        return r;
     }
     function forget() {
         closeModes(); stop();
@@ -700,7 +733,7 @@
         try { Store.rawSet(TRAIN_KEY, trained); } catch (e) {}
         applyCfg();
     }
-    function buzz(ms) { if (navigator.vibrate) { try { navigator.vibrate(ms); } catch (e) {} } }
+    function buzz(ms) { Haptics.buzz(ms); }
     // one move, TRAIN_REPS times: "get ready" (1.2 s), "go" (1.6 s recorded, with the second before it), a short pause
     function trainMove(move) {
         if (trainer) return stopTrain();

@@ -203,6 +203,11 @@
         for (i = 0; i < pads.length; i++) out.push({ kind: 'info', label: t('devController') + ' ' + (i + 1), value: pads[i].name + (pads[i].standard ? '' : ' \u00B7 ' + t('devGeneric')) });
         out.push({ kind: 'action', label: t('devTestOpen'), desc: pads.length ? t('devTest') : t('devNoPad'), run: function () { sub = 'padtest'; var f = renderMain(0); if (f) Focus.focus(f); } });
         out.push({ kind: 'text', value: t('devMapHelp') });
+        // this phone itself (js/core/haptics.js): the same settings as the Game controller's
+        if (Haptics.phone()) {
+            out.push({ kind: 'toggle', label: t('gcRotate'), desc: t('gcRotateDesc'), get: function () { return Haptics.rotate(); }, set: function (v) { Haptics.set('rotate', v); } });
+            out.push({ kind: 'slider', label: t('gcVib'), desc: t('gcVibDesc'), max: Haptics.MAX, value: function () { return Haptics.level(); }, adjust: function (d) { Haptics.set('vib', Haptics.level() + d); } });
+        }
         var pl0 = Controllers.players();
         out.push({ kind: 'action', label: t('ctrlTitle'), desc: !Controllers.on() ? t('ctrlOff') : (pl0[1] || pl0[2]) ? [pl0[1], pl0[2]].filter(Boolean).join(', ') : t('ctrlScanDesc'),
                    run: function () { sub = 'phonectrl'; if (Controllers.on()) Controllers.pair(); var f = renderMain(1); if (f) Focus.focus(f); } });
@@ -558,7 +563,7 @@
                 var aria = r.label;
                 if (r.kind === 'slider') {
                     var v = r.value(), sl = el('span', 'set-slider'), bar = el('span', 'set-slider-bar'), fill = el('span', 'set-slider-fill');
-                    fill.style.width = (v * 10) + '%';
+                    fill.style.width = (v * 100 / (r.max || 10)) + '%';
                     bar.appendChild(fill); sl.appendChild(bar); sl.appendChild(el('span', 'set-val', String(v)));
                     b.appendChild(sl);
                     aria += ': ' + v + '. ' + t('adjustHint');
@@ -666,6 +671,7 @@
     }
 
     function activate(r, idx) {
+        if (r.kind === 'slider' && r.max && r.value() >= r.max) { r.adjust(-r.max); return refresh(idx); }   // a short scale (0..3) goes round on OK / tap
         if (r.kind === 'select' || r.kind === 'slider') return change(idx, 1);
         if (r.kind === 'toggle') { r.set(!r.get()); return refresh(idx); }
         if (r.kind === 'action') r.run();
@@ -673,7 +679,7 @@
 
     function change(idx, d) {
         var r = rows[idx];
-        if (r.kind === 'slider' && ((d > 0 && r.value() >= 10) || (d < 0 && r.value() <= 0))) return;
+        if (r.kind === 'slider' && ((d > 0 && r.value() >= (r.max || 10)) || (d < 0 && r.value() <= 0))) return;
         r.adjust(d);
         refresh(idx);
     }
