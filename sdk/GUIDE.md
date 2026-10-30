@@ -747,6 +747,13 @@ OpenRouter and the other OpenAI-compatible services take the model names of thei
 `meta/llama-3.3-70b-instruct`, `deepseek-ai/deepseek-r1`, `nvidia/llama-3.1-nemotron-70b-instruct`). What a model can do
 depends on the service: a service that cannot do something answers with an `http` or `unsupported` error.
 
+**Ollama** uses its own API, not the OpenAI-compatible one: chat goes to `POST <address>/api/chat` with
+`{ model, messages, stream }` (the answer is read from `message.content`; streaming works too), `task: 'embed'` to
+`/api/embed`. The service's address is the server itself (`http://192.168.1.10:11434` or `https://my-ollama.example`;
+an address ending in `/v1` or `/api` works too). It takes text and images (`images` on a message), `temperature`, `topP`,
+`stop`, `seed`, `maxTokens` (`num_predict`) and `output: 'json'` / `schema` (`format`). An app's own Ollama:
+`provider: { type: 'ollama', url: 'https://my-ollama.example', model: 'llama3.1:8b' }`.
+
 **NVIDIA speech (Magpie-Multilingual)**: with the NVIDIA service, `task: 'speech'` goes to NVIDIA's Magpie-Multilingual
 text-to-speech (an NVCF function; its id is set in the App Store Manager > AI services > NVIDIA > Voice (Magpie) function, filled in already).
 Languages `en-US`, `es-US`, `fr-FR`, `de-DE` (`'en'`, `'es'`, `'fr'`, `'de'` work too; others, Arabic included, give

@@ -4,7 +4,8 @@
  * settings/ai); each My PC copies them at start (Bridges.syncAi -> AI.setManaged) and Settings > AI only shows them.
  * Apps never see the keys. An app can also bring its own provider (with its own key) in the request. Kinds of provider:
  *   openai     OpenAI and every OpenAI-compatible API: NVIDIA, OpenRouter, Groq, Mistral, DeepSeek, xAI, Together,
- *              Ollama / LM Studio on a computer at home, or any custom address
+ *              LM Studio on a computer at home, or any custom address; Ollama (preset 'ollama') uses its own API
+ *              (POST <address>/api/chat, /api/embed) on the same kind
  *   gemini     Google Gemini (text, images, speech, video with Veo, embeddings)
  *   anthropic  Anthropic Claude (text, images, PDF)
  *
@@ -49,14 +50,15 @@ var AI = (function () {
         { preset: 'deepseek', type: 'openai', name: 'DeepSeek', url: 'https://api.deepseek.com/v1', model: 'deepseek-chat', site: 'platform.deepseek.com' },
         { preset: 'xai', type: 'openai', name: 'xAI Grok', url: 'https://api.x.ai/v1', model: 'grok-3-mini', site: 'console.x.ai' },
         { preset: 'together', type: 'openai', name: 'Together AI', url: 'https://api.together.xyz/v1', model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', site: 'api.together.ai' },
-        { preset: 'ollama', type: 'openai', name: 'Ollama (computer at home)', url: 'http://192.168.1.10:11434/v1', model: 'llama3.2', noKey: true, lan: true },
+        { preset: 'ollama', type: 'openai', name: 'Ollama (computer at home)', url: 'http://192.168.1.10:11434', model: 'llama3.2', noKey: true, lan: true },
         { preset: 'custom', type: 'openai', name: 'Custom (OpenAI-compatible)', url: 'https://', model: '' }
     ];
     // the model used for a task when neither the request nor the provider names one
     var MODELS = {
         openai: { image: 'gpt-image-1', speech: 'gpt-4o-mini-tts', transcribe: 'gpt-4o-mini-transcribe', video: 'sora-2', embed: 'text-embedding-3-small' },
         gemini: { image: 'gemini-2.5-flash-image', speech: 'gemini-2.5-flash-preview-tts', video: 'veo-3.0-fast-generate-001', embed: 'gemini-embedding-001' },
-        anthropic: {}
+        anthropic: {},
+        ollama: {}
     };
     var TASKS = { chat: 1, image: 1, speech: 1, transcribe: 1, video: 1, embed: 1 };
 
@@ -124,6 +126,9 @@ var AI = (function () {
         }
         return t;
     }
+    function isOllama(p) { return p.preset === 'ollama'; }
+    // Ollama's own API is at the server's root: an address saved with /v1 (its OpenAI-compatible part) or /api still works
+    function ollamaBase(p) { return String(p.url || '').replace(/\/+$/, '').replace(/\/(v1|api)$/, ''); }
     function isNvidia(p) { return p.preset === 'nvidia' || /\/\/integrate\.api\.nvidia\.com/.test(p.url || ''); }
     // an NVCF function: its id alone, or its whole address
     function nvcfUrl(v, path) { v = String(v || '').trim(); return /^[0-9a-f-]{36}$/i.test(v) ? 'https://' + v.toLowerCase() + '.invocation.api.nvcf.nvidia.com' + path : v; }
@@ -146,7 +151,7 @@ var AI = (function () {
             if (!/^https?:\/\//.test(url)) return null;
             return { id: 'app', own: true, type: t, name: String(spec.name || pre.name || 'App'), url: url, key: String(spec.key || ''), model: String(spec.model || ''),
                      models: spec.models && typeof spec.models === 'object' ? spec.models : {}, headers: spec.headers && typeof spec.headers === 'object' ? spec.headers : null,
-                     preset: spec.preset || (/\/\/integrate\.api\.nvidia\.com/.test(url) ? 'nvidia' : ''),
+                     preset: spec.preset || (spec.type === 'ollama' ? 'ollama' : '') || (/\/\/integrate\.api\.nvidia\.com/.test(url) ? 'nvidia' : ''),
                      speechUrl: String(spec.speechUrl || (/\/\/integrate\.api\.nvidia\.com/.test(url) ? presetOf('nvidia').speechUrl : '')), transcribeUrl: String(spec.transcribeUrl || '') };
         }
         var want = spec || appDefault, l = list(), i;
@@ -422,6 +427,67 @@ var AI = (function () {
         return out;
     }
 
+    /* ---------------- Ollama (its own API: POST /api/chat, /api/embed) ---------------- */
+
+    // Ollama streams one JSON object per line (not server-sent events)
+    function ndjson(onData) {
+        var buf = '';
+        return function (piece) {
+            buf += piece;
+            var lines = buf.split(/\r?\n/);
+            buf = lines.pop();
+            for (var i = 0; i < lines.length; i++) { var l = lines[i].trim(); if (l) { try { onData(JSON.parse(l)); } catch (e) {} } }
+        };
+    }
+    function olMessages(n) {
+        var out = [];
+        if (n.sys) out.push({ role: 'system', content: n.sys });
+        n.msgs.forEach(function (m) {
+            var text = [], images = [];
+            m.parts.forEach(function (x) {
+                if (x.type === 'text') text.push(x.text);
+                else if (x.type === 'image') images.push(x._b64);
+                else throw err('unsupported', 'Ollama only takes text and images.');
+            });
+            var o = { role: m.role, content: text.join('\n') };
+            if (images.length) o.images = images;
+            out.push(o);
+        });
+        return out;
+    }
+    function olUsage(b) { return b && (b.prompt_eval_count !== undefined || b.eval_count !== undefined) ? { input: b.prompt_eval_count || 0, output: b.eval_count || 0, total: (b.prompt_eval_count || 0) + (b.eval_count || 0) } : null; }
+    async function olChat(ctl, p, model, n, req, onEvent) {
+        await loadAll(ctl, p, n, false);
+        var body = { model: model, messages: olMessages(n), stream: !!req.stream }, o = {};
+        if (req.temperature !== undefined) o.temperature = +req.temperature;
+        if (req.topP !== undefined) o.top_p = +req.topP;
+        if (req.stop) o.stop = Array.isArray(req.stop) ? req.stop : [req.stop];
+        if (req.seed !== undefined) o.seed = +req.seed;
+        if (req.maxTokens) o.num_predict = +req.maxTokens;
+        if (Object.keys(o).length) body.options = o;
+        if (n.json) body.format = req.schema || 'json';
+        Object.assign(body, req.extra || {});
+        var url = ollamaBase(p) + '/api/chat';
+        if (body.stream) {
+            var text = '', usage = null, finish = '';
+            await http(ctl, p, { url: url, json: body, responseType: 'text', onChunk: ndjson(function (d) {
+                var c = d.message && d.message.content;
+                if (typeof c === 'string' && c) { text += c; onEvent({ ev: 'delta', text: c }); }
+                if (d.done) { finish = d.done_reason || 'stop'; usage = olUsage(d); }
+            }) });
+            return result(p, model, text, [], usage, finish, null, req);
+        }
+        var r = await http(ctl, p, { url: url, json: body }), b = r.body || {};
+        return result(p, model, (b.message && b.message.content) || '', [], olUsage(b), b.done_reason || 'stop', b, req);
+    }
+    async function olEmbed(ctl, p, model, n, req) {
+        var input = Array.isArray(req.input) ? req.input.map(asText) : [allText(n)];
+        var r = await http(ctl, p, { url: ollamaBase(p) + '/api/embed', json: Object.assign({ model: model, input: input }, req.extra || {}) });
+        var out = result(p, model, '', [], olUsage(r.body), 'stop', r.body, req);
+        out.vectors = (r.body && r.body.embeddings) || [];
+        return out;
+    }
+
     /* ---------------- Google Gemini ---------------- */
 
     function gContents(n) {
@@ -648,12 +714,12 @@ var AI = (function () {
             if (req.timeout) ctl.timeout = Math.min(Math.max(5000, +req.timeout), 600000);
             var n = normalise(req);
             if (!n.msgs.length && !(n.task === 'embed' && Array.isArray(req.input))) throw err('bad-request', 'Give a prompt or messages.');
-            var fn = (RUN[p.type] || {})[n.task];
+            var fn = isOllama(p) ? { chat: olChat, embed: olEmbed }[n.task] : (RUN[p.type] || {})[n.task];
             var nv = isNvidia(p) && (n.task === 'speech' || n.task === 'transcribe');
             if (nv) fn = n.task === 'speech' ? nvSpeech : nvTranscribe;
             if (!fn) throw err('unsupported', (p.name || p.type) + ' cannot do "' + n.task + '". ' + (n.task === 'chat' ? '' : 'Gemini and OpenAI can.'));
             var model = req.model || (nv ? (n.task === 'speech' ? 'magpie-multilingual' : 'parakeet') : '') ||
-                (n.task === 'chat' || n.task === 'transcribe' && p.type === 'gemini' ? '' : (p.models && p.models[n.task]) || MODELS[p.type][n.task]) || p.model;
+                (n.task === 'chat' || n.task === 'transcribe' && p.type === 'gemini' ? '' : (p.models && p.models[n.task]) || MODELS[isOllama(p) ? 'ollama' : p.type][n.task]) || p.model;
             if (!model) throw err('bad-request', 'Name a model (the request\'s "model", or the service\'s model in the App Store Manager).');
             var r = await fn(ctl, p, model, n, req, onEvent);
             if (n.json) r.json = parseJson(r.text);
@@ -668,8 +734,9 @@ var AI = (function () {
         var promise = (async function () {
             if (!p) throw err('no-provider', 'No AI service is set up. Add one in the App Store Manager (AI services).');
             req = req && typeof req === 'object' ? req : {};
-            var url = req.url ? String(req.url) : p.url + '/' + String(req.path || '').replace(/^\/+/, '');
-            var a = new URL(url), b = new URL(p.url + '/');
+            var base = isOllama(p) ? ollamaBase(p) : p.url;
+            var url = req.url ? String(req.url) : base + '/' + String(req.path || '').replace(/^\/+/, '');
+            var a = new URL(url), b = new URL(base + '/');
             if (a.origin !== b.origin && !(isNvidia(p) && a.protocol === 'https:' && nvidiaHost(a.hostname))) throw err('blocked', 'The key of ' + p.name + ' is only sent to ' + b.host + (isNvidia(p) ? ' and NVIDIA\'s own hosts' : '') + '.');
             if (req.timeout) ctl.timeout = Math.min(Math.max(5000, +req.timeout), 600000);
             var r = await http(ctl, p, { url: url, method: req.method, headers: req.headers, json: req.json, body: req.body, form: req.form, responseType: req.responseType || 'json' });

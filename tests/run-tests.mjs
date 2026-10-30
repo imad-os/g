@@ -3380,6 +3380,13 @@ async function main() {
             if (seen.nvidia.body.stream) return r.fulfill({ status: 200, contentType: 'text/event-stream', headers: cors, body: 'data: {"choices":[{"delta":{"content":"Hel"}}]}\n\ndata: {"choices":[{"delta":{"content":"lo"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n' });
             r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ choices: [{ message: { content: 'Hi there' }, finish_reason: 'stop' }], usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 } }) });
         });
+        await page.context().route('https://ollama.test/**', (r) => {
+            const q = r.request();
+            if (q.method() === 'OPTIONS') return r.fulfill({ status: 204, headers: cors });
+            seen.ollama = { url: q.url(), body: JSON.parse(q.postData() || '{}') };
+            if (seen.ollama.body.stream) return r.fulfill({ status: 200, contentType: 'application/x-ndjson', headers: cors, body: '{"message":{"role":"assistant","content":"Bon"},"done":false}\n{"message":{"role":"assistant","content":"jour"},"done":false}\n{"message":{"role":"assistant","content":""},"done":true,"done_reason":"stop","prompt_eval_count":3,"eval_count":2}\n' });
+            r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ model: 'llama3.1:8b', message: { role: 'assistant', content: 'Hello from Ollama' }, done: true, done_reason: 'stop', prompt_eval_count: 5, eval_count: 4 }) });
+        });
         await page.context().route('https://877104f7-e885-42b9-8de8-f6e4c6303969.invocation.api.nvcf.nvidia.com/**', (r) => {
             const q = r.request();
             if (q.method() === 'OPTIONS') return r.fulfill({ status: 204, headers: cors });
@@ -3441,6 +3448,12 @@ async function main() {
             'NVIDIA (OpenAI-compatible): streamed pieces through onDelta, Bearer key, the service\'s model; no second question once allowed (' + deltas + ')');
         const own = await frame.evaluate(() => MyPC.ai.generate({ provider: { type: 'openai', url: 'https://integrate.api.nvidia.com/v1', key: 'app-own-key', model: 'm1' }, messages: [{ role: 'system', content: 'S' }, { role: 'user', content: 'Q' }, { role: 'assistant', content: 'A' }, { role: 'user', content: 'Q2' }] }).then((r) => r.text));
         check(own === 'Hi there' && seen.nvidia.auth === 'Bearer app-own-key' && seen.nvidia.body.messages.map((m) => m.role).join() === 'system,user,assistant,user', 'an app can bring its own provider and key; messages keep their roles');
+        const oll = await frame.evaluate(() => MyPC.ai.generate({ provider: { preset: 'ollama', url: 'https://ollama.test/v1', model: 'llama3.1:8b' }, system: 'S', prompt: 'Hello', temperature: 0.5, maxTokens: 20 }).then((r) => r.text + ':' + r.usage.total));
+        const ob = seen.ollama.body;
+        check(oll === 'Hello from Ollama:9' && /^https:\/\/ollama\.test\/api\/chat$/.test(seen.ollama.url) && ob.model === 'llama3.1:8b' && ob.stream === false && ob.messages.map((m) => m.role + '=' + m.content).join() === 'system=S,user=Hello' &&
+            ob.options.temperature === 0.5 && ob.options.num_predict === 20, 'Ollama uses its own POST /api/chat (model, messages, stream: false) and reads message.content (' + oll + ', ' + seen.ollama.url + ')');
+        const ollS = await frame.evaluate(() => { const d = []; return MyPC.ai.generate({ provider: { type: 'ollama', url: 'https://ollama.test', model: 'llama3.1:8b' }, prompt: 'hi' }, { onDelta: (t) => d.push(t) }).then((r) => d.join('|') + '=' + r.text + ':' + r.finish); });
+        check(ollS === 'Bon|jour=Bonjour:stop' && seen.ollama.body.stream === true, 'Ollama streaming reads its one-JSON-per-line answer (' + ollS + ')');
         const unsup = await frame.evaluate(() => MyPC.ai.generate({ provider: 'nvidia', task: 'video', prompt: 'a cat' }).then(() => 'ok', (e) => e.code));
         check(unsup === 'http' || unsup === 'unsupported' || unsup === 'network', 'a task the service cannot do fails with an error, not a hang (' + unsup + ')');
         // NVIDIA Magpie-Multilingual text to speech (an NVCF function, multipart form, .wav back)
