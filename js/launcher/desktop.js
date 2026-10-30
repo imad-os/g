@@ -16,6 +16,7 @@ var Desktop = (function () {
         { id: 'browser', icon: 'browser', label: 'browser' },
         { id: 'calculator', icon: 'calculator', label: 'calculator' },
         { id: 'calendar', icon: 'calendar', label: 'calendar' },
+        { id: 'memo', icon: 'memo', label: 'memo' },
         { id: 'scores', icon: 'scores', label: 'leaderboards' },
         { id: 'gamepad', icon: 'controller', label: 'gamepad' },
         { id: 'settings', icon: 'settings', label: 'settings' }

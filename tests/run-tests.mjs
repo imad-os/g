@@ -896,7 +896,7 @@ async function main() {
         check(/\d{1,2}:\d{2}/.test(await page.textContent('#tray-time')) && (await page.textContent('#tray-date')).length > 5, 'taskbar clock shows time and date (' + await page.textContent('#tray-time') + ')');
         check(await page.evaluate(() => document.querySelectorAll('#desk-icons [data-game]').length === 7 && !!document.querySelector('#desk-icons [data-app="explorer"]')), 'desktop icons: 7 games plus apps');
         await page.focus('#tb-start'); await key('Enter');
-        check(await page.evaluate(() => Desktop.startOpen() && document.querySelectorAll('#start-pinned [data-focus]').length === 14), 'Start menu lists 7 apps (with the App Store) and 7 games');
+        check(await page.evaluate(() => Desktop.startOpen() && document.querySelectorAll('#start-pinned [data-focus]').length === 15), 'Start menu lists 8 apps (with the App Store and Memo) and 7 games');
         await key('Escape');
         check(await page.evaluate(() => !Desktop.startOpen() && document.activeElement.id === 'tb-start'), 'Back closes Start');
         // shortcut menu: hold OK on a shortcut (a short press still opens it), a long press with the mouse or a finger, a right click
@@ -908,6 +908,7 @@ async function main() {
         check(await page.evaluate(() => !Desktop.menuOpen() && !document.querySelector('#desk-icons [data-game="parchis"]') && !Desktop.onHome('parchis') && Store.get('home_hidden', []).indexOf('parchis') >= 0 && document.activeElement.classList.contains('dicon')),
             'Remove from home screen hides the shortcut for this profile; the focus stays on the desktop');
         await page.focus('#tb-start'); await key('Enter');
+        await page.evaluate(() => document.querySelector('#start-pinned [data-game="parchis"]').scrollIntoView());
         const tbox = await (await page.$('#start-pinned [data-game="parchis"]')).boundingBox();
         await page.mouse.move(tbox.x + tbox.width / 2, tbox.y + tbox.height / 2); await page.mouse.down(); await page.waitForTimeout(800); await page.mouse.up();
         check(await page.evaluate(() => Desktop.menuOpen() && Desktop.startOpen() && GameHost.state() === 'idle' && [...document.querySelectorAll('#dmenu .dm-item')].map((b) => b.textContent).join('|') === 'Open|Add to home screen'),
@@ -954,6 +955,33 @@ async function main() {
         const notes = await page.evaluate(() => Store.get('cal_notes', {}));
         check(Object.keys(notes).length === 1 && Object.values(notes)[0][0] === 'Match' && await page.evaluate(() => !!document.querySelector('.cal-today .cal-dot')), 'a note is saved on the day and marked');
         await key('Escape');
+        // Memo: the record key (R = the red button) records a new memo, again on its screen adds a part, Play plays both
+        await page.evaluate(() => Win.open('memo'));
+        await page.waitForFunction(() => !!document.querySelector('.memo-empty'), null, { timeout: 3000 }).catch(() => {});
+        check(await page.evaluate(() => document.activeElement.id === 'memo-new' && !!document.querySelector('.memo-empty')), 'Memo opens on its (empty) list, focus on New memo');
+        await key('r');
+        await page.waitForFunction(() => document.querySelector('.memo-mic.memo-on'), null, { timeout: 5000 });
+        await page.waitForTimeout(1200);
+        await key('r');
+        await page.waitForFunction(() => document.activeElement.id === 'memo-play', null, { timeout: 5000 });
+        await key('r');
+        await page.waitForFunction(() => document.querySelector('.memo-mic.memo-on'), null, { timeout: 5000 });
+        await page.waitForTimeout(800);
+        await key('Escape');      // Back while recording: saved, back on the list with the memo focused
+        await page.waitForFunction(() => document.activeElement && document.activeElement.className === 'memo-item', null, { timeout: 5000 });
+        const memos = await page.evaluate(() => new Promise((ok) => MemoStore.list((e, l) => ok(l.map((m) => ({ n: m.parts.length, s: m.seconds, mime: m.parts[0].mime, size: m.parts[0].audio.size }))))));
+        check(memos.length === 1 && memos[0].n === 2 && memos[0].s > 1 && memos[0].size > 500, 'Memo: one memo with two recordings ' + JSON.stringify(memos));
+        await key('Enter');
+        await page.waitForFunction(() => document.activeElement.id === 'memo-play');
+        await key('Enter');
+        check(await page.evaluate(() => document.getElementById('memo-play').textContent === 'Stop'), 'Memo: OK on Play plays the memo');
+        await key('Enter', 'ArrowRight', 'Enter', 'Enter');      // stop, Delete twice
+        await page.waitForFunction(() => document.querySelector('.memo-empty'), null, { timeout: 5000 });
+        const other = await page.evaluate(() => new Promise((ok) => { MemoStore.save({ parts: [{ audio: new Blob(['x']), mime: 'audio/wav', seconds: 1 }] }, () => {
+            const p = Store.profile(); Store.setProfile('p9'); MemoStore.list((e, l) => { Store.setProfile(p); ok(l.length); }); }); }));
+        check(other === 0, 'Memo: another profile does not see the memos');
+        await key('Escape');
+        check(await page.evaluate(() => Win.current() === null && !Mic.active()), 'Memo closes with the microphone off');
         // the Control Panel (was Settings) opens on a grid of categories
         await page.evaluate(() => Win.open('settings'));
         check(await page.evaluate(() => document.querySelectorAll('.cp-tile').length === 12 && document.getElementById('win-title').textContent === 'Control Panel' &&

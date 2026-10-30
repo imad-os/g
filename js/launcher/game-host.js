@@ -577,7 +577,7 @@ var GameHost = (function () {
         if (state === 'running') {
             // Guide = the Start key of this PC: opens the pause menu. Page keys and Tab belong to the desktop, not to games.
             if (action === 'guide') { if (pressed && !repeat) openPause(); return; }
-            if (action === 'pageUp' || action === 'pageDown' || action === 'tab' || action === 'tabBack') return;
+            if (action === 'pageUp' || action === 'pageDown' || action === 'tab' || action === 'tabBack' || action === 'record') return;
             if (action === 'pause') { if (pressed && !repeat) openPause(); return; }
             // My PC's menu: only the TV remote's Back. A keyboard's Esc / Backspace go to the game as its Back ('cancel').
             if (action === 'back') {

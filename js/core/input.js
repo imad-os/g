@@ -4,7 +4,8 @@
  *   Gamepad Start / Select (Switch +/-, Xbox Menu/View, PlayStation Options/Share): pressing one is 'menu'
  *   (the game's own menu); holding both together HOLD_MS is 'pause' (My PC's menu, works in every game).
  *   Back: in a game only the TV remote's Back (tvBack() is true) opens My PC's menu; Esc / Backspace go to the game.
- *   pageUp pageDown guide tab tabBack   (desktop and apps only: games never receive these)
+ *   pageUp pageDown guide tab tabBack record   (desktop and apps only: games never receive these)
+ *   record: the remote's Record key, or its voice / mic key on the rare TVs that give it to apps (the Memo app)
  * Every action carries the device that produced it, so games can tell players apart:
  *   'keys'  TV remote, or arrows + Enter/Space/Z/X/Shift on a keyboard
  *   'keys2' second keyboard player: W A S D + F (jump) + G (run)
@@ -29,6 +30,7 @@ var Input = (function () {
         427: ['pageUp'], 428: ['pageDown'],        // TV remote Channel Up / Down: scroll a page
         33: ['pageUp'], 34: ['pageDown'],          // PageUp / PageDown on a keyboard
         458: ['guide'], 117: ['guide'],            // TV remote Guide, F6 on a keyboard: to the toolbar / Start
+        416: ['record'],                           // TV remote Record (voice / mic keys are added by registerTvKeys when the TV has them)
         9: ['tab'],                                // Tab (Shift+Tab is tabBack)
         // second keyboard player
         87: ['up'], 65: ['left'], 83: ['down'], 68: ['right'], 70: ['jump', 'confirm'], 71: ['run']
@@ -37,7 +39,10 @@ var Input = (function () {
     var DIRS = { left: 1, right: 1, up: 1, down: 1 };
     var REPEAT = { left: 1, right: 1, up: 1, down: 1, pageUp: 1, pageDown: 1, tab: 1, tabBack: 1 };    // held keys that repeat
     // Only what is used. Arrows, Enter and Back need no registration.
-    var TV_KEYS = ['MediaPlayPause', 'MediaPlay', 'MediaPause', 'ColorF0Red', 'ChannelUp', 'ChannelDown', 'Guide'];
+    var TV_KEYS = ['MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaRecord', 'ColorF0Red', 'ChannelUp', 'ChannelDown', 'Guide'];
+    // Samsung keeps the Smart Remote's mic button for Bixby / the voice assistant (it is not in the keys apps can register);
+    // a TV that does list a voice or mic key gets it registered as 'record'.
+    var VOICE_KEY = /voice|mic|bixby/i;
 
     // W3C "standard" gamepad mapping.
     var PAD_BUTTONS = [
@@ -374,6 +379,13 @@ var Input = (function () {
         } catch (e) {
             for (var j = 0; j < TV_KEYS.length; j++) { try { tizen.tvinputdevice.registerKey(TV_KEYS[j]); } catch (e2) {} }
         }
+        try {
+            var sup = tizen.tvinputdevice.getSupportedKeys() || [];
+            for (var k = 0; k < sup.length; k++) {
+                if (!VOICE_KEY.test(sup[k].name) || KEYMAP[sup[k].code]) continue;
+                try { tizen.tvinputdevice.registerKey(sup[k].name); KEYMAP[sup[k].code] = ['record']; } catch (e3) {}
+            }
+        } catch (e4) {}
     }
 
     function init() {

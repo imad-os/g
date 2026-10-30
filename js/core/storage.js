@@ -150,6 +150,7 @@ var Profiles = (function () {
         for (var i = 0; i < l.length; i++) if (l[i].id !== id) out.push(l[i]);
         Store.rawSet(KEY, out);
         Store.dropProfile(id);
+        if (typeof MemoStore !== 'undefined') MemoStore.dropProfile(id);     // voice memos live in IndexedDB, not in arc_<id>_*
         if (Store.profile() === id) Store.setProfile(out[0].id);
         return true;
     }

@@ -1,6 +1,6 @@
 {
-  "build": 79,
-  "version": "2.20.0",
+  "build": 80,
+  "version": "2.21.0",
   "shell": 1,
   "css": [
     "css/launcher.css",
@@ -24,6 +24,7 @@
     "js/core/ai.js",
     "js/core/mic.js",
     "js/core/qr.js",
+    "js/core/memo-store.js",
     "js/core/virtual-pad.js",
     "js/core/backup.js",
     "js/core/accounts.js",
@@ -47,6 +48,7 @@
     "js/launcher/apps/browser.js",
     "js/launcher/apps/calculator.js",
     "js/launcher/apps/calendar.js",
+    "js/launcher/apps/memo.js",
     "js/launcher/apps/scores.js",
     "js/launcher/apps/store.js",
     "js/launcher/apps/gamepad.js",

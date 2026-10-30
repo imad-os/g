@@ -63,6 +63,11 @@
   (or Add to) home screen / Uninstall (installed apps, admins only: `Profiles.isAdmin()`). Short OK on a shortcut opens it on release
   (`main.js` passes the OK release to `Desktop.action`). Removed ids per profile in `home_hidden` (`Desktop.onHome` / `setOnHome`);
   too many icons scroll sideways in `#desk-icons`.
+- **Memo** (`apps/memo.js`, voice memos): list screen, then a memo screen; each recording is up to 15 s (`Mic`, Opus WebM or 16 kHz WAV)
+  and the record key on a memo's screen adds a part to it. Record key = Input action `record` (remote Record key, or a voice / mic
+  key when `getSupportedKeys()` lists one; Samsung keeps the Smart Remote's mic button for Bixby) + red button / R (`runToggle`) + X / Y.
+  Memos are per profile in IndexedDB through `js/core/memo-store.js` (`MemoStore.use(adapter)` swaps in a cloud store later; not in
+  the TV backup yet). Mic needs the `mediacapture` privilege (package 1.5.0+, already in `config.xml`).
 - `apps/store.js`: the App Store app (Home / Games / Apps / Library / Search, Install / Open / Uninstall).
 - **Settings of every My PC** (owner decision): App Store Manager > Settings writes Firestore `settings/mypc` (admins only, read by
   every TV): backgrounds (`wallpapers: [{ url, title, thumb }]`, an empty title is taken from the address) and the background of new

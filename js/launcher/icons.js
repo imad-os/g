@@ -22,6 +22,9 @@ var Icons = (function () {
         calculator: '<rect x="9" y="4" width="30" height="40" rx="5" fill="#3b3f4a"/><rect x="13" y="8" width="22" height="9" rx="2" fill="#9ad0ff"/>' +
                     '<g fill="#e6e6e6"><rect x="13" y="21" width="6" height="5" rx="1.5"/><rect x="21" y="21" width="6" height="5" rx="1.5"/><rect x="13" y="29" width="6" height="5" rx="1.5"/><rect x="21" y="29" width="6" height="5" rx="1.5"/><rect x="13" y="37" width="14" height="4" rx="1.5"/></g>' +
                     '<rect x="29" y="21" width="6" height="20" rx="1.5" fill="#4cc2ff"/>',
+        // microphone (the Memo app)
+        memo: '<rect x="16" y="4" width="16" height="26" rx="8" fill="#ff5a5f"/><rect x="20" y="9" width="8" height="2.5" rx="1.25" fill="#ffd0d1"/>' +
+              '<path d="M10 22a14 14 0 0 0 28 0" fill="none" stroke="#e6e6e6" stroke-width="3.5" stroke-linecap="round"/><rect x="22" y="36" width="4" height="6" fill="#e6e6e6"/><rect x="14" y="41" width="20" height="4" rx="2" fill="#e6e6e6"/>',
         calendar: '<rect x="5" y="8" width="38" height="35" rx="5" fill="#f3f3f3"/><path d="M5 13a5 5 0 0 1 5-5h28a5 5 0 0 1 5 5v5H5z" fill="#2f7de1"/>' +
                   '<rect x="13" y="4" width="4" height="8" rx="2" fill="#555"/><rect x="31" y="4" width="4" height="8" rx="2" fill="#555"/>' +
                   '<g fill="#2f7de1"><rect x="11" y="23" width="6" height="5" rx="1"/><rect x="21" y="23" width="6" height="5" rx="1"/><rect x="31" y="23" width="6" height="5" rx="1"/><rect x="11" y="32" width="6" height="5" rx="1"/><rect x="21" y="32" width="6" height="5" rx="1"/></g>',
