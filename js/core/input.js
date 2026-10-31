@@ -150,7 +150,7 @@ var Input = (function () {
     var touchHeld = {};             // pad action -> true
     function touch(action, down) {
         var acts = TOUCH[action], i;
-        if (action === 'menu' || action === 'pause' || action === 'guide') {
+        if (action === 'menu' || action === 'pause' || action === 'guide' || action === 'record') {
             if (down) { emit(action, true, false, 'touch'); emit(action, false, false, 'touch'); }
             return;
         }
@@ -165,7 +165,7 @@ var Input = (function () {
     var remoteHeld = { 1: {}, 2: {} };
     function remote(player, action, down) {
         var dev = player === 2 ? 'keys2' : 'keys', held = remoteHeld[player === 2 ? 2 : 1], acts, i;
-        if (action === 'menu' || action === 'pause') {
+        if (action === 'menu' || action === 'pause' || action === 'record') {     // record: a pad's microphone button (the Record key)
             if (down) { emit(action, true, false, dev); emit(action, false, false, dev); }
             return;
         }

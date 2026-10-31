@@ -196,6 +196,7 @@ What the pad sends (the same actions the TV remote and gamepads send, device `'t
 | button **Y** (left, in the catalog) | `run` (like the real Y) |
 | **+** button (top centre, movable) | My PC's pause menu |
 | **Home** button (hidden at first, the player can add it) | My PC's pause menu (like a pad's Guide / Home button) |
+| **microphone** button (hidden at first, the player can add it; top centre under **+**) | the Record key (`record`, for My PC's own apps such as Memo; your app gets nothing). Same button as the phone controller's Microphone mode |
 
 **Owner rule: the buttons are always called and placed A B X Y like a Nintendo controller (A right, B bottom, X top, Y left).
 Never A B C, never a menu symbol (&#9776;) or the word "Menu" as a button. Pause / menu is the Nintendo-style **+** button.** The phone and the touch pad send exactly what the same button of a real Nintendo controller connected to the TV sends (My PC reads a pad by position:
@@ -341,7 +342,7 @@ make sure it still works with the other inputs. Players should never have to fig
   You still receive their button events, but don't give them an essential job of their own.
 - Never call `navigator.getGamepads()` or listen to `gamepadconnected` yourself: on the TV your page has no focus and gets
   nothing. The SDK does it for you (also standalone, where it reads the pads itself, so you can test with a pad on a PC).
-- Physical controllers only: the TV remote, the keyboard, the touch pad send actions (a phone in Buttons or Keyboard mode is a real gamepad: `MyPC.gamepad` sees it as a standard pad with 18 buttons like a Switch Pro controller, device `pad101` / `pad102`)
+- Physical controllers only: the TV remote, the keyboard, the touch pad send actions (a phone in Buttons, Keyboard or Microphone mode is a real gamepad: `MyPC.gamepad` sees it as a standard pad with 18 buttons like a Switch Pro controller, device `pad101` / `pad102`)
   (`onInput`), so the game must also be playable with `left right up down` + `confirm` (see the rules below).
 
 ```js
@@ -579,7 +580,8 @@ button of a real Nintendo controller on the TV sends: A = `run` + `cancel`, B = 
 player maps each key to a control (every button, the D-pad and both sticks; ZQSD = D-pad, arrows = left stick, numeric
 keypad = right stick, I J K L = X Y B A by default) and your app gets **gamepad buttons and axes, never keys**: the same
 standard pad as Buttons mode, with the right stick on axes 2 / 3 and Capture as button 17. `players` reports
-`'keyboard'` for such a phone. How strong each move must be (per move, harder while running) and the repeat guard (one move,
+`'keyboard'` for such a phone. **Microphone** mode: the same pad as Buttons mode (your app gets the same gamepad) plus a
+microphone button, and the phone is the TV's microphone for `MyPC.mic` (section 14); `players` reports `'mic'`. How strong each move must be (per move, harder while running) and the repeat guard (one move,
 not two, for a step and its bounce back) are set by the player on the TV (Control Panel > Devices > Phone controller >
 Motion moves) and apply to your app too; your own `define` rules still win for the moves they name. Actions may carry
 `gait` (`IDLE`, `WALK`, `RUN`).
@@ -796,7 +798,11 @@ Keys in an app's config or code can be read by anyone who opens the app's websit
 My PC opens the microphone and sends you the sound. The first use asks the user "*<app> wants to use the microphone*";
 a red microphone shows on the screen while it listens. Which microphone a TV gives to apps depends on the model (a USB
 or Bluetooth microphone or headset, the TV camera's microphone, the remote's microphone on many models; some keep the
-remote's for Bixby); on phones and computers it is the device's own. Needs My PC package 1.5.0 on a TV;
+remote's for Bixby); on phones and computers it is the device's own. **A phone connected in the Game controller's
+Microphone mode is the microphone whenever one is connected** (Samsung TVs keep the remote's mic for Bixby): your app
+changes nothing; the sound is then 16-bit PCM at 16 kHz at most (`info.sampleRate` says which; a `webm` request comes
+back as `wav`, `info.format` / `res.mime` say so) and `info.label` is the phone's name. The pad's microphone button on
+that phone is the Record key of My PC's own apps (Memo), not an event for yours. Needs My PC package 1.5.0 on a TV;
 `MyPC.mic.available()` says whether there is a microphone path.
 
 ```js

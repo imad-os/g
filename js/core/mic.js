@@ -14,11 +14,18 @@
  *     onEvent('data', { chunk: ArrayBuffer, seq })   onEvent('level', { v: 0..1 })   onEvent('end', { reason, result })
  *   Mic.stop(cb)    cb(err, { audio: ArrayBuffer, mime, format, sampleRate, seconds })   (audio null when keep is false)
  *   Mic.cancel()    stops and drops the recording       Mic.active()
- * Errors: { code: 'no-mic' | 'denied' | 'busy' | 'cancelled', message } */
+ * Errors: { code: 'no-mic' | 'denied' | 'busy' | 'cancelled', message }
+ *
+ * A phone in the Game controller's Microphone mode is a microphone for this device (Samsung keeps the remote's mic for
+ * Bixby): while one is connected, Mic.start records from it instead of getUserMedia (js/launcher/controllers.js gives the
+ * source with Mic.source(src)). The phone sends 16-bit PCM over the controller link; 'webm' is then recorded as 'wav'
+ * (the result's format / mime say so), and the rate is the phone's (16000 asked, at most 16000).
+ *   src: { available() -> boolean, open(rate, onPcm(Int16Array), onEnd(), cb(errCode, { rate, label })) -> { close() } }
+ *   (cb once: an error code 'denied' | 'no-mic', or started; onEnd only after it started) */
 var Mic = (function () {
     'use strict';
 
-    var cur = null;
+    var cur = null, source = null;
 
     function err(code, message) { return { code: code, message: message }; }
     function supported() { return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia); }
@@ -30,18 +37,54 @@ var Mic = (function () {
     }
     function concat(list, total, Type) { var out = new Type(total), o = 0; for (var i = 0; i < list.length; i++) { out.set(list[i], o); o += list[i].length; } return out; }
 
+    // one block of sound (local microphone or phone): level, the recording, live chunks
+    function frame(c, f, opts, per) {
+        level(c, f, opts.level !== false);
+        if (c.format === 'webm') return;
+        if (c.keep) { c.parts.push(f); c.total += f.length; }
+        if (c.chunkMs) {
+            c.pending.push(f); c.pendingN += f.length;
+            if (c.pendingN >= per) flush(c);
+        }
+    }
+
+    // the phone's microphone (Microphone mode): same events and result as a local one
+    function startRemote(c, opts, cb) {
+        if (c.format === 'webm') c.format = 'wav';
+        var per = 0;
+        c.startCb = cb;
+        c.remote = source.open(Math.min(16000, c.rate), function (pcm) {
+            if (c.stopped) return;
+            var f = new Float32Array(pcm.length);
+            for (var i = 0; i < pcm.length; i++) f[i] = pcm[i] / 0x8000;
+            frame(c, f, opts, per);
+        }, function () {
+            if (!c.stopped) finish(c, 'closed', null);                     // the phone went away or stopped by itself
+        }, function (e, info) {
+            if (c.stopped) return;
+            if (e) { c.stopped = true; c.remote = null; if (cur === c) cur = null; return cb(err(e === 'denied' ? 'denied' : 'no-mic', e === 'denied' ? 'The phone did not allow its microphone.' : 'The phone\'s microphone did not start.')); }
+            c.started = true; c.rate = info.rate; c.t0 = Date.now();
+            per = Math.round(c.rate * (c.chunkMs || 250) / 1000);
+            c.maxTimer = setTimeout(function () { finish(c, 'max', null); }, c.maxS * 1000);
+            cb(null, { sampleRate: c.rate, format: c.format, mime: mimeOf(c), label: info.label || 'Phone' });
+        });
+    }
+
     function start(opts, onEvent, cb) {
         opts = opts && typeof opts === 'object' ? opts : {};
         onEvent = typeof onEvent === 'function' ? onEvent : function () {};
         if (cur) return cb(err('busy', 'The microphone is already recording.'));
-        if (!supported()) return cb(err('no-mic', 'This device gives no microphone to apps.'));
+        var phone = !!(source && source.available());
+        if (!phone && !supported()) return cb(err('no-mic', 'This device gives no microphone to apps.'));
         var format = /^(wav|pcm16|float32|webm)$/.test(opts.format) ? opts.format : 'wav';
         var rate = Math.max(8000, Math.min(48000, +opts.sampleRate || 16000));
         var chunkMs = opts.chunkMs === 0 ? 0 : Math.max(50, Math.min(2000, +opts.chunkMs || 250));
         var keep = opts.keep !== false, maxS = Math.max(1, Math.min(600, +opts.maxSeconds || 60));
         var sil = opts.silence && typeof opts.silence === 'object' ? { ms: Math.max(300, +opts.silence.ms || 1500), th: Math.max(0.001, +opts.silence.threshold || 0.02) } : null;
         var c = cur = { stopped: false, stream: null, ctx: null, rec: null, onEvent: onEvent, format: format, keep: keep, rate: rate, parts: [], total: 0,
-                        pending: [], pendingN: 0, seq: 0, t0: Date.now(), maxTimer: 0, levelAt: 0, spoke: false, quietSince: 0, mime: '', stopCbs: [] };
+                        pending: [], pendingN: 0, seq: 0, t0: Date.now(), maxTimer: 0, levelAt: 0, spoke: false, quietSince: 0, mime: '', stopCbs: [],
+                        chunkMs: chunkMs, maxS: maxS, sil: sil };
+        if (phone) return startRemote(c, opts, cb);
         var a = { echoCancellation: opts.echoCancellation !== false, noiseSuppression: opts.noiseSuppression !== false, autoGainControl: opts.autoGainControl !== false, channelCount: 1 };
         navigator.mediaDevices.getUserMedia({ audio: a, video: false }).then(function (stream) {
             if (c.stopped) { stream.getTracks().forEach(function (t) { t.stop(); }); return cb(err('cancelled', 'Stopped before it started.')); }
@@ -55,14 +98,7 @@ var Mic = (function () {
                 var src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(2048, 1, 1), per = Math.round(c.rate * chunkMs / 1000);
                 node.onaudioprocess = function (e) {
                     if (c.stopped) return;
-                    var f = new Float32Array(e.inputBuffer.getChannelData(0));
-                    level(c, f, opts.level !== false);
-                    if (format === 'webm') return;
-                    if (keep) { c.parts.push(f); c.total += f.length; }
-                    if (chunkMs) {
-                        c.pending.push(f); c.pendingN += f.length;
-                        if (c.pendingN >= per) flush(c);
-                    }
+                    frame(c, new Float32Array(e.inputBuffer.getChannelData(0)), opts, per);
                 };
                 src.connect(node);
                 node.connect(ctx.destination);           // a ScriptProcessor only runs when connected (it outputs silence)
@@ -86,7 +122,6 @@ var Mic = (function () {
                 if (cur === c) cur = null;
                 return cb(err('no-mic', 'The microphone could not start: ' + (e && e.message || e)));
             }
-            c.sil = sil;
             c.maxTimer = setTimeout(function () { finish(c, 'max', null); }, maxS * 1000);
             cb(null, { sampleRate: c.rate, format: format, mime: mimeOf(c), label: label });
         }, function (e) {
@@ -118,6 +153,7 @@ var Mic = (function () {
 
     function release(c) {
         clearTimeout(c.maxTimer);
+        if (c.remote) { try { c.remote.close(); } catch (e) {} c.remote = null; }
         try { if (c.node) { c.node.onaudioprocess = null; c.node.disconnect(); } if (c.src) c.src.disconnect(); } catch (e) {}
         if (c.stream) c.stream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} });
         if (c.ctx && c.ctx.close) { try { c.ctx.close(); } catch (e) {} }
@@ -136,6 +172,10 @@ var Mic = (function () {
             var res = { audio: audio, mime: mimeOf(c), format: c.format, sampleRate: c.rate, seconds: seconds };
             if (reason !== 'stop' && reason !== 'cancel') c.onEvent('end', { reason: reason, result: res });
             c.stopCbs.forEach(function (f) { try { f(null, res); } catch (e) {} });
+        }
+        if (c.remote && !c.started) {                                   // the phone had not started yet: nothing was recorded
+            reason = 'cancel';
+            setTimeout(function () { c.startCb(err('cancelled', 'Stopped before it started.')); }, 0);
         }
         if (reason === 'cancel') { c.dropped = true; if (c.rec && c.rec.state !== 'inactive') { try { c.rec.stop(); } catch (e) {} } return done(null); }
         if (c.format === 'webm') {
@@ -162,6 +202,8 @@ var Mic = (function () {
         stop: function (cb) { if (!cur) return cb && cb(null, null); finish(cur, 'stop', cb || null); },
         end: function (reason) { if (cur) finish(cur, reason || 'closed', null); },     // the shell stops it (the app paused or closed)
         cancel: function () { if (cur) finish(cur, 'cancel', null); },
-        active: function () { return !!cur; }
+        active: function () { return !!cur; },
+        source: function (src) { source = src && typeof src.open === 'function' ? src : null; },
+        phone: function () { return !!(source && source.available()); }      // a phone in Microphone mode is connected
     };
 })();

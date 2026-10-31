@@ -16,6 +16,7 @@ camera app. Typing the code, picking **P1** / **P2** and a mode, then **Connect*
 | **Motion moves** (`sensor-actions`) | The player faces the TV, phone in the right hand. The phone detects moves and sends **only the moves the game asked for**, plus metrics if asked. | `MyPC.sensors` events in the game. With no game listening, moves drive the TV: LEFT / RIGHT = left / right, JUMP = OK, DUCK … DUCK_END = down held. |
 | **Motion data** (`sensor-raw`) | Sends the sensor samples themselves at the rate the game asks for. | `raw` events; the game does its own detection. |
 | **Pointer** (`pointer`) | A TV pointer like a magic remote, on the My PC screens: see below. | The pointer moves; A = OK on what it points at, B = back. Nothing on a game's page. |
+| **Microphone** (`mic`) | **The same pad as Buttons mode** (same library, same saved layout, same gamepad message) plus a round **microphone button** at the top centre, under the **+**. The phone is the TV's microphone (Samsung keeps the remote's mic for Bixby): when the TV records, the phone opens its microphone and the button turns red, with a ring that follows the sound level. Only this mode ever opens the phone's microphone; the phone asks for it the first time (Android app 2.3.0+; in the browser, Chrome asks). | The pad as in Buttons mode. The mic button is the **Record key** (action `record`: Memo starts / stops a memo). While a phone in Microphone mode is connected, every recording on the TV (`Mic`: Memo, `MyPC.mic` in apps) comes from it: 16-bit PCM, 16 kHz, mono (a `webm` request is recorded as `wav`). |
 
 **Pointer mode.** Point the phone at the TV and turn it: a pointer moves on the TV and whatever item it is on gets the
 focus (white ring); **A** opens it, **B** is back. The phone screen has no stick: big **A** and **B** (Nintendo places),
@@ -78,7 +79,7 @@ MyPC.sensors.on('action', function (ev, player) {   // { type: 'action', action:
 });
 MyPC.sensors.on('metrics', function (m, player) {}); // { gait: 'RUN', cadence: 162, speed_kmh: 8.4, pace_sec_per_km: 428, distance_m: 325.6, steps }
 MyPC.sensors.on('raw', function (r, player) {});     // { hz, s: [[dt, ax, ay, az, gx, gy, gz, ra, rb, rg], ...] }
-MyPC.sensors.on('players', function (modes) {});     // { 1: 'sensor-actions', 2: null } when phones come and go ('pad', 'sensor-actions', 'sensor-raw', 'pointer', 'keyboard')
+MyPC.sensors.on('players', function (modes) {});     // { 1: 'sensor-actions', 2: null } when phones come and go ('pad', 'sensor-actions', 'sensor-raw', 'pointer', 'keyboard', 'mic')
 MyPC.sensors.on('config', function (cfg) {});        // what the phones were actually sent (unknown moves removed)
 MyPC.sensors.stop();
 ```
@@ -143,8 +144,14 @@ when the two clocks differ. Older phones without `proto` / `mode` are treated as
 // pad and keyboard modes: the raw buttons of the standard layout (bits 0-17, 17 = Capture) and the sticks (-1..1;
 // rx / ry only in keyboard mode); sent on every change
 { "t": "gp", "b": 4098, "x": 0, "y": -1, "rx": 0, "ry": 0 }
-// the pointer's A / B; a: left right up down ok b run cancel menu pause (b = run + cancel)
+// the pointer's A / B; a: left right up down ok b run cancel menu pause record (b = run + cancel; record = the mic button)
 { "t": "k", "a": "ok", "d": 1 }
+// Microphone mode: the TV asks for the phone's microphone while it records, and stops it
+{ "t": "mic", "on": 1, "id": 7, "rate": 16000 }        // TV -> phone (rate 8000..16000)
+{ "t": "mic", "on": 0, "id": 7 }                       // TV -> phone
+{ "t": "ms", "id": 7, "ok": 1, "rate": 16000 }         // phone -> TV: started (or "err": "denied" | "no-mic" | "off")
+{ "t": "au", "id": 7, "d": "<base64>" }                // phone -> TV: 16-bit PCM, little endian, mono, 2400 bytes at most (about 14 a second)
+{ "t": "me", "id": 7 }                                 // phone -> TV: the phone stopped by itself (page hidden): the TV keeps what it got
 ```
 
 Rules:

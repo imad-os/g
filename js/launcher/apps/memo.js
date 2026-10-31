@@ -6,7 +6,9 @@
  * Record key = the remote's red button or Record key (or its voice key when a TV gives it to apps; Samsung keeps the
  * Smart Remote's mic button for Bixby), X or Y on a controller, R on a keyboard. Play key (▶ / ⏯, Start's short press is
  * the + menu and is not used) plays or stops.
- * The sound: Opus in WebM when the TV has MediaRecorder (about 30 KB per 15 s), else 16 kHz WAV. One <audio>, freed on close. */
+ * The sound: Opus in WebM when the TV has MediaRecorder (about 30 KB per 15 s), else 16 kHz WAV. One <audio>, freed on close.
+ * A phone in the Game controller's Microphone mode is the microphone when one is connected (js/core/mic.js; 16 kHz WAV then):
+ * its mic button is the Record key, so a memo starts and stops from the phone or from the TV. */
 (function () {
     'use strict';
 
@@ -16,25 +18,25 @@
               memoHint: 'Record: red button, Record key, X or Y   ·   Play: ▶ key   ·   Back: A', memoRec: 'Record', memoMore: 'Record more',
               memoStop: 'Stop', memoPlay: 'Play', memoDel: 'Delete', memoDelSure: 'OK again to delete', memoRecording: 'Recording',
               memoSaved: 'Memo saved', memoDeleted: 'Memo deleted', memoParts: '{n} parts',
-              memoNoMic: 'No microphone for apps on this device. On a TV, plug in a USB or Bluetooth microphone (or a camera with one); on many Samsung TVs the remote\'s mic stays with Bixby.',
+              memoNoMic: 'No microphone. Use your phone as the microphone: open Game controller on the phone and pick Microphone (Settings > Devices > Phone controller to pair it). A USB or Bluetooth microphone also works; Samsung keeps the remote\'s mic for Bixby.',
               memoDenied: 'The microphone was not allowed.', memoNoSave: 'The memo could not be saved.' },
         fr: { memo: 'Mémo', memoNew: 'Nouveau mémo', memoNone: 'Aucun mémo. Appuyez sur le bouton rouge pour en enregistrer un.',
               memoHint: 'Enregistrer : bouton rouge, touche Enregistrer, X ou Y   ·   Lire : touche ▶   ·   Retour : A', memoRec: 'Enregistrer', memoMore: 'Continuer',
               memoStop: 'Arrêter', memoPlay: 'Lire', memoDel: 'Supprimer', memoDelSure: 'OK encore pour supprimer', memoRecording: 'Enregistrement',
               memoSaved: 'Mémo enregistré', memoDeleted: 'Mémo supprimé', memoParts: '{n} parties',
-              memoNoMic: 'Aucun micro pour les applis sur cet appareil. Sur un téléviseur, branchez un micro USB ou Bluetooth (ou une caméra avec micro) ; sur beaucoup de TV Samsung le micro de la télécommande reste à Bixby.',
+              memoNoMic: 'Aucun micro. Utilisez votre téléphone comme micro : ouvrez Manette de jeu sur le téléphone et choisissez Micro (Paramètres > Périphériques > Téléphone manette pour l\'associer). Un micro USB ou Bluetooth fonctionne aussi ; Samsung garde le micro de la télécommande pour Bixby.',
               memoDenied: 'Le micro n\'a pas été autorisé.', memoNoSave: 'Le mémo n\'a pas pu être enregistré.' },
         es: { memo: 'Memo', memoNew: 'Nueva nota de voz', memoNone: 'Aún no hay notas. Pulsa el botón rojo para grabar una.',
               memoHint: 'Grabar: botón rojo, tecla Grabar, X o Y   ·   Reproducir: tecla ▶   ·   Atrás: A', memoRec: 'Grabar', memoMore: 'Seguir grabando',
               memoStop: 'Parar', memoPlay: 'Reproducir', memoDel: 'Borrar', memoDelSure: 'OK otra vez para borrar', memoRecording: 'Grabando',
               memoSaved: 'Nota guardada', memoDeleted: 'Nota borrada', memoParts: '{n} partes',
-              memoNoMic: 'Este dispositivo no da micrófono a las apps. En un televisor, conecta un micrófono USB o Bluetooth (o una cámara con micrófono); en muchos Samsung el micrófono del mando es solo para Bixby.',
+              memoNoMic: 'No hay micrófono. Usa tu teléfono como micrófono: abre Mando de juego en el teléfono y elige Micrófono (Ajustes > Dispositivos > Móvil como mando para emparejarlo). Un micrófono USB o Bluetooth también sirve; Samsung reserva el micrófono del mando para Bixby.',
               memoDenied: 'No se permitió el micrófono.', memoNoSave: 'No se pudo guardar la nota.' },
         ar: { memo: 'مذكرة', memoNew: 'مذكرة جديدة', memoNone: 'لا توجد مذكرات بعد. اضغط الزر الأحمر لتسجيل واحدة.',
               memoHint: 'تسجيل: الزر الأحمر أو زر التسجيل أو X أو Y   ·   تشغيل: زر ▶   ·   رجوع: A', memoRec: 'تسجيل', memoMore: 'متابعة التسجيل',
               memoStop: 'إيقاف', memoPlay: 'تشغيل', memoDel: 'حذف', memoDelSure: 'اضغط OK مرة أخرى للحذف', memoRecording: 'جارٍ التسجيل',
               memoSaved: 'تم حفظ المذكرة', memoDeleted: 'تم حذف المذكرة', memoParts: '{n} أجزاء',
-              memoNoMic: 'لا يوجد ميكروفون للتطبيقات على هذا الجهاز. على التلفاز، صِل ميكروفون USB أو بلوتوث (أو كاميرا بميكروفون)؛ في كثير من تلفزيونات سامسونج يبقى ميكروفون جهاز التحكم لـ Bixby.',
+              memoNoMic: 'لا يوجد ميكروفون. استخدم هاتفك كميكروفون: افتح ذراع الألعاب على الهاتف واختر الميكروفون (الإعدادات > الأجهزة > الهاتف كذراع تحكم لإقرانه). يعمل أيضاً ميكروفون USB أو بلوتوث؛ تحتفظ سامسونج بميكروفون جهاز التحكم لـ Bixby.',
               memoDenied: 'لم يُسمح بالميكروفون.', memoNoSave: 'تعذر حفظ المذكرة.' }
     };
     I18n.add(S);

@@ -147,7 +147,7 @@ var Bridges = (function () {
             if (d.op !== 'start') return;
             if (o.state() !== 'running') return send('mic', { rid: d.rid, error: { code: 'not-running', message: 'The app is not running. Resume it first.' } });
             if (mic) return send('mic', { rid: d.rid, error: { code: 'busy', message: 'The microphone is already recording.' } });
-            if (!Mic.supported()) return send('mic', { rid: d.rid, error: { code: 'no-mic', message: 'This device gives no microphone to apps.' } });
+            if (!Mic.supported() && !Mic.phone()) return send('mic', { rid: d.rid, error: { code: 'no-mic', message: 'This device gives no microphone to apps.' } });
             mic = { rid: d.rid, starting: true };
             ask(ctx, 'mic', I18n.t('permMicText'), function (ok) {
                 if (!ok || ctx.dead || o.state() !== 'running') { mic = null; return send('mic', { rid: d.rid, error: ok ? { code: 'not-running', message: 'The app is not running.' } : { code: 'denied', message: 'The user did not allow this app to use the microphone.' } }); }

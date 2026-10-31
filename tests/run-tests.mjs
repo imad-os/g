@@ -2819,6 +2819,78 @@ async function main() {
         for (const pg of [tv, P1, P2, P3]) await pg.context().close();
     }
 
+    // ---- 34b. Microphone mode: the same pad + a mic button; the phone is the TV's microphone (Memo records from it)
+    console.log('34b. phone controller Microphone mode (phone mic -> TV, Memo)');
+    {
+        const db = {};
+        const tv = await newPage(browser, base, db);
+        await tv.goto(base + 'index.html');
+        await tv.waitForFunction(() => window.Controllers && document.querySelector('[data-game]'), null, { timeout: 20000 });
+        await tv.evaluate(() => Controllers.setOn(true));
+        const code = await tv.evaluate(() => Controllers.code());
+        await tv.waitForFunction(() => Controllers.status().s === 'ready', null, { timeout: 10000 });
+        const ph = await newPage(browser, base, db, { phone: true, viewport: { width: 844, height: 390 } });
+        await ph.goto(base + 'index.html');
+        await ph.waitForFunction(() => window.Win && document.querySelector('[data-game]'), null, { timeout: 20000 });
+        await ph.evaluate(() => Win.open('gamepad'));
+        await ph.fill('.gc-code', code);
+        const names = await ph.evaluate(() => [...document.querySelectorAll('.gc-modes .btn')].map((b) => b.textContent));
+        check(names[names.length - 1] === 'Microphone', 'the Game controller offers a Microphone mode (' + names.join(', ') + ')');
+        await ph.evaluate(() => [...document.querySelectorAll('.gc-modes .btn')].find((b) => b.textContent === 'Microphone').click());
+        await ph.click('.gc-go');
+        await tv.waitForFunction(() => Controllers.modes()[1] === 'mic', null, { timeout: 40000 });
+        await ph.waitForFunction(() => window.GamepadApp && GamepadApp.linked() && VirtualPad.active(), null, { timeout: 10000 });
+        const pad = await ph.evaluate(() => {
+            const vis = (e) => !!e && e.style.display !== 'none';
+            const face = ['A', 'B', 'X', 'Y'].every((l) => [...document.querySelectorAll('div')].some((d) => d.textContent === l && d.style.borderRadius === '50%' && vis(d)));
+            const m = document.getElementById('vp-mic'), pl = document.getElementById('vp-plus'), r = m && m.getBoundingClientRect(), q = pl.getBoundingClientRect();
+            return { face, stick: !!document.getElementById('vp-stick'), home: vis(document.getElementById('vp-home')), plus: vis(pl), mic: vis(m), mx: r && r.left + r.width / 2, my: r && r.top, plusBottom: q.bottom, plusX: q.left + q.width / 2 };
+        });
+        check(pad.face && pad.stick && pad.home && pad.plus && pad.mic, 'Microphone mode shows the same virtual pad as Buttons mode (stick, A B X Y, +, Home) plus its microphone button');
+        check(Math.abs(pad.mx - pad.plusX) < 2 && pad.my > pad.plusBottom, 'the microphone button sits at the top centre, under the + button');
+        await tv.evaluate(() => Win.open('memo'));
+        await tv.waitForFunction(() => document.activeElement && document.activeElement.id === 'memo-new', null, { timeout: 5000 });
+        check(await tv.evaluate(() => Mic.phone()), 'the TV sees a phone microphone (Mic.phone())');
+        const tap = async () => { const r = await ph.evaluate(() => { const b = document.getElementById('vp-mic').getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; }); await ph.mouse.move(r[0], r[1]); await ph.mouse.down(); await ph.mouse.up(); };
+        await tap();                                                     // the phone's mic button = the Record key: a new memo starts
+        await tv.waitForFunction(() => document.querySelector('.memo-mic.memo-on') && Mic.active(), null, { timeout: 8000 });
+        await ph.waitForFunction(() => /229, 57, 53/.test(document.getElementById('vp-mic').style.background), null, { timeout: 8000 });
+        check(true, 'the phone\'s mic button starts a memo on the TV, and the button turns red while the phone records');
+        await tv.waitForTimeout(1600);
+        await tap();                                                     // and stops it
+        await tv.waitForFunction(() => !Mic.active() && document.activeElement && document.activeElement.id === 'memo-play', null, { timeout: 8000 });
+        const m1 = await tv.evaluate(() => new Promise((ok) => MemoStore.list((e, l) => Promise.all(l.map((m) => m.parts[0].audio.arrayBuffer().then((b) => {
+            const pcm = new Int16Array(b, 44); let peak = 0; for (let i = 0; i < pcm.length; i++) peak = Math.max(peak, Math.abs(pcm[i]));
+            return { n: m.parts.length, s: m.seconds, mime: m.parts[0].mime, size: m.parts[0].audio.size, rate: new DataView(b).getUint32(24, true), peak };
+        }))).then(ok))));
+        check(m1.length === 1 && m1[0].mime === 'audio/wav' && m1[0].rate === 16000 && m1[0].s >= 1 && m1[0].size > 16000 && m1[0].peak > 1000, 'the memo was recorded from the phone (16 kHz WAV over the link, not silence) ' + JSON.stringify(m1));
+        await ph.waitForFunction(() => !/229, 57, 53/.test(document.getElementById('vp-mic').style.background), null, { timeout: 5000 });
+        check(await ph.evaluate(() => !Mic.active()), 'the phone closes its microphone when the TV stops');
+        // from the TV: Record more starts the phone's microphone; Stop on the TV stops it
+        await tv.evaluate(() => document.getElementById('memo-rec').click());
+        await tv.waitForFunction(() => document.querySelector('.memo-mic.memo-on') && Mic.active(), null, { timeout: 8000 });
+        await ph.waitForFunction(() => Mic.active(), null, { timeout: 5000 });
+        await tv.waitForTimeout(800);
+        await tv.evaluate(() => document.getElementById('memo-rec').click());
+        await tv.waitForFunction(() => !Mic.active() && !document.querySelector('.memo-mic.memo-on'), null, { timeout: 8000 });
+        await ph.waitForFunction(() => !Mic.active(), null, { timeout: 5000 });
+        const n2 = await tv.evaluate(() => new Promise((ok) => MemoStore.list((e, l) => ok(l[0].parts.length))));
+        check(n2 === 2, 'Record more on the TV records a second part from the phone; Stop on the TV closes the phone\'s microphone');
+        // the phone leaves while recording: the TV keeps what it got
+        await tv.evaluate(() => document.getElementById('memo-rec').click());
+        await ph.waitForFunction(() => Mic.active(), null, { timeout: 8000 });
+        await tv.waitForTimeout(700);
+        await ph.evaluate(() => document.querySelector('.gc-bar .gc-leave:not(.gc-modebtn)').click());
+        await tv.waitForFunction(() => !Mic.active(), null, { timeout: 10000 });
+        const n3 = await tv.evaluate(() => new Promise((ok) => MemoStore.list((e, l) => ok(l[0].parts.length))));
+        check(n3 === 3 && await tv.evaluate(() => !Mic.phone()), 'a phone that leaves while recording ends the recording, and what was recorded is kept');
+        // Buttons mode never opens the phone's microphone; the mic button is only offered in its gear panel
+        check(await ph.evaluate(() => { VirtualPad.hide(); VirtualPad.init({ force: true, id: 't', home: true, mic: null }); const m = document.getElementById('vp-mic'); const r = m && m.style.display === 'none'; VirtualPad.hide(); return r; }), 'with mic: null the pad only offers the microphone button (hidden at first, in the gear panel)');
+        check(tv.errors.length === 0 && ph.errors.length === 0, 'no page errors ' + tv.errors.concat(ph.errors).join('; '));
+        await tv.evaluate(() => Win.close());
+        for (const pg of [tv, ph]) await pg.context().close();
+    }
+
     // ---- 35. phone controller sensor modes: moves, metrics, raw data, live and debug screens
     console.log('35. phone controller sensor modes (sensor-actions, sensor-raw, protocol v1)');
     {

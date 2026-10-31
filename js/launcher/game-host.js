@@ -213,7 +213,7 @@ var GameHost = (function () {
                         data: Store.get('game_' + id + '_data', {}), app: { id: id },
                         config: game.remote.config || {},
                         mp: typeof Multiplayer !== 'undefined' && typeof Rooms !== 'undefined' && NetLink.supported() ? 1 : 0,   // MyPC.multiplayer is supported
-                        bridges: { net: 1, ai: 1, mic: Mic.supported() ? 1 : 0 }      // MyPC.net / ai / mic go through My PC (API 10)
+                        bridges: { net: 1, ai: 1, mic: Mic.supported() || Mic.phone() ? 1 : 0 }      // MyPC.net / ai / mic go through My PC (API 10)
                     });
                     padsSent = ''; padsChanged();
                     Input.onPadRaw(rawPad); Input.offDevices(padsChanged); Input.onDevices(padsChanged);

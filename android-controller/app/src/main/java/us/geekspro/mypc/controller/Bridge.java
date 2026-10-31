@@ -11,8 +11,9 @@ final class Bridge {
 
     Bridge(MainActivity app) { this.app = app; }
 
-    /** 3: + settings(); 2: native motion samples, native QR scanner, link kept with the screen off, exit (1: no exit) */
-    @JavascriptInterface public int version() { return 3; }
+    /** 4: the page may use the microphone (getUserMedia, Microphone mode); 3: + settings(); 2: native motion samples,
+     *  native QR scanner, link kept with the screen off, exit (1: no exit) */
+    @JavascriptInterface public int version() { return 4; }
 
     /** {"motion":true,"linear":true,"gyro":true}: which sensors this phone has */
     @JavascriptInterface public String caps() { return app.sensorCaps(); }

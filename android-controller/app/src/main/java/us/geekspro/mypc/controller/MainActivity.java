@@ -15,7 +15,9 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import android.webkit.PermissionRequest;
 import android.webkit.RenderProcessGoneDetail;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -48,6 +50,8 @@ import java.util.regex.Pattern;
  * and tested with. The app adds what a browser tab does badly (assets/bridge.js + Bridge):
  *   native motion sensors (SensorHub: 200 Hz fused sensors, real timestamps) instead of devicemotion,
  *   a native QR scanner for the TV's pairing code,
+ *   the microphone for the page (getUserMedia: the Game controller's Microphone mode makes this phone the TV's microphone;
+ *   Android's RECORD_AUDIO is asked the first time, only for My PC's own pages),
  *   screen kept on (while a controller is connected or a game is open), and a foreground service + wake lock so the link
  *   survives with the screen off; the phone's Back is the TV remote's Back (Input.systemBack), exit closes the app.
  * The Game controller's phone settings (Bridge.settings, kept in SharedPreferences "opts", applied from the start):
@@ -92,6 +96,7 @@ public final class MainActivity extends Activity {
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT))
             WebViewCompat.addDocumentStartJavaScript(web, bridgeJs, ORIGINS);
         web.setWebViewClient(new Client());
+        web.setWebChromeClient(new Chrome());
         setContentView(web);
         immersive();
         web.loadUrl(startUrl(getIntent()));
@@ -154,7 +159,8 @@ public final class MainActivity extends Activity {
     };
 
     // the scanner screen of zxing-android-embedded, opened directly (its IntentIntegrator helper needs androidx.fragment)
-    private static final int SCAN = 7, CAMERA = 8;
+    private static final int SCAN = 7, CAMERA = 8, MIC = 9;
+    private PermissionRequest micAsk;                        // the page's microphone request, while Android asks the user
 
     void scanQr() {
         if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -174,6 +180,14 @@ public final class MainActivity extends Activity {
     }
 
     @Override public void onRequestPermissionsResult(int request, String[] perms, int[] res) {
+        if (request == MIC) {
+            PermissionRequest r = micAsk;
+            micAsk = null;
+            if (r == null) return;
+            if (res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED) r.grant(new String[] { PermissionRequest.RESOURCE_AUDIO_CAPTURE });
+            else r.deny();
+            return;
+        }
         if (request != CAMERA) return;
         if (res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED) scanQr();
         else Toast.makeText(this, R.string.scan_no_camera, Toast.LENGTH_LONG).show();
@@ -246,6 +260,27 @@ public final class MainActivity extends Activity {
             setMotion(false); setActive(false);
             recreate();                                          // the page's renderer died: start again cleanly
             return true;
+        }
+    }
+
+    // getUserMedia in the page: only the microphone, only for My PC's own pages; Android asks once (RECORD_AUDIO)
+    private final class Chrome extends WebChromeClient {
+        @Override public void onPermissionRequest(PermissionRequest req) {
+            runOnUiThread(() -> {
+                boolean audio = Arrays.asList(req.getResources()).contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE);
+                if (!audio || !isOurs(req.getOrigin().toString())) { req.deny(); return; }
+                if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    req.grant(new String[] { PermissionRequest.RESOURCE_AUDIO_CAPTURE });
+                    return;
+                }
+                if (micAsk != null) micAsk.deny();
+                micAsk = req;
+                requestPermissions(new String[] { Manifest.permission.RECORD_AUDIO }, MIC);
+            });
+        }
+
+        @Override public void onPermissionRequestCanceled(PermissionRequest req) {
+            if (req == micAsk) micAsk = null;
         }
     }
 

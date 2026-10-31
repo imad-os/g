@@ -24,18 +24,26 @@
  *   .sensorSetup(cfg, listener(player, msg)) | .sensorSetup(null)   (game-host.js, for the running app)   .sensorStats()
  *   .tune() / .setTune(t)   the Motion moves settings of this TV (arc_dev_ctrltune; Settings > Devices > Phone controller >
  *                           Motion moves), sent to every motion phone in its config and used there at once
- *   .monitor(fn(player, msg)) | .monitor(null)   that screen's live test: the moves arrive there and do not press buttons */
+ *   .monitor(fn(player, msg)) | .monitor(null)   that screen's live test: the moves arrive there and do not press buttons
+ * Microphone mode ('mic'): the same pad as Buttons mode plus a microphone button, and the phone is this TV's microphone
+ * (Samsung keeps the remote's mic for Bixby). Its mic button sends { t: 'k', a: 'record' } (the Record key: Memo starts /
+ * stops). Recording goes through Mic (js/core/mic.js), which takes the phone as its source (Mic.source below):
+ *   TV -> phone { t: 'mic', on: 1, id, rate } / { t: 'mic', on: 0, id }
+ *   phone -> TV { t: 'ms', id, ok: 1, rate } | { t: 'ms', id, err: 'denied' | 'no-mic' | 'off' }, then { t: 'au', id, d: base64 of
+ *   16-bit PCM, at most 2400 bytes } about 14 times a second, { t: 'me', id } when the phone stopped by itself.
+ *   The phone whose mic button was pressed last is used (else P1, then P2). */
 var Controllers = (function () {
     'use strict';
 
     var KEY = 'arc_dev_ctrl', TUNE_KEY = 'arc_dev_ctrltune', APP = 'controller', MAX_PHONES = 8, PAIR_MS = 300000, HELLO_MS = 4000;
-    var ACTIONS = { left: 1, right: 1, up: 1, down: 1, ok: 1, run: 1, cancel: 1, b: 1, menu: 1, pause: 1, guide: 1 };
+    var ACTIONS = { left: 1, right: 1, up: 1, down: 1, ok: 1, run: 1, cancel: 1, b: 1, menu: 1, pause: 1, guide: 1, record: 1 };
     var DIRS = { left: 1, right: 1, up: 1, down: 1 };
     var ALPHA = 'abcdefghjkmnpqrstuvwxyz23456789';
     var status = { s: 'off', err: '' };
     var sess = null, slots = { 1: null, 2: null }, pairUntil = 0, listeners = [], timer = 0, started = false;
     var appCfg = null, appListener = null, cfgSeq = 0, monitorFn = null;
     var FALLBACK = { LEFT: 'left', RIGHT: 'right', JUMP: 'ok', DUCK: 'down', DUCK_END: 'down' };
+    var micReq = null, micSeq = 0, micLast = 0, MIC_WAIT_MS = 20000, MIC_CHUNK = 3300;
 
     function cfg() {
         var c = Store.rawGet(KEY);
@@ -43,8 +51,8 @@ var Controllers = (function () {
         return { on: c.on === true, code: typeof c.code === 'string' && /^[a-z0-9]{6,16}$/.test(c.code) ? c.code : '', ok: c.ok instanceof Array ? c.ok : [] };
     }
     function save(c) { Store.rawSet(KEY, c); }
-    // Buttons and Keyboard modes: the phone is a gamepad (no sensor config, no moves)
-    function padLike(slot) { return slot.mode === 'pad' || slot.mode === 'keyboard'; }
+    // Buttons, Keyboard and Microphone modes: the phone is a gamepad (no sensor config, no moves)
+    function padLike(slot) { return slot.mode === 'pad' || slot.mode === 'keyboard' || slot.mode === 'mic'; }
     function makeCode() {
         var out = '', b = new Uint8Array(8), i;
         try { (window.crypto || window.msCrypto).getRandomValues(b); } catch (e) { for (i = 0; i < 8; i++) b[i] = Math.floor(Math.random() * 256); }
@@ -61,6 +69,7 @@ var Controllers = (function () {
         slots[p] = null;
         Input.releaseRemote(p); Input.virtualPad(p, null);
         if (slot.mode === 'pointer') Pointer.hide();
+        micGone(slot);
         say(I18n.t('ctrlGone').replace('%s', slot.name).replace('%n', p));
         report();
     }
@@ -82,7 +91,7 @@ var Controllers = (function () {
                     save(c);
                 }
                 if (slots[p] && slots[p].cid !== cid) { conn.send({ t: 'no', why: 'busy' }); return setTimeout(function () { conn.close(); }, 300); }
-                if (slots[p]) { var old = slots[p]; slots[p] = null; Input.releaseRemote(p); Input.virtualPad(p, null); old.conn.close(); }
+                if (slots[p]) { var old = slots[p]; slots[p] = null; Input.releaseRemote(p); Input.virtualPad(p, null); micGone(old); old.conn.close(); }
                 var h = SensorProto.hello(m);
                 slot = { conn: conn, cid: cid, p: p, name: name || 'Phone', mode: h.mode, proto: h.proto, session: h.session || SensorProto.session(),
                          offset: h.now ? Date.now() - h.now : null, seen: SensorProto.tracker(), stats: { actions: 0, duplicate: 0, stale: 0, invalid: 0, metrics: 0, raw: 0 } };
@@ -99,8 +108,10 @@ var Controllers = (function () {
                 Input.virtualPad(slot.p, m.b | 0, m.x, m.y, slot.name, m.rx, m.ry);
                 return;
             }
+            if (m.t === 'ms' || m.t === 'au' || m.t === 'me') return micMessage(slot, m);
             if (m.t === 'k') {
                 if (typeof m.a !== 'string' || !ACTIONS.hasOwnProperty(m.a)) return;
+                if (m.a === 'record' && slot.mode === 'mic') micLast = slot.p;     // that phone is the microphone
                 if (m.d === 1 && Pointer.visible()) {
                     if (m.a === 'ok' && Pointer.press()) return;              // clicked something that is not a focusable item
                     if (DIRS[m.a]) Pointer.hide();                            // arrows: back to the focus ring, like the remote
@@ -117,6 +128,53 @@ var Controllers = (function () {
         });
         conn.onClose(function () { clearTimeout(t); if (slot) drop(slot.p, slot); });
     }
+
+    /* ---------- Microphone mode: a phone is this TV's microphone (Mic.source) ---------- */
+    function micSlot() {
+        var order = [micLast, 1, 2];
+        for (var i = 0; i < order.length; i++) { var s = slots[order[i]]; if (s && s.mode === 'mic') return s; }
+        return null;
+    }
+    function micEnd(r) {
+        clearTimeout(r.timer);
+        if (micReq === r) micReq = null;
+        r.slot.conn.send({ t: 'mic', on: 0, id: r.id });
+    }
+    function micOpen(rate, onPcm, onEnd, cb) {
+        var slot = micSlot();
+        if (!slot) { setTimeout(function () { cb('no-mic'); }, 0); return { close: function () {} }; }
+        if (micReq) micEnd(micReq);
+        var r = micReq = { id: ++micSeq, slot: slot, onPcm: onPcm, onEnd: onEnd, cb: cb, started: false };
+        slot.conn.send({ t: 'mic', on: 1, id: r.id, rate: rate });
+        r.timer = setTimeout(function () { if (micReq === r && !r.started) { micEnd(r); cb('no-mic'); } }, MIC_WAIT_MS);  // the phone's permission prompt can take a while
+        return { close: function () { if (micReq === r) micEnd(r); } };
+    }
+    function micMessage(slot, m) {
+        var r = micReq;
+        if (!r || r.slot !== slot || m.id !== r.id) return;
+        if (m.t === 'ms') {
+            if (r.started) return;
+            if (!m.ok) { micEnd(r); return r.cb(m.err === 'denied' ? 'denied' : 'no-mic'); }
+            r.started = true; clearTimeout(r.timer);
+            r.cb(null, { rate: Math.max(8000, Math.min(48000, +m.rate || 16000)), label: slot.name + ' (P' + slot.p + ')' });
+        } else if (m.t === 'au') {
+            if (!r.started || typeof m.d !== 'string' || m.d.length > MIC_CHUNK * 4 / 3 + 4) return;
+            var b; try { b = atob(m.d); } catch (e) { return; }
+            var n = b.length >> 1, u = new Uint8Array(n * 2);
+            for (var i = 0; i < n * 2; i++) u[i] = b.charCodeAt(i);
+            r.onPcm(new Int16Array(u.buffer));
+        } else {
+            micReq = null; clearTimeout(r.timer);
+            if (r.started) r.onEnd('closed'); else r.cb('no-mic');
+        }
+    }
+    function micGone(slot) {
+        var r = micReq;
+        if (!r || r.slot !== slot) return;
+        micReq = null; clearTimeout(r.timer);
+        if (r.started) r.onEnd('closed'); else r.cb('no-mic');
+    }
+    if (typeof Mic !== 'undefined' && Mic.source) Mic.source({ available: function () { return !!micSlot(); }, open: micOpen });
 
     /* ---------- sensor modes ---------- */
     function currentCfg() { return appCfg || SensorProto.config({ moves: SensorProto.DEFAULT_MOVES, metrics: { enabled: false } }); }
@@ -192,7 +250,7 @@ var Controllers = (function () {
     function tune() { return SensorProto.tune(Store.rawGet(TUNE_KEY)); }
     function resend() { for (var p = 1; p <= 2; p++) if (slots[p] && !padLike(slots[p])) sendConfig(slots[p]); }
 
-    function closePhones() { for (var p = 1; p <= 2; p++) if (slots[p]) { var s = slots[p]; slots[p] = null; Input.releaseRemote(p); Input.virtualPad(p, null); s.conn.close(); } }
+    function closePhones() { for (var p = 1; p <= 2; p++) if (slots[p]) { var s = slots[p]; slots[p] = null; Input.releaseRemote(p); Input.virtualPad(p, null); micGone(s); s.conn.close(); } }
 
     return {
         start: function () { if (started) return; started = true; if (cfg().on) open(); },

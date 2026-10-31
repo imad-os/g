@@ -65,6 +65,7 @@ VirtualPad.init({
 | `floating` | `true` | a touch anywhere in the left half puts the stick under the finger (back to its place on release); `false` = fixed stick *(My PC addition)* |
 | `dpad` | `false` | `true`: a D-pad (four arrows, diagonals when two are pressed) in place of the stick, at its place and size; it does not float *(My PC addition)* |
 | `home` | not set | `true`: a round Home button below and left of the face buttons, action `'home'` (key 36), shown; not set: offered in the settings panel, hidden at first; `false`: never *(My PC addition)* |
+| `mic` | not set | `true`: a round microphone button at the top centre under **+**, action `'mic'` (key 82), shown; `null`: offered in the settings panel, hidden at first; not set: never. `VirtualPad.micLive(on, level)` paints it red while the host records *(My PC addition)* |
 | `dpadSwitch` | `false` | `true`: the settings panel offers **Stick / D-pad**; the choice is saved with the layout and wins over `dpad`. The D-pad does not take the left half of the screen, so taps there reach the game *(My PC addition)* |
 | `onHide` | none | `function ()`: the settings panel gets a **Hide the pad** button that calls it (your host shows the pad again) *(My PC addition)* |
 | `storage` | none | `{ get(key), set(key, value) }`: where the layout is saved besides `localStorage` *(My PC addition)* |

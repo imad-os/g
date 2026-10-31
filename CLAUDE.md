@@ -63,7 +63,11 @@
   (or Add to) home screen / Uninstall (installed apps, admins only: `Profiles.isAdmin()`). Short OK on a shortcut opens it on release
   (`main.js` passes the OK release to `Desktop.action`). Removed ids per profile in `home_hidden` (`Desktop.onHome` / `setOnHome`);
   too many icons scroll sideways in `#desk-icons`.
-- **Memo** (`apps/memo.js`, voice memos): list screen, then a memo screen; each recording is up to 15 s (`Mic`, Opus WebM or 16 kHz WAV)
+- **Memo** (`apps/memo.js`, voice memos): list screen, then a memo screen; each recording is up to 15 s (`Mic`, Opus WebM or 16 kHz WAV;
+  owner decision 2026-10-31: Samsung keeps the remote's mic for Bixby, so the TV's microphone is a phone in the Game controller's
+  **Microphone mode** (`mic`): the same VirtualPad as Buttons mode + a mic button (VirtualPad option `mic`, also offered in the shell's
+  touch pad: the same pad, never a separate design) = the Record key; while one is connected `Mic` records from it (`Mic.source`,
+  set by `controllers.js`; messages `mic` / `ms` / `au` / `me`, 16 kHz PCM). The APK needs 2.3.0+ (RECORD_AUDIO + WebView permission))
   and the record key on a memo's screen adds a part to it. Record key = Input action `record` (remote Record key, or a voice / mic
   key when `getSupportedKeys()` lists one; Samsung keeps the Smart Remote's mic button for Bixby) + red button / R (`runToggle`) + X / Y.
   Memos are per profile in IndexedDB through `js/core/memo-store.js` (`MemoStore.use(adapter)` swaps in a cloud store later; not in
