@@ -2,6 +2,9 @@
  * the SHELL draws a customizable virtual pad above the app and feeds the same input path as the remote and gamepads
  * (Input.touch -> actions, device 'touch'). Apps and games need no touch code. The pad is the virtual-pad library
  * (js/core/virtual-pad.js, source: sdk/pad/virtual-pad.js). Never drawn on a TV, and not while a gamepad is the active input.
+ * Owner rule: unless the app asks for other buttons, it is THE SAME pad as the phone controller (js/core/pad-spec.js: A B X Y,
+ * L R, + and Home shown, the gear adds ZL ZR − Capture L3 R3, same sizes, Stick / D-pad, one saved layout shared with the
+ * Game controller app); each button gives what the same button of a real pad gives (Input.touch('btn<N>')).
  *   Manifest / mypc-app.json:  "touch": false | { "buttons": [{ "label": "A", "action": "ok" }], "catalog": [...], "scale": { "stick": 1, "btn": 1 } }
  *   (false = the app has its own touch UI; labels are 3 characters at most; actions ok b run cancel menu, `place` right / bottom / top / left for the Nintendo diamond; 8 entries at most)
  *   MyPC.init({ pad: false | { ... } }) says the same from the app (it wins over the manifest; true = no preference);
@@ -51,8 +54,9 @@ var TouchPad = (function () {
     function clean(t) {
         var out = {}, b, c, s;
         if (t === false) return { off: true };
-        if (!t || typeof t !== 'object' || t instanceof Array) return { buttons: DEFAULT, catalog: CATALOG, scale: {} };
+        if (!t || typeof t !== 'object' || t instanceof Array) return { std: true, buttons: DEFAULT, catalog: CATALOG, scale: {} };
         b = list(t.buttons); c = list(t.catalog);
+        if (!b && !c) out.std = true;                      // no buttons of its own: the phone controller's pad (js/core/pad-spec.js)
         out.buttons = b || (c ? c.slice(0, 2) : DEFAULT);
         out.catalog = c || (b ? b : CATALOG);
         out.scale = {};
@@ -115,6 +119,11 @@ var TouchPad = (function () {
         if (own) { if (relay) relay({ action: action, down: down }); }
         else Input.touch(action === 'home' ? 'guide' : action === 'mic' ? 'record' : action, down);     // Home = a pad's Guide button: My PC's menu; the mic = the Record key
     }
+    // the shared pad (PadSpec): every button by its standard gamepad index, the stick / D-pad as directions
+    function onStd(action, down) {
+        var i = PadSpec.index(action);
+        onAction(i >= 0 ? 'btn' + i : action, down);
+    }
     function onKey(code, down) { if (!fromPause && own && relay) { if (down) Haptics.buzz(); relay({ key: code, down: down }); } }
     function onSettings(open) {
         settingsOpen = open;
@@ -123,6 +132,7 @@ var TouchPad = (function () {
     }
     function build() {
         var c = own ? ownCfg : cur.cfg;
+        if (!own && c.std) { VirtualPad.init(PadSpec.options({ onAction: onStd, onSettings: onSettings, onHide: function () { setHidden(true); } })); return; }
         VirtualPad.init({ storage: PAD_STORE, id: 'app:' + cur.id + (own ? ':own' : ''), buttons: c.buttons, catalog: c.catalog, scale: c.scale, force: true, onAction: onAction, onSettings: onSettings,
                           dpadSwitch: true, onHide: function () { setHidden(true); }, mic: null,
                           send: own ? onKey : undefined, pause: own ? c.pause : undefined, customize: own ? c.customize : undefined });

@@ -2386,6 +2386,10 @@ async function main() {
         const fr = await openApp(P, 'pad-def');
         let pad = await padOf(P);
         check(!!pad && !!pad.stick && !!pad.labels.A && !!pad.labels.B && !!pad.labels['⚙'] && !!pad.labels['+'] && !pad.labels.C && !pad.labels.II && !pad.labels['☰'], 'phone 844x390: the shell draws the pad (stick, A, B, the + button, gear; never A B C) above the app, nothing to code in the app');
+        check(['X', 'Y', 'L', 'R'].every((l) => pad.labels[l]) && !pad.labels.ZL && await P.evaluate(() => {
+            const o = PadSpec.options({}), h = document.getElementById('vp-home');
+            return o.id === 'controller2' && o.home === true && o.dpadSwitch === true && o.scale.stick === 1.35 && o.catalog.length === 12 && !!h && h.style.display === 'flex';
+        }), 'the pad over the game IS the phone controller\'s pad (PadSpec): A B X Y, L R, + and Home shown, the gear adds the rest, same sizes and saved layout (' + Object.keys(pad.labels).join(' ') + ')');
         check(await P.evaluate(() => { const r = [...document.body.children].find((e) => e.style && e.style.zIndex === '99999'); return r.parentNode === document.body && !document.getElementById('desktop').offsetParent; }), 'the pad lives on the page, over the game layer (the desktop is not built on the game page)');
         // the stick
         const fg = await fingers(P);
@@ -2416,19 +2420,22 @@ async function main() {
         check(!(await padOf(P)), 'the pad is hidden while My PC\'s pause menu is open');
         const items = await P.evaluate(() => [...document.querySelectorAll('#pause-items button')].map((b) => b.textContent));
         check(items.indexOf('Touch pad settings') > 0, 'the pause menu has "Touch pad settings" (' + items.join(', ') + ')');
-        // customize from the pause menu: add X, close, resume: C is there
+        // customize from the pause menu: add ZL, close, resume: it is there
         await P.evaluate(() => { [...document.querySelectorAll('#pause-items button')].find((b) => b.textContent === 'Touch pad settings').click(); });
         await wait(P);
         pad = await padOf(P);
         check(!!pad && pad.panel === true, 'Touch pad settings opens the pad\'s settings panel over the pause menu');
-        await P.evaluate(() => { [...document.querySelectorAll('div')].find((e) => !e.children.length && e.textContent === 'X' && e.style.cursor === 'pointer').click(); });
+        await P.evaluate(() => { [...document.querySelectorAll('div')].find((e) => !e.children.length && e.textContent === 'ZL' && e.style.cursor === 'pointer').click(); });
         await P.evaluate(() => { [...document.querySelectorAll('div')].find((e) => !e.children.length && e.textContent === 'Close').click(); });
         await wait(P);
         check(!(await padOf(P)) && await P.evaluate(() => GameHost.state() === 'paused' && !document.getElementById('pause').hidden), 'closing the panel goes back to the pause menu (pad hidden, game still paused)');
         await P.evaluate(() => document.querySelector('#pause-items button').click());      // Resume
         await wait(P);
         pad = await padOf(P);
-        check(!!pad && !!pad.labels.X && !!pad.labels.A && !!pad.labels.B, 'back in the game the pad has the new button X');
+        check(!!pad && !!pad.labels.ZL && !!pad.labels.X && !!pad.labels.A && !!pad.labels.B, 'back in the game the pad has the new button ZL');
+        await fg.down(5, pad.labels.L.x, pad.labels.L.y); await wait(P);
+        check(await P.evaluate(() => Input.isDownDev('touch', 'pageUp')), 'L = "pageUp", like a real pad\'s L');
+        await fg.up(5); await wait(P);
         await fg.down(4, pad.labels.X.x, pad.labels.X.y); await wait(P);
         check(await fr.evaluate(() => MyPC.isDown('run') && !MyPC.isDown('cancel')), 'X = "run", like a Nintendo pad\'s X');
         await fg.up(4);
@@ -2441,21 +2448,21 @@ async function main() {
         await wait(P);
         check(await P.evaluate(() => GameHost.state() === 'running') && !!(await padOf(P)), 'closing the settings resumes the game');
         // the layout is saved on the device (per app) and survives a reload
-        const saved = await P.evaluate(() => JSON.parse(localStorage.getItem('vpad:app:app-pad-def') || 'null'));
-        check(!!saved && Object.values(saved.on).filter(Boolean).length === 1, 'the layout is saved as vpad:app:<app id>');
+        const saved = await P.evaluate(() => Store.rawGet('arc_dev_vpad:controller2'));
+        check(!!saved && Object.values(saved.on).filter(Boolean).length === 1, 'the layout is saved once for every app and the phone controller (vpad:controller2)');
         await openApp(P, 'pad-def');                                   // loads the page again: the saved layout comes back
         pad = await padOf(P);
-        check(!!pad && !!pad.labels.X, 'after a reload the customized layout is back');
+        check(!!pad && !!pad.labels.ZL, 'after a reload the customized layout is back');
         // the panel: Stick / D-pad (no left-half zone with the D-pad), + and Home are buttons like the others; hide / show from the pause menu
         const zone = () => P.evaluate(() => { const r = [...document.body.children].find((e) => e.style && e.style.zIndex === '99999'); return !!r && [...r.children].some((e) => e.style.width === '50%'); });
-        check(await zone() && !(await P.evaluate(() => document.getElementById('vp-home').style.display !== 'none')), 'the stick has its left-half zone; Home is offered but hidden at first');
+        check(await zone() && await P.evaluate(() => document.getElementById('vp-home').style.display === 'flex'), 'the stick has its left-half zone; Home is shown, like on the phone controller');
         await P.evaluate(() => VirtualPad.openSettings()); await wait(P);
         const chip = (t) => P.evaluate((t) => { [...document.querySelectorAll('div')].find((e) => !e.children.length && e.textContent === t && e.style.cursor === 'pointer').click(); }, t);
         await chip('D-pad'); await wait(P);
         check(await P.evaluate(() => !!document.getElementById('vp-dpad') && !document.getElementById('vp-stick')) && !(await zone()) && (await padOf(P)).panel === true && await P.evaluate(() => GameHost.state() === 'paused'),
             'D-pad: drawn in place of the stick, the left half is free for taps, the panel stays open and the game stays paused');
-        await chip('⌂'); await chip('Close'); await wait(P);
-        check(await P.evaluate(() => GameHost.state() === 'running' && document.getElementById('vp-home').style.display === 'flex' && JSON.parse(localStorage.getItem('vpad:app:app-pad-def')).dp === true), 'Home added from the panel; the D-pad choice is saved with the layout');
+        await chip('Close'); await wait(P);
+        check(await P.evaluate(() => GameHost.state() === 'running' && document.getElementById('vp-home').style.display === 'flex' && Store.rawGet('arc_dev_vpad:controller2').dp === true && PadSpec.dpad()), 'the D-pad choice is saved with the shared layout (the Game controller\'s GamePad setting)');
         const hb2 = await P.evaluate(() => { const r = document.getElementById('vp-home').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
         await P.waitForTimeout(450); await tap(P, hb2[0], hb2[1]);
         check(await P.evaluate(() => GameHost.state() === 'paused'), 'Home opens My PC\'s menu (like a pad\'s Guide button)');
@@ -2545,7 +2552,7 @@ async function main() {
         // validation and the copies
         const clean = await P.evaluate(() => ({
             off: TouchPad.clean(false).off === true,
-            def: TouchPad.clean(undefined).buttons.length === 2 && TouchPad.clean(true).catalog.length === 4,
+            def: TouchPad.clean(undefined).buttons.length === 2 && TouchPad.clean(true).catalog.length === 4 && TouchPad.clean(true).std && TouchPad.clean({ scale: { btn: 1.2 } }).std && !TouchPad.clean({ buttons: [{ label: 'A', action: 'ok' }] }).std,
             long: TouchPad.clean({ buttons: [{ label: 'ABCD', action: 'ok' }, { label: 'Z', action: 'fly' }] }).buttons.length === 2,
             max: TouchPad.clean({ catalog: Array.from({ length: 12 }, (_, i) => ({ label: 'b' + i, action: 'ok' })) }).catalog.length === 8,
             scale: TouchPad.clean({ scale: { stick: 9, btn: 1.25 } }).scale.stick === undefined && TouchPad.clean({ scale: { stick: 9, btn: 1.25 } }).scale.btn === 1.25
@@ -2760,7 +2767,7 @@ async function main() {
         check(ps.size >= 24, 'the checkboxes are finger-sized (' + Math.round(ps.size) + ' px)');
         await P2.click('.gc-phoneset [data-opt=dpad]');
         await P2.click('.gc-phoneset .btn-primary');
-        check(await P2.evaluate(() => VirtualPad.active() && !!document.getElementById('vp-dpad') && !document.getElementById('vp-stick') && Store.rawGet('arc_dev_ctrlphone').opt.dpad === true), 'GamePad on: a D-pad in place of the stick, and the setting is kept on the phone');
+        check(await P2.evaluate(() => VirtualPad.active() && !!document.getElementById('vp-dpad') && !document.getElementById('vp-stick') && PadSpec.dpad() === true && Store.rawGet('arc_dev_vpad:controller2').dp === true), 'GamePad on: a D-pad in place of the stick, kept on the phone in the pad\'s layout (the same D-pad choice as its gear panel and the pad over games)');
         const dp = await P2.evaluate(() => { const r = document.getElementById('vp-dpad').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width / 2]; });
         await P2.mouse.move(dp[0] + dp[2] * 0.7, dp[1]); await P2.mouse.down();
         await tv.waitForFunction(() => Input.isDownDev('pad102', 'right') && !Input.isDownDev('pad102', 'up'), null, { timeout: 3000 });

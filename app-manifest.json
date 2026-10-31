@@ -1,5 +1,5 @@
 {
-  "build": 83,
+  "build": 84,
   "version": "2.22.0",
   "shell": 1,
   "css": [
@@ -27,6 +27,7 @@
     "js/core/qr.js",
     "js/core/memo-store.js",
     "js/core/virtual-pad.js",
+    "js/core/pad-spec.js",
     "js/core/backup.js",
     "js/core/accounts.js",
     "js/core/world.js",

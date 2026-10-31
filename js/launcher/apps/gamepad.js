@@ -28,7 +28,8 @@
  * Background (the Android app keeps the link with the screen off) and GamePad (a D-pad in place of the stick). The Android
  * app (MyPCNative 3+) applies the first three natively; in a browser Auto rotate and Stay awake use the Screen Orientation
  * and Wake Lock APIs where the browser has them; all four settings are always shown.
- * Protocol: js/core/sensor-proto.js, docs/phone-controller.md. Separate from the touch pad that the shell draws over games. */
+ * Protocol: js/core/sensor-proto.js, docs/phone-controller.md. The Buttons pad IS the touch pad the shell draws over games
+ * (js/core/pad-spec.js, owner rule): same buttons, settings and saved layout; GamePad here = the D-pad choice of its gear panel. */
 (function () {
     'use strict';
 
@@ -51,22 +52,12 @@
     var KEY = 'arc_dev_ctrlphone', REC_MAX = 60 * 120;      // 2 minutes at 60 Hz
     var MODES = ['pad', 'sensor-actions', 'sensor-raw', 'pointer', 'keyboard', 'mic'], MODE_NAMES = ['gcModePad', 'gcModeActions', 'gcModeRaw', 'gcModePointer', 'gcModeKeys', 'gcModeMic'];
     var MIC_CHUNK = 2400, MIC_APP = 4;          // bytes of PCM per message; the Android app gives its microphone from Bridge version 4
-    // the pad layout (buttons, sizes, places) is kept in My PC's store too, so it is never lost between opens
-    var PAD_STORE = { get: function (k) { return Store.rawGet('arc_dev_' + k); }, set: function (k, v) { Store.rawSet('arc_dev_' + k, v); } };
-    // A B X Y in the Nintendo places, sending EXACTLY what the same button of a real Nintendo controller on the TV sends (owner
-    // rule). My PC reads a pad by position (W3C standard mapping, js/core/input.js PAD_BUTTONS): the bottom button (B) is
-    // OK / jump, the right one (A) is run + back, top (X) and left (Y) are run. The + button is Start ('menu'), Home is the
-    // Guide button ('guide'). A test compares them with a fake pad.
-    var ABXY = [{ label: 'A', key: 13, action: 'g1', place: 'right' }, { label: 'B', key: 88, action: 'g0', place: 'bottom' },
-                { label: 'X', key: 77, action: 'g3', place: 'top' }, { label: 'Y', key: 90, action: 'g2', place: 'left' }];
-    // Pad mode is a real gamepad: the phone sends raw button bits of the W3C standard layout (g0..g3 = buttons 0..3, + = 9, Home = 16,
-    // D-pad = 12..15) and the stick as axes; the TV makes a virtual gamepad of it (Input.virtualPad).
-    // The pad's gear can also add the other buttons of a Switch Pro controller (L R ZL ZR, −, Capture, stick clicks)
-    // L and R are shown at first (shoulder pills at the top corners); the gear adds the rest
-    ABXY.extra = [{ label: 'L', key: 76, action: 'l', place: 'l' }, { label: 'R', key: 82, action: 'r', place: 'r' }, { label: 'ZL', key: 75, action: 'zl', place: 'zl' }, { label: 'ZR', key: 84, action: 'zr', place: 'zr' },
-                  { label: '−', key: 189, action: 'minus' }, { label: '●', key: 67, action: 'capture' }, { label: 'L3', key: 49, action: 'ls' }, { label: 'R3', key: 50, action: 'rs' }];
-    var GBTN = { g0: 0, g1: 1, g2: 2, g3: 3, l: 4, r: 5, zl: 6, zr: 7, minus: 8, menu: 9, ls: 10, rs: 11, guide: 16, capture: 17 }, DPAD = { up: 12, down: 13, left: 14, right: 15 }, gpBits = 0, gpHeld = {}, gpSent = '';
-    var PAD = { buttons: ABXY.concat(ABXY.extra.slice(0, 2)), catalog: ABXY.concat(ABXY.extra) };
+    // The pad is THE pad My PC draws over games (owner rule: identical): js/core/pad-spec.js gives both the same buttons, sizes,
+    // settings and saved layout. A B X Y in the Nintendo places, sending EXACTLY what the same button of a real Nintendo
+    // controller on the TV sends (owner rule; a test compares them with a fake pad).
+    // Pad mode is a real gamepad: the phone sends raw button bits of the W3C standard layout (PadSpec.index: B = 0, A = 1, Y = 2,
+    // X = 3, + = 9, Home = 16, D-pad = 12..15) and the stick as axes; the TV makes a virtual gamepad of it (Input.virtualPad).
+    var DPAD = { up: 12, down: 13, left: 14, right: 15 }, gpBits = 0, gpHeld = {}, gpSent = '';
     var root = null, code = '', player = 1, mode = 'pad', run = false, busy = false, conn = null, linked = false, sess = null, retry = 0, wait = 0, curReq = null, offerObj = null;
     var want = {}, sent = {}, ui = {}, saved = {}, cid = '', inPad = false, wl = null, session = '';
     // sensor modes
@@ -96,6 +87,7 @@
         var o = saved.opt || {}, r = {};
         for (var k in OPT_DEF) r[k] = typeof o[k] === 'boolean' ? o[k] : OPT_DEF[k];
         r.rotate = o.rv === 2 && o.rotate === true;
+        r.dpad = PadSpec.dpad();                                       // the pad's own Stick / D-pad choice (also in its gear panel)
         r.vib = o.vib === 0 || o.vib === 1 || o.vib === 2 || o.vib === 3 ? o.vib : Haptics.level();
         return r;
     }
@@ -103,7 +95,8 @@
     // owner decision: every setting is always shown, no conditions (an old app or a browser simply ignores what it cannot do)
     function setOpt(k, v) {
         var o = opts();
-        if (k === 'vib') o.vib = Math.max(0, Math.min(Haptics.MAX, Math.round(+v) || 0)); else o[k] = !!v;
+        if (k === 'vib') o.vib = Math.max(0, Math.min(Haptics.MAX, Math.round(+v) || 0)); else if (k === 'dpad') PadSpec.setDpad(v); else o[k] = !!v;
+        delete o.dpad;
         o.rv = 2; saved.opt = o; save();
         if (k === 'vib') { Haptics.buzz(); return; }                    // feel the new strength
         applyOpts();
@@ -141,7 +134,7 @@
         ui.ptr.hidden = !ptrUi;
         ui.kb.hidden = !kbUi;
         ui.sense.hidden = !senseUi;
-        if (padUi) VirtualPad.init({ storage: PAD_STORE, id: 'controller2', force: true, scale: { stick: 1.35, btn: 1.15 }, buttons: PAD.buttons, catalog: PAD.catalog, onAction: padAction, dpad: opts().dpad, home: true, mic: mode === 'mic' ? true : null });
+        if (padUi) VirtualPad.init(PadSpec.options({ onAction: padAction, mic: mode === 'mic' ? true : null }));
         else if (VirtualPad.active()) VirtualPad.hide();
         if (ptrUi) paintPtr();
         if (kbUi) { kStop(); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); }   // keys go to the controller, not to a button
@@ -236,8 +229,8 @@
             return;
         }
         if (a === 'mic') { send({ t: 'k', a: 'record', d: down ? 1 : 0 }); if (down) Haptics.buzz(); return; }   // the Record key
-        a = a === 'pause' ? 'menu' : a === 'home' ? 'guide' : a;       // + = Start, Home = Guide, like a real pad
-        var i = GBTN.hasOwnProperty(a) ? GBTN[a] : (DPAD.hasOwnProperty(a) && opts().dpad ? DPAD[a] : -1);
+        var i = PadSpec.index(a);                                          // + = Start (9), Home = Guide (16), like a real pad
+        if (i < 0 && DPAD.hasOwnProperty(a) && PadSpec.dpad()) i = DPAD[a];
         if (i >= 0) { if (down) gpBits |= 1 << i; else gpBits &= ~(1 << i); }
         else if (DPAD.hasOwnProperty(a)) gpHeld[a] = down;               // the stick: axes
         else return;
@@ -1112,6 +1105,7 @@
         title: function () { return t('gamepad'); },
         open: function (body, arg) {
             saved = Store.rawGet(KEY) || {};
+            if (saved.opt && typeof saved.opt.dpad === 'boolean') { if (saved.opt.dpad) PadSpec.setDpad(true); delete saved.opt.dpad; }   // the GamePad setting moved into the pad's layout
             cid = typeof saved.cid === 'string' && /^[a-z0-9]{6,24}$/.test(saved.cid) ? saved.cid : '';
             if (!cid) for (var i = 0; i < 12; i++) cid += 'abcdefghijklmnopqrstuvwxyz0123456789'.charAt(Math.floor(Math.random() * 36));
             want = {}; sent = {}; micId = 0; kHeld = {}; kWait = null; kWizard = -1; gpBits = 0; gpHeld = {}; gpSent = ""; ui = {}; inPad = false; aimLast = 0; calib = null; log = []; plot = []; seq = 0; acks = {}; rtt = 0; lastAction = null; rawSent = 0; rawLast = 0; cfg = null; perm = 'unknown';

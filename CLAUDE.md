@@ -98,7 +98,9 @@
   (orientation lock after the first touch where Chrome allows it, else a "turn your phone" cover). Web only, never on the TV.
 - **Phone controller** (a phone as player 1 / 2, shows no game): the phone side is the system app **Game controller** (`js/launcher/apps/gamepad.js`, phones only, hidden on the TV); the TV side is `js/launcher/controllers.js`
   (Settings > Devices > Phone controller). Signalling = a `rooms` doc with app `controller` and a fixed code kept in `arc_dev_ctrl`, link = NetLink;
-  P1 = Input device `keys`, P2 = `keys2` (`Input.remote`). The phone reconnects by itself when the TV changes page. Separate from the in-game touch pad.
+  P1 = Input device `keys`, P2 = `keys2` (`Input.remote`). The phone reconnects by itself when the TV changes page.
+  **Owner rule: the Buttons pad and the shell's touch pad over games are ONE pad** (`js/core/pad-spec.js`: same buttons, sizes, Home / +, Stick / D-pad, one saved layout
+  `vpad:controller2`; the GamePad setting = the pad panel's D-pad choice). Any pad change applies to both; only an app's own `touch.buttons` gets a different pad.
   Pairing is a QR code (own page Settings > Devices > Phone controller, `js/core/qr.js`, link `?pair=<code>` opens the Game controller and connects).
   **Owner decision: its Buttons mode reuses the existing virtual pad (`VirtualPad`, id `controller`), never a separately drawn pad;**
   **A B X Y in the Nintendo places** (pad button option `place`) ****the phone IS a virtual standard gamepad on the TV (`Input.virtualPad`, message `gp`: raw button bits + stick axes, device `pad10<player>`), never high-level actions** (owner rule, games must see exactly a real pad; Input.PAD_BUTTONS reads by position): A right = `b` (run + cancel), B bottom = `ok` (jump + confirm), X top and Y left = run, the + button = `menu` (Start), Home (pad option `home`) = `guide`**; same mapping in the shell's touch pad and the SDK's `MyPC.pad`.

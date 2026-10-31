@@ -148,8 +148,18 @@ var Input = (function () {
     // 'ok' is confirm + jump like the remote's OK; 'menu' and 'pause' are taps (the Start button).
     var TOUCH = { left: ['left'], right: ['right'], up: ['up'], down: ['down'], ok: ['confirm', 'jump'], run: ['run'], cancel: ['cancel'], b: ['run', 'cancel'] };   // b: like a gamepad's B
     var touchHeld = {};             // pad action -> true
+    // 'btn<N>': button N of the standard gamepad layout (js/core/pad-spec.js, the pad shared with the phone controller):
+    // exactly what that button of a real pad gives (PAD_BUTTONS; − and + = 'menu', Home = 'guide')
+    function padActs(action) {
+        var n = /^btn(\d+)$/.exec(action), j;
+        if (!n) return null;
+        for (j = 0; j < PAD_BUTTONS.length; j++) if (PAD_BUTTONS[j][0] === +n[1]) return PAD_BUTTONS[j][1];
+        return null;
+    }
     function touch(action, down) {
-        var acts = TOUCH[action], i;
+        if (action === 'btn8' || action === 'btn9') action = 'menu';
+        else if (action === 'btn16') action = 'guide';
+        var acts = TOUCH[action] || padActs(action), i;
         if (action === 'menu' || action === 'pause' || action === 'guide' || action === 'record') {
             if (down) { emit(action, true, false, 'touch'); emit(action, false, false, 'touch'); }
             return;
