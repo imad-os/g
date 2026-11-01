@@ -333,6 +333,7 @@ var GameHost = (function () {
         loadTimer = setTimeout(function () { fail('timeout'); }, LOAD_TIMEOUT_MS);
         said = { hello: 0, progress: 0, at: Date.now(), sdk: 0 };
         var token = ++loadSeq;
+        $('game-frame-box').classList.toggle('wide', wideOnly());
         if (game.remote) return loadRemote(token);
 
         AppBoot.get(dir + entry + '?b=' + build, FILE_TIMEOUT_MS, function (err, html) {
@@ -411,6 +412,7 @@ var GameHost = (function () {
             if (TouchPad.available()) pauseItems.push({ id: '_touchpad', label: I18n.t('padSettings') });
             pauseItems.push({ id: '_padshow', label: I18n.t(TouchPad.hidden() ? 'padShow' : 'padHide') });
         }
+        if (window.Rotation && Rotation.phone() && Rotation.mode() === 'manual') pauseItems.push({ id: '_rotate', label: I18n.t('rotNow') });
         pauseItems.push({ id: '_quit', label: I18n.t('quitToMenu') });
         var target = null;
         for (var i = 0; i < pauseItems.length; i++) {
@@ -423,6 +425,14 @@ var GameHost = (function () {
             if (pauseItems[i].id === focusId) target = b;
         }
         return target || box.firstChild;
+    }
+
+    // on a phone held upright (html.tall) an app gets the whole tall screen; the built-in games and apps with
+    // "orientation": "landscape" in their config are made for 16:9: they keep 1920x1080, shown across the screen's width
+    function wideOnly() {
+        if (!game.remote) return true;
+        var c = game.remote.config, v = c && c.orientation;
+        return v === 'landscape';
     }
 
     // the app may keep running while My PC is in the background: "allow_background_running": true in its config
@@ -492,6 +502,7 @@ var GameHost = (function () {
         if (id === '_touchpad') return TouchPad.settings();           // the pause menu stays; the pad's own panel opens over it
         var r;
         if (id === '_padshow') { TouchPad.setHidden(!TouchPad.hidden()); r = 'stay'; }
+        else if (id === '_rotate') { if (!Rotation.turn()) App.toast(I18n.t('rotUpdate')); r = 'stay'; }   // Manual screen rotation
         else try { r = api.onMenu(id); } catch (e) {}
         if (r === 'stay') {
             Focus.pop();

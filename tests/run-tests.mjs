@@ -2600,6 +2600,69 @@ async function main() {
         await W.context().close();
     }
 
+    // ---- 33a. phones held upright: Control Panel > Display (Screen rotation) and a tall screen that fills the phone
+    console.log('33a. screen rotation and portrait');
+    {
+        const R = await newPage(browser, base, {}, { phone: true, viewport: { width: 390, height: 844 } });
+        await R.goto(base + 'index.html');
+        await R.waitForFunction(() => window.Desktop && document.querySelector('.dicon'), null, { timeout: 20000 });
+        check(await R.evaluate(() => Rotation.mode() === 'landscape' && Rotation.want() === 'landscape' && document.getElementById('turn-cover').hidden === false), 'a phone starts in Landscape (held): upright in a browser tab the "turn your phone" cover shows');
+        await R.evaluate(() => Win.open('settings', 'display'));
+        const d1 = await R.evaluate(() => ({ title: document.querySelector('.set-title').textContent, row: document.querySelector('.set-row').textContent }));
+        check(d1.title === 'Display' && /Screen rotation/.test(d1.row) && /Landscape/.test(d1.row), 'Control Panel > Display shows Screen rotation (' + d1.row + ')');
+        await R.evaluate(() => { const r = document.querySelector('.set-row'); r.focus(); });
+        await R.keyboard.press('ArrowLeft'); await R.waitForTimeout(100);
+        check(await R.evaluate(() => Rotation.mode() === 'portrait' && Store.rawGet('arc_dev_ctrlphone').opt.orient === 'portrait'), 'the remote\'s arrows change it (Landscape < Portrait), kept on the phone');
+        await R.keyboard.press('ArrowLeft'); await R.waitForTimeout(800);
+        const t1 = await R.evaluate(() => { const r = document.getElementById('stage').getBoundingClientRect(); return { mode: Rotation.mode(), tall: document.documentElement.classList.contains('tall'), size: App.screenSize(), r: [r.left, r.top, r.width, r.height], cover: document.getElementById('turn-cover').hidden }; });
+        check(t1.mode === 'auto' && t1.cover === true, 'Auto: no cover, the phone can be held upright (' + t1.mode + ')');
+        check(t1.tall && t1.size.w === 1080 && t1.size.h === Math.round(1080 * 844 / 390) && Math.abs(t1.r[2] - 390) < 2 && Math.abs(t1.r[3] - 844) < 2 && Math.abs(t1.r[1]) < 1, 'upright, My PC fills the whole tall screen (1080 x ' + t1.size.h + ', ' + t1.r.map(Math.round) + ')');
+        await R.evaluate(() => Win.close());
+        const tb = await R.evaluate(() => { const c = document.getElementById('tray-clock').getBoundingClientRect(), b = [...document.querySelectorAll('#tb-apps .tb-btn')].filter((e) => e.offsetWidth).map((e) => e.getBoundingClientRect()); return { clockL: c.left, last: Math.max(...b.map((x) => x.right)), rot: document.getElementById('tray-rot').hidden }; });
+        check(tb.last <= tb.clockL && tb.rot, 'upright, the taskbar buttons and the clock do not overlap; no Rotate button outside Manual (' + Math.round(tb.last) + ' <= ' + Math.round(tb.clockL) + ')');
+        await R.evaluate(() => Rotation.set('manual'));
+        check(await R.evaluate(() => Rotation.side() === 'portrait' && !document.getElementById('tray-rot').hidden), 'Manual: it stays as it is (upright here) and a Rotate button shows on the taskbar');
+        await R.evaluate(() => document.getElementById('tray-rot').click());
+        check(await R.evaluate(() => Rotation.side() === 'landscape' && Rotation.want() === 'landscape'), 'Rotate turns it sideways');
+        await R.setViewportSize({ width: 844, height: 390 }); await R.waitForTimeout(800);
+        check(await R.evaluate(() => !document.documentElement.classList.contains('tall') && App.screenSize().w === 1920 && document.getElementById('turn-cover').hidden), 'sideways: the 1920x1080 screen again, no cover');
+        // a built-in game keeps 16:9 across the width of a tall screen; the game menu has Rotate screen in Manual
+        await R.evaluate(() => Rotation.set('auto'));
+        await R.setViewportSize({ width: 390, height: 844 }); await R.waitForTimeout(500);
+        await R.evaluate(() => document.querySelector('[data-game="blocks"]').click());
+        await R.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 15000 });
+        await R.waitForTimeout(500);
+        const g = await R.evaluate(() => { const r = document.querySelector('#game-frame-box iframe').getBoundingClientRect(); return { wide: document.getElementById('game-frame-box').classList.contains('wide'), r: [r.left, r.top, r.width, r.height] }; });
+        check(g.wide && Math.abs(g.r[2] - 390) < 2 && Math.abs(g.r[3] - 390 * 9 / 16) < 2 && g.r[1] > 100, 'upright, a built-in game is shown 16:9 across the width, in the middle (' + g.r.map(Math.round) + ')');
+        await R.evaluate(() => { Rotation.set('manual'); GameHost.openPause(); });
+        check(await R.evaluate(() => [...document.querySelectorAll('#pause-items button')].some((b) => b.textContent === 'Rotate screen')), 'Manual: the game menu has Rotate screen');
+        check(R.errors.length === 0, 'no page errors ' + R.errors.join('; '));
+        await R.context().close();
+        // the Android app: orient for app 2.4.0+ (MyPCNative 5); an older app cannot turn upright (held landscape, Display says to update)
+        for (const v of [5, 4]) {
+            const N = await newPage(browser, base, {}, { phone: true, viewport: { width: 844, height: 390 } });
+            await N.addInitScript((ver) => { window.__nat = []; window.MyPCNative = { version: () => ver, settings: (j) => __nat.push(j), caps: () => '{}', motion: () => {}, active: () => {} }; }, v);
+            await N.goto(base + 'index.html');
+            await N.waitForFunction(() => window.Desktop && document.querySelector('.dicon'), null, { timeout: 20000 });
+            await N.evaluate(() => { __nat.length = 0; Rotation.set('portrait'); Rotation.set('auto'); });
+            const n = await N.evaluate(() => __nat.slice());
+            if (v === 5) check(n[0] === '{"orient":"portrait","rotate":false}' && n[1] === '{"orient":"any","rotate":true}', 'Android app 2.4.0: Portrait and Auto go to the app (' + n.join(' ') + ')');
+            else {
+                await N.evaluate(() => { Rotation.set('portrait'); Win.open('settings', 'display'); });
+                check(n[0] === '{"orient":"landscape","rotate":false}' && await N.evaluate(() => [...document.querySelectorAll('.set-row')].some((r) => /Update the My PC app/.test(r.textContent))), 'an older Android app stays sideways for Portrait, and Display asks to update the app (' + n.join(' ') + ')');
+            }
+            check(N.errors.length === 0, 'no page errors ' + N.errors.join('; '));
+            await N.context().close();
+        }
+        // a TV: no Display page, never tall
+        const T = await newPage(browser, base);
+        await T.goto(base + 'index.html');
+        await T.waitForFunction(() => window.Desktop && document.querySelector('.dicon'), null, { timeout: 20000 });
+        await T.evaluate(() => Win.open('settings'));
+        check(await T.evaluate(() => ![...document.querySelectorAll('.cp-tile')].some((b) => /Display/.test(b.textContent)) && !document.documentElement.classList.contains('tall') && document.getElementById('tray-rot').hidden), 'a TV has no Display page and no Rotate button');
+        await T.context().close();
+    }
+
     // ---- 33b. typing in a text field: the phone's keyboard types, B / Backspace are not Back until the field is left
     console.log('33b. text fields keep their keys while typing');
     {
@@ -2763,7 +2826,8 @@ async function main() {
         await P2.click('.gc-setbtn');
         const ps = await P2.evaluate(() => ({ opts: [...document.querySelectorAll('.gc-phoneset input[type=checkbox]')].map((c) => c.getAttribute('data-opt') + ':' + c.checked), pad: VirtualPad.active(),
             size: document.querySelector('.gc-phoneset input[type=checkbox]').getBoundingClientRect().height }));
-        check(ps.opts.indexOf('dpad:false') >= 0 && ps.opts.join() === 'rotate:false,awake:true,bg:true,dpad:false' && !ps.pad, 'Settings (top right) always lists Auto rotate (off at first: the screen never turns), Stay awake, Background and GamePad, even in a browser, over a hidden pad (' + ps.opts + ')');
+        check(ps.opts.indexOf('dpad:false') >= 0 && ps.opts.join() === 'awake:true,bg:true,dpad:false' && !ps.pad, 'Settings (top right) always lists Stay awake, Background and GamePad, even in a browser, over a hidden pad (' + ps.opts + ')');
+        check(await P2.evaluate(() => { const r = document.querySelector('.gc-phoneset .gc-rot'); return !!r && /Screen rotation/.test(r.textContent) && /Landscape/.test(r.textContent); }), 'Settings has Screen rotation (Landscape at first: the screen never turns), the same setting as Control Panel > Display');
         check(ps.size >= 24, 'the checkboxes are finger-sized (' + Math.round(ps.size) + ' px)');
         await P2.click('.gc-phoneset [data-opt=dpad]');
         await P2.click('.gc-phoneset .btn-primary');
@@ -3157,14 +3221,14 @@ async function main() {
             motion: (on) => __nat.push('motion:' + on), active: (on) => __nat.push('active:' + on), scanQr: () => __nat.push('scan'), version: () => 3, settings: (j) => __nat.push('settings:' + j) };
             navigator.vibrate = (ms) => { __nat.push('vib:' + ms); return true; }; });
         await A.addInitScript({ path: path.join(ROOT, 'android-controller/app/src/main/assets/bridge.js') });
-        // an older app saved Auto rotate on (the old default): My PC holds the side anyway, for the whole app, from the start
+        // an older app saved Auto rotate on (the old default, no rv: 2): My PC holds landscape anyway, for the whole app, from the start
         await A.addInitScript(() => { if (!localStorage.getItem('arc_dev_ctrlphone')) localStorage.setItem('arc_dev_ctrlphone', JSON.stringify({ opt: { rotate: true, awake: true, bg: true, dpad: false } })); });
         await A.goto(base + 'index.html?ctrl=1');
         await A.waitForFunction(() => window.GamepadApp && !!document.querySelector('.gc-scanbtn'), null, { timeout: 20000 });
-        check(await A.evaluate(() => __nat[0] === 'settings:{"rotate":false}'), 'Android app: My PC tells the app at start to hold the screen on its side (Auto rotate off, even over an old saved default) (' + await A.evaluate(() => __nat.join()) + ')');
-        check(await A.evaluate(() => __nat.indexOf('settings:{"rotate":false,"awake":true,"bg":true}') >= 0), 'Android app: the phone settings (Auto rotate off, the others on) go to the app when the Game controller opens');
+        check(await A.evaluate(() => __nat[0] === 'settings:{"orient":"landscape","rotate":false}'), 'Android app: My PC tells the app at start to hold landscape (the default screen rotation, even over an old saved default) (' + await A.evaluate(() => __nat.join()) + ')');
+        check(await A.evaluate(() => __nat.indexOf('settings:{"awake":true,"bg":true}') >= 0), 'Android app: the phone settings (Stay awake and Background on) go to the app when the Game controller opens');
         await A.click('.gc-phonebtn');
-        check(await A.evaluate(() => [...document.querySelectorAll('.gc-phoneset input')].map((c) => c.getAttribute('data-opt')).join() === 'rotate,awake,bg,dpad,vib'), 'Android app: Settings has Auto rotate, Stay awake, Background, GamePad and Vibration');
+        check(await A.evaluate(() => [...document.querySelectorAll('.gc-phoneset input')].map((c) => c.getAttribute('data-opt')).join() === 'awake,bg,dpad,vib' && !!document.querySelector('.gc-phoneset .gc-rot')), 'Android app: Settings has Stay awake, Background, GamePad, Screen rotation and Vibration');
         // Vibration: a 0..3 slider (2 at first); each press buzzes at that strength, 0 never buzzes
         check(await A.evaluate(() => document.querySelector('.gc-phoneset .gc-range').value === '2' && document.querySelector('.gc-phoneset .gc-range').max === '3'), 'Android app: Settings has a Vibration slider from 0 to 3, at 2 at first');
         await A.click('.gc-vib .gc-step:last-of-type');
@@ -3175,14 +3239,17 @@ async function main() {
         check(await A.evaluate(() => !__nat.some((x) => /^vib/.test(x))), 'Android app: Vibration 0 never buzzes');
         await A.evaluate(() => { const s = document.querySelector('.gc-phoneset .gc-range'); s.value = '1'; s.dispatchEvent(new Event('change')); __nat.length = 0; Haptics.buzz(); });
         check(await A.evaluate(() => __nat.join() === 'vib:10'), 'Android app: Vibration 1 is a light buzz (' + await A.evaluate(() => __nat.join()) + ')');
-        await A.click('.gc-phoneset [data-opt=rotate]'); await A.click('.gc-phoneset [data-opt=bg]');
+        await A.click('.gc-rot .gc-step:last-of-type'); await A.click('.gc-rot .gc-step:last-of-type');     // Landscape > Manual > Auto
+        await A.click('.gc-phoneset [data-opt=bg]');
         await A.click('.gc-phoneset .btn-primary');
-        check(await A.evaluate(() => __nat[__nat.length - 1] === 'settings:{"rotate":true,"awake":true,"bg":false}' && Store.rawGet('arc_dev_ctrlphone').opt.rotate === true), 'Android app: turning Auto rotate on and Background off tells the app at once and is kept on the phone');
+        check(await A.evaluate(() => __nat.indexOf('settings:{"awake":true,"bg":false}') >= 0 && Store.rawGet('arc_dev_ctrlphone').opt.orient === 'auto' && Store.rawGet('arc_dev_ctrlphone').opt.bg === false), 'Android app: Screen rotation Auto and Background off are kept on the phone, Background tells the app at once');
+        check(await A.evaluate(() => __nat[__nat.length - 1] === 'settings:{"orient":"landscape","rotate":false}'), 'Android app: the Game controller itself stays sideways while it is open, whatever the screen rotation');
         await A.reload();
         await A.waitForFunction(() => window.GamepadApp && !!document.querySelector('.gc-scanbtn'), null, { timeout: 20000 });
-        check(await A.evaluate(() => __nat[0] === 'settings:{"rotate":true}' && __nat.indexOf('settings:{"rotate":true,"awake":true,"bg":false}') >= 0 && Haptics.level() === 1), 'Android app: the settings (Auto rotate chosen on, Vibration 1) are still there after the app restarts');
+        check(await A.evaluate(() => __nat[0] === 'settings:{"orient":"any","rotate":true}' && __nat.indexOf('settings:{"awake":true,"bg":false}') >= 0 && Haptics.level() === 1), 'Android app: the settings (Screen rotation Auto, Vibration 1) are still there after the app restarts (' + await A.evaluate(() => __nat.join()) + ')');
+        await A.evaluate(() => Rotation.set('landscape'));
         await A.click('.gc-phonebtn');
-        await A.click('.gc-phoneset [data-opt=rotate]'); await A.click('.gc-phoneset [data-opt=bg]');
+        await A.click('.gc-phoneset [data-opt=bg]');
         await A.click('.gc-phoneset .btn-primary');
         await A.click('.gc-modes .btn:nth-of-type(2)');           // Motion moves
         await A.click('.gc-scanbtn');
@@ -3218,13 +3285,16 @@ async function main() {
         check(tr.report.length === 1 && tr.report[0].move === 'LEFT' && tr.define.LEFT && tr.define.LEFT.below < 0, 'Android app: the Train tab records a move 5 times and sets its limit (' + JSON.stringify(tr.report) + ')');
         await A.evaluate(() => document.querySelector('.gc-leave2').click());
         check(await A.evaluate(() => __nat.slice(-2).sort().join() === 'active:false,motion:false'), 'Android app: leaving stops the native sensors and the keep-awake (' + await A.evaluate(() => __nat.join()) + ')');
-        // Control Panel > Devices on the phone: the same Auto rotate and Vibration (for the whole My PC app on this phone)
-        await A.evaluate(() => { Win.close(); Win.open('settings', 'devices'); });
+        // Control Panel on the phone: Display > Screen rotation (the Game controller's setting) and Devices > Vibration (for the whole My PC app)
+        await A.evaluate(() => { Win.close(); Win.open('settings', 'display'); });
+        await A.waitForFunction(() => [...document.querySelectorAll('.set-row')].some((r) => /Screen rotation/.test(r.textContent)), null, { timeout: 5000 });
+        await A.evaluate(() => { __nat.length = 0; [...document.querySelectorAll('.set-row')].find((r) => /Screen rotation/.test(r.textContent)).click(); });
+        check(await A.evaluate(() => Rotation.mode() === 'manual' && __nat.join() === 'settings:{"orient":"landscape","rotate":false}' && Store.rawGet('arc_dev_ctrlphone').opt.orient === 'manual' && [...document.querySelectorAll('.set-row')].some((r) => /Rotate screen/.test(r.textContent))), 'Android app: OK on Screen rotation in Control Panel > Display goes to the next choice (Manual: held, Rotate screen shows) and tells the app at once (' + await A.evaluate(() => __nat.join()) + ')');
+        await A.evaluate(() => { Rotation.set('landscape'); Win.close(); Win.open('settings', 'devices'); });
         await A.waitForFunction(() => [...document.querySelectorAll('.set-row')].some((r) => /Vibration/.test(r.textContent)), null, { timeout: 5000 });
-        const cpRows = await A.evaluate(() => [...document.querySelectorAll('.set-row')].map((r) => r.querySelector('.set-row-name') ? r.querySelector('.set-row-name').textContent : '').filter((x) => /Auto rotate|Vibration/.test(x)));
-        check(cpRows.join() === 'Auto rotate,Vibration', 'Android app: Control Panel > Devices has Auto rotate and Vibration (' + cpRows + ')');
-        await A.evaluate(() => { __nat.length = 0; [...document.querySelectorAll('.set-row')].find((r) => /Auto rotate/.test(r.textContent)).click(); });
-        check(await A.evaluate(() => __nat.join() === 'settings:{"rotate":true}' && Store.rawGet('arc_dev_ctrlphone').opt.rotate === true), 'Android app: Auto rotate on in Control Panel tells the app at once (' + await A.evaluate(() => __nat.join()) + ')');
+        const cpRows = await A.evaluate(() => [...document.querySelectorAll('.set-row')].map((r) => r.querySelector('.set-row-name') ? r.querySelector('.set-row-name').textContent : '').filter((x) => /rotat|Vibration/i.test(x)));
+        check(cpRows.join() === 'Vibration', 'Android app: Control Panel > Devices has Vibration (screen rotation moved to Display) (' + cpRows + ')');
+        await A.evaluate(() => { __nat.length = 0; });
         await A.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Vibration/.test(r.textContent)).click());
         check(await A.evaluate(() => Haptics.level() === 2 && __nat[__nat.length - 1] === 'vib:22'), 'Android app: OK on Vibration in Control Panel goes one step stronger and buzzes (' + await A.evaluate(() => __nat.join()) + ')');
         await A.evaluate(() => Win.close());

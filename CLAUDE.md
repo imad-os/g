@@ -94,6 +94,13 @@
   above every app, feeding `Input.touch` (device `'touch'`). Per-app config: `touch` in `mypc-app.json` / the Firestore `apps` doc,
   `MyPC.init({ pad })`, `MyPC.pad` in the SDK. The library's one source is `sdk/pad/virtual-pad.js` (from github.com/imad-os/g_rpg `pad/`,
   one My PC change: `onSettings`); run `node tools/sync-pad.mjs` after editing it (copies in `js/core/` and inside `sdk/mypc-sdk.js`).
+- **Screen rotation / portrait** (owner request 2026-11-01): phones choose in Control Panel > Display (page only on phones; same setting in
+  the Game controller's Settings): Landscape (default, held, no sensor), Portrait (held), Auto (sensor, both ways) or Manual (Rotate button in
+  the tray, the game menu and Display). `js/core/rotation.js` (`arc_dev_ctrlphone.opt.orient` / `side`; replaced Auto rotate); native in the APK
+  2.4.0+ (`MyPCNative` 5, `settings({ orient })`). Upright, `main.js fit()` lays the stage out 1080 wide x as tall as the phone (`html.tall`,
+  CSS `--sw` / `--sh`, `App.screenSize()`): use those vars, never a fixed 1920 / 1080 for a full-screen box; `.tall` rules at the end of
+  launcher.css fix what does not fit 1080 wide. Built-in games and apps with config `"orientation": "landscape"` stay 1920x1080 scaled across
+  the width (`.game-frame-box.wide`); other installed apps get the tall screen. The Game controller holds landscape while open.
 - **Installable web app**: `manifest.webmanifest` (fullscreen, landscape), `sw.js` (network first), `js/core/pwa.js` registers it and keeps phones in landscape
   (orientation lock after the first touch where Chrome allows it, else a "turn your phone" cover). Web only, never on the TV.
 - **Phone controller** (a phone as player 1 / 2, shows no game): the phone side is the system app **Game controller** (`js/launcher/apps/gamepad.js`, phones only, hidden on the TV); the TV side is `js/launcher/controllers.js`

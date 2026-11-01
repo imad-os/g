@@ -23,7 +23,13 @@
             cpd_system: 'Graphics, device, network, storage', cpd_personal: 'Theme, background', cpd_apps: 'Installed apps, App Store',
             cpd_accounts: 'Your profile, password, other users', cpd_sound: 'Music and effects volume', cpd_devices: 'Controllers, phone controller, keyboard',
             cpd_time: 'Language, clock, date', cpd_gaming: 'Controls, reset progress', cpd_ai: 'AI services for apps',
-            cpd_privacy: 'Cloud backup, world records, permissions', cpd_about: 'Version and device', cpd_update: 'Check for My PC updates'
+            cpd_privacy: 'Cloud backup, world records, permissions', cpd_about: 'Version and device', cpd_update: 'Check for My PC updates',
+            sysDisplay: 'Display', cpd_display: 'Screen rotation, portrait and landscape',
+            rotTitle: 'Screen rotation', rotDesc: 'How this phone\'s screen turns. Upright, My PC fills the tall screen and apps and games get a tall screen.',
+            rotAuto: 'Auto', rotPortrait: 'Portrait', rotLandscape: 'Landscape', rotManual: 'Manual',
+            rotAutoDesc: 'Follows the phone: upright or sideways.', rotPortraitDesc: 'Always upright. Turning the phone does nothing.',
+            rotLandscapeDesc: 'Always sideways. Turning the phone does nothing.', rotManualDesc: 'Stays as it is. Turn it with the Rotate button on the taskbar, in the game menu or here.',
+            rotNow: 'Rotate screen', rotUpdate: 'Update the My PC app on this phone (Get the app on the desktop) to use it upright.'
         },
         fr: {
             settings: 'Panneau de configuration', startWord: 'démarrer',
@@ -44,7 +50,13 @@
             cpd_system: 'Graphismes, appareil, réseau, stockage', cpd_personal: 'Thème, fond d’écran', cpd_apps: 'Applis installées, App Store',
             cpd_accounts: 'Votre profil, mot de passe, autres utilisateurs', cpd_sound: 'Volume de la musique et des effets', cpd_devices: 'Manettes, téléphone manette, clavier',
             cpd_time: 'Langue, horloge, date', cpd_gaming: 'Commandes, remise à zéro', cpd_ai: 'Services d’IA pour les applis',
-            cpd_privacy: 'Sauvegarde, records mondiaux, autorisations', cpd_about: 'Version et appareil', cpd_update: 'Rechercher des mises à jour de My PC'
+            cpd_privacy: 'Sauvegarde, records mondiaux, autorisations', cpd_about: 'Version et appareil', cpd_update: 'Rechercher des mises à jour de My PC',
+            sysDisplay: 'Affichage', cpd_display: 'Rotation de l’écran, portrait et paysage',
+            rotTitle: 'Rotation de l’écran', rotDesc: 'Comment l’écran de ce téléphone tourne. Debout, My PC remplit l’écran haut et les apps et jeux ont un écran haut.',
+            rotAuto: 'Auto', rotPortrait: 'Portrait', rotLandscape: 'Paysage', rotManual: 'Manuelle',
+            rotAutoDesc: 'Suit le téléphone : debout ou sur le côté.', rotPortraitDesc: 'Toujours debout. Tourner le téléphone ne change rien.',
+            rotLandscapeDesc: 'Toujours sur le côté. Tourner le téléphone ne change rien.', rotManualDesc: 'Reste tel quel. Tournez-le avec le bouton Pivoter de la barre des tâches, du menu du jeu ou d’ici.',
+            rotNow: 'Pivoter l’écran', rotUpdate: 'Mettez à jour l’app My PC sur ce téléphone (Obtenir l’app sur le bureau) pour l’utiliser debout.'
         },
         es: {
             settings: 'Panel de control', startWord: 'inicio',
@@ -65,7 +77,13 @@
             cpd_system: 'Gráficos, dispositivo, red, almacenamiento', cpd_personal: 'Tema, fondo', cpd_apps: 'Apps instaladas, App Store',
             cpd_accounts: 'Tu perfil, contraseña, otros usuarios', cpd_sound: 'Volumen de música y efectos', cpd_devices: 'Mandos, teléfono como mando, teclado',
             cpd_time: 'Idioma, reloj, fecha', cpd_gaming: 'Controles, borrar progreso', cpd_ai: 'Servicios de IA para apps',
-            cpd_privacy: 'Copia en la nube, récords mundiales, permisos', cpd_about: 'Versión y dispositivo', cpd_update: 'Buscar actualizaciones de My PC'
+            cpd_privacy: 'Copia en la nube, récords mundiales, permisos', cpd_about: 'Versión y dispositivo', cpd_update: 'Buscar actualizaciones de My PC',
+            sysDisplay: 'Pantalla', cpd_display: 'Rotación de pantalla, vertical y horizontal',
+            rotTitle: 'Rotación de pantalla', rotDesc: 'Cómo gira la pantalla de este teléfono. En vertical, My PC llena la pantalla alta y las apps y juegos tienen una pantalla alta.',
+            rotAuto: 'Automática', rotPortrait: 'Vertical', rotLandscape: 'Horizontal', rotManual: 'Manual',
+            rotAutoDesc: 'Sigue al teléfono: en vertical o de lado.', rotPortraitDesc: 'Siempre en vertical. Girar el teléfono no cambia nada.',
+            rotLandscapeDesc: 'Siempre de lado. Girar el teléfono no cambia nada.', rotManualDesc: 'Se queda como está. Gírala con el botón Girar de la barra de tareas, del menú del juego o de aquí.',
+            rotNow: 'Girar pantalla', rotUpdate: 'Actualiza la app My PC en este teléfono (Obtener la app en el escritorio) para usarla en vertical.'
         },
         ar: {
             settings: 'لوحة التحكم', startWord: 'ابدأ',
@@ -86,7 +104,13 @@
             cpd_system: 'الرسومات، الجهاز، الشبكة، التخزين', cpd_personal: 'السمة، الخلفية', cpd_apps: 'التطبيقات المثبتة، متجر التطبيقات',
             cpd_accounts: 'ملفك، كلمة المرور، مستخدمون آخرون', cpd_sound: 'مستوى الموسيقى والمؤثرات', cpd_devices: 'أذرع التحكم، الهاتف كذراع، لوحة المفاتيح',
             cpd_time: 'اللغة، الساعة، التاريخ', cpd_gaming: 'التحكم، مسح التقدم', cpd_ai: 'خدمات الذكاء الاصطناعي للتطبيقات',
-            cpd_privacy: 'النسخ السحابي، الأرقام العالمية، الأذونات', cpd_about: 'الإصدار والجهاز', cpd_update: 'البحث عن تحديثات My PC'
+            cpd_privacy: 'النسخ السحابي، الأرقام العالمية، الأذونات', cpd_about: 'الإصدار والجهاز', cpd_update: 'البحث عن تحديثات My PC',
+            sysDisplay: 'الشاشة', cpd_display: 'تدوير الشاشة، عمودي وأفقي',
+            rotTitle: 'تدوير الشاشة', rotDesc: 'كيف تدور شاشة هذا الهاتف. في الوضع العمودي يملأ My PC الشاشة الطويلة وتحصل التطبيقات والألعاب على شاشة طويلة.',
+            rotAuto: 'تلقائي', rotPortrait: 'عمودي', rotLandscape: 'أفقي', rotManual: 'يدوي',
+            rotAutoDesc: 'يتبع الهاتف: عموديًا أو أفقيًا.', rotPortraitDesc: 'عمودي دائمًا. تدوير الهاتف لا يغير شيئًا.',
+            rotLandscapeDesc: 'أفقي دائمًا. تدوير الهاتف لا يغير شيئًا.', rotManualDesc: 'تبقى كما هي. أدرها بزر التدوير في شريط المهام أو في قائمة اللعبة أو من هنا.',
+            rotNow: 'تدوير الشاشة', rotUpdate: 'حدّث تطبيق My PC على هذا الهاتف (احصل على التطبيق من سطح المكتب) لاستخدامه عموديًا.'
         }
     };
     // the help texts that say "Settings > ..." now say "Control Panel > ..."

@@ -1,12 +1,16 @@
-/* Installable web app + landscape only on phones.
+/* Installable web app + the screen rotation chosen on phones (js/core/rotation.js: landscape at first).
    - Chrome installs the site as an app (manifest.webmanifest + sw.js); the manifest asks for landscape.
    - In a normal browser tab the orientation is locked when Chrome allows it (full screen after the first touch);
-     where it cannot be locked (iOS, desktop windows resized) a "turn your phone" cover shows in portrait. */
+     where it cannot be locked (iOS, desktop windows resized) a "turn your phone" cover shows when the phone is held the
+     other way than a held side (Landscape, Portrait, Manual). Auto never shows it. The Android app turns natively. */
 var PWA = (function () {
     'use strict';
     var T = {
         en: 'Turn your phone sideways', fr: 'Tournez votre téléphone sur le côté',
         es: 'Gira el teléfono de lado', ar: 'أدر هاتفك إلى الوضع الأفقي'
+    }, U = {
+        en: 'Turn your phone upright', fr: 'Tenez votre téléphone droit',
+        es: 'Pon el teléfono en vertical', ar: 'أدر هاتفك إلى الوضع العمودي'
     };
     var cover = null;
 
@@ -19,7 +23,7 @@ var PWA = (function () {
         catch (e) { return false; }
     }
     function lock() {
-        if (window.Haptics) { Haptics.apply(); return; }    // held on the side it is on unless Auto rotate is on (js/core/haptics.js)
+        if (window.Rotation) { Rotation.apply(); return; }  // the side chosen in Control Panel > Display (js/core/rotation.js)
         try {
             var o = screen.orientation;
             if (o && o.lock) { var p = o.lock('landscape'); if (p && p.catch) p.catch(function () {}); }
@@ -32,8 +36,10 @@ var PWA = (function () {
         try { l = (window.I18n && I18n.lang && I18n.lang()) || (navigator.language || 'en').slice(0, 2); } catch (e) {}
         return T[l] ? l : 'en';
     }
-    function update() {
-        if (!phone()) { if (cover) cover.hidden = true; return; }
+    // w: what js/core/rotation.js wants ('any' | 'landscape' | 'portrait'); it passes it while it is still loading
+    function update(w) {
+        if (typeof w !== 'string') w = window.Rotation ? Rotation.want() : 'landscape';
+        if (!phone() || window.MyPCNative || w === 'any') { if (cover) cover.hidden = true; return; }
         if (!cover) {
             cover = document.createElement('div');
             cover.id = 'turn-cover';
@@ -43,8 +49,9 @@ var PWA = (function () {
             document.body.appendChild(cover);
             cover.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
         }
-        cover.lastChild.textContent = T[lang()];
-        cover.hidden = !portrait();
+        cover.lastChild.textContent = (w === 'portrait' ? U : T)[lang()];
+        cover.firstChild.style.transform = w === 'portrait' ? 'rotate(90deg)' : '';
+        cover.hidden = portrait() === (w === 'portrait');
     }
     function onFirstTouch() {
         document.removeEventListener('touchend', onFirstTouch, true);

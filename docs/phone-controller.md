@@ -244,17 +244,21 @@ Each fired move carries a `confidence` (0.3 to 1: how far past its threshold the
 ## Screens on the phone
 
 **Settings** (button on the join screen, top right over the pad, in the top bar of the other modes; kept on the phone in
-`arc_dev_ctrlphone.opt`): **Auto rotate** (**off by default**: the screen stays on the landscape side it is on, even when
-the phone is turned over; it holds the whole My PC app on that phone, not only the Game controller; `rv: 2` marks a choice
-made since it became off by default), **Vibration** (a slider 0 to 3, 2 at first, 0 = off: a short buzz on every button
+`arc_dev_ctrlphone.opt`): **Screen rotation** (`orient`, `js/core/rotation.js`, the same setting as My PC's **Control
+Panel > Display**; it holds the whole My PC app on that phone): **Landscape** (the default: held on the side it is on, the
+sensors never turn it), **Portrait** (held upright), **Auto** (follows the phone both ways; My PC fills the tall screen) or
+**Manual** (held; a Rotate button on the taskbar, in the game menu and in Control Panel > Display turns it, `side`).
+It replaced Auto rotate (an old `rotate: true` with `rv: 2` reads as Auto). The Game controller itself always stays
+sideways while it is open (`Rotation.hold('landscape')`). **Vibration** (a slider 0 to 3, 2 at first, 0 = off: a short buzz on every button
 press, in every mode and also on the touch pad My PC draws over games on that phone; `vib`), **Stay awake** (the screen stays on while connected), **Background** (the link stays up with the screen off or
 the app in the background: foreground service + wake locks) and **GamePad** (a D-pad in place of the stick), plus
 **Disconnect** (while connected) and **Forget TV**. Once a phone has connected to a TV it remembers it
 (`arc_dev_ctrlphone.paired`) and connects to it by itself whenever the Game controller opens, until Forget TV. The Game
-controller opens with **Connect** focused, not the code box (no phone keyboard popping up). Auto rotate and Vibration
-are also in My PC's **Control Panel > Devices** on a phone (`js/core/haptics.js`, which also applies Auto rotate when My PC
-starts). Stay awake and Background are on by default; these three are done natively by the Android app (`MyPCNative.settings(json)`, app 2.1.0, `version()` 3,
-kept by the app in its own preferences and applied from its start). In a browser, Auto rotate uses the Screen
+controller opens with **Connect** focused, not the code box (no phone keyboard popping up). Vibration
+is also in My PC's **Control Panel > Devices** on a phone (`js/core/haptics.js`), Screen rotation in **Control Panel >
+Display** (applied when My PC starts). Stay awake and Background are on by default; these three are done natively by the Android app (`MyPCNative.settings(json)`, app 2.1.0, `version()` 3,
+kept by the app in its own preferences and applied from its start; `{ orient: 'any' | 'landscape' | 'portrait' }` needs app
+2.4.0, `version()` 5: older apps only turn between the two landscape sides, and Control Panel > Display asks to update the app). In a browser, Screen rotation uses the Screen
 Orientation API (only in full screen) and Stay awake the Wake Lock API; all four settings are always shown (owner decision); a phone that cannot do one simply ignores it.
 
 **Live** (sensor modes): gait (with confidence), pace, speed, cadence, steps, distance, last move (flashes), connection

@@ -190,12 +190,13 @@ var Desktop = (function () {
         });
         wrap.hidden = false;
         // beside the shortcut (stage pixels: the stage is scaled to the window), kept above the taskbar
-        var sr = $('stage').getBoundingClientRect(), k = sr.width / 1920 || 1, r = b.getBoundingClientRect();
+        var ss = window.App && App.screenSize ? App.screenSize() : { w: 1920, h: 1080 }, SW = ss.w, SH = ss.h;
+        var sr = $('stage').getBoundingClientRect(), k = sr.width / SW || 1, r = b.getBoundingClientRect();
         var x = (r.right - sr.left) / k + 8, y = (r.top - sr.top) / k, w = m.offsetWidth, h = m.offsetHeight;
         var rtl = document.documentElement.getAttribute('dir') === 'rtl';
-        if (rtl || x + w > 1904) x = (r.left - sr.left) / k - w - 8;
-        if (x < 16) x = Math.min(1904 - w, (r.right - sr.left) / k + 8);
-        y = Math.max(16, Math.min(y, 1080 - $('taskbar').offsetHeight - h - 16));
+        if (rtl || x + w > SW - 16) x = (r.left - sr.left) / k - w - 8;
+        if (x < 16) x = Math.max(16, Math.min(SW - 16 - w, (r.right - sr.left) / k + 8));
+        y = Math.max(16, Math.min(y, SH - $('taskbar').offsetHeight - h - 16));
         m.style.left = Math.round(x) + 'px';
         m.style.top = Math.round(y) + 'px';
         Focus.focus(b);
@@ -275,7 +276,13 @@ var Desktop = (function () {
             box.appendChild(b);
         }
         $('tray-clock').onclick = function () { Win.open('calendar'); };
+        // Manual screen rotation (Control Panel > Display, js/core/rotation.js): this button turns the phone's screen
+        $('tray-rot').onclick = function () { rotateScreen(); };
+        if (window.Rotation) Rotation.onChange(updateTray);
         updateTray();
+    }
+    function rotateScreen() {
+        if (!Rotation.turn()) App.toast(I18n.t('rotUpdate'));
     }
 
     function updateTray() {
@@ -284,6 +291,11 @@ var Desktop = (function () {
         $('input-indicator').setAttribute('aria-label', I18n.t(d === 'pad' ? 'inputPad' : d === 'keyboard' ? 'inputKeys' : d === 'mouse' ? 'inputMouse' : 'inputRemote'));
         Icons.put($('tray-net'), navigator.onLine === false ? 'wifiOff' : 'wifi');
         Icons.put($('tray-vol'), AudioPrefs.music() + AudioPrefs.sfx() ? 'volume' : 'mute');
+        var rot = $('tray-rot'), man = !!window.Rotation && Rotation.phone() && Rotation.mode() === 'manual';
+        if (rot.hidden === man) {
+            rot.hidden = !man;
+            if (man) { Icons.put(rot, 'rotate'); rot.setAttribute('aria-label', I18n.t('rotNow')); rot.title = I18n.t('rotNow'); }
+        }
     }
 
     /* ---------------- clock (once a minute, only while visible) ---------------- */

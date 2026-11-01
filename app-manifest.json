@@ -1,5 +1,5 @@
 {
-  "build": 84,
+  "build": 85,
   "version": "2.22.0",
   "shell": 1,
   "css": [
@@ -11,6 +11,7 @@
     "js/core/pwa.js",
     "js/core/storage.js",
     "js/core/haptics.js",
+    "js/core/rotation.js",
     "js/core/cloud.js",
     "js/core/reports.js",
     "js/core/global-settings.js",

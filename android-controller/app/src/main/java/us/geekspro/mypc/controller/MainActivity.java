@@ -6,6 +6,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
@@ -55,7 +56,9 @@ import java.util.regex.Pattern;
  *   screen kept on (while a controller is connected or a game is open), and a foreground service + wake lock so the link
  *   survives with the screen off; the phone's Back is the TV remote's Back (Input.systemBack), exit closes the app.
  * The Game controller's phone settings (Bridge.settings, kept in SharedPreferences "opts", applied from the start):
- *   rotate  off: the screen stays on the landscape side it is on (no turning when the phone is flipped)
+ *   orient  the screen rotation chosen in My PC (js/core/rotation.js): "any" follows the phone (portrait and landscape),
+ *           "landscape" / "portrait" hold that side with no sensor (the side it is on now when it already is that way)
+ *   rotate  (pages before orient) on: both landscape sides follow the phone; off: held on the side it is on
  *   awake   off: the screen may turn off by itself while a controller is connected
  *   bg      off: no foreground service; with the screen off the page pauses and the link drops
  */
@@ -70,6 +73,7 @@ public final class MainActivity extends Activity {
     private String bridgeJs;
     private boolean active, motion, playing;
     private boolean optRotate = true, optAwake = true, optBg = true;
+    private String optOrient = "";
 
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     @Override protected void onCreate(Bundle state) {
@@ -77,6 +81,7 @@ public final class MainActivity extends Activity {
         bridgeJs = asset("bridge.js");
         SharedPreferences o = getSharedPreferences("opts", MODE_PRIVATE);
         optRotate = o.getBoolean("rotate", true); optAwake = o.getBoolean("awake", true); optBg = o.getBoolean("bg", true);
+        optOrient = o.getString("orient", "");
         rotation();
         hub = new SensorHub(this, json -> {
             final String js = "window.__mypcMotion&&__mypcMotion(" + json + ")";
@@ -117,17 +122,25 @@ public final class MainActivity extends Activity {
         try {
             JSONObject j = new JSONObject(json);
             optRotate = j.optBoolean("rotate", optRotate); optAwake = j.optBoolean("awake", optAwake); optBg = j.optBoolean("bg", optBg);
+            optOrient = j.optString("orient", optOrient);
         } catch (Exception e) { return; }
         getSharedPreferences("opts", MODE_PRIVATE).edit()
-                .putBoolean("rotate", optRotate).putBoolean("awake", optAwake).putBoolean("bg", optBg).apply();
+                .putBoolean("rotate", optRotate).putBoolean("awake", optAwake).putBoolean("bg", optBg).putString("orient", optOrient).apply();
         rotation();
         screenOn();
         if (active) LinkService.set(this, optBg);
     }
 
-    // Auto rotate: either landscape side follows the phone; off: held on the side it is on now
+    // Screen rotation: "any" follows the phone (both ways), "landscape" / "portrait" are held with no sensor, on the side it
+    // is on now when it already is that way; without orient (older pages) the old Auto rotate between the landscape sides
     private void rotation() {
-        setRequestedOrientation(optRotate ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE : ActivityInfo.SCREEN_ORIENTATION_LOCKED);
+        boolean land = getResources().getConfiguration().orientation != Configuration.ORIENTATION_PORTRAIT;
+        int o;
+        if ("any".equals(optOrient)) o = ActivityInfo.SCREEN_ORIENTATION_SENSOR;
+        else if ("portrait".equals(optOrient)) o = land ? ActivityInfo.SCREEN_ORIENTATION_PORTRAIT : ActivityInfo.SCREEN_ORIENTATION_LOCKED;
+        else if ("landscape".equals(optOrient)) o = land ? ActivityInfo.SCREEN_ORIENTATION_LOCKED : ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+        else o = optRotate ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE : land ? ActivityInfo.SCREEN_ORIENTATION_LOCKED : ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+        if (o != getRequestedOrientation()) setRequestedOrientation(o);
     }
 
     void setActive(boolean on) {

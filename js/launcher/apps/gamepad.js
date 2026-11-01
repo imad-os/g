@@ -23,10 +23,11 @@
  *                   button is the Record key ({ t: 'k', a: 'record' }: Memo starts / stops); when the TV records (Mic on the
  *                   TV asks { t: 'mic', on: 1 }) this phone opens its microphone (js/core/mic.js) and sends 16-bit PCM
  *                   ({ t: 'au' }); the button is red while it does. Only this mode ever opens the phone's microphone.
- * Phone settings (Settings button on every screen, kept on the phone in arc_dev_ctrlphone.opt): Auto rotate (off by default),
- * Vibration 0..3 (both shared with My PC itself through js/core/haptics.js), Stay awake,
+ * Phone settings (Settings button on every screen, kept on the phone in arc_dev_ctrlphone.opt): Screen rotation (Auto /
+ * Portrait / Landscape / Manual, js/core/rotation.js = Control Panel > Display; this app itself stays sideways while open),
+ * Vibration 0..3 (shared with My PC itself through js/core/haptics.js), Stay awake,
  * Background (the Android app keeps the link with the screen off) and GamePad (a D-pad in place of the stick). The Android
- * app (MyPCNative 3+) applies the first three natively; in a browser Auto rotate and Stay awake use the Screen Orientation
+ * app (MyPCNative 3+) applies rotation, Stay awake and Background natively; in a browser rotation and Stay awake use the Screen Orientation
  * and Wake Lock APIs where the browser has them; all four settings are always shown.
  * Protocol: js/core/sensor-proto.js, docs/phone-controller.md. The Buttons pad IS the touch pad the shell draws over games
  * (js/core/pad-spec.js, owner rule): same buttons, settings and saved layout; GamePad here = the D-pad choice of its gear panel. */
@@ -35,16 +36,16 @@
 
     // Keyboard mode and Vibration / Auto rotate strings (the last ones also in Control Panel > Devices)
     I18n.add({
-        en: { gcModeMic: 'Microphone', gcMicDenied: 'This phone did not give its microphone to My PC. Allow it in the browser or phone settings.', gcMicUpdate: 'Update the My PC app on this phone (Get the app on the TV\'s desktop) to use its microphone.', gcVib: 'Vibration', gcVibDesc: 'A short buzz on every button press: 0 = off, 3 = strongest. Also used by the touch pad over games on this phone.', gcRotateDesc: 'Off: the screen stays on the side it is on, even when the phone is turned over. For the whole My PC app on this phone.',
+        en: { gcModeMic: 'Microphone', gcMicDenied: 'This phone did not give its microphone to My PC. Allow it in the browser or phone settings.', gcMicUpdate: 'Update the My PC app on this phone (Get the app on the TV\'s desktop) to use its microphone.', gcVib: 'Vibration', gcVibDesc: 'A short buzz on every button press: 0 = off, 3 = strongest. Also used by the touch pad over games on this phone.',
               gcModeKeys: 'Keyboard', gcKHelp: 'Plug a keyboard into this phone (USB or Bluetooth): each key presses the controller button that shows it. Tap a button to give it another key.', gcKMap: 'Map keys', gcKDefault: 'Default keys', gcKSkip: 'Skip', gcKClear: 'No key', gcKStop: 'Done', gcKPress: 'Press a key for %s', gcKNone: 'no key',
               gcKDpad: 'D-pad', gcKLs: 'Left stick', gcKRs: 'Right stick', gcKLclick: 'Left stick click', gcKRclick: 'Right stick click', gcKHome: 'Home', gcKCapture: 'Capture' },
-        fr: { gcModeMic: 'Micro', gcMicDenied: 'Ce téléphone n’a pas donné son micro à My PC. Autorisez-le dans les réglages du navigateur ou du téléphone.', gcMicUpdate: 'Mettez à jour l’appli My PC sur ce téléphone (Obtenir l’appli sur le bureau de la TV) pour utiliser son micro.', gcVib: 'Vibration', gcVibDesc: 'Une courte vibration à chaque bouton : 0 = désactivée, 3 = la plus forte. Aussi pour la manette tactile sur les jeux de ce téléphone.', gcRotateDesc: 'Désactivée : l’écran reste du côté où il est, même si le téléphone est retourné. Pour toute l’appli My PC sur ce téléphone.',
+        fr: { gcModeMic: 'Micro', gcMicDenied: 'Ce téléphone n’a pas donné son micro à My PC. Autorisez-le dans les réglages du navigateur ou du téléphone.', gcMicUpdate: 'Mettez à jour l’appli My PC sur ce téléphone (Obtenir l’appli sur le bureau de la TV) pour utiliser son micro.', gcVib: 'Vibration', gcVibDesc: 'Une courte vibration à chaque bouton : 0 = désactivée, 3 = la plus forte. Aussi pour la manette tactile sur les jeux de ce téléphone.',
               gcModeKeys: 'Clavier', gcKHelp: 'Branchez un clavier sur ce téléphone (USB ou Bluetooth) : chaque touche appuie sur le bouton de la manette qui l’affiche. Touchez un bouton pour lui donner une autre touche.', gcKMap: 'Assigner les touches', gcKDefault: 'Touches par défaut', gcKSkip: 'Passer', gcKClear: 'Aucune touche', gcKStop: 'Terminé', gcKPress: 'Appuyez sur une touche pour %s', gcKNone: 'aucune touche',
               gcKDpad: 'Croix', gcKLs: 'Joystick gauche', gcKRs: 'Joystick droit', gcKLclick: 'Clic du joystick gauche', gcKRclick: 'Clic du joystick droit', gcKHome: 'Accueil', gcKCapture: 'Capture' },
-        es: { gcModeMic: 'Micrófono', gcMicDenied: 'Este teléfono no dio su micrófono a My PC. Permítelo en los ajustes del navegador o del teléfono.', gcMicUpdate: 'Actualiza la app My PC en este teléfono (Obtener la app en el escritorio de la TV) para usar su micrófono.', gcVib: 'Vibración', gcVibDesc: 'Una vibración corta en cada botón: 0 = desactivada, 3 = la más fuerte. También para el mando táctil sobre los juegos en este teléfono.', gcRotateDesc: 'Desactivado: la pantalla se queda del lado en que está, aunque se dé la vuelta al teléfono. Para toda la app My PC en este teléfono.',
+        es: { gcModeMic: 'Micrófono', gcMicDenied: 'Este teléfono no dio su micrófono a My PC. Permítelo en los ajustes del navegador o del teléfono.', gcMicUpdate: 'Actualiza la app My PC en este teléfono (Obtener la app en el escritorio de la TV) para usar su micrófono.', gcVib: 'Vibración', gcVibDesc: 'Una vibración corta en cada botón: 0 = desactivada, 3 = la más fuerte. También para el mando táctil sobre los juegos en este teléfono.',
               gcModeKeys: 'Teclado', gcKHelp: 'Conecta un teclado a este teléfono (USB o Bluetooth): cada tecla pulsa el botón del mando que la muestra. Toca un botón para darle otra tecla.', gcKMap: 'Asignar teclas', gcKDefault: 'Teclas por defecto', gcKSkip: 'Saltar', gcKClear: 'Sin tecla', gcKStop: 'Listo', gcKPress: 'Pulsa una tecla para %s', gcKNone: 'sin tecla',
               gcKDpad: 'Cruceta', gcKLs: 'Joystick izquierdo', gcKRs: 'Joystick derecho', gcKLclick: 'Clic del joystick izquierdo', gcKRclick: 'Clic del joystick derecho', gcKHome: 'Inicio', gcKCapture: 'Captura' },
-        ar: { gcModeMic: 'الميكروفون', gcMicDenied: 'لم يمنح هذا الهاتف الميكروفون لـ My PC. اسمح به في إعدادات المتصفح أو الهاتف.', gcMicUpdate: 'حدّث تطبيق My PC على هذا الهاتف (تنزيل التطبيق على سطح مكتب التلفاز) لاستخدام الميكروفون.', gcVib: 'الاهتزاز', gcVibDesc: 'اهتزاز قصير عند كل ضغطة زر: 0 = متوقف، 3 = الأقوى. يُستخدم أيضاً لذراع اللمس فوق الألعاب على هذا الهاتف.', gcRotateDesc: 'متوقف: تبقى الشاشة على الجهة التي هي عليها حتى لو قُلب الهاتف. لكل تطبيق My PC على هذا الهاتف.',
+        ar: { gcModeMic: 'الميكروفون', gcMicDenied: 'لم يمنح هذا الهاتف الميكروفون لـ My PC. اسمح به في إعدادات المتصفح أو الهاتف.', gcMicUpdate: 'حدّث تطبيق My PC على هذا الهاتف (تنزيل التطبيق على سطح مكتب التلفاز) لاستخدام الميكروفون.', gcVib: 'الاهتزاز', gcVibDesc: 'اهتزاز قصير عند كل ضغطة زر: 0 = متوقف، 3 = الأقوى. يُستخدم أيضاً لذراع اللمس فوق الألعاب على هذا الهاتف.',
               gcModeKeys: 'لوحة المفاتيح', gcKHelp: 'صِل لوحة مفاتيح بهذا الهاتف (USB أو بلوتوث): كل مفتاح يضغط زر اليد الذي يظهر عليه. المس زراً لتعطيه مفتاحاً آخر.', gcKMap: 'تعيين المفاتيح', gcKDefault: 'المفاتيح الافتراضية', gcKSkip: 'تخطي', gcKClear: 'بلا مفتاح', gcKStop: 'تم', gcKPress: 'اضغط مفتاحاً لـ %s', gcKNone: 'بلا مفتاح',
               gcKDpad: 'أزرار الاتجاه', gcKLs: 'العصا اليسرى', gcKRs: 'العصا اليمنى', gcKLclick: 'ضغط العصا اليسرى', gcKRclick: 'ضغط العصا اليمنى', gcKHome: 'الرئيسية', gcKCapture: 'التقاط' }
     });
@@ -71,8 +72,9 @@
     // pointer mode (js/core/aim.js): settings kept on the phone; calibration steps
     var PTR_DEF = { smooth: 5, speed: 1, steady: 1.5, swapX: false, swapY: false };
     var aim = null, aimLast = 0, calib = null;
-    // phone settings (Stay awake and Background on, Auto rotate and GamePad off) and Vibration 0..3 (js/core/haptics.js)
-    var OPT_DEF = { rotate: false, awake: true, bg: true, dpad: false }, OPT_NAMES = [['rotate', 'gcRotate'], ['awake', 'gcAwake'], ['bg', 'gcBackground'], ['dpad', 'gcDpad']];
+    // phone settings (Stay awake and Background on, GamePad off), Vibration 0..3 (js/core/haptics.js) and Screen rotation (js/core/rotation.js)
+    var OPT_DEF = { awake: true, bg: true, dpad: false }, OPT_NAMES = [['awake', 'gcAwake'], ['bg', 'gcBackground'], ['dpad', 'gcDpad']];
+    var ROT_KEYS = { auto: 'rotAuto', portrait: 'rotPortrait', landscape: 'rotLandscape', manual: 'rotManual' };
 
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
     function t(k) { return I18n.t(k); }
@@ -81,12 +83,16 @@
     function native(fn, v) { try { if (window.MyPCNative && typeof window.MyPCNative[fn] === 'function') { window.MyPCNative[fn](v); return true; } } catch (e) {} return false; }
     function name() { return /Android/i.test(navigator.userAgent) ? 'Android' : /iPhone|iPad/i.test(navigator.userAgent) ? 'iPhone' : 'Phone'; }
     function prefs() { var p = saved.prefs || {}; return { profile: SensorProto.profile(p.profile), sensitivity: +p.sensitivity || 1, stride: +p.stride || 1, swap: !!p.swap }; }
-    function save() { Store.rawSet(KEY, { cid: cid, code: code, p: player, mode: mode, prefs: saved.prefs || {}, ptr: saved.ptr || {}, opt: saved.opt || {}, keys: saved.keys || null, paired: !!saved.paired }); }
-    // Auto rotate counts only when chosen since it became off by default (rv: 2, see js/core/haptics.js)
+    // the screen rotation (orient, side) is written by js/core/rotation.js into the same opt: kept as it is saved now
+    function save() {
+        var cur = (Store.rawGet(KEY) || {}).opt || {}, o = saved.opt = saved.opt || {};
+        ['orient', 'side'].forEach(function (k) { if (cur[k] !== undefined) o[k] = cur[k]; else delete o[k]; });
+        Store.rawSet(KEY, { cid: cid, code: code, p: player, mode: mode, prefs: saved.prefs || {}, ptr: saved.ptr || {}, opt: saved.opt || {}, keys: saved.keys || null, paired: !!saved.paired });
+    }
     function opts() {
         var o = saved.opt || {}, r = {};
         for (var k in OPT_DEF) r[k] = typeof o[k] === 'boolean' ? o[k] : OPT_DEF[k];
-        r.rotate = o.rv === 2 && o.rotate === true;
+        if (o.rv === 2 && typeof o.rotate === 'boolean') { r.rotate = o.rotate; r.rv = 2; }   // the old Auto rotate (read by js/core/rotation.js)
         r.dpad = PadSpec.dpad();                                       // the pad's own Stick / D-pad choice (also in its gear panel)
         r.vib = o.vib === 0 || o.vib === 1 || o.vib === 2 || o.vib === 3 ? o.vib : Haptics.level();
         return r;
@@ -104,8 +110,8 @@
     }
     function applyOpts() {
         var o = opts();
-        native('settings', JSON.stringify({ rotate: o.rotate, awake: o.awake, bg: o.bg }));
-        lock();
+        native('settings', JSON.stringify({ awake: o.awake, bg: o.bg }));
+        Rotation.hold('landscape');                                    // the pads and screens here are made sideways
         if (run && o.awake) wake(); else unwake();
     }
     function ptrPrefs() {
@@ -207,7 +213,7 @@
         Rooms.LIMITS.asksPerMin = 30;                               // it reconnects by itself every time the TV changes page
         run = true; session = SensorProto.session(); cfg = null;
         sess = new Rooms.Session('controller', name(), onEvent);
-        show(true); state(t('gcConnecting'), false); lock(); wake(); native('active', true);
+        show(true); state(t('gcConnecting'), false); Rotation.hold('landscape'); wake(); native('active', true);
         if (mode !== 'pad' && mode !== 'keyboard' && mode !== 'mic') sensorsOn();     // the tap on Connect also answers the motion permission prompt (iPhone)
         attempt();
     }
@@ -725,6 +731,7 @@
             r.appendChild(el('span', 'gc-grow', t(n[1]))); r.appendChild(c); box.appendChild(r);
             if (!first) first = c;
         });
+        box.appendChild(rotRow());
         box.appendChild(vibRow(o.vib));
         box.appendChild(el('div', 'gc-line', t('gcPhoneSaved')));
         // the TV this phone connects to by itself: Disconnect (for now) and Forget TV (no more connecting by itself)
@@ -736,6 +743,18 @@
         box.appendChild(cl);
         root.appendChild(box); ui.modes = box;
         Focus.focus(first || cl);
+    }
+    // Screen rotation of My PC on this phone (the same setting as Control Panel > Display): − / + go through the choices
+    function rotRow() {
+        var r = el('div', 'gc-srow gc-rot'), val = el('span', 'gc-rotval'), M = Rotation.MODES;
+        function paint() { val.textContent = t(ROT_KEYS[Rotation.mode()]); }
+        function step(d) { Rotation.set(M[(M.indexOf(Rotation.mode()) + d + M.length) % M.length]); saved.opt = (Store.rawGet(KEY) || {}).opt || saved.opt; paint(); Haptics.buzz(); }
+        r.appendChild(el('span', 'gc-grow', t('rotTitle')));
+        r.appendChild(btn('gc-step', '−', function () { step(-1); }));
+        r.appendChild(val);
+        r.appendChild(btn('gc-step', '+', function () { step(1); }));
+        paint();
+        return r;
     }
     // Vibration: a slider 0 (off) .. 3 (strongest), with − / + for the TV remote's arrows and big fingers
     function vibRow(v) {
@@ -1029,15 +1048,7 @@
         return s;
     }
 
-    /* ---------- phone: landscape, screen on ---------- */
-    // Auto rotate off: held in the landscape side it is in now (the Android app does this natively)
-    function lock() {
-        if (nativeV() >= 3) return;
-        try {
-            var so = screen.orientation;
-            if (so && so.lock) so.lock(opts().rotate || !/^landscape/.test(so.type) ? 'landscape' : so.type).catch(function () {});
-        } catch (e) {}
-    }
+    /* ---------- phone: landscape while open (Rotation.hold), screen on ---------- */
     function wake() { if (!opts().awake || wl) return; try { if (navigator.wakeLock) navigator.wakeLock.request('screen').then(function (l) { if (!run || !opts().awake) { l.release(); return; } wl = l; l.addEventListener('release', function () { if (wl === l) wl = null; }); }, function () {}); } catch (e) {} }
     function unwake() { var l = wl; wl = null; try { if (l) l.release(); } catch (e) {} }
 
@@ -1045,7 +1056,7 @@
     // so they read like normal phone text (1 on a TV or a big screen).
     function readable() {
         if (!root) return;
-        var st = document.getElementById('stage'), s = st ? st.getBoundingClientRect().width / 1920 : 1;
+        var st = document.getElementById('stage'), s = st ? st.getBoundingClientRect().width / (window.App && App.screenSize ? App.screenSize().w : 1920) : 1;
         root.style.setProperty('--k', Math.max(1, Math.min(4, 0.9 / (s || 1))).toFixed(2));
     }
     function build(body) {
@@ -1138,6 +1149,7 @@
             window.removeEventListener('keydown', kbKey, true); window.removeEventListener('keyup', kbKey, true); window.removeEventListener('blur', onBlur);
             window.removeEventListener('resize', readable);
             unwake(); root = null; ui = {}; eng = null;
+            Rotation.hold(null);                                    // back to the screen rotation chosen in Control Panel > Display
             delete window.GamepadApp;
         }
     });

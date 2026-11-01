@@ -47,6 +47,7 @@ var Icons = (function () {
         back: '<path d="M30 10L16 24l14 14" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
         forward: '<path d="M18 10l14 14-14 14" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
         up: '<path d="M10 30l14-14 14 14" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+        rotate: '<rect x="8" y="14" width="20" height="28" rx="3" fill="none" stroke="#fff" stroke-width="3.5"/><path d="M24 7a15 15 0 0 1 15 15" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><path d="M33 20l6 3 3-6" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>',
         reload: '<path d="M37 24a13 13 0 1 1-4-9.4" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/><path d="M35 6v10H25" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
         home: '<path d="M8 22L24 8l16 14v18a2 2 0 0 1-2 2h-9V31h-10v11h-9a2 2 0 0 1-2-2z" fill="none" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"/>',
         search: '<circle cx="21" cy="21" r="12" fill="none" stroke="#fff" stroke-width="4"/><path d="M30 30l10 10" stroke="#fff" stroke-width="4" stroke-linecap="round"/>',

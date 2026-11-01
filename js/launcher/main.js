@@ -32,15 +32,28 @@ var App = (function () {
         if (de.style.height) de.style.height = document.body.style.height = '';
         full = [w, h];
         if (window.scrollX || window.scrollY) window.scrollTo(0, 0);         // a rotation can leave the page scrolled
-        var s = Math.min(w / 1920, h / 1080), st = $('stage');
+        // a tall window (a phone held upright, js/core/rotation.js) gets a tall screen that fills it: 1080 wide and as tall
+        // as the window (CSS --sw / --sh, html.tall); the TV and wide windows keep 1920x1080
+        var tall = !window.tizen && h > w * 1.1, sw = tall ? 1080 : 1920, sh = tall ? Math.round(1080 * h / w) : 1080;
+        var s = Math.min(w / sw, h / sh), st = $('stage');
         var tr = Math.abs(s - 1) < 0.01 ? '' : 'scale(' + s + ')';
         st.style.webkitTransform = tr;
         st.style.transform = tr;
+        if (tall !== de.classList.contains('tall') || (tall && screenH !== sh)) {
+            screenW = sw; screenH = sh;
+            de.classList.toggle('tall', tall);
+            if (tall) { de.style.setProperty('--sw', sw + 'px'); de.style.setProperty('--sh', sh + 'px'); }
+            else { de.style.removeProperty('--sw'); de.style.removeProperty('--sh'); }
+            try { window.dispatchEvent(new Event('mypc-screen')); } catch (e) {}
+        }
         // a phone shows the 1920x1080 screen at about a third of its size: bigger taskbar and desktop icons (css .compact)
-        document.documentElement.classList.toggle('compact', !window.tizen && s < 0.6);
-        st.style.left = Math.max(0, (w - 1920 * s) / 2) + 'px';
-        st.style.top = Math.max(0, (h - 1080 * s) / 2) + 'px';
+        de.classList.toggle('compact', !window.tizen && s < 0.6);
+        st.style.left = Math.max(0, (w - sw * s) / 2) + 'px';
+        st.style.top = Math.max(0, (h - sh * s) / 2) + 'px';
     }
+    // the size My PC's screen is laid out at: 1920x1080, or 1080 x taller on a phone held upright
+    var screenW = 1920, screenH = 1080;
+    function screenSize() { return { w: screenW, h: screenH, tall: screenW < screenH }; }
 
     /* ---------- dialogs & toasts ---------- */
     // opts (optional): { yes: 'Allow', no: "Don't allow", onNo: fn } (onNo also runs on Back)
@@ -362,7 +375,7 @@ var App = (function () {
     // after a language change: everything that is not data-i18n driven
     function refresh() { Desktop.render(); ProfilesUI.renderButton(); showVersion(); Desktop.tick(); }
 
-    return { start: start, confirm: confirm, toast: toast, refresh: refresh, exitApp: exitApp, dialogOpen: function () { return dialogOpen; } };
+    return { start: start, confirm: confirm, toast: toast, refresh: refresh, exitApp: exitApp, screenSize: screenSize, dialogOpen: function () { return dialogOpen; } };
 })();
 
 App.start();

@@ -3,6 +3,7 @@
    no flex gap, no backdrop-filter (blur is too slow on TVs: panels use solid dark colours instead).
    Designed for 1920x1080; js/launcher/main.js scales #stage to fit any other window size. */
 
+:root { --sw: 1920px; --sh: 1080px; }   /* the screen size the UI is laid out at; 1080 x taller on a phone held upright (main.js fit(), html.tall) */
 html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
 /* native app feel: no pinch zoom, no selection, no long-press menu, no bounce, no tap flash */
 html, body { touch-action: pan-x pan-y; overscroll-behavior: none; -webkit-user-select: none; user-select: none;
@@ -17,7 +18,7 @@ svg { display: block; width: 100%; height: 100%; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-.stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden;
+.stage { position: absolute; left: 0; top: 0; width: var(--sw); height: var(--sh); overflow: hidden;
          background: #202020; -webkit-transform-origin: 0 0; transform-origin: 0 0; }
 
 /* the focus ring: thick and white, readable from the sofa */
@@ -33,7 +34,7 @@ svg { display: block; width: 100%; height: 100%; }
 .btn-primary:focus { background: #7dd3ff; }
 
 /* ---------- wallpapers (pure CSS: nothing to download or decode) ---------- */
-.wp { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+.wp { position: absolute; left: 0; top: 0; width: var(--sw); height: var(--sh); }
 .wp-bloom { background-color: #07122a;
     background-image: radial-gradient(30% 45% at 60% 55%, rgba(125, 215, 255, 0.95) 0%, rgba(0, 120, 212, 0.65) 40%, rgba(7, 18, 42, 0) 100%),
                       radial-gradient(35% 40% at 45% 68%, rgba(120, 90, 255, 0.6) 0%, rgba(7, 18, 42, 0) 100%),
@@ -57,9 +58,9 @@ svg { display: block; width: 100%; height: 100%; }
                       linear-gradient(180deg, #02030a 0%, #0b1236 70%, #16204a 100%); }
 
 /* ---------- desktop ---------- */
-.desktop { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden; }
+.desktop { position: absolute; left: 0; top: 0; width: var(--sw); height: var(--sh); overflow: hidden; }
 /* many shortcuts (small screens): the columns scroll sideways (swipe, or the focus moving there) instead of running off the screen */
-.desk-icons { position: absolute; left: 24px; right: 24px; top: 24px; height: 952px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+.desk-icons { position: absolute; left: 24px; right: 24px; top: 24px; height: calc(var(--sh) - 128px); overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
               display: -webkit-box; display: -webkit-flex; display: flex;
               -webkit-box-orient: vertical; -webkit-flex-direction: column; flex-direction: column;
               -webkit-flex-wrap: wrap; flex-wrap: wrap; -webkit-align-content: flex-start; align-content: flex-start; }
@@ -77,7 +78,7 @@ svg { display: block; width: 100%; height: 100%; }
 [dir="rtl"] .dot { right: auto; left: 30px; }
 
 /* ---------- taskbar ---------- */
-.taskbar { position: absolute; left: 0; bottom: 0; width: 1920px; height: 96px; background: #1c1c1c; border-top: 1px solid #333; z-index: 5; }
+.taskbar { position: absolute; left: 0; bottom: 0; width: var(--sw); height: 96px; background: #1c1c1c; border-top: 1px solid #333; z-index: 5; }
 .tb-apps { position: absolute; left: 50%; top: 7px; -webkit-transform: translateX(-50%); transform: translateX(-50%);
            display: -webkit-box; display: -webkit-flex; display: flex; }
 .tb-btn { display: block; width: 82px; height: 82px; margin: 0 4px; padding: 15px; border-radius: 12px; }
@@ -105,7 +106,7 @@ svg { display: block; width: 100%; height: 100%; }
 .compact .tray-ver { bottom: 186px; font-size: 28px; }
 .compact .start { bottom: 188px; }
 .compact .toast { bottom: 200px; }
-.compact .desk-icons { height: 856px; }
+.compact .desk-icons { height: calc(var(--sh) - 224px); }
 .compact .dicon { width: 252px; height: 270px; padding-top: 18px; border-radius: 22px; }
 .compact .dicon .ic { width: 150px; height: 150px; margin-bottom: 12px; border-radius: 30px; }
 .compact .dicon .ic-app { border-radius: 0; }
@@ -114,7 +115,7 @@ svg { display: block; width: 100%; height: 100%; }
 .compact[dir="rtl"] .dicon .dot { right: auto; left: 46px; }
 
 /* shortcut menu (hold OK, long-press or right-click a shortcut): Open / Remove from home screen / Uninstall */
-.dmenu-wrap { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; z-index: 35; }
+.dmenu-wrap { position: absolute; left: 0; top: 0; width: var(--sw); height: var(--sh); z-index: 35; }
 .dmenu { position: absolute; width: 400px; padding: 10px; background: #2b2b2b; border: 1px solid #444; border-radius: 14px; box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6); }
 .dm-title { padding: 8px 16px 12px; font-size: 22px; color: rgba(255, 255, 255, 0.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dm-item { display: block; width: 100%; height: 64px; padding: 0 16px; border-radius: 10px; font-size: 26px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -160,14 +161,14 @@ svg { display: block; width: 100%; height: 100%; }
 #profile-name { vertical-align: middle; display: inline-block; max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- app window (always full screen) ---------- */
-.window { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: #202020; z-index: 20; overflow: hidden; }
+.window { position: absolute; left: 0; top: 0; width: var(--sw); height: var(--sh); background: #202020; z-index: 20; overflow: hidden; }
 .win-bar { position: relative; height: 88px; padding-left: 32px; background: #1c1c1c; border-bottom: 1px solid #2d2d2d;
            display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: center; -webkit-align-items: center; align-items: center; }
 .win-icon { display: block; width: 44px; height: 44px; margin-right: 20px; }
 .win-title { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; margin: 0; font-size: 26px; font-weight: 400; }
 .win-close { width: 128px; height: 88px; padding: 24px 42px; }
 .win-close:focus { background: #c42b1c; }
-.win-body { position: absolute; left: 0; top: 89px; width: 1920px; height: 991px; overflow: hidden; }
+.win-body { position: absolute; left: 0; top: 89px; width: var(--sw); height: calc(var(--sh) - 89px); overflow: hidden; }
 .icon-btn { display: inline-block; width: 64px; height: 64px; padding: 15px; margin-right: 8px; border-radius: 10px; vertical-align: middle; }
 .icon-btn:focus { background: rgba(255, 255, 255, 0.1); }
 .icon-btn[disabled] { opacity: 0.35; }
@@ -177,7 +178,7 @@ svg { display: block; width: 100%; height: 100%; }
 
 /* ---------- Settings ---------- */
 .app-settings { display: -webkit-box; display: -webkit-flex; display: flex; }
-.set-nav { width: 440px; height: 991px; padding: 32px 24px; -webkit-flex: none; flex: none; }
+.set-nav { width: 440px; height: calc(var(--sh) - 89px); padding: 32px 24px; -webkit-flex: none; flex: none; }
 .set-user { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: center; -webkit-align-items: center; align-items: center; padding: 6px 12px 28px; }
 .avatar-mid { width: 88px; height: 88px; line-height: 88px; border-radius: 44px; font-size: 44px; margin-right: 20px; }
 .set-user-name { font-size: 28px; font-weight: 600; }
@@ -188,7 +189,7 @@ svg { display: block; width: 100%; height: 100%; }
 .set-nav-btn.on:before { content: ''; position: absolute; left: 0; top: 19px; width: 5px; height: 28px; border-radius: 3px; background: #4cc2ff; }
 .set-nav-ic { display: block; width: 36px; height: 36px; margin-right: 20px; }
 [dir="rtl"] .set-nav-ic { margin-right: 0; margin-left: 20px; }
-.set-main { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; height: 991px; padding: 32px 64px 48px 40px; overflow: hidden; }
+.set-main { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; height: calc(var(--sh) - 89px); padding: 32px 64px 48px 40px; overflow: hidden; }
 .set-title { margin: 0 0 30px; font-size: 46px; font-weight: 600; }
 .set-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: center; -webkit-align-items: center; align-items: center;
            -webkit-box-pack: justify; -webkit-justify-content: space-between; justify-content: space-between;
@@ -228,7 +229,7 @@ svg { display: block; width: 100%; height: 100%; }
 .set-th .set-wp-name { bottom: 16px; }
 
 /* ---------- Control Panel home: a grid of categories (Windows 11 style) ---------- */
-.cp-home { width: 1920px; height: 991px; padding: 40px 96px; overflow: hidden; }
+.cp-home { width: var(--sw); height: calc(var(--sh) - 89px); padding: 40px 96px; overflow: hidden; }
 .cp-user { padding: 0 0 12px; }
 .cp-title { margin: 12px 0 24px; font-size: 34px; color: #c5c5c5; font-weight: 400; }
 .cp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
@@ -254,7 +255,7 @@ svg { display: block; width: 100%; height: 100%; }
 .fx-bar-top { height: 88px; padding: 0 24px; border-bottom: 1px solid #2d2d2d; display: -webkit-box; display: -webkit-flex; display: flex;
               -webkit-box-align: center; -webkit-align-items: center; align-items: center; }
 .fx-path { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; height: 56px; line-height: 56px; margin-left: 16px; padding: 0 20px; border-radius: 8px; background: #2b2b2b; font-size: 24px; }
-.fx-wrap { display: -webkit-box; display: -webkit-flex; display: flex; height: 846px; }
+.fx-wrap { display: -webkit-box; display: -webkit-flex; display: flex; height: calc(var(--sh) - 234px); }
 .fx-side { width: 380px; padding: 16px; border-right: 1px solid #2d2d2d; -webkit-flex: none; flex: none; }
 .fx-nav { position: relative; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: center; -webkit-align-items: center; align-items: center;
           width: 100%; height: 62px; padding: 0 18px; margin-bottom: 4px; border-radius: 10px; font-size: 24px; text-align: left; }
@@ -285,9 +286,9 @@ svg { display: block; width: 100%; height: 100%; }
 .br-addr { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; height: 60px; margin-left: 16px; padding: 0 28px; border-radius: 30px; background: #1c1c1c;
            font-size: 24px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .br-addr-empty { color: #9a9a9a; }
-.br-view { position: absolute; left: 0; top: 96px; width: 1920px; height: 895px; overflow: hidden; background: #fff; }
+.br-view { position: absolute; left: 0; top: 96px; width: var(--sw); height: calc(var(--sh) - 185px); overflow: hidden; background: #fff; }
 .br-view:focus { box-shadow: inset 0 0 0 4px #4cc2ff; }
-.br-frame { display: block; width: 1920px; border: 0; background: #fff; }
+.br-frame { display: block; width: var(--sw); border: 0; background: #fff; }
 .br-start { padding-top: 110px; text-align: center; }
 .br-hello { margin: 0 0 40px; font-size: 56px; font-weight: 600; }
 .br-search { display: block; width: 900px; height: 80px; margin: 0 auto; padding: 0 32px; border-radius: 40px; background: #2b2b2b; font-size: 26px; color: #c5c5c5; text-align: left; }
@@ -361,7 +362,7 @@ svg { display: block; width: 100%; height: 100%; }
 .cal-add { margin-top: 16px; }
 
 /* ---------- Leaderboards ---------- */
-.lb-side { position: absolute; left: 0; top: 0; width: 520px; height: 991px; padding: 32px 24px; box-sizing: border-box; background: #202020; overflow-y: auto; scrollbar-width: none; }
+.lb-side { position: absolute; left: 0; top: 0; width: 520px; height: calc(var(--sh) - 89px); padding: 32px 24px; box-sizing: border-box; background: #202020; overflow-y: auto; scrollbar-width: none; }
 .lb-side::-webkit-scrollbar { display: none; }
 .lb-tab { display: flex; align-items: center; height: 96px; margin-bottom: 8px; padding: 0 20px; border-radius: 14px; background: #2b2b2b; outline: none; font-size: 28px; }
 .lb-tab.on { background: #34425c; }
@@ -373,7 +374,7 @@ svg { display: block; width: 100%; height: 100%; }
 .lb-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lb-top { flex: none; color: #ffc83d; font-weight: 700; }
 .lb-tab:focus { box-shadow: 0 0 0 4px #fff; }
-.lb-pane { position: absolute; left: 520px; top: 0; right: 0; height: 991px; padding: 40px 80px; box-sizing: border-box; }
+.lb-pane { position: absolute; left: 520px; top: 0; right: 0; height: calc(var(--sh) - 89px); padding: 40px 80px; box-sizing: border-box; }
 [dir="rtl"] .lb-side { left: auto; right: 0; }
 [dir="rtl"] .lb-pane { left: 0; right: 520px; }
 .lb-head { display: flex; align-items: baseline; margin-bottom: 8px; }
@@ -406,7 +407,7 @@ svg { display: block; width: 100%; height: 100%; }
 [dir="rtl"] .lb-s, [dir="rtl"] .lb-meta { text-align: left; }
 
 /* ---------- App Store ---------- */
-.st-nav { position: absolute; left: 0; top: 0; width: 280px; height: 991px; padding: 24px 16px; background: #1c1c1c; }
+.st-nav { position: absolute; left: 0; top: 0; width: 280px; height: calc(var(--sh) - 89px); padding: 24px 16px; background: #1c1c1c; }
 .st-nav-btn { position: relative; display: flex; align-items: center; width: 100%; height: 84px; margin-bottom: 8px; padding: 0 20px; border-radius: 12px; font-size: 28px; text-align: left; outline: none; }
 .st-nav-btn.on { background: #2d2d2d; }
 .st-nav-btn.on:before { content: ""; position: absolute; left: 4px; top: 25px; width: 5px; height: 34px; border-radius: 3px; background: #4cc2ff; }
@@ -415,7 +416,7 @@ svg { display: block; width: 100%; height: 100%; }
 [dir="rtl"] .st-nav { left: auto; right: 0; }
 [dir="rtl"] .st-nav-btn { text-align: right; }
 [dir="rtl"] .st-nav-ic { margin-right: 0; margin-left: 20px; }
-.st-main { position: absolute; left: 280px; top: 0; right: 0; height: 991px; padding: 32px 64px 60px; box-sizing: border-box; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+.st-main { position: absolute; left: 280px; top: 0; right: 0; height: calc(var(--sh) - 89px); padding: 32px 64px 60px; box-sizing: border-box; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
 .st-main::-webkit-scrollbar { display: none; }
 [dir="rtl"] .st-main { left: 0; right: 280px; }
 .st-title { margin: 0 0 28px; font-size: 48px; font-weight: 600; }
@@ -501,7 +502,7 @@ svg { display: block; width: 100%; height: 100%; }
 }
 
 /* ---------- dialogs and toasts ---------- */
-.backdrop { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: rgba(0, 0, 0, 0.6); z-index: 50; }
+.backdrop { position: absolute; left: 0; top: 0; width: var(--sw); height: var(--sh); background: rgba(0, 0, 0, 0.6); z-index: 50; }
 .dialog { position: absolute; left: 50%; top: 50%; width: 900px; margin-left: -450px; margin-top: -200px; padding: 44px 48px;
           border-radius: 12px; background: #2b2b2b; border: 1px solid #444; text-align: center; z-index: 60; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6); }
 .dialog-title { margin: 0 0 18px; font-size: 40px; font-weight: 600; }
@@ -511,12 +512,12 @@ svg { display: block; width: 100%; height: 100%; }
          background: #2b2b2b; border: 1px solid #4cc2ff; font-size: 28px; text-align: center; z-index: 90; }
 
 /* ---------- game layer ---------- */
-.game-layer { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: #000; outline: none; z-index: 40; }
-.game-frame-box, .game-frame-box iframe { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; border: 0; }
+.game-layer { position: absolute; left: 0; top: 0; width: var(--sw); height: var(--sh); background: #000; outline: none; z-index: 40; }
+.game-frame-box, .game-frame-box iframe { position: absolute; left: 0; top: 0; width: var(--sw); height: var(--sh); border: 0; }
 /* app start screen: the app's icon, its name, a thin progress bar and a status line, like opening an app on a PC */
-.game-loading { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; text-align: center; background: #202020;
+.game-loading { position: absolute; left: 0; top: 0; width: var(--sw); height: var(--sh); text-align: center; background: #202020;
                 background-image: -webkit-radial-gradient(50% 42%, circle, #2d3340 0%, #202020 62%); background-image: radial-gradient(circle at 50% 42%, #2d3340 0%, #202020 62%); }
-.gl-center { position: absolute; left: 0; top: 0; width: 1920px; height: 1000px; display: -webkit-box; display: -webkit-flex; display: flex;
+.gl-center { position: absolute; left: 0; top: 0; width: var(--sw); height: calc(var(--sh) - 80px); display: -webkit-box; display: -webkit-flex; display: flex;
              -webkit-box-orient: vertical; -webkit-flex-direction: column; flex-direction: column;
              -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; }
 .gl-icon { width: 184px; height: 184px; margin-bottom: 44px; border-radius: 38px; overflow: hidden; background: #2b2b2b; box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55); }
@@ -532,12 +533,12 @@ svg { display: block; width: 100%; height: 100%; }
 .hi .gl-ring { -webkit-animation: gl-spin 0.9s linear infinite; animation: gl-spin 0.9s linear infinite; }
 @-webkit-keyframes gl-spin { to { -webkit-transform: rotate(360deg); } }
 @keyframes gl-spin { to { transform: rotate(360deg); } }
-.gl-brand { position: absolute; left: 0; bottom: 56px; width: 1920px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center;
+.gl-brand { position: absolute; left: 0; bottom: 56px; width: var(--sw); display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center;
             -webkit-box-align: center; -webkit-align-items: center; align-items: center; font-size: 24px; color: #8a8a8a; }
 .gl-logo { display: block; width: 30px; height: 30px; margin-right: 12px; }
 [dir="rtl"] .gl-logo { margin-right: 0; margin-left: 12px; }
 
-.pause { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: rgba(0, 0, 0, 0.65); z-index: 45; }
+.pause { position: absolute; left: 0; top: 0; width: var(--sw); height: var(--sh); background: rgba(0, 0, 0, 0.65); z-index: 45; }
 .pause-box { position: absolute; left: 50%; top: 50%; width: 760px; margin-left: -380px; -webkit-transform: translateY(-50%); transform: translateY(-50%);
              padding: 44px 52px; border-radius: 12px; background: #2b2b2b; border: 1px solid #444; text-align: center; }
 .pause-title { margin: 0 0 30px; font-size: 48px; font-weight: 600; }
@@ -555,7 +556,7 @@ svg { display: block; width: 100%; height: 100%; }
 .netpop.ok .netpop-icon { background: #4cd97b; }
 
 /* ---------- profiles (overlay over the desktop or Settings) ---------- */
-.screen { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; padding: 64px 96px; }
+.screen { position: absolute; left: 0; top: 0; width: var(--sw); height: var(--sh); padding: 64px 96px; }
 .screen-title { margin: 0 0 40px; font-size: 52px; font-weight: 600; }
 .profiles { background: #202020; z-index: 48; }
 .profiles-hint { margin: -20px 0 40px; font-size: 28px; color: #c5c5c5; }
@@ -769,8 +770,9 @@ svg { display: block; width: 100%; height: 100%; }
 .gc-phoneset { overflow: auto; justify-content: safe center; padding: calc(16px * var(--k, 1)); touch-action: pan-y; }
 .gc-phoneset .gc-srow { width: min(92vw, calc(460px * var(--k, 1))); min-height: calc(48px * var(--k, 1)); background: #1b1e3f; border-radius: calc(10px * var(--k, 1)); padding: calc(6px * var(--k, 1)) calc(14px * var(--k, 1)); font-size: calc(17px * var(--k, 1)); text-align: start; box-sizing: border-box; }
 .gc-phoneset .gc-line { opacity: .7; }
-.gc-vib .gc-step { min-width: calc(40px * var(--k, 1)); padding: calc(4px * var(--k, 1)) 0; font-size: calc(20px * var(--k, 1)); }
+.gc-vib .gc-step, .gc-rot .gc-step { min-width: calc(40px * var(--k, 1)); padding: calc(4px * var(--k, 1)) 0; font-size: calc(20px * var(--k, 1)); }
 .gc-range { width: calc(120px * var(--k, 1)); height: calc(28px * var(--k, 1)); accent-color: #5fd0ff; touch-action: pan-x; }
+.gc-rotval { min-width: calc(110px * var(--k, 1)); text-align: center; font-weight: 700; }
 .gc-vibval { min-width: calc(44px * var(--k, 1)); text-align: center; font-weight: 700; }
 
 /* an installed app listens (MyPC.mic, js/launcher/bridges.js): a red microphone over everything until it stops */
@@ -778,3 +780,41 @@ svg { display: block; width: 100%; height: 100%; }
           box-shadow: 0 0 0 6px rgba(217, 48, 37, 0.35); animation: mic-pulse 1.6s ease-in-out infinite; pointer-events: none; }
 .mic-on svg { position: absolute; left: 14px; top: 14px; width: 36px; height: 36px; }
 @keyframes mic-pulse { 50% { box-shadow: 0 0 0 14px rgba(217, 48, 37, 0.1); } }
+
+/* ---------- a phone held upright (html.tall, main.js fit(): the screen is 1080 wide and as tall as the phone) ----------
+   Only what does not fit 1080 wide changes; everything else follows --sw / --sh. */
+.tall .tb-apps { left: 8px; -webkit-transform: none; transform: none; }
+[dir="rtl"].tall .tb-apps { left: auto; right: 8px; }
+.tall .tb-apps > .tb-btn:nth-child(n+5) { display: none; }          /* Start + 3 pinned: the clock (and Rotate) need the rest */
+.compact #input-indicator { display: none; }                         /* phones: room for the taskbar buttons */
+.tall .start { left: 16px; right: 16px; width: auto; margin-left: 0; }
+.tall .cp-grid, .tall.compact .cp-grid { grid-template-columns: repeat(2, 1fr); }
+.tall .cp-home { overflow-y: auto; }
+.tall .memo { width: auto; margin: 40px 32px 0; }
+.tall .memo-top { flex-wrap: wrap; gap: 16px; }
+.tall .memo-list { height: calc(var(--sh) - 400px); }
+.tall .memo-bar { width: 80%; }
+.tall .app-calendar { -webkit-flex-direction: column; flex-direction: column; overflow-y: auto; }
+.tall .cal-main { -webkit-flex: none; flex: none; padding: 30px 24px; }
+.tall .cal-grid { width: 100%; }
+.tall .cal-dow, .tall .cal-day { width: calc(100% / 7 - 8px); }
+.tall .cal-day { padding: 10px 12px 50px; }
+.tall .cal-side { width: auto; border-left: 0; border-top: 1px solid #2d2d2d; }
+.tall .lb-side { width: 360px; }
+.tall .lb-pane { left: 360px; padding: 32px 32px; }
+[dir="rtl"].tall .lb-pane { left: 0; right: 360px; }
+.tall .st-main { padding: 32px 32px 60px; }
+.tall .set-nav { width: 360px; }
+.tall .set-main { padding: 32px 24px 48px 16px; overflow-y: auto; }
+.tall .netpop { width: auto; left: 24px; right: 24px; margin-left: 0; }
+.tall .namer-box { width: auto; left: 24px; right: 24px; margin-left: 0; }
+.tall .namer-text { width: auto; }
+.tall .fx-drive { width: 100%; }
+.tall .gl-title { max-width: 960px; }
+/* Manual screen rotation (js/core/rotation.js): the Rotate button in the tray */
+.tray-rot { display: block; width: 76px; height: 76px; padding: 16px; border-radius: 12px; }
+.tray-rot:focus { background: rgba(255, 255, 255, 0.12); box-shadow: 0 0 0 4px #fff; }
+.compact .tray-rot { width: 140px; height: 140px; padding: 30px; border-radius: 22px; }
+.tall .game-frame-box.wide { top: calc((var(--sh) - 607.5px) / 2); width: 1920px; height: 1080px;
+                               -webkit-transform: scale(0.5625); transform: scale(0.5625); -webkit-transform-origin: 0 0; transform-origin: 0 0; }
+.tall .game-frame-box.wide iframe { width: 1920px; height: 1080px; }

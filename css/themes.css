@@ -75,7 +75,7 @@ html.th-ios { --acc: #0a84ff; --ink: #fff; }
 /* ---------- phone and Mac styles: no taskbar but a dock, the tray becomes a bar at the top ---------- */
 :is(.th-mac, .th-android, .th-ios) .taskbar { position: static; height: 0; border: 0; background: none; }
 :is(.th-mac, .th-android, .th-ios) .tb-apps { top: auto; bottom: 14px; padding: 8px 10px; z-index: 5; }
-:is(.th-mac, .th-android, .th-ios) .tray { top: 0; left: 0; right: auto; width: 1920px; height: 54px; padding: 0 24px; z-index: 5; }
+:is(.th-mac, .th-android, .th-ios) .tray { top: 0; left: 0; right: auto; width: var(--sw); height: 54px; padding: 0 24px; z-index: 5; }
 .compact:is(.th-mac, .th-android, .th-ios) .tray { top: 0; height: 84px; }
 :is(.th-mac, .th-android, .th-ios) .tray-ic { width: 28px; height: 28px; margin: 0 10px; }
 .compact:is(.th-mac, .th-android, .th-ios) .tray-ic { width: 44px; height: 44px; }
@@ -83,8 +83,8 @@ html.th-ios { --acc: #0a84ff; --ink: #fff; }
 .compact:is(.th-mac, .th-android, .th-ios) .tray-clock { height: 76px; font-size: 38px; }
 :is(.th-mac, .th-android, .th-ios) .tray-clock span { display: inline; margin: 0 6px; }
 :is(.th-mac, .th-android, .th-ios) .tray-ver { position: static; margin: 0 14px; font-size: 18px; }
-:is(.th-mac, .th-android, .th-ios) .desk-icons { top: 78px; height: 830px; }
-.compact:is(.th-mac, .th-android, .th-ios) .desk-icons { top: 104px; height: 760px; }
+:is(.th-mac, .th-android, .th-ios) .desk-icons { top: 78px; height: calc(var(--sh) - 250px); }
+.compact:is(.th-mac, .th-android, .th-ios) .desk-icons { top: 104px; height: calc(var(--sh) - 320px); }
 :is(.th-mac, .th-android, .th-ios) .start { bottom: auto; top: 84px; }
 /* app icons sit on a light tile (the picture is drawn smaller: a transform, no relayout) */
 :is(.th-mac .dicon, .th-mac .stile, .th-android, .th-ios) .ic-app svg { transform: scale(0.66); }
@@ -127,7 +127,7 @@ html.th-ios { --acc: #0a84ff; --ink: #fff; }
 .th-android .tb-btn:focus { background: rgba(255, 255, 255, 0.22); }
 .th-android .ic-app { border-radius: 50%; background: #e8eaf6; }
 .th-android :is(.dicon, .stile, .srec) .ic { border-radius: 50%; }
-.th-android .start { left: 0; margin-left: 0; top: auto; bottom: 0; width: 1920px; height: 900px; padding: 48px 240px 0; border: 0; border-radius: 44px 44px 0 0; background: #1f2026; }
+.th-android .start { left: 0; margin-left: 0; top: auto; bottom: 0; width: var(--sw); height: 900px; padding: 48px 240px 0; border: 0; border-radius: 44px 44px 0 0; background: #1f2026; }
 .th-android .start:before { content: ''; position: absolute; left: 50%; top: 16px; width: 96px; height: 8px; margin-left: -48px; border-radius: 4px; background: #5f6370; }
 .th-android .start-foot { border-radius: 0; background: #1a1b20; }
 .th-android .win-bar { background: #1f2026; border-bottom: 0; padding-left: 16px; }

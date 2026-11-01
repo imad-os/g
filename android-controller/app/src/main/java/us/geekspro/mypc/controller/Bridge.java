@@ -11,9 +11,9 @@ final class Bridge {
 
     Bridge(MainActivity app) { this.app = app; }
 
-    /** 4: the page may use the microphone (getUserMedia, Microphone mode); 3: + settings(); 2: native motion samples,
+    /** 5: settings() takes "orient" (any / landscape / portrait: My PC can turn upright); 4: the page may use the microphone (getUserMedia, Microphone mode); 3: + settings(); 2: native motion samples,
      *  native QR scanner, link kept with the screen off, exit (1: no exit) */
-    @JavascriptInterface public int version() { return 4; }
+    @JavascriptInterface public int version() { return 5; }
 
     /** {"motion":true,"linear":true,"gyro":true}: which sensors this phone has */
     @JavascriptInterface public String caps() { return app.sensorCaps(); }
@@ -27,7 +27,7 @@ final class Bridge {
     /** My PC asked to exit (Back on the desktop, then Yes): the app closes */
     @JavascriptInterface public void exit() { app.runOnUiThread(app::exitApp); }
 
-    /** the Game controller's phone settings, {"rotate":true,"awake":true,"bg":true}: kept by the app and applied at once */
+    /** the Game controller's phone settings, {"orient":"any","rotate":true,"awake":true,"bg":true}: kept by the app and applied at once */
     @JavascriptInterface public void settings(String json) { app.runOnUiThread(() -> app.setSettings(json)); }
 
     /** the controller is connecting / connected (true) or stopped (false): screen on, link kept alive */

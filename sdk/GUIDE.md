@@ -170,8 +170,9 @@ MyPC.app_config.speed      // e.g. 2
 - It is **not secret**: every TV downloads it, and the app's site can see it. No passwords or keys.
 - Put sensible defaults in `mypc-app.json` as `"config": { ... }`; the App Store Manager uses them
   when the app is added, and updates never overwrite what the owner has set.
-- My PC itself reads one key: `"allow_background_running": true` keeps the app running when My PC loses the focus
-  (no menu; see the lifecycle above).
+- My PC itself reads two keys: `"allow_background_running": true` keeps the app running when My PC loses the focus
+  (no menu; see the lifecycle above), and `"orientation": "landscape"` (see section 6: on a phone held upright your app
+  then keeps a 16:9 window across the screen's width instead of the whole tall screen).
 - Standalone (opened directly in a browser) it is `{}` unless you add `?app_config={"speed":2}`
   to the address, which lets you test different configs.
 
@@ -407,6 +408,12 @@ Actions: `left right up down` (directions), `jump` and `confirm` (OK / Enter / S
 
 - Fill the whole window: `html, body { margin:0; height:100%; overflow:hidden }`. The window is
   16:9 (1920×1080 on most TVs, but 1280×720 or 3840×2160 happen).
+- **Phones held upright (portrait):** a phone user can let My PC turn (Control Panel > Display > Screen rotation: Auto,
+  Portrait, Landscape (the default) or Manual, with a Rotate button). Upright, your app gets the **whole tall screen**
+  (1080 wide and as tall as the phone, about 1080×2340), and it can be turned while your app runs: read the size on every
+  `resize`, never assume 16:9. If your app only works sideways, put `"orientation": "landscape"` in its config: My PC then
+  keeps it at 1920×1080, shown across the width with black above and below (like the built-in games), and the touch pad
+  sits around it.
 - Draw at a fixed logical size (e.g. 480×270 or 960×540) and scale it to the window, as the example
   does. Listen to `resize`.
 - Text: large (at least 3–4% of the screen height), high contrast, nothing important within 5% of
