@@ -735,7 +735,7 @@ res.parts;     // [{ type: 'text', text }, { type: 'image' | 'audio' | 'video', 
 res.usage;     // { input, output, total } tokens (when the service says), res.model, res.provider, res.finish
 
 var txt = await MyPC.ai.chat('Tell me a joke');           // shortcut: prompt in, text out
-var list = await MyPC.ai.providers();                     // [{ id, name, type, preset, model, isDefault, tasks }] (no keys)
+var list = await MyPC.ai.providers();                     // [{ id, name, type, preset, model, mode, isDefault, tasks }] (no keys; mode: Ollama only)
 // tasks: { chat, image, speech, transcribe, video, embed } true / false: hide a feature no service has
 var job = MyPC.ai.generate(req); job.cancel();            // stop a request
 ```
@@ -760,12 +760,19 @@ OpenRouter and the other OpenAI-compatible services take the model names of thei
 `meta/llama-3.3-70b-instruct`, `deepseek-ai/deepseek-r1`, `nvidia/llama-3.1-nemotron-70b-instruct`). What a model can do
 depends on the service: a service that cannot do something answers with an `http` or `unsupported` error.
 
-**Ollama** uses its own API, not the OpenAI-compatible one: chat goes to `POST <address>/api/chat` with
-`{ model, messages, stream }` (the answer is read from `message.content`; streaming works too), `task: 'embed'` to
-`/api/embed`. The service's address is the server itself (`http://192.168.1.10:11434` or `https://my-ollama.example`;
+**Ollama** uses its own API, not the OpenAI-compatible one, in one of two **modes** (some models only answer one):
+- `chat` (default): `POST <address>/api/chat` with `{ model, messages, stream }`, the answer read from `message.content`;
+- `completion`: `POST <address>/api/generate` with `{ model, prompt, system, images, stream }`, the answer read from
+  `response`. Your request does not change: `prompt`, `system`, `rules`, `context` work the same; earlier turns
+  (`messages`, `examples`) are written into the one prompt as `User: ...` / `Assistant: ...` lines.
+
+The mode is set per service in the **App Store Manager > AI services > Ollama > Mode**, so apps need nothing. An app can
+override it for one request with `mode: 'completion'` (or `'chat'`), or for the whole app with the app config
+`{ "ai": { "provider": "ollama", "mode": "completion" } }`. `MyPC.ai.providers()` gives an Ollama service's `mode`.
+Streaming works in both modes. `task: 'embed'` goes to `/api/embed`. The service's address is the server itself (`http://192.168.1.10:11434` or `https://my-ollama.example`;
 an address ending in `/v1` or `/api` works too). It takes text and images (`images` on a message), `temperature`, `topP`,
 `stop`, `seed`, `maxTokens` (`num_predict`) and `output: 'json'` / `schema` (`format`). An app's own Ollama:
-`provider: { type: 'ollama', url: 'https://my-ollama.example', model: 'llama3.1:8b' }`.
+`provider: { type: 'ollama', url: 'https://my-ollama.example', model: 'llama3.1:8b', mode: 'chat' }` (`mode` optional).
 
 **NVIDIA speech (Magpie-Multilingual)**: with the NVIDIA service, `task: 'speech'` goes to NVIDIA's Magpie-Multilingual
 text-to-speech (an NVCF function; its id is set in the App Store Manager > AI services > NVIDIA > Voice (Magpie) function, filled in already).
@@ -802,7 +809,7 @@ MyPC.ai.generate({ provider: { type: 'openai', url: 'https://integrate.api.nvidi
 
 Keys in an app's config or code can be read by anyone who opens the app's website: prefer the services set in the App Store Manager (never sent to apps).
 
-**App config** (App Store Manager > Config) can pick the service and model for an app: `{ "ai": { "provider": "nvidia", "model": "meta/llama-3.3-70b-instruct" } }`.
+**App config** (App Store Manager > Config) can pick the service and model for an app: `{ "ai": { "provider": "nvidia", "model": "meta/llama-3.3-70b-instruct" } }` (for Ollama also `"mode": "chat"` or `"completion"`).
 
 ### `MyPC.mic`: the microphone
 

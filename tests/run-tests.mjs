@@ -3533,6 +3533,10 @@ async function main() {
             const q = r.request();
             if (q.method() === 'OPTIONS') return r.fulfill({ status: 204, headers: cors });
             seen.ollama = { url: q.url(), body: JSON.parse(q.postData() || '{}') };
+            if (/\/api\/generate$/.test(q.url())) {
+                if (seen.ollama.body.stream) return r.fulfill({ status: 200, contentType: 'application/x-ndjson', headers: cors, body: '{"response":"Sa","done":false}\n{"response":"lut","done":false}\n{"response":"","done":true,"done_reason":"stop","prompt_eval_count":2,"eval_count":2}\n' });
+                return r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ model: 'phi', response: 'Completed', done: true, done_reason: 'stop', prompt_eval_count: 3, eval_count: 1 }) });
+            }
             if (seen.ollama.body.stream) return r.fulfill({ status: 200, contentType: 'application/x-ndjson', headers: cors, body: '{"message":{"role":"assistant","content":"Bon"},"done":false}\n{"message":{"role":"assistant","content":"jour"},"done":false}\n{"message":{"role":"assistant","content":""},"done":true,"done_reason":"stop","prompt_eval_count":3,"eval_count":2}\n' });
             r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ model: 'llama3.1:8b', message: { role: 'assistant', content: 'Hello from Ollama' }, done: true, done_reason: 'stop', prompt_eval_count: 5, eval_count: 4 }) });
         });
@@ -3603,6 +3607,17 @@ async function main() {
             ob.options.temperature === 0.5 && ob.options.num_predict === 20, 'Ollama uses its own POST /api/chat (model, messages, stream: false) and reads message.content (' + oll + ', ' + seen.ollama.url + ')');
         const ollS = await frame.evaluate(() => { const d = []; return MyPC.ai.generate({ provider: { type: 'ollama', url: 'https://ollama.test', model: 'llama3.1:8b' }, prompt: 'hi' }, { onDelta: (t) => d.push(t) }).then((r) => d.join('|') + '=' + r.text + ':' + r.finish); });
         check(ollS === 'Bon|jour=Bonjour:stop' && seen.ollama.body.stream === true, 'Ollama streaming reads its one-JSON-per-line answer (' + ollS + ')');
+        // completion mode: POST /api/generate with one prompt, answer in "response"
+        const olc = await frame.evaluate(() => MyPC.ai.generate({ provider: { type: 'ollama', url: 'https://ollama.test', model: 'phi', mode: 'completion' }, system: 'S', prompt: 'Hello', maxTokens: 9 }).then((r) => r.text + ':' + r.usage.total));
+        const cb = seen.ollama.body;
+        check(olc === 'Completed:4' && /\/api\/generate$/.test(seen.ollama.url) && cb.prompt === 'Hello' && cb.system === 'S' && !cb.messages && cb.stream === false && cb.options.num_predict === 9,
+            'Ollama completion mode uses POST /api/generate (prompt, system) and reads response (' + olc + ', ' + seen.ollama.url + ')');
+        const olcT = await frame.evaluate(() => MyPC.ai.generate({ provider: { type: 'ollama', url: 'https://ollama.test', model: 'phi' }, mode: 'completion', messages: [{ role: 'user', content: 'Q' }, { role: 'assistant', content: 'A' }], prompt: 'Q2' }).then((r) => r.text));
+        check(olcT === 'Completed' && seen.ollama.body.prompt === 'User: Q\n\nAssistant: A\n\nUser: Q2\n\nAssistant:', 'a request\'s mode: \'completion\' writes earlier turns into the one prompt (' + JSON.stringify(seen.ollama.body.prompt) + ')');
+        const olcS = await frame.evaluate(() => { const d = []; return MyPC.ai.generate({ provider: { type: 'ollama', url: 'https://ollama.test', model: 'phi', mode: 'completion' }, prompt: 'hi' }, { onDelta: (t) => d.push(t) }).then((r) => d.join('|') + '=' + r.text); });
+        check(olcS === 'Sa|lut=Salut' && seen.ollama.body.stream === true, 'Ollama completion streaming reads response pieces (' + olcS + ')');
+        const olMgr = await page.evaluate(() => { const was = localStorage.getItem('arc_dev_ai'); AI.setManaged({ list: [{ id: 'ol', preset: 'ollama', url: 'http://192.168.1.10:11434', model: 'phi', mode: 'completion' }, { id: 'ol2', preset: 'ollama', url: 'http://x:11434' }] }); const p = AI.providers(); if (was === null) localStorage.removeItem('arc_dev_ai'); else localStorage.setItem('arc_dev_ai', was); return p[0].mode + ',' + p[1].mode; });
+        check(olMgr === 'completion,chat', 'an Ollama service keeps its mode from the App Store Manager (chat by default) and apps see it in providers() (' + olMgr + ')');
         const unsup = await frame.evaluate(() => MyPC.ai.generate({ provider: 'nvidia', task: 'video', prompt: 'a cat' }).then(() => 'ok', (e) => e.code));
         check(unsup === 'http' || unsup === 'unsupported' || unsup === 'network', 'a task the service cannot do fails with an error, not a hang (' + unsup + ')');
         // NVIDIA Magpie-Multilingual text to speech (an NVCF function, multipart form, .wav back)

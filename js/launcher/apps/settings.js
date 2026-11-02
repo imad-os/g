@@ -339,7 +339,7 @@
         if (!l.length) out.push({ kind: 'text', value: t('aiNoneYet') });
         l.forEach(function (p) {
             var tk = AI.tasks(p), can = ['speech', 'transcribe', 'image', 'video'].filter(function (k) { return tk[k]; }).map(function (k) { return t('aiTask_' + k); });
-            out.push({ kind: 'action', label: p.name + (p.id === d ? ' (' + t('aiDefault') + ')' : ''), desc: [p.model, keyHint(p)].concat(can).filter(Boolean).join(' · '),
+            out.push({ kind: 'action', label: p.name + (p.id === d ? ' (' + t('aiDefault') + ')' : ''), desc: [p.model, p.preset === 'ollama' ? (p.mode === 'completion' ? '/api/generate' : '/api/chat') : '', keyHint(p)].concat(can).filter(Boolean).join(' · '),
                        run: function () { aiTest(p.id); } });
         });
         out.push({ kind: 'action', label: t('aiCheck'), run: aiSync });

@@ -143,6 +143,7 @@
   .svc-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .svc-head b { font-size: 15px; }
   .svc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 0 16px; }
+  .svc-grid select { width: 100%; }
   .svc-grid .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
   .keybox { display: flex; gap: 6px; }
   .warn { border-color: #5a4a1a; background: #221d10; }
@@ -960,13 +961,18 @@
     ['speechUrl', 'Voice (Magpie) function', 'text', 'NVCF function id or https address (MyPC.ai task "speech")'],
     ['transcribeUrl', 'Speech-to-text function', 'text', 'Only a function with an HTTP API (task "transcribe"); empty = off']
   ];
+  const OL_FIELDS = [
+    ['mode', 'Mode', 'select', 'Chat = /api/chat (messages), Completion = /api/generate (one prompt). Some models only answer one of them.', [['chat', 'Chat'], ['completion', 'Completion']]]
+  ];
   function aiChanged() { aiDirty = true; $('ai-save').disabled = false; say('ai-msg', 'Not saved yet', 'muted'); }
   function renderAi() {
     if (aiErr) say('ai-msg', aiErr, 'err');
     if (!ai.list.length) { $('ai-list').innerHTML = '<div class="empty">No AI service yet. Pick one below and add its API key.</div>'; return; }
     $('ai-list').innerHTML = ai.list.map((p, i) => {
-      const pre = AI.presetOf(p.preset) || {}, nv = p.preset === 'nvidia';
-      const field = (f) => '<div><label for="ai-' + i + '-' + f[0] + '">' + f[1] + '</label>' + (f[2] === 'password'
+      const pre = AI.presetOf(p.preset) || {}, nv = p.preset === 'nvidia', ol = p.preset === 'ollama';
+      const field = (f) => '<div><label for="ai-' + i + '-' + f[0] + '">' + f[1] + '</label>' + (f[2] === 'select'
+          ? '<select id="ai-' + i + '-' + f[0] + '" data-i="' + i + '" data-f="' + f[0] + '">' + f[4].map((o) => '<option value="' + o[0] + '"' + (p[f[0]] === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select>'
+          : f[2] === 'password'
           ? '<div class="keybox"><input id="ai-' + i + '-' + f[0] + '" type="password" autocomplete="off" spellcheck="false" data-i="' + i + '" data-f="' + f[0] + '" value="' + esc(p[f[0]]) + '"><button class="icon small" data-show="' + i + '">Show</button></div>'
           : '<input id="ai-' + i + '-' + f[0] + '" spellcheck="false" data-i="' + i + '" data-f="' + f[0] + '" value="' + esc(p[f[0]]) + '">') +
         (f[3] || (f[0] === 'key' && pre.site) ? '<div class="hint">' + esc(f[3] || 'Get a key at ' + pre.site) + '</div>' : '') + '</div>';
@@ -974,7 +980,7 @@
         '<span class="tag cfg">' + esc(p.id) + '</span>' + (p.id === ai.def ? '<span class="tag installed">default</span>' : '') + '<span class="grow"></span>' +
         (p.id === ai.def ? '' : '<button class="small" data-def="' + i + '">Use by default</button>') +
         '<button class="small danger" data-del="' + i + '">Remove</button></div>' +
-        '<div class="svc-grid">' + AI_FIELDS.concat(nv ? NV_FIELDS : []).map(field).join('') + '</div></div>';
+        '<div class="svc-grid">' + AI_FIELDS.concat(nv ? NV_FIELDS : [], ol ? OL_FIELDS : []).map(field).join('') + '</div></div>';
     }).join('');
   }
   $('ai-list').addEventListener('input', (e) => {

@@ -5,7 +5,7 @@
  * Apps never see the keys. An app can also bring its own provider (with its own key) in the request. Kinds of provider:
  *   openai     OpenAI and every OpenAI-compatible API: NVIDIA, OpenRouter, Groq, Mistral, DeepSeek, xAI, Together,
  *              LM Studio on a computer at home, or any custom address; Ollama (preset 'ollama') uses its own API
- *              (POST <address>/api/chat, /api/embed) on the same kind
+ *              (POST <address>/api/chat, or /api/generate with mode 'completion', /api/embed) on the same kind
  *   gemini     Google Gemini (text, images, speech, video with Veo, embeddings)
  *   anthropic  Anthropic Claude (text, images, PDF)
  *
@@ -73,8 +73,10 @@ var AI = (function () {
         return { id: String(p.id || ''), preset: p.preset || 'custom', type: /^(openai|gemini|anthropic)$/.test(p.type) ? p.type : (pre.type || 'openai'),
                  name: String(p.name || pre.name || 'AI').slice(0, 40), url: String(p.url || pre.url || '').replace(/\/+$/, ''), key: String(p.key || ''),
                  model: String(p.model || '').trim(), models: p.models && typeof p.models === 'object' ? p.models : {}, lan: !!(p.lan || pre.lan),
-                 speechUrl: String(p.speechUrl !== undefined ? p.speechUrl : pre.speechUrl || '').trim(), transcribeUrl: String(p.transcribeUrl !== undefined ? p.transcribeUrl : pre.transcribeUrl || '').trim() };
+                 speechUrl: String(p.speechUrl !== undefined ? p.speechUrl : pre.speechUrl || '').trim(), transcribeUrl: String(p.transcribeUrl !== undefined ? p.transcribeUrl : pre.transcribeUrl || '').trim(), mode: olMode(p.mode) };
     }
+    // Ollama: 'chat' = POST /api/chat (messages), 'completion' = POST /api/generate (one prompt); models support one or both
+    function olMode(m) { return m === 'completion' || m === 'generate' ? 'completion' : 'chat'; }
     function presetOf(id) { for (var i = 0; i < PRESETS.length; i++) if (PRESETS[i].preset === id) return PRESETS[i]; return null; }
     function list() { return rawGet().list.map(clean); }
     function find(id) { var l = list(); for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
@@ -112,7 +114,7 @@ var AI = (function () {
     // what an app may know: no keys, no addresses
     function providers() {
         var d = defaultId();
-        return list().map(function (p) { return { id: p.id, name: p.name, type: p.type, preset: p.preset, model: p.model, isDefault: p.id === d, tasks: tasks(p) }; });
+        return list().map(function (p) { return { id: p.id, name: p.name, type: p.type, preset: p.preset, model: p.model, mode: isOllama(p) ? p.mode : undefined, isDefault: p.id === d, tasks: tasks(p) }; });
     }
 
     // what a service can do (apps hide a feature when no service has it)
@@ -152,7 +154,7 @@ var AI = (function () {
             return { id: 'app', own: true, type: t, name: String(spec.name || pre.name || 'App'), url: url, key: String(spec.key || ''), model: String(spec.model || ''),
                      models: spec.models && typeof spec.models === 'object' ? spec.models : {}, headers: spec.headers && typeof spec.headers === 'object' ? spec.headers : null,
                      preset: spec.preset || (spec.type === 'ollama' ? 'ollama' : '') || (/\/\/integrate\.api\.nvidia\.com/.test(url) ? 'nvidia' : ''),
-                     speechUrl: String(spec.speechUrl || (/\/\/integrate\.api\.nvidia\.com/.test(url) ? presetOf('nvidia').speechUrl : '')), transcribeUrl: String(spec.transcribeUrl || '') };
+                     speechUrl: String(spec.speechUrl || (/\/\/integrate\.api\.nvidia\.com/.test(url) ? presetOf('nvidia').speechUrl : '')), transcribeUrl: String(spec.transcribeUrl || ''), mode: olMode(spec.mode) };
         }
         var want = spec || appDefault, l = list(), i;
         if (!want) return find(defaultId());
@@ -427,7 +429,7 @@ var AI = (function () {
         return out;
     }
 
-    /* ---------------- Ollama (its own API: POST /api/chat, /api/embed) ---------------- */
+    /* ---------------- Ollama (its own API: POST /api/chat or /api/generate, /api/embed) ---------------- */
 
     // Ollama streams one JSON object per line (not server-sent events)
     function ndjson(onData) {
@@ -456,9 +458,30 @@ var AI = (function () {
         return out;
     }
     function olUsage(b) { return b && (b.prompt_eval_count !== undefined || b.eval_count !== undefined) ? { input: b.prompt_eval_count || 0, output: b.eval_count || 0, total: (b.prompt_eval_count || 0) + (b.eval_count || 0) } : null; }
+    // completion mode: one prompt (earlier turns written out as a transcript), the system text apart, images of every turn
+    function olPrompt(n) {
+        var images = [], turns = n.msgs.map(function (m) {
+            var text = [];
+            m.parts.forEach(function (x) {
+                if (x.type === 'text') text.push(x.text);
+                else if (x.type === 'image') images.push(x._b64);
+                else throw err('unsupported', 'Ollama only takes text and images.');
+            });
+            return { role: m.role, text: text.join('\n') };
+        });
+        var prompt = turns.length === 1 && turns[0].role === 'user' ? turns[0].text :
+            turns.map(function (m) { return (m.role === 'assistant' ? 'Assistant: ' : 'User: ') + m.text; }).join('\n\n') + '\n\nAssistant:';
+        return { prompt: prompt, images: images };
+    }
     async function olChat(ctl, p, model, n, req, onEvent) {
         await loadAll(ctl, p, n, false);
-        var body = { model: model, messages: olMessages(n), stream: !!req.stream }, o = {};
+        var gen = olMode(req.mode || p.mode) === 'completion', body, o = {};
+        if (gen) {
+            var q = olPrompt(n);
+            body = { model: model, prompt: q.prompt, stream: !!req.stream };
+            if (n.sys) body.system = n.sys;
+            if (q.images.length) body.images = q.images;
+        } else body = { model: model, messages: olMessages(n), stream: !!req.stream };
         if (req.temperature !== undefined) o.temperature = +req.temperature;
         if (req.topP !== undefined) o.top_p = +req.topP;
         if (req.stop) o.stop = Array.isArray(req.stop) ? req.stop : [req.stop];
@@ -467,18 +490,19 @@ var AI = (function () {
         if (Object.keys(o).length) body.options = o;
         if (n.json) body.format = req.schema || 'json';
         Object.assign(body, req.extra || {});
-        var url = ollamaBase(p) + '/api/chat';
+        var url = ollamaBase(p) + (gen ? '/api/generate' : '/api/chat');
+        function said(d) { return gen ? d.response : d.message && d.message.content; }
         if (body.stream) {
             var text = '', usage = null, finish = '';
             await http(ctl, p, { url: url, json: body, responseType: 'text', onChunk: ndjson(function (d) {
-                var c = d.message && d.message.content;
+                var c = said(d);
                 if (typeof c === 'string' && c) { text += c; onEvent({ ev: 'delta', text: c }); }
                 if (d.done) { finish = d.done_reason || 'stop'; usage = olUsage(d); }
             }) });
             return result(p, model, text, [], usage, finish, null, req);
         }
         var r = await http(ctl, p, { url: url, json: body }), b = r.body || {};
-        return result(p, model, (b.message && b.message.content) || '', [], olUsage(b), b.done_reason || 'stop', b, req);
+        return result(p, model, said(b) || '', [], olUsage(b), b.done_reason || 'stop', b, req);
     }
     async function olEmbed(ctl, p, model, n, req) {
         var input = Array.isArray(req.input) ? req.input.map(asText) : [allText(n)];

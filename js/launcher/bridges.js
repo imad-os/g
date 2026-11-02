@@ -117,6 +117,7 @@ var Bridges = (function () {
                 return send('ai', { rid: d.rid, error: { code: 'no-provider', message: req.provider && typeof req.provider === 'object' ? 'The provider needs an https address.' :
                     'No AI service' + (req.provider ? ' "' + req.provider + '"' : '') + ' is set up for My PC. Add one in the App Store Manager (AI services).' } });
             }
+            if (!req.mode && aiCfg.mode) req.mode = aiCfg.mode;          // Ollama: 'chat' | 'completion' for this app
             if (!p.own && !req.model && aiCfg.model && (!aiCfg.provider || aiCfg.provider === p.id || aiCfg.provider === p.preset || aiCfg.provider === p.type)) req.model = aiCfg.model;
             nAi++;
             ais[d.rid] = { cancel: function () { ais[d.rid].cancelled = true; } };       // until the question is answered
