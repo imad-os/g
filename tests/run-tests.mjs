@@ -971,6 +971,34 @@ async function main() {
         check(await page.textContent('.calc-disp') === '42', 'calculator with a PC keyboard: 7*6 = 42');
         await key('Escape');
         check(await page.evaluate(() => document.getElementById('window').hidden && document.getElementById('win-body').childNodes.length === 0 && document.activeElement.id === 'tb-calculator'), 'Back closes the app, frees its content and refocuses the taskbar button');
+        // focus memory: closing an app or a game focuses again the item it was opened from
+        await page.focus('#desk-icons [data-app="explorer"]'); await key('Enter'); await key('Escape');
+        check(await page.evaluate(() => document.activeElement.getAttribute('data-app') === 'explorer' && document.getElementById('desk-icons').contains(document.activeElement)), 'an app opened from its desktop icon refocuses that icon');
+        await page.focus('#tb-explorer'); await key('Enter'); await key('Escape');
+        check(await page.evaluate(() => document.activeElement.id === 'tb-explorer'), 'the same app opened from the taskbar refocuses the taskbar button, not the desktop icon');
+        const quitGame = async (id) => {
+            await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 15000 });
+            await tvBack(page);
+            await Promise.all([page.waitForURL(new RegExp('from=' + id)), page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); })]);
+            await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
+        };
+        await page.evaluate(() => Store.set('last_game', 'parchis'));
+        await page.evaluate(() => Desktop.openStart());
+        await page.focus('#start-pinned [data-game="snake"]');
+        await Promise.all([page.waitForURL(/play=snake/), key('Enter')]);
+        await quitGame('snake');
+        check(await page.evaluate(() => document.activeElement.getAttribute('data-game') === 'snake' && document.getElementById('desk-icons').contains(document.activeElement) && !Desktop.startOpen()), 'a game opened from a Start tile comes back to its desktop icon');
+        await page.evaluate(() => Desktop.setOnHome('snake', false));
+        await page.evaluate(() => Desktop.openStart());
+        await page.focus('#start-pinned [data-game="snake"]');
+        await Promise.all([page.waitForURL(/play=snake/), key('Enter')]);
+        await quitGame('snake');
+        check(await page.evaluate(() => document.activeElement.id === 'tb-start'), 'a game opened from Start and not on the home screen comes back to the Start button');
+        await page.evaluate(() => Desktop.setOnHome('snake', true));
+        await page.focus('#tray-clock'); await key('Enter');
+        check(await page.evaluate(() => Win.current() === 'calendar'), 'the clock opens the calendar');
+        await key('Escape');
+        check(await page.evaluate(() => document.activeElement.id === 'tray-clock'), 'closing the calendar refocuses the clock it was opened from');
         // calendar: today, add a note with the on-screen keyboard
         await page.evaluate(() => Win.open('calendar'));
         check(await page.evaluate(() => document.activeElement.className.indexOf('cal-today') >= 0), 'calendar opens on today');

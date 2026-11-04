@@ -59,6 +59,7 @@
   `tools/gen-levels.mjs`; after any change to chunks, the generator or the hero's physics
   (`Actors.TUNE` in `games/jumper/js/actors.js`) run `node tools/play-levels.mjs`: it plays every stage
   with a handicapped hero and must finish all of them with no traps.
+- **Focus memory**: `Desktop.hide()` saves the focused desktop item (profile key `last_focus`; a launcher button's own click wins); `Desktop.show()` focuses it again when an app closes or the game page reloads the desktop. A Start tile falls back to the item's desktop icon, then its taskbar button, then Start; a game started inside an app falls back to the game's icon, then that app's taskbar button.
 - **Home screen shortcuts**: hold OK (600 ms), long-press or right-click a desktop icon or Start tile -> menu Open / Remove from
   (or Add to) home screen / Uninstall (installed apps, admins only: `Profiles.isAdmin()`). Short OK on a shortcut opens it on release
   (`main.js` passes the OK release to `Desktop.action`). Removed ids per profile in `home_hidden` (`Desktop.onHome` / `setOnHome`);

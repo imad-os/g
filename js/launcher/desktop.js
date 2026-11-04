@@ -8,6 +8,7 @@ var Desktop = (function () {
     var installed = [];         // installed from the App Store (Firebase catalog), same shape + remote
     var onPlay = null;
     var lastPlayed = null, clockTimer = 0, startReturn = null;
+    var leaving = null;         // the launcher button being clicked (focus memory, see remember())
 
     // desktop apps (opened full screen by Win)
     var APPS = [
@@ -90,7 +91,7 @@ var Desktop = (function () {
         if (kind === 'app') {
             label = I18n.t(item.label);
             b.setAttribute('data-app', item.id);
-            b.onclick = function () { closeStart(true); Win.open(item.id); };
+            b.onclick = function () { leaving = b; closeStart(true); Win.open(item.id); leaving = null; };
         } else {
             label = I18n.pick(item.manifest.title);
             b.setAttribute('data-game', item.id);
@@ -98,7 +99,7 @@ var Desktop = (function () {
             if (badge) { b.appendChild(el('span', 'dot' + (badge === 'upd' ? ' dot-upd' : ''))); aria += '. ' + I18n.t(badge === 'new' ? 'badgeNew' : 'badgeUpdated'); }
             if (item.id === lastPlayed) aria += '. ' + I18n.t('lastPlayed');
             b.setAttribute('aria-label', aria);
-            b.onclick = function () { closeStart(true); play(item); };
+            b.onclick = function () { leaving = b; closeStart(true); play(item); leaving = null; };
         }
         if (!b.getAttribute('aria-label')) b.setAttribute('aria-label', label);
         b.insertBefore(picture(kind, item), b.firstChild);
@@ -412,16 +413,47 @@ var Desktop = (function () {
 
     function firstIcon() { return $('desk-icons').firstChild; }
 
-    // focusSel: element or id/selector to focus when the desktop comes back
+    /* Focus memory: the item that had the focus on the desktop (icon, Start tile, taskbar or tray button) when a game
+     * or an app took the screen is focused again when the desktop comes back, also after the game page reloads it
+     * (profile key last_focus). A Start tile (Start is closed by then) falls back to the same item on the desktop,
+     * then to its taskbar button, then to the Start button. */
+    function focusKey(e) {
+        if (!e || !e.getAttribute || !$('desktop').contains(e)) return null;
+        return {
+            z: $('start').contains(e) ? 'start' : $('desk-icons').contains(e) ? 'icons' : 'bar',
+            id: e.id || '', g: e.getAttribute('data-game') || '', a: e.getAttribute('data-app') || ''
+        };
+    }
+    function remember(e) { var k = focusKey(e); if (k) Store.set('last_focus', k); }
+    function visible(e) { return !!e && $('desktop').contains(e) && e.getClientRects().length > 0; }
+    function attr(k) { return k.g ? '[data-game="' + k.g + '"]' : k.a ? '[data-app="' + k.a + '"]' : null; }
+    function remembered() {
+        var k = Store.get('last_focus', null), sel, e;
+        if (!k || typeof k !== 'object') return null;
+        sel = attr(k);
+        if (k.z === 'icons' && sel && visible(e = $('desk-icons').querySelector(sel))) return e;
+        if (k.z !== 'start' && k.id && visible(e = $(k.id))) return e;
+        if (k.z === 'start') {
+            if (sel && visible(e = $('desk-icons').querySelector(sel))) return e;
+            if (k.a && visible(e = $('tb-' + k.a))) return e;
+            if (visible(e = $('tb-start'))) return e;
+        }
+        return null;
+    }
+
+    // focusEl: the element to focus when the desktop comes back and nothing remembered is there any more
     function show(focusEl) {
         $('desktop').hidden = false;
         restoreImages();
         updateTray();
         tick();
         Focus.reset();
-        Focus.set($('desktop'), focusEl || tileFor(lastPlayed) || firstIcon());
+        Focus.set($('desktop'), remembered() || focusEl || tileFor(lastPlayed) || firstIcon());
     }
     function hide() {
+        // a launcher button's own click wins (a Start tile: closing Start moved the focus to the Start button)
+        if (!$('desktop').hidden) remember(leaving || Focus.current());
+        leaving = null;
         cancelHold();
         closeMenu();
         closeStart(true);
@@ -451,6 +483,8 @@ var Desktop = (function () {
         lastPlayed = g.id;
         Store.set('last_game', g.id);
         markSeen(g);
+        // started inside an app (File Explorer, App Store, Control Panel): back on the game's icon, else on that app's taskbar button
+        if (Win.isOpen()) Store.set('last_focus', { z: 'start', id: '', g: g.id, a: Win.current() || '' });
         if (Win.isOpen()) Win.close(true);
         onPlay(g);
     }
