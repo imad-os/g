@@ -2245,8 +2245,13 @@ async function main() {
             await E.evaluate(() => { Rooms.LIMITS.poll = 100; Rooms.LIMITS.fastFor = 300; });
             const oq = await call(E, 'open', { name: 'Quiet2', max: 2, idle: 600 });
             const pq = () => db.queries.filter((q) => q.col === 'rooms/' + oq.r.id + '/reqs').length;
+            const light = () => E.evaluate(() => ({ c: document.getElementById('tray-poll').className, t: document.getElementById('tray-poll').title }));
+            const l0 = await light();
+            check(/fast/.test(l0.c) && /every 2 s/.test(l0.t) && /room was opened/.test(l0.t), 'taskbar light: green while checking every 2 s, its title says why (' + l0.t + ')');
             await E.waitForTimeout(400); const a0 = pq();
             await E.waitForTimeout(1800); const a1 = pq() - a0;
+            const l1 = await light();
+            check(/slow/.test(l1.c) && /slowed down/.test(l1.t) && /a minute without requests/.test(l1.t), 'taskbar light: orange once slowed down (' + l1.t + ')');
             check(fastN >= 4 && a1 >= 1 && a1 <= 8, 'polls every 2 s (shortened) at first, then backs off to the idle rate (' + fastN + ' fast, ' + a1 + ' in 1.8 s idle)');
             await call(E, 'wake', { room: oq.r.id });
             const w0 = pq(); await E.waitForTimeout(250);
@@ -2254,6 +2259,8 @@ async function main() {
             await call(E, 'count', { room: oq.r.id, n: 2 });
             await E.waitForTimeout(400); const f0 = pq(); await E.waitForTimeout(1500);
             check(pq() === f0, 'a full room is not polled');
+            const l2 = await light();
+            check(/tray-poll off/.test(l2.c) && /room is full/.test(l2.t), 'taskbar light: grey while the room is full (' + l2.t + ')');
             await call(E, 'count', { room: oq.r.id, n: 1 });
             const g0 = pq(); await E.waitForTimeout(250);
             check(pq() - g0 >= 2, 'a player left: polls fast again');
@@ -2264,6 +2271,8 @@ async function main() {
             const v0 = pq(); await E.waitForTimeout(250);
             check(pq() - v0 >= 2, 'shown again: polls fast at once');
             await E.evaluate(() => window.S.destroy());
+            const l3 = await light();
+            check(/tray-poll off/.test(l3.c) && /No Firestore checks/.test(l3.t), 'taskbar light: grey with "No Firestore checks" once no room is open');
             check(E.errors.length === 0, 'no page errors while polling ' + E.errors.join('; '));
             await E.context().close();
         }

@@ -280,7 +280,43 @@ var Desktop = (function () {
         // Manual screen rotation (Control Panel > Display, js/core/rotation.js): this button turns the phone's screen
         $('tray-rot').onclick = function () { rotateScreen(); };
         if (window.Rotation) Rotation.onChange(updateTray);
+        // Firestore checks light (owner request 2026-11-04): why My PC is reading Firestore every 2 s, slower, or not at all
+        var pl = $('tray-poll');
+        pl.onclick = function () { App.toast(pollText(), { id: 'poll', kind: 'info', title: I18n.t('pollTitle'), timeout: 8000 }); };
+        pl.onmouseenter = pl.onfocus = function () { pl.title = pollText(); };
+        if (window.Rooms && Rooms.onStatus) Rooms.onStatus(updatePoll);
+        updatePoll();
         updateTray();
+    }
+    function pollState() {
+        var st = window.Rooms && Rooms.status ? Rooms.status() : [], s = 'off', i;
+        for (i = 0; i < st.length; i++) { if (st[i].state === 'fast') s = 'fast'; else if (st[i].state === 'slow' && s !== 'fast') s = 'slow'; }
+        return { s: s, list: st };
+    }
+    function ago(t) {
+        var sec = Math.max(0, Math.round((Date.now() - t) / 1000));
+        return sec < 60 ? I18n.t('pollSec').replace('%n', sec) : I18n.t('pollMin').replace('%n', Math.round(sec / 60));
+    }
+    function pollText() {
+        var p = pollState(), out = [], i, r, line;
+        if (!p.list.length) return I18n.t('pollNone');
+        for (i = 0; i < p.list.length; i++) {
+            r = p.list[i];
+            line = (r.app === 'controller' ? I18n.t('pollCtrl') : I18n.t('pollApp').replace('%s', r.app)) + ' (' + r.room + '): ';
+            line += r.state === 'fast' ? I18n.t('pollFast') : r.state === 'slow' ? I18n.t('pollSlow').replace('%n', Math.round(r.wait / 1000)) : I18n.t('pollOff');
+            line += '. ' + I18n.t('pollWhy') + ' ' + I18n.t('pollWhy_' + r.why).replace('%s', r.who || '?') + ', ' + ago(r.at) + '.';
+            if (r.last) line += ' ' + I18n.t('pollCount').replace('%n', r.polls).replace('%t', ago(r.last)) + '.';
+            out.push(line);
+        }
+        return out.join('\n');
+    }
+    function updatePoll() {
+        var el = $('tray-poll'); if (!el) return;
+        var p = pollState(), cls = 'tray-poll ' + p.s;
+        if (el.className !== cls) el.className = cls;
+        var label = I18n.t('pollTitle') + ': ' + I18n.t(p.s === 'fast' ? 'pollFast' : p.s === 'slow' ? 'pollSlowShort' : 'pollOff');
+        if (el.getAttribute('aria-label') !== label) el.setAttribute('aria-label', label);
+        el.title = pollText();
     }
     function rotateScreen() {
         if (!Rotation.turn()) App.toast(I18n.t('rotUpdate'));

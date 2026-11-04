@@ -10,6 +10,9 @@
  * Request polling (the host's only repeated read, one runQuery on rooms/{room}/reqs): every 2 s for the first minute after
  * `open`, a request, a player leaving or `wake`; then slower and slower (x1.5) up to `idle` ms (open's arg, default 5 s, at most
  * 30 s); none while the room is full or the page is hidden (another TV app / source). Firestore REST has no listener.
+ * Rooms.status() -> [{ app, room, state: 'fast' | 'slow' | 'off', wait (ms to the next check), why, at (when `why` happened),
+ *   polls (checks made), last (time of the last check) }] for every room this page hosts; Rooms.onStatus(fn) is called on every
+ *   change (the taskbar's light, js/launcher/desktop.js). `why` is a key: open request left wake shown full hidden backoff.
  * Error codes: offline denied full gone invalid unavailable. */
 var Rooms = (function () {
     'use strict';
@@ -18,6 +21,22 @@ var Rooms = (function () {
               minMax: 2, maxMax: 8, defMax: 2, asksPerMin: 5, opensPerMin: 6, timeout: 6000 };
     var ALPHA = 'abcdefghjkmnpqrstuvwxyz23456789';
     var asks = [], opens = [];                       // TV-wide rate limits (timestamps)
+    var live = [], watchers = [];                    // host rooms of this page (for Rooms.status) and their listeners
+    function changed() { for (var i = 0; i < watchers.length; i++) { try { watchers[i](); } catch (e) {} } }
+    function status() {
+        var out = [], i, r;
+        for (i = 0; i < live.length; i++) {
+            r = live[i];
+            out.push({ app: r.app, room: r.id, state: r.state, wait: r.curWait, why: r.why, who: r.who || '', at: r.whyAt, polls: r.polls, last: r.last });
+        }
+        return out;
+    }
+    // what the room's polling is doing now and why (only reported when it changes)
+    function note(r, state, why, who) {
+        if (why && (why !== r.why || who !== r.who)) { r.why = why; r.who = who || ''; r.whyAt = Date.now(); }
+        r.state = state;
+        changed();
+    }
 
     function id(n) {
         var out = '', i, b = null;
@@ -60,6 +79,7 @@ var Rooms = (function () {
         function stopRoom() {
             if (!room) return;
             clearInterval(room.beat); clearTimeout(room.poll);
+            var li = live.indexOf(room); if (li >= 0) { live.splice(li, 1); changed(); }
             if (room.vis) document.removeEventListener('visibilitychange', room.vis);
             room = null;
         }
@@ -76,16 +96,22 @@ var Rooms = (function () {
             var t = Date.now(), wait;
             if (t < r.fastUntil) wait = L.poll;
             else wait = r.wait = Math.min(r.idle, Math.max(L.poll, Math.round((r.wait || L.poll) * 1.5)));
+            r.curWait = wait;
+            if (r.n >= r.max) note(r, 'off', 'full');
+            else if (hidden()) note(r, 'off', 'hidden');
+            else if (wait > L.poll) note(r, 'slow', r.state === 'fast' || r.why === 'full' || r.why === 'hidden' ? 'backoff' : '');
+            else note(r, 'fast', '');
             r.poll = setTimeout(function () { poll(r); }, wait);
         }
-        function fast(r) {                           // a guest is likely to come soon: poll every 2 s for a minute
+        function fast(r, why, who) {                 // a guest is likely to come soon: poll every 2 s for a minute
             r.fastUntil = Date.now() + L.fastFor; r.wait = 0;
+            if (why) note(r, 'fast', why, who);
             if (!r.busy) { clearTimeout(r.poll); r.poll = setTimeout(function () { poll(r); }, 0); }
         }
         function poll(r) {
             if (room !== r || r.busy) return;
             if (r.n >= r.max || hidden()) return next(r);                    // full (asks are refused anyway) or nobody watching
-            r.busy = true;
+            r.busy = true; r.polls++; r.last = Date.now();
             Cloud.query('rooms/' + r.id, { from: [{ collectionId: 'reqs' }], limit: 25 }, L.timeout, function (err, docs) {
                 r.busy = false;
                 if (room !== r) return;
@@ -94,6 +120,7 @@ var Rooms = (function () {
                     if (r.seen[q.id] || d.answer || d.no || !str(d.offer, L.payload) || ms(d.exp) < now()) continue;
                     r.seen[q.id] = 1;
                     r.fastUntil = Date.now() + L.fastFor; r.wait = 0;            // more may follow (a second phone, friends)
+                    note(r, 'fast', 'request', cleanName(d.name, ''));
                     fire('request', { room: r.id, id: q.id, name: cleanName(d.name, ''), offer: d.offer });
                 }
                 next(r);
@@ -148,7 +175,8 @@ var Rooms = (function () {
                 var idle = Math.floor(+args.idle || L.pollIdle);
                 idle = Math.max(L.poll, Math.min(L.pollMaxIdle, idle));
                 var r = { id: fixed || id(8), name: cleanName(args.name, profileName), max: max, n: 1, seen: {}, busy: false, beat: 0, poll: 0,
-                          idle: idle, wait: 0, fastUntil: Date.now() + L.fastFor };
+                          idle: idle, wait: 0, fastUntil: Date.now() + L.fastFor,
+                          app: appId, state: 'fast', curWait: L.poll, why: 'open', who: '', whyAt: Date.now(), polls: 0, last: 0 };
                 room = r;                                                    // reserved while the write is in flight
                 sync(function (e0) {
                     if (room !== r) return;
@@ -157,9 +185,10 @@ var Rooms = (function () {
                         if (room !== r) return;                              // closed meanwhile
                         if (err) { room = null; return cb(code(err)); }
                         r.beat = setInterval(function () { beat(r); }, L.beat);
+                        live.push(r);
                         next(r);
                         if (typeof document !== 'undefined') {             // back on My PC: look for guests at once
-                            r.vis = function () { if (!hidden() && room === r) fast(r); };
+                            r.vis = function () { if (!hidden() && room === r) fast(r, 'shown'); };
                             document.addEventListener('visibilitychange', r.vis);
                         }
                         cb(null, { id: r.id, name: r.name, max: r.max });
@@ -177,13 +206,13 @@ var Rooms = (function () {
                 var n = Math.max(1, Math.min(r.max, args.n | 0)), less = n < r.n;
                 r.n = n;
                 beat(r);
-                if (less) fast(r);                                           // a player left: they often come back at once
+                if (less) fast(r, 'left');                                           // a player left: they often come back at once
                 cb(null, true);
             },
             wake: function (args, cb) {                                      // a guest is expected (pairing screen open): poll fast again
                 var r = room;
                 if (!r || r.id !== args.room) return cb('gone');
-                fast(r);
+                fast(r, 'wake');
                 cb(null, true);
             },
             list: function (args, cb) {
@@ -284,5 +313,7 @@ var Rooms = (function () {
         };
     }
 
-    return { Session: Session, LIMITS: L };
+    return { Session: Session, LIMITS: L, status: status,
+             onStatus: function (fn) { if (watchers.indexOf(fn) < 0) watchers.push(fn); },
+             offStatus: function (fn) { var i = watchers.indexOf(fn); if (i >= 0) watchers.splice(i, 1); } };
 })();
