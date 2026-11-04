@@ -110,7 +110,7 @@ var Cloud = (function () {
     // cb(err, [{ id, data }])
     // The TV's clock can be wrong: a query answer carries the server's time (readTime), kept as an offset (Cloud.now()).
     var offset = null;
-    function query(parent, structured, timeout, cb) {
+    function query(parent, structured, timeout, cb, token) {
         request('POST', ROOT + (parent ? '/' + parent : '') + ':runQuery', { structuredQuery: structured }, timeout, function (err, r) {
             if (err || !r || r.length === undefined) return cb(err || 'json', null);
             if (r[0] && r[0].readTime && !isNaN(Date.parse(r[0].readTime))) offset = Date.parse(r[0].readTime) - Date.now();
@@ -121,9 +121,9 @@ var Cloud = (function () {
                 out.push({ id: n.slice(n.lastIndexOf('/') + 1), data: fromFields(r[i].document.fields || {}) });
             }
             cb(null, out);
-        });
+        }, token);
     }
-    function remove(path, timeout, cb) { request('DELETE', ROOT + '/' + path, null, timeout, function (err) { cb(err); }); }
+    function remove(path, timeout, cb, token) { request('DELETE', ROOT + '/' + path, null, timeout, function (err) { cb(err); }, token); }
     // Delete that survives the page being unloaded (an app is closed by loading the desktop page): fetch keepalive
     function removeKeep(path) {
         try { fetch(ROOT + '/' + path + '?key=' + CFG.apiKey, { method: 'DELETE', keepalive: true }).catch(function () {}); }

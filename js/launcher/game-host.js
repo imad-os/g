@@ -175,6 +175,8 @@ var GameHost = (function () {
             catch (e) { if (transfer && transfer.length) { try { win.postMessage({ mypc: 1, type: type, data: d === undefined ? null : d }, origin); } catch (e2) {} } }
         }
         // MyPC.net / MyPC.ai / MyPC.mic (js/launcher/bridges.js): web requests, AI services and the microphone, done by My PC
+        var storeId = id.replace(/^app-/, '');
+        var pushCtx = { appId: storeId, title: title(), hold: hold, release: release };
         var br = Bridges.attach({ appId: id, title: title(), config: game.remote.config || {}, send: send, hold: hold, release: release, state: function () { return state; } });
         function bleAllowed() { return id === 'hr-monitor' || !!(game.remote.config && game.remote.config.heartRate === true); }
         // heart-rate sensors over Bluetooth LE (js/core/hr-ble.js), only for apps allowed to use them (bleAllowed)
@@ -213,7 +215,8 @@ var GameHost = (function () {
                         data: Store.get('game_' + id + '_data', {}), app: { id: id },
                         config: game.remote.config || {},
                         mp: typeof Multiplayer !== 'undefined' && typeof Rooms !== 'undefined' && NetLink.supported() ? 1 : 0,   // MyPC.multiplayer is supported
-                        bridges: { net: 1, ai: 1, mic: Mic.supported() || Mic.phone() ? 1 : 0 }      // MyPC.net / ai / mic go through My PC (API 10)
+                        bridges: { net: 1, ai: 1, mic: Mic.supported() || Mic.phone() ? 1 : 0 },     // MyPC.net / ai / mic go through My PC (API 10)
+                        notify: 1, launch: Push.takeLaunch(id)        // MyPC.notify, MyPC.launch: push notifications (API 12, js/launcher/push.js)
                     });
                     padsSent = ''; padsChanged();
                     Input.onPadRaw(rawPad); Input.offDevices(padsChanged); Input.onDevices(padsChanged);
@@ -246,7 +249,17 @@ var GameHost = (function () {
                     if (d.settings) TouchPad.settings(); else TouchPad.own(!!d.own, d.cfg);
                     break;
                 case 'progress': if (state === 'loading') { said.progress = +d.p || 0; setProgress(+d.p || 0); } break;
-                case 'ready': onLoaded(); break;
+                case 'ready':
+                    onLoaded();
+                    // an app with a push notification service: asks the player once (an account only), a moment after it starts
+                    if (game.remote.services && Push.state(storeId) === 'default') setTimeout(function () { if (win && state === 'running') Push.ask(pushCtx, function () {}); }, 1500);
+                    break;
+                case 'notify':
+                    // MyPC.notify.request() / status(): { rid, op } -> { rid, result: 'granted' | 'denied' | 'default' | 'no-account' }
+                    if (e.origin !== origin || typeof d.rid !== 'number') break;
+                    if (d.op === 'request') Push.ask(pushCtx, function (s) { send('notify', { rid: d.rid, result: s }); });
+                    else send('notify', { rid: d.rid, result: Push.state(storeId) });
+                    break;
                 case 'failed': fail('app: ' + d.reason); break;
                 case 'err':                                                    // MyPC.report and the app's uncaught errors (sent by the SDK, even before MyPC.init)
                     if (e.origin !== origin) break;
@@ -283,7 +296,7 @@ var GameHost = (function () {
             start: function () { send('start'); },
             pause: function () { br.pause(); send('pause'); },
             resume: function () { send('resume'); },
-            destroy: function () { br.destroy(); Input.onPadRaw(null); Input.offDevices(padsChanged); ble.destroy(); if (mp) { mp.destroy(); mp = null; } send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
+            destroy: function () { pushCtx.dead = true; br.destroy(); Input.onPadRaw(null); Input.offDevices(padsChanged); ble.destroy(); if (mp) { mp.destroy(); mp = null; } send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
             menuItems: function () { return items; },
             onMenu: function (mid) { send('menu', { id: String(mid).slice(4) }); },
             onAction: function (a, pressed, repeat, dev) { send('input', { action: a, pressed: pressed, repeat: repeat, dev: dev }); }

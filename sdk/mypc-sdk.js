@@ -23,6 +23,7 @@
  *   Every controller button, trigger and stick: MyPC.gamepad (API 9). Game controllers come first: use all of them.
  * Web requests without CORS limits, AI services and the microphone: MyPC.net, MyPC.ai, MyPC.mic (API 10).
  * Errors (uncaught, failed files, MyPC.fail, MyPC.report(error, data)) are saved by My PC for the App Store Manager (API 11).
+ * Push notifications: MyPC.notify.request() / status(), MyPC.launch (the notification that opened the app) (API 12).
  *   'menu' = gamepad Start or Select pressed alone; only sent to apps that init with { ownMenu: true }.
  *   Only the TV remote's Back, or holding Start + Select together 1 s, opens My PC's menu; Esc / Backspace are 'cancel'.
  * Written in ES5 so it loads anywhere; My PC itself supports Samsung TVs from 2024 (Tizen 8+).
@@ -30,7 +31,7 @@
 var MyPC = (function () {
     'use strict';
 
-    var VERSION = 1, API = 11, HELLO_WAIT = 1200;
+    var VERSION = 1, API = 12, HELLO_WAIT = 1200;
     var handlers = {}, info = null, data = {}, started = false, destroyed = false, isReady = false;
     var hosted = false, hostWin = null, hostOrigin = '*', helloTimer = 0;
     var down = {};                       // action -> number of keys / buttons holding it
@@ -124,8 +125,9 @@ var MyPC = (function () {
                 hosted = true; hostWin = e.source; hostOrigin = e.origin && e.origin !== 'null' ? e.origin : '*';
                 data = d.data || {};
                 pub.app_config = plainObject(d.config) ? d.config : {};
+                pub.launch = plainObject(d.launch) ? d.launch : null;
                 info = { standalone: false, lang: d.lang || 'en', rtl: !!d.rtl, volume: d.volume || { music: 0.7, sfx: 0.8 },
-                         profile: d.profile || { id: 'p1', name: '' }, quality: d.quality || { tier: 'mid' }, app: d.app || {}, bridges: d.bridges || null };
+                         profile: d.profile || { id: 'p1', name: '' }, quality: d.quality || { tier: 'mid' }, app: d.app || {}, bridges: d.bridges || null, notify: d.notify || 0 };
                 if (info.rtl) document.documentElement.setAttribute('dir', 'rtl');
                 document.documentElement.setAttribute('lang', info.lang);
                 multiplayer._enable(d.mp === 1 ? 'shell' : 'none');       // false on an older My PC: apps hide the multiplayer feature
@@ -151,6 +153,7 @@ var MyPC = (function () {
             case 'net': net._message(d); break;
             case 'ai': ai._message(d); break;
             case 'mic': mic._message(d); break;
+            case 'notify': notify._message(d); break;
         }
     }
 
@@ -1563,9 +1566,28 @@ var MyPC = (function () {
         };
     })();
 
+    /* ---------------- push notifications: MyPC.notify (API 12) ----------------
+     * The notifications themselves come from the app's service (a .js file listed in mypc-app.json, run by the App Store
+     * Manager: sdk/GUIDE.md "Push notifications"). In the app: ask the player once, at a good moment.
+     *   MyPC.notify.request() -> Promise 'granted' | 'denied' | 'no-account' | 'unavailable'   (asks when not decided yet)
+     *   MyPC.notify.status()  -> Promise, the same values without asking ('default' = not asked yet) */
+    var notify = (function () {
+        var ch = channel('notify');
+        function go(op) {
+            if (!info) return Promise.reject(bridgeError({ code: 'not-ready', message: 'Call MyPC.init() and wait for onInit first.' }));
+            if (!viaShell() || !info.notify) return Promise.resolve('unavailable');
+            return ch.call(op, {});
+        }
+        return {
+            request: function () { return go('request'); },
+            status: function () { return go('status'); },
+            _message: function (d) { ch._message(d); }
+        };
+    })();
+
     var pub = {
         version: VERSION,
-        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report) (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,
@@ -1574,6 +1596,9 @@ var MyPC = (function () {
         net: net,
         ai: ai,
         mic: mic,
+        notify: notify,
+        // The notification that opened the app ({ link, title, text, at }) or null; read it in onInit
+        launch: null,
         // The app's settings object, set in the installer and read before the app opens. Read it in
         // onInit (or later). Always an object ({} when none). Standalone, test it with ?app_config={"a":1}.
         app_config: {},

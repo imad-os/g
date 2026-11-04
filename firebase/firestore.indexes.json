@@ -23,6 +23,7 @@
       { "order": "DESCENDING", "queryScope": "COLLECTION" } ] },
     { "collectionGroup": "reqs", "fieldPath": "exp", "ttl": true, "indexes": [
       { "order": "ASCENDING", "queryScope": "COLLECTION" } ] },
-    { "collectionGroup": "errors", "fieldPath": "exp", "ttl": true, "indexes": [] }
+    { "collectionGroup": "errors", "fieldPath": "exp", "ttl": true, "indexes": [] },
+    { "collectionGroup": "items", "fieldPath": "exp", "ttl": true, "indexes": [] }
   ]
 }

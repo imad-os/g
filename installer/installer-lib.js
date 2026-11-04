@@ -92,6 +92,12 @@
         // optional touch controls: false = the app draws its own, or the pad's buttons / catalog / scale
         var touch = m.touch === undefined ? undefined : parseTouch(m.touch);
         if (touch !== undefined) app.touch = touch;
+        // optional push notification services (installer/services-lib.js, sdk/GUIDE.md "Push notifications")
+        if (m.services !== undefined) {
+            var SL = typeof ServicesLib !== 'undefined' ? ServicesLib : typeof require === 'function' ? require('./services-lib.js') : null;
+            var sv = SL.parseServices(m.services, base);
+            if (sv.length) app.services = sv;
+        }
         return app;
     }
 
@@ -114,7 +120,7 @@
     function status(installed, app) {
         for (var i = 0; i < (installed || []).length; i++) {
             var a = installed[i];
-            if (a.id === app.id || a.url === app.url) return a.version === app.version && a.entry === app.entry && a.name === app.name && a.icon === app.icon ? 'installed' : 'update';
+            if (a.id === app.id || a.url === app.url) return a.version === app.version && a.entry === app.entry && a.name === app.name && a.icon === app.icon && JSON.stringify(a.services || []) === JSON.stringify(app.services || []) ? 'installed' : 'update';
         }
         return 'new';
     }

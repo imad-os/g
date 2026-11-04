@@ -1,6 +1,6 @@
 {
-  "build": 90,
-  "version": "2.22.0",
+  "build": 91,
+  "version": "2.23.0",
   "shell": 1,
   "css": [
     "css/launcher.css",
@@ -42,6 +42,7 @@
     "js/core/focus.js",
     "js/launcher/icons.js",
     "js/launcher/notify.js",
+    "js/launcher/push.js",
     "js/launcher/keyboard.js",
     "js/launcher/themes.js",
     "js/launcher/desktop.js",

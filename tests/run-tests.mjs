@@ -197,7 +197,8 @@ async function fakeFirestore(ctx, db) {
         }
         // rooms: any depth (rooms/<id>/reqs/<id>), runQuery, updateMask, currentDocument.exists
         const segs = p.split('/').filter(Boolean);
-        if (segs[0] === 'rooms' || p === ':runQuery') {
+        if (segs[0] === 'rooms' || segs[0] === 'inbox' || segs[0] === 'subs' || p === ':runQuery') {
+            if (segs[0] === 'inbox' || segs[0] === 'subs') { db.pushAuth = db.pushAuth || []; db.pushAuth.push(method + ' ' + p + ' ' + (req.headers()['authorization'] || '')); }
             const last = segs[segs.length - 1];
             if (last.endsWith(':runQuery')) {
                 db.queries = db.queries || [];
@@ -1037,8 +1038,8 @@ async function main() {
         check(await page.evaluate(() => Win.current() === null && !Mic.active()), 'Memo closes with the microphone off');
         // the Control Panel (was Settings) opens on a grid of categories
         await page.evaluate(() => Win.open('settings'));
-        check(await page.evaluate(() => document.querySelectorAll('.cp-tile').length === 12 && document.getElementById('win-title').textContent === 'Control Panel' &&
-            document.activeElement.getAttribute('data-page') === 'system' && document.querySelector('.set-nav').hidden), 'the Control Panel opens on a grid of 12 categories, focus on the first');
+        check(await page.evaluate(() => document.querySelectorAll('.cp-tile').length === 13 && document.getElementById('win-title').textContent === 'Control Panel' &&
+            document.activeElement.getAttribute('data-page') === 'system' && document.querySelector('.set-nav').hidden), 'the Control Panel opens on a grid of 13 categories, focus on the first');
         await key('ArrowRight', 'Enter');
         check(await page.evaluate(() => !document.querySelector('.cp-home') .offsetParent && document.querySelector('.set-title').textContent === 'Personalization' &&
             document.activeElement.getAttribute('data-theme') === 'win11'), 'OK on a card opens its page, focus on its first row (the theme)');
@@ -1362,9 +1363,9 @@ async function main() {
         check(rows.some((t) => /Star Catcher.*Not in store/.test(t)) && rows.some((t) => /Old Game.*In store/.test(t)) && rows.some((t) => /g_broken.*not a My PC app/.test(t)),
             'each app shows its status: not in the store, in the store, or not a My PC app');
         check(/App Store Manager/.test(await page.title()) && /App Store Manager/.test(await page.textContent('.brand')), 'the installer is now the App Store Manager');
-        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,AI services,Settings,Devices,World records,Errors'
+        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,AI services,Services,Settings,Devices,World records,Errors'
             && document.querySelector('.nav a.on').dataset.page === 'add' && !document.querySelector('[data-view="add"]').hidden && document.querySelector('[data-view="overview"]').hidden),
-            'a menu with one page each: Overview, Apps, Add apps, AI services, Settings, Devices, World records, Errors');
+            'a menu with one page each: Overview, Apps, Add apps, AI services, Services, Settings, Devices, World records, Errors');
         check(await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].find((r) => /Old Game/.test(r.textContent)).querySelector('input').disabled), 'installed apps cannot be selected again');
         await page.check('#sel-all');
         await page.click('#btn-install-sel');
@@ -1444,6 +1445,7 @@ async function main() {
         await page.fill('#cfg-text', '{ "speed": 9 }'); await page.click('#cfg-save');
         await page.waitForFunction(() => window.__db.apps['star-catcher'].config.speed === 9);
         starVersion = '1.0.1';
+        await page.evaluate(() => { window.__db['subs/star-catcher/users'] = { sara: { at: 1, app: 'star-catcher' } }; });
         await go('#add');
         await page.click('#btn-scan');
         await page.waitForFunction(() => /Update available/.test(document.getElementById('catalog').textContent));
@@ -1451,6 +1453,10 @@ async function main() {
         await page.waitForFunction(() => window.__db.apps['star-catcher'].version === '1.0.1');
         const upd = await page.evaluate(() => window.__db.apps['star-catcher']);
         check(upd.config.speed === 9 && upd.order === 1, 'updating an app keeps its config and its position');
+        await page.waitForFunction(() => Object.keys(window.__db['inbox/sara/items'] || {}).length === 1, null, { timeout: 4000 }).catch(() => {});
+        const upn = await page.evaluate(() => Object.values(window.__db['inbox/sara/items'] || {}));
+        check(upn.length === 1 && upn[0].title === 'Star Catcher was updated' && /1\.0\.1/.test(upn[0].text) && upn[0].app === 'star-catcher' && upn[0].link === 'app',
+            'App updates (built in): a new version notifies the players who allowed the app (' + JSON.stringify(upn) + ')');
         check(await page.evaluate(() => !!document.getElementById('url') && !!document.getElementById('btn-fetch')), 'the manual address section is still there for apps outside imad-os');
         // AI services: set once here for every My PC (Firestore settings/ai)
         await go('#ai');
@@ -1496,10 +1502,53 @@ async function main() {
         check(gm.wallpapers.length === 2 && gm.wallpapers[0].title === 'Golden dunes' && gm.wallpapers[0].thumb === 'https://pics.example/dunes-small.png' &&
             gm.wallpapers[1].title === 'Blue lake at night' && gm.wallpaper === 'u:https://pics.example/dunes.png' && gm.updatedBy === 'owner@example.com' && /Saved/.test(await page.textContent('#gs-msg')),
             'Save writes the backgrounds in their order (empty titles filled from the address) and the one of new profiles into settings/mypc');
+        // Services: push notification services of the store apps (installer/services.js)
+        let svcCode = "export default async function (ctx) { return { notifications: [{ username: '*', title: 'Goal! Raja', message: 'origin ' + self.origin + ' ' + (() => { try { indexedDB.open('x'); return 'idb-open'; } catch (e) { return 'idb-blocked'; } })() + ' ' + (ctx.state ? ctx.state.n : 0), link: 'app?match=7' }, { username: 'stranger', title: 'No' }], state: { n: ((ctx.state && ctx.state.n) || 0) + 1 } }; }";
+        await page.route('https://imad-os.github.io/g_soccer/services/notify.js', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: svcCode }));
+        await page.evaluate(() => {
+            window.__db.apps.soccer = { id: 'soccer', name: 'Soccer Live', url: 'https://imad-os.github.io/g_soccer/', entry: 'https://imad-os.github.io/g_soccer/index.html', icon: '', type: 'app', version: '1.0.0', enabled: true, order: 5,
+                services: [{ id: 'goals', file: 'https://imad-os.github.io/g_soccer/services/notify.js', every: 5, title: 'Goal alerts' }] };
+            window.__db['subs/soccer/users'] = { imad12: { at: 1, app: 'soccer' }, 'sara.k': { at: 2, app: 'soccer' } };
+        });
+        await page.evaluate(() => document.getElementById('btn-reload').click());
+        await go('#services');
+        await page.waitForFunction(() => /Soccer Live/.test(document.getElementById('sv-list').textContent), null, { timeout: 5000 });
+        const svRow = 'tr[data-k="soccer__goals"]';
+        check(/Goal alerts/.test(await page.textContent(svRow)) && /Waiting for approval/.test(await page.textContent(svRow)) && /\b2\b/.test(await page.textContent(svRow + ' td.num')) &&
+            await page.evaluate(() => document.querySelector('tr[data-k="soccer__goals"] button[data-act="now"]').disabled) && /App updates/.test(await page.textContent('#sv-list')),
+            'Services lists an app\'s service waiting for approval, how many players allowed the app, and the built-in App updates');
+        check(/Services run in this tab/.test(await page.textContent('#sv-runner')) && await page.evaluate(() => !!window.__db.services._runner), 'this tab holds the runner lease');
+        await page.click(svRow + ' button[data-act="review"]');
+        await page.waitForFunction(() => !document.getElementById('sv-modal').hidden);
+        check(/Goal! Raja/.test(await page.textContent('#sv-mbody')) && /SHA-256 [0-9a-f]{64}/.test(await page.textContent('#sv-mbody')), 'Review shows the code and its SHA-256 before approval');
+        await page.click('#sv-approve');
+        await page.waitForFunction(() => window.__db.services.soccer__goals && window.__db.services.soccer__goals.hash);
+        await page.waitForFunction(() => document.querySelector('tr[data-k="soccer__goals"] .tag').textContent === 'On', null, { timeout: 3000 }).catch(() => {});
+        check(await page.evaluate(() => window.__db.services.soccer__goals.enabled === true && window.__db.services.soccer__goals.every === 5) && await page.textContent(svRow + ' .tag') === 'On', 'Approve turns it on, every 5 minutes');
+        await page.click(svRow + ' button[data-act="test"]');
+        await page.waitForFunction(() => /would be sent/.test(document.getElementById('sv-mbody').textContent), null, { timeout: 8000 });
+        const tb = await page.textContent('#sv-mbody');
+        check(/2 notification\(s\) would be sent, 1 dropped/.test(tb) && /Nothing was sent/.test(tb) && /did not allow/.test(tb) && !(await page.evaluate(() => window.__db['inbox/imad12/items'])),
+            'Test runs it and shows the rows (the user who did not allow the app is dropped), nothing is sent: ' + tb.slice(0, 160));
+        await page.click('#sv-close');
+        await page.click(svRow + ' button[data-act="now"]');
+        await page.waitForFunction(() => window.__db['inbox/imad12/items'] && window.__db.services.soccer__goals.lastRun, null, { timeout: 8000 });
+        const inb = await page.evaluate(() => ({ a: Object.values(window.__db['inbox/imad12/items']), b: Object.values(window.__db['inbox/sara.k/items'] || {}), s: window.__db['inbox/stranger/items'], d: window.__db.services.soccer__goals }));
+        check(inb.a.length === 1 && inb.b.length === 1 && !inb.s && inb.a[0].title === 'Goal! Raja' && inb.a[0].name === 'Soccer Live' && inb.a[0].link === 'app?match=7' && inb.a[0].exp instanceof Object,
+            'Run now writes one inbox item per opted-in player, none for the others');
+        check(/^origin null idb-blocked 0$/.test(inb.a[0].text), 'the service runs in an opaque origin with no access to the page\'s storage (' + inb.a[0].text + ')');
+        check(inb.d.lastSent === 2 && inb.d.lastDropped === 1 && inb.d.state === '{"n":1}' && inb.d.log.length === 1 && /2 sent, 1 dropped/.test(await page.textContent(svRow)), 'the run is logged and its state saved for the next run');
+        await page.evaluate(() => { window.__db.services.soccer__goals.lastRun = Date.now() - 6 * 60000; });
+        await page.evaluate(() => { location.hash = '#services'; });
+        svcCode = svcCode.replace('Goal! Raja', 'Changed');
+        await page.click(svRow + ' button[data-act="now"]');
+        await page.waitForFunction(() => /approve the new code/.test(document.querySelector('tr[data-k="soccer__goals"]').textContent), null, { timeout: 8000 });
+        check(/Code changed: approve again/.test(await page.textContent(svRow)) && await page.evaluate(() => Object.keys(window.__db['inbox/imad12/items']).length === 1),
+            'a changed file is not run: it waits for a new approval');
         // phone sized: a top bar with the tabs, nothing wider than the screen
         await page.setViewportSize({ width: 390, height: 844 });
         let wide = [];
-        for (const h of ['#overview', '#apps', '#add', '#ai', '#settings', '#devices', '#records', '#errors']) {
+        for (const h of ['#overview', '#apps', '#add', '#ai', '#services', '#settings', '#devices', '#records', '#errors']) {
             await go(h);
             if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)) wide.push(h);
         }
@@ -2653,7 +2702,7 @@ async function main() {
         for (const t of [{ buttons: [{ label: 'ABCD', action: 'ok' }] }, { buttons: [{ label: 'A', action: 'jump' }] }, { catalog: Array.from({ length: 9 }, (_, i) => ({ label: 'b', action: 'ok' })) }, { scale: { stick: 5 } }, 'yes']) { try { lib.toApp(mf(t), base0, 0); bad.push('accepted ' + JSON.stringify(t)); } catch (e) { /* refused: good */ } }
         check(bad.length === 0, 'the App Store Manager refuses a bad "touch" (label > 3 chars, unknown action, > 8 entries, bad scale)' + bad.join('; '));
         check(lib.toApp(mf(false), base0, 0).touch === false && lib.toApp(mf({ buttons: [{ label: 'A', action: 'ok' }] }), base0, 0).touch.buttons.length === 1 && !('touch' in lib.toApp(mf(undefined), base0, 0)), '"touch": false and { buttons } are stored in the app document; nothing is stored by default');
-        check(/'touch'\]\)/.test(fs.readFileSync(path.join(ROOT, 'firebase/firestore.rules'), 'utf8')) && /d\.touch is map/.test(fs.readFileSync(path.join(ROOT, 'firebase/firestore.rules'), 'utf8')), 'the Firestore rules accept the "touch" field');
+        check(/'touch'(, 'services')?\]\)/.test(fs.readFileSync(path.join(ROOT, 'firebase/firestore.rules'), 'utf8')) && /d\.touch is map/.test(fs.readFileSync(path.join(ROOT, 'firebase/firestore.rules'), 'utf8')), 'the Firestore rules accept the "touch" field');
         const norm = (t) => t.replace('window.VirtualPad = (function', 'var VirtualPad = (function').split('\n').map((l) => l.trim()).join('\n').trim();
         const canon = norm(fs.readFileSync(path.join(ROOT, 'sdk/pad/virtual-pad.js'), 'utf8'));
         const shellCopy = fs.readFileSync(path.join(ROOT, 'js/core/virtual-pad.js'), 'utf8');
@@ -3656,6 +3705,9 @@ async function main() {
         }
         let frame = await openApp();
         check(await frame.evaluate(() => MyPC.apiLevel >= 10 && MyPC.info().bridges.net === 1 && MyPC.info().bridges.ai === 1), 'the app learns that My PC does web requests, AI and the microphone for it (API 10)');
+        const nst = await frame.evaluate(() => Promise.all([MyPC.notify.status(), MyPC.notify.request()]).then((a) => a.concat([MyPC.apiLevel, MyPC.launch, MyPC.info().notify])));
+        check(nst[0] === 'no-account' && nst[1] === 'no-account' && nst[2] >= 12 && nst[3] === null && nst[4] === 1 && !(await page.evaluate(() => App.dialogOpen())),
+            'MyPC.notify (API 12): a profile without an account cannot get notifications, nothing is asked; MyPC.launch is null (' + JSON.stringify(nst) + ')');
         // MyPC.net
         const r1 = await frame.evaluate(() => MyPC.net.fetch('https://api.nocors.test/items', { method: 'POST', headers: { 'X-Test': 'abc', Cookie: 'no' }, json: { n: 1 }, responseType: 'json' }).then((r) => ({ status: r.status, body: r.body, json: r.json(), h: r.headers['x-reply'] })));
         check(r1.status === 201 && r1.body.hello === 'world' && r1.json.hello === 'world' && r1.h === 'yes' && seen.net.method === 'POST' && seen.net.header === 'abc' && seen.net.body === '{"n":1}',
@@ -3815,7 +3867,7 @@ async function main() {
         const loop = by('error', /loop error/);
         check(loop && loop.n === 5 && reps.filter((r) => /loop error/.test(r.msg)).length === 1, 'the same error 5 times is one report with n = 5 (' + (loop && loop.n) + ')');
         const one = by('error', /boom/) || {};
-        check(one.appv === '2.0.1' && one.sdk === 11 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
+        check(one.appv === '2.0.1' && one.sdk === 12 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
             'each report has the app version, SDK level, TV id and model, My PC version and build, language, place, address, time and a 30-day expiry (' + JSON.stringify(one) + ')');
         const keys = new Set(reps.flatMap((r) => Object.keys(r)));
         const allowed = ['app', 'kind', 'msg', 'stack', 'src', 'stage', 'appv', 'sdk', 'n', 'at', 'exp', 'tv', 'model', 'ver', 'build', 'lang', 'user', 'where', 'ua', 'url'];
@@ -3950,6 +4002,55 @@ async function main() {
         await page.evaluate(() => new Promise((r) => GlobalSettings.sync(() => { Desktop.paintWallpaper(); r(); })));
         check(await page.evaluate(() => Desktop.wallpaper() === 'u:https://pics.example/dunes.png'), 'a picture taken out in the App Store Manager falls back to the background of new profiles');
         check(await page.evaluate(() => !!localStorage.getItem('arc_dev_global') && !('arc_dev_global' in Backup.snapshot())), 'the copy of the settings is not in the TV backup');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('41. push notifications on the TV: inbox of the player account, toasts, Control Panel > Notifications, opt-in');
+    {
+        const now = Date.now();
+        const db = { apps: { soccer: { id: 'soccer', name: 'Soccer Live', url: 'https://soccer.example/', entry: 'https://soccer.example/index.html', icon: 'https://soccer.example/icon.png', type: 'app', version: '1.0.0', enabled: true, order: 0,
+            services: [{ id: 'goals', file: 'https://soccer.example/services/notify.js', every: 5, title: 'Goal alerts' }] } } };
+        const page = await newPage(browser, base, db);
+        await page.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'soccer', at: 1 }])); });
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon');
+        check(await page.evaluate(() => Push.state('soccer')) === 'no-account', 'a local profile gets no notifications (no account)');
+        await page.evaluate(() => new Promise((r) => Accounts.signUp('imad12', 'Secret#1', Profiles.current().id, r)));
+        check(await page.evaluate(() => Profiles.current().user === 'imad12' && Push.state('soccer') === 'default'), 'once it is an account, nothing is decided yet');
+        // the player allows the app: subs/soccer/users/imad12, with the account's token
+        await page.evaluate(() => new Promise((r) => Push.set('soccer', true, r)));
+        check(db['subs/soccer/users'] && db['subs/soccer/users'].imad12 && db['subs/soccer/users'].imad12.app === 'soccer' && await page.evaluate(() => Push.state('soccer')) === 'granted' &&
+            db.pushAuth.some((x) => /^PATCH \/subs\/soccer\/users\/imad12 Bearer id-/.test(x)), 'Allow writes the opt-in document with the player\'s token');
+        // the Manager left two notifications in the inbox
+        db['inbox/imad12/items'] = {
+            'soccer-a-0': { app: 'soccer', name: 'Soccer Live', title: 'Goal! Raja', text: "12' 1-0", link: 'https://news.example/raja', at: now - 60000, exp: new Date(now + 1e9) },
+            'soccer-a-1': { app: 'soccer', name: 'Soccer Live', title: 'Kick-off', text: 'Raja - Wydad', link: 'app?match=7', at: now - 120000, exp: new Date(now + 1e9) } };
+        const n1 = await page.evaluate(() => new Promise((r) => Push.check((e, n) => r(e || n))));
+        await page.waitForFunction(() => document.querySelectorAll('#toast .nt').length >= 2, null, { timeout: 3000 }).catch(() => {});
+        const cards = await page.evaluate(() => [...document.querySelectorAll('#toast .nt')].map((c) => c.textContent + '|' + ((c.querySelector('img') || {}).src || '')));
+        check(n1 === 2 && cards.some((c) => /Goal! Raja.*Soccer Live · 12' 1-0\|https:\/\/soccer\.example\/icon\.png/.test(c)) && cards.some((c) => /Kick-off/.test(c)),
+            'new notifications show as cards with the app name, the message and the app\'s icon: ' + JSON.stringify(cards));
+        check(db.pushAuth.some((x) => /^POST \/inbox\/imad12:runQuery Bearer id-/.test(x)) && await page.evaluate(() => Push.list().length === 2 && Push.unread() === 2 && Store.get('notif_seen') > 0),
+            'the inbox is read with the account\'s token; both are kept, unread');
+        check(await page.evaluate(() => new Promise((r) => Push.check((e, n) => r(n)))) === 0, 'reading again brings nothing twice');
+        // Control Panel > Notifications
+        await page.evaluate(() => Win.open('settings', 'notifications'));
+        await page.waitForSelector('.set-main .set-row');
+        const cp = await page.textContent('.set-main');
+        check(/Notifications/.test(cp) && /Goal! Raja/.test(cp) && /Kick-off/.test(cp) && /Clear all/.test(cp) && /Apps that may send notifications/.test(cp) && /Soccer Live/.test(cp),
+            'Control Panel > Notifications lists them and the apps that may send them');
+        // the app's switch blocks it again (the opt-in document is deleted)
+        await page.evaluate(() => [...document.querySelectorAll('.set-main .set-row')].find((b) => /^Soccer Live/.test(b.textContent.trim())).click());
+        await page.waitForFunction(() => Push.state('soccer') === 'denied', null, { timeout: 4000 }).catch(() => {});
+        check(await page.evaluate(() => Push.state('soccer')) === 'denied', 'the app\'s switch in Control Panel blocks it again');
+        check(!(db['subs/soccer/users'] || {}).imad12, 'the opt-in document is gone');
+        // OK on a notification with an https link opens the Browser on it and marks it read
+        await page.evaluate(() => [...document.querySelectorAll('.set-main .set-row')].find((b) => /Goal! Raja/.test(b.textContent)).click());
+        await page.waitForFunction(() => Win.current() === 'browser', null, { timeout: 4000 }).catch(() => {});
+        check(await page.evaluate(() => Win.current() === 'browser' && Push.unread() === 1), 'a notification with an https link opens it in the Browser and is read');
+        await page.evaluate(() => Win.close());
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }

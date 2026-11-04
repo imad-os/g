@@ -93,6 +93,7 @@ The site **MUST** be served over **https** and must allow other sites to read `m
 | `version` | your version string, e.g. `"1.2.0"`; bump it when you publish |
 | `scores` | games only: `false` if the game has no points (no top-10 table) |
 | `config` | optional default settings, a JSON object (see "App config" below); 8000 characters at most |
+| `services` | optional push notification services, up to 3: `[{ "id": "goals", "file": "services/notify.js", "every": 5, "title": "Goal alerts" }]` (section 16) |
 
 ## 4. The SDK API
 
@@ -150,7 +151,7 @@ still slow down a hidden page by itself. Standalone, outside My PC, the SDK does
 itself. Your app only sees `info.profile` and keeps progress with `MyPC.save` / `MyPC.load`, which are already per
 profile and backed up. **Never** build your own login, accounts, cloud saves, name entry for scores, Firebase or backend.
 
-Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports) and hide the feature
+Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch) and hide the feature
 when it is missing.
 
 ### App config: `MyPC.app_config`
@@ -896,3 +897,113 @@ Protocol (for reference): app → My PC `{ mypc: 1, type: 'err', data: { kind, m
 before `hello` (to `location.ancestorOrigins[0]`); `hello` carries `sdkApi`. My PC side: `js/core/reports.js` (Firestore
 `errors`, rules in `firebase/firestore.rules`), `js/launcher/game-host.js`; dashboard: `installer/index.html#errors`.
 
+## 16. Push notifications: services, `MyPC.notify`, `MyPC.launch` (API level 12)
+
+Your app can send notifications to its players (a goal in a match, a new level, a reply) even when the app is closed. You
+write a small **service**: a JavaScript file on your site that the App Store Manager runs on a schedule (every 1, 5, 10 or
+30 minutes). It returns rows; each row becomes a notification on every TV, phone and computer where that player is signed
+in. A player who is not signed in gets it at the next sign-in (kept 30 days).
+
+How it fits together:
+1. You list the service in `mypc-app.json` and put the file on your site.
+2. The owner adds or updates the app in the App Store Manager; its **Services** page shows your service. The owner reads
+   the code, approves it and picks the interval. **Any change to the file pauses it until the owner approves it again.**
+3. Players allow your app (My PC asks once, or your app calls `MyPC.notify.request()`). Only those players can get your
+   notifications: rows for anyone else are dropped.
+4. Each run, your function gets the usernames who allowed it and returns the rows to send.
+
+Only **player accounts** get notifications (a profile with a username, see Control Panel > Accounts); a local profile
+without an account gets none. Players change their choice in Control Panel > Notifications.
+
+### `mypc-app.json`
+
+```json
+"services": [
+  { "id": "goals", "file": "services/notify.js", "every": 5, "title": "Goal alerts" }
+]
+```
+
+| Field | Rules |
+|---|---|
+| `id` | **MUST**, 1–20 characters `a-z 0-9 -`, unique in the app, never `updates` |
+| `file` | **MUST**, the service's file, relative to the manifest (or an `https://` address) |
+| `every` | minutes between runs: `1`, `5`, `10` or `30` (default `5`); the owner can change it |
+| `title` | what the owner sees in the Services page (40 characters) |
+
+At most 3 services per app. **App updates** are built in: when the owner publishes a new `version` of your app, the
+players who allowed it get "<app> was updated" (no code needed).
+
+### The service file
+
+An ES module whose **default export** is a function (it can be `async`). It runs in a Web Worker with no page, no DOM and
+no `MyPC` object, and is stopped after **20 seconds**.
+
+```js
+// services/notify.js
+export default async function (ctx) {
+  // ctx.subscribers  ['imad12', 'sara.k']: usernames that allowed notifications from this app (lowercase)
+  // ctx.state        what your last run returned as state (null the first time); up to 10 000 characters of JSON
+  // ctx.config       the app's config (MyPC.app_config, set in the App Store Manager)
+  // ctx.now          this run's time (ms); ctx.lastRun: the previous run (ms) or 0
+  // ctx.app / ctx.service   your app id and service id
+  // ctx.fetch        the normal fetch (the API must allow CORS: Access-Control-Allow-Origin *)
+  const since = (ctx.state && ctx.state.last) || 0;
+  const r = await ctx.fetch('https://api.example.com/goals?after=' + since);
+  const goals = await r.json();
+  return {
+    notifications: goals.map((g) => ({
+      username: '*',                       // '*' = every subscriber, or one username
+      title: 'Goal! ' + g.team,            // MUST, 60 characters (longer is cut)
+      message: g.minute + "' " + g.score,  // 200 characters (longer is cut)
+      image: g.logo,                       // optional https:// picture (shown in the card)
+      link: 'app?match=' + g.id            // optional: 'app' or 'app?...' opens your app, or an https:// page
+    })),
+    state: { last: goals.length ? goals[0].id : since }   // given back as ctx.state next time
+  };
+}
+```
+
+Rules (the Services page enforces them; dropped rows are counted in its log):
+- Return `{ notifications: [...], state }` (or just the list). Return `{ notifications: [] }` when there is nothing new:
+  **use `state` to remember what you already sent**, or players get the same notification every run.
+- Rows for usernames that did not allow your app are dropped. `username: '*'` sends to every subscriber.
+- At most **100 notifications per run** and **20 per player per hour** for your app; the rest is dropped.
+- Title and message are plain text (no HTML). `image` must be `https://`; `link` must be `https://...`, `app` or `app?...`.
+- No `import` of other files (the service is one file). Keep it small and fast: it shares the owner's computer with every
+  other app's service. Never put secret keys in it: anyone can read the file on your site.
+- A run that throws or times out is logged; after 5 failed runs in a row the service is paused until the owner turns it
+  on again.
+- Test it yourself: the owner's **Test** button runs it once and shows the rows without sending anything.
+
+### In the app: `MyPC.notify` and `MyPC.launch`
+
+```js
+MyPC.init({
+  onInit: function () {
+    // the notification that opened the app (the player chose it), or null
+    if (MyPC.launch && /^app\?match=/.test(MyPC.launch.link)) openMatch(MyPC.launch.link.split('=')[1]);
+  }
+});
+// ask at a good moment (for example after the player follows a team); asks only once
+MyPC.notify.request().then(function (s) { /* 'granted' | 'denied' | 'no-account' | 'unavailable' */ });
+MyPC.notify.status().then(function (s) { /* the same without asking; 'default' = not asked yet */ });
+```
+
+- `MyPC.launch` is `{ link, title, text, at }` when the player opened your app from one of its notifications (the `link`
+  is your row's `link`, `'app?...'`), else `null`.
+- If your app has a service, My PC asks the player once, a moment after the app starts, when they have not decided yet.
+  `request()` asks the same question; after an answer it returns that answer without asking again.
+- `'unavailable'`: standalone (outside My PC) or an older My PC (`MyPC.apiLevel < 12`).
+
+### What the player sees
+
+A Windows style card rises in the bottom right corner with your title, the app name and message and your picture (or
+your app's icon), and slides down after 6 seconds; also on top of a game, without taking the focus. Control Panel >
+Notifications lists the last 50 (new ones marked) and opens a notification's link with OK. A TV checks for new ones at start,
+at sign-in, when My PC comes back to the front and every 2 minutes.
+
+Protocol (for reference): app → My PC `{ mypc: 1, type: 'notify', data: { rid, op: 'request' | 'status' } }`, answer
+`{ rid, result }`; `init` carries `notify: 1` and `launch`. Firestore: `subs/<app>/users/<username>` (the player's
+choice), `inbox/<username>/items/<id>` (one notification), `services/<app>__<service>` (owner only). My PC side:
+`js/launcher/push.js`, `js/launcher/game-host.js`; runner: `installer/services.js`, `installer/services-lib.js`. A complete small
+service: `sdk/example/services/notify.js`.

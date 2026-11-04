@@ -77,6 +77,15 @@
   'ok' | 'err' | 'warn' | 'info', image, id, timeout, onClick })`, `hide(id)`, `clear()`; `App.toast(text, opts)` wraps it). Windows style
   cards in `#toast` (bottom right, newest at the bottom, max 3): rise in, slide down on timeout; green = connected, red = disconnected /
   failed (role alert). Same `id` updates a card in place (`net`, `pad`, `ctrl1` / `ctrl2`). Reuse it for push notifications; never add another popup.
+- **Push notifications** (owner request 2026-11-04, plan doc https://claude.ai/artifact/SQK1PHrBMrFvkzJkHJcwT3): apps list `services`
+  in `mypc-app.json` (`[{ id, file, every: 1|5|10|30, title }]`, parsed by `installer/services-lib.js`, max 3); App Store Manager >
+  **Services** (`installer/services.js`) runs them ONLY while a Manager tab is open (lease `services/_runner`), each file in a `data:`
+  Worker (opaque origin: never a blob: or same-origin worker, it could read the admin's sign-in), 20 s max; the admin approves the
+  file's SHA-256 (a changed file pauses until approved again); rows `{ username | '*', title, message, image, link }` -> checked
+  (opted-in users only, 100 per run, 20 per user per hour) -> Firestore `inbox/<username>/items/<id>` (TTL `exp` 30 d). Opt-in
+  `subs/<app>/users/<username>` written with the player's token (rules match `request.auth.token.email`). Built in: "App updates" on a
+  new `version`. TV: `js/launcher/push.js` (player accounts only; polls every 2 min + start / resume, toasts via `Notify`, last 50 in
+  `notifs`, Control Panel > Notifications, permission once per app, `MyPC.notify` / `MyPC.launch`, API 12). Docs: GUIDE.md section 16.
 - `apps/store.js`: the App Store app (Home / Games / Apps / Library / Search, Install / Open / Uninstall).
 - **Settings of every My PC** (owner decision): App Store Manager > Settings writes Firestore `settings/mypc` (admins only, read by
   every TV): backgrounds (`wallpapers: [{ url, title, thumb }]`, an empty title is taken from the address) and the background of new

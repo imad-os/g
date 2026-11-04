@@ -442,6 +442,6 @@ var Accounts = (function () {
         signUp: signUp, signIn: signIn, check: check, changePassword: changePassword, forget: forget,
         pull: pull, upload: upload, start: start, isAccount: isAccount, signedIn: signedIn, asks: asks,
         unlocked: unlocked, unlock: unlock, validName: validName, clean: clean,
-        _sha256: sha256, _secrets: all
+        token: token, _sha256: sha256, _secrets: all
     };
 })();

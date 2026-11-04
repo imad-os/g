@@ -54,7 +54,7 @@ service cloud.firestore {
     function validApp(id, d) {
       return d.keys().hasAll(['id', 'name', 'url', 'entry', 'type', 'enabled', 'order'])
           && d.keys().hasOnly(['id', 'name', 'description', 'url', 'entry', 'icon', 'type', 'version', 'sdk',
-                               'scores', 'enabled', 'order', 'installedAt', 'installedBy', 'config', 'touch'])
+                               'scores', 'enabled', 'order', 'installedAt', 'installedBy', 'config', 'touch', 'services'])
           && d.id == id
           && d.name is string && d.name.size() > 0 && d.name.size() <= 40
           && (!('description' in d) || (d.description is string && d.description.size() <= 120))
@@ -69,7 +69,8 @@ service cloud.firestore {
           && (!('installedAt' in d) || d.installedAt is timestamp)
           && (!('installedBy' in d) || d.installedBy is string)
           && (!('config' in d) || d.config is map)
-          && (!('touch' in d) || (d.touch is bool && d.touch == false) || (d.touch is map && d.touch.size() <= 3));      // touch pad: false, or { buttons, catalog, scale }
+          && (!('touch' in d) || (d.touch is bool && d.touch == false) || (d.touch is map && d.touch.size() <= 3))      // touch pad: false, or { buttons, catalog, scale }
+          && (!('services' in d) || (d.services is list && d.services.size() <= 3));      // push notification services [{ id, file, every, title }]
     }
 
     // The App Store catalog, read by every TV (REST: .../documents/apps), written only by admins.
@@ -234,6 +235,39 @@ service cloud.firestore {
     match /players/{uid} {
       allow get, delete: if signedIn() && request.auth.uid == uid;
       allow create, update: if signedIn() && request.auth.uid == uid && validPlayer(request.resource.data);
+    }
+
+    // Push notifications (App Store Manager > Services, installer/services.js; TV side js/core/push.js; sdk/GUIDE.md).
+    // A player is the account <username>@players.mypc.app (js/core/accounts.js): their sign-in token carries that e-mail.
+    function player(username) {
+      return signedIn() && request.auth.token.email == username + '@players.mypc.app';
+    }
+    // the services' settings, approvals, state and the runner lease: admins only
+    match /services/{id} {
+      allow read, write: if isAdmin();
+    }
+    // opt-in: subs/<app>/users/<username> exists = this player allowed notifications from this app
+    match /subs/{appId}/users/{username} {
+      allow get, delete: if player(username) || isAdmin();
+      allow list: if isAdmin();
+      allow create, update: if player(username) && request.resource.data.keys().hasOnly(['at', 'app'])
+          && request.resource.data.at is int && request.resource.data.app == appId;
+    }
+    // the inbox: written by the Manager (admins), read and emptied by that player only. TTL policy on exp (SETUP.md).
+    function validItem(d) {
+      return d.keys().hasAll(['app', 'title', 'at', 'exp'])
+          && d.keys().hasOnly(['app', 'name', 'title', 'text', 'image', 'link', 'at', 'exp'])
+          && d.app is string && d.app.size() <= 40
+          && (!('name' in d) || (d.name is string && d.name.size() <= 40))
+          && d.title is string && d.title.size() > 0 && d.title.size() <= 60
+          && (!('text' in d) || (d.text is string && d.text.size() <= 200))
+          && (!('image' in d) || (d.image is string && d.image.size() <= 300 && d.image.matches('^https://.*')))
+          && (!('link' in d) || (d.link is string && d.link.size() <= 300))
+          && d.at is int && d.exp is timestamp;
+    }
+    match /inbox/{username}/items/{id} {
+      allow read, delete: if player(username) || isAdmin();
+      allow create: if isAdmin() && validItem(request.resource.data);
     }
 
     // Admin list: each admin can only check their own entry; managed in the console only.

@@ -191,3 +191,17 @@ My PC saves why an app could not open or start, and what an app threw (`js/core/
 
 Cost: nothing while apps work. A TV sends at most 8 reports per app per page and 60 per day, the same error only once
 (repeats are a count), batched in one request a few seconds after it happens.
+
+## 4c. Push notifications (`services`, `subs`, `inbox`): rules and TTL (once)
+Apps list notification services in their `mypc-app.json`; the App Store Manager's **Services** page runs them (only while a
+Manager tab is open somewhere) and writes one document per notification in `inbox/<username>/items`. Players allow an app in
+My PC (`subs/<app>/users/<username>`); My PC on their TV or phone reads their own inbox (`js/core/push.js`).
+
+1. Publish `firebase/firestore.rules` again (step 1): it adds `services` (admins only), `subs` and `inbox` (each player only
+   their own, matched by the sign-in e-mail `<username>@players.mypc.app`) and `services` in the `apps` documents.
+2. **TTL policy** so notifications go away by themselves after 30 days: collection group `items`, timestamp field `exp`.
+   (CLI: `gcloud firestore fields ttls update exp --collection-group=items --enable-ttl`.)
+3. No new index: the inbox query (`at` newer than the last one seen, newest first) uses the automatic single-field index.
+
+Cost: a signed-in My PC reads its inbox at start, at sign-in, when it comes back to the front and every 2 minutes (one read
+when nothing is new). Each notification is one write; the Manager reads each app's opt-in list once every 10 minutes.

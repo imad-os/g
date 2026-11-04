@@ -419,5 +419,37 @@ console.log('6. GlobalSettings (settings of every My PC)');
         'only https pictures are kept, once each, with a safe address; an empty title is filled');
     check(G.clean(null).wallpapers.length === 0 && G.clean({ wallpapers: 'x' }).wallpaper === '', 'a missing or broken document gives empty settings');
 }
+console.log('7. Push notification services (installer/services-lib.js)');
+{
+    const S = load('installer/services-lib.js', vm.createContext({ JSON, Array, String, Object, URL, Error, Math })).ServicesLib;
+    const sv = S.parseServices([{ id: 'Goals', file: 'services/notify.js', every: 10, title: 'Goal alerts' }, { id: 'news', file: 'https://cdn.x.com/n.js' }], 'https://me.github.io/soccer/');
+    check(sv.length === 2 && sv[0].id === 'goals' && sv[0].file === 'https://me.github.io/soccer/services/notify.js' && sv[0].every === 10 && sv[1].every === 5 && sv[1].title === 'news',
+        'services of mypc-app.json: ids lowercased, files made absolute, every 5 min by default');
+    const bad = (l) => { try { S.parseServices(l, 'https://me.github.io/a/'); return ''; } catch (e) { return e.message; } };
+    check(/every/.test(bad([{ id: 'a', file: 'a.js', every: 3 }])) && /updates/.test(bad([{ id: 'updates', file: 'a.js' }])) && /twice/.test(bad([{ id: 'a', file: 'a.js' }, { id: 'a', file: 'b.js' }])) &&
+        /https/.test(bad([{ id: 'a', file: 'http://x.com/a.js' }])) && /more than 3/.test(bad([1, 2, 3, 4].map((i) => ({ id: 'a' + i, file: 'a.js' })))) && /list/.test(bad({})),
+        'bad services are refused with a readable reason (interval, reserved id, duplicates, http, too many)');
+    check(S.due({}, 1e9) && !S.due({ every: 5, lastRun: 1e9 - 60000 }, 1e9) && S.due({ every: 5, lastRun: 1e9 - 300000 }, 1e9) && S.due({ every: 1, lastRun: 1e9 - 56000 }, 1e9),
+        'a run is due when its interval has passed (a few seconds early is fine)');
+    const now = 5e12, sent = {};
+    const r = S.checkRows({ notifications: [
+        { username: '*', title: 'Goal! Raja', message: '1-0', image: 'https://x.com/r.png', link: 'app?match=7' },
+        { username: 'Imad12', title: 'Only you', link: 'https://news.x.com/a' },
+        { username: 'stranger', title: 'Nope' }, { title: '' }, { username: 'imad12', title: 'Bad picture', image: 'http://x.com/a.png' },
+        { username: 'imad12', title: 'Bad link', link: 'javascript:alert(1)' }, 'junk'], state: { last: 7 } }, ['imad12', 'sara.k'], sent, now);
+    check(r.items.length === 3 && r.items.filter((x) => x.title === 'Goal! Raja').length === 2 && r.items.some((x) => x.user === 'imad12' && x.title === 'Only you') &&
+        r.dropped === 5 && r.why['user did not allow notifications'] === 1 && r.state === '{"last":7}' && !r.error,
+        'rows: "*" goes to every subscriber, others only to opted-in users; bad pictures, links and rows are dropped; state kept as JSON');
+    const many = { notifications: Array.from({ length: 30 }, (_, i) => ({ username: 'imad12', title: 'n' + i })) };
+    const r2 = S.checkRows(many, ['imad12'], {}, now), r3 = S.checkRows({ notifications: Array.from({ length: 150 }, (_, i) => ({ username: '*', title: 'x' + i })) }, Array.from({ length: 10 }, (_, i) => 'u' + i), {}, now);
+    check(r2.items.length === 20 && r2.dropped === 10 && r3.items.length === 100, 'limits: 20 per player per hour, 100 per run');
+    check(S.checkRows({ notifications: [{ username: 'a', title: 'x'.repeat(80), message: 'y'.repeat(300) }] }, ['a'], {}, now).items[0].title.length === 60 &&
+        S.checkRows('oops', ['a'], {}, now).error && S.checkRows([{ username: 'a', title: 'list' }], ['a'], {}, now).items.length === 1 &&
+        /bigger/.test(S.checkRows({ notifications: [], state: 'x'.repeat(20000) }, [], {}, now).error),
+        'long text is cut, a bare list works, a wrong return value or a huge state is reported');
+    const it = S.inboxItem(r.items[0], { id: 'soccer', name: 'Soccer Live' }, now, 'EXP');
+    check(it.app === 'soccer' && it.name === 'Soccer Live' && it.title === 'Goal! Raja' && it.link === 'app?match=7' && it.at === now && it.exp === 'EXP' && S.itemId('soccer', now, 3).indexOf('soccer-') === 0,
+        'an inbox document carries the app, its name, the text, the time and the expiry');
+}
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall unit checks passed');
 process.exit(failures ? 1 : 0);

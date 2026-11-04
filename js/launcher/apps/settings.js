@@ -21,6 +21,7 @@
         { id: 'gaming', icon: 'controller', label: 'sysGaming' },
         { id: 'ai', icon: 'globe', label: 'sysAi' },
         { id: 'privacy', icon: 'shield', label: 'sysPrivacy' },
+        { id: 'notifications', icon: 'bell', label: 'sysNotifs' },
         { id: 'about', icon: 'info', label: 'about' },
         { id: 'update', icon: 'reload', label: 'sysUpdate' }
     ];
@@ -42,6 +43,7 @@
         if (sub === 'phonectrl' && id === 'devices') { phoneRows(out); return out; }
         if (sub === 'motionmoves' && id === 'devices') { movesRows(out); return out; }
         if (id === 'ai') { aiRows(out); return out; }
+        if (id === 'notifications') { notifRows(out); return out; }
         if (sub === 'users' && id === 'accounts') { usersRows(out); return out; }
         if (sub === 'user' && id === 'accounts') { userRows(out); return out; }
         if (sub === 'padtest' && id === 'devices') {
@@ -191,6 +193,37 @@
         var why = { stale: 'updWhyStale', unreachable: 'updWhyUnreachable', bad: 'updWhyBad', forced: 'updWhyForced' }[inf.reason];
         if (why) out.push({ kind: 'info', label: t('updWhy'), value: t(why) });
         if (!inf.smart) out.push({ kind: 'text', value: t('updOldPackage') });
+    }
+
+    /* ---------- Notifications (js/launcher/push.js): the last ones received, and which apps may send them ---------- */
+
+    // the list changes after a check, a read or a switch (async): redraw it if it is still on screen
+    function notifRedraw() { setTimeout(function () { if (Win.current() === 'settings' && page === 'notifications' && main) rerender(); }, 0); }
+    function notifRows(out) {
+        var p = Profiles.current(), list = Push.list(), i;
+        if (!p.user) { out.push({ kind: 'text', value: t('notifNoAccount') }); return; }
+        out.push({ kind: 'action', label: t('notifCheck'), primary: true, run: function () {
+            Push.check(function (e, n) { App.toast(e ? t('notifOffline') : n ? t('notifNew').replace('%s', n) : t('notifChecked'), { kind: e ? 'err' : 'info' }); notifRedraw(); });
+        } });
+        if (!list.length) out.push({ kind: 'info', label: t('notifs'), value: t('notifNone') });
+        for (i = 0; i < list.length; i++) {
+            (function (it) {
+                var when = new Date(it.at);
+                out.push({ kind: 'action', label: (it.read ? '' : '\u25CF ') + it.title,
+                           desc: [it.name, it.text, Desktop.dateText(when, { day: 'numeric', month: 'short' }) + ' ' + Desktop.timeText(when)].filter(Boolean).join(' \u00B7 ') + (it.read ? '' : ' \u00B7 ' + t('notifUnread')),
+                           run: function () { Push.open(it); notifRedraw(); } });
+            })(list[i]);
+        }
+        if (list.length) out.push({ kind: 'action', label: t('notifClear'), danger: true, run: function () { Push.clear(); App.toast(t('notifCleared')); notifRedraw(); } });
+        out.push({ kind: 'text', value: t('notifApps') });
+        var apps = Cloud.apps().filter(function (a) { return a.services && a.services.length; });
+        if (!apps.length) out.push({ kind: 'text', value: t('notifAppsNone') });
+        for (i = 0; i < apps.length; i++) {
+            (function (a) {
+                out.push({ kind: 'toggle', label: a.name, get: function () { return Push.state(a.id) === 'granted'; },
+                           set: function (v) { Push.set(a.id, v, function (e) { if (e) App.toast(t('notifFailed'), { kind: 'err' }); notifRedraw(); }); } });
+            })(apps[i]);
+        }
     }
 
     /* ---------- Devices: what is connected, and a live test of the controller buttons ---------- */

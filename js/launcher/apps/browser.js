@@ -204,7 +204,7 @@
     Win.register('browser', {
         icon: 'browser',
         title: function () { return t('browser'); },
-        open: function (b) {
+        open: function (b, arg) {
             body = b; hist = []; pos = -1; native = wantNative();
             bar = el('div', 'br-bar');
             back = iconBtn('back', t('back'), function () { backKey(); });
@@ -229,6 +229,8 @@
             applyMode();
             updateButtons();
             window.addEventListener('blur', onWindowBlur);
+            // Win.open('browser', 'https://…'): opens on that page (a push notification's link)
+            if (typeof arg === 'string' && /^https:\/\//.test(arg)) { load(arg, true); return view; }
             return start.querySelector('[data-focus]');
         },
         close: function () {

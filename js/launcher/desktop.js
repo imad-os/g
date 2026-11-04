@@ -44,7 +44,7 @@ var Desktop = (function () {
         return {
             id: 'app-' + a.id, installed: true, kind: a.type === 'app' ? 'app' : 'game',
             manifest: { title: a.name, description: a.description || '', build: a.version || '1', scores: a.type !== 'app' && a.scores !== false },
-            iconUrl: a.icon || '', url: a.url || '', remote: { entry: a.entry, config: a.config || {}, version: a.version || '', touch: a.touch }
+            iconUrl: a.icon || '', url: a.url || '', remote: { entry: a.entry, config: a.config || {}, version: a.version || '', touch: a.touch, services: a.services && a.services.length ? a.services.length : 0 }
         };
     }
     function setInstalled(list) {

@@ -228,6 +228,7 @@ var App = (function () {
             if (!g) return goHome(id);                 // uninstalled or unknown: back to the desktop
             Store.set('last_game', g.id);
             GameHost.launch(g, goHome);
+            Push.start();                              // notifications also arrive during a game (small cards, no focus taken)
         };
         if (id.indexOf('app-') === 0) {
             // an installed app: from the saved Firebase list (no network needed)
@@ -349,6 +350,7 @@ var App = (function () {
             }
             Backup.start();
             Accounts.start();
+            Push.start();                                        // push notifications of a signed-in player account (js/launcher/push.js)
             World.flush();
             Bridges.syncAi();                                    // the AI services set in the App Store Manager
             GlobalSettings.sync(function (e, changed) { if (changed) Desktop.paintWallpaper(); });   // its Settings (backgrounds)
