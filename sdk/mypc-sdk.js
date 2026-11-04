@@ -154,6 +154,7 @@ var MyPC = (function () {
             case 'ai': ai._message(d); break;
             case 'mic': mic._message(d); break;
             case 'notify': notify._message(d); break;
+            case 'launch': if (plainObject(d)) { pub.launch = d; call('onLaunch', d); } break;
         }
     }
 
@@ -1597,7 +1598,8 @@ var MyPC = (function () {
         ai: ai,
         mic: mic,
         notify: notify,
-        // The notification that opened the app ({ link, title, text, at }) or null; read it in onInit
+        // The notification that opened the app ({ link, app, path, title, text, at }) or null; read it in onInit.
+        // A notification chosen while the app runs: MyPC.init({ onLaunch(launch) }) (and MyPC.launch is updated)
         launch: null,
         // The app's settings object, set in the installer and read before the app opens. Read it in
         // onInit (or later). Always an object ({} when none). Standalone, test it with ?app_config={"a":1}.

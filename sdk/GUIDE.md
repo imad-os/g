@@ -956,7 +956,7 @@ export default async function (ctx) {
       title: 'Goal! ' + g.team,            // MUST, 60 characters (longer is cut)
       message: g.minute + "' " + g.score,  // 200 characters (longer is cut)
       image: g.logo,                       // optional https:// picture (shown in the card)
-      link: 'app?match=' + g.id            // optional: 'app' or 'app?...' opens your app, or an https:// page
+      link: 'soccer:match/' + g.id         // optional deep link '<app id>:<path>' (opens that app on that path), or an https:// page
     })),
     state: { last: goals.length ? goals[0].id : since }   // given back as ctx.state next time
   };
@@ -968,29 +968,44 @@ Rules (the Services page enforces them; dropped rows are counted in its log):
   **use `state` to remember what you already sent**, or players get the same notification every run.
 - Rows for usernames that did not allow your app are dropped. `username: '*'` sends to every subscriber.
 - At most **100 notifications per run** and **20 per player per hour** for your app; the rest is dropped.
-- Title and message are plain text (no HTML). `image` must be `https://`; `link` must be `https://...`, `app` or `app?...`.
+- Title and message are plain text (no HTML). `image` must be `https://`; `link` (300 characters) is one of the forms below.
 - No `import` of other files (the service is one file). Keep it small and fast: it shares the owner's computer with every
   other app's service. Never put secret keys in it: anyone can read the file on your site.
 - A run that throws or times out is logged; after 5 failed runs in a row the service is paused until the owner turns it
   on again.
 - Test it yourself: the owner's **Test** button runs it once and shows the rows without sending anything.
 
+### Deep links: `link`
+
+| `link` | What OK / a tap on the notification does |
+|---|---|
+| `soccer:match/7` | opens the app `soccer` (its store id) and gives it the path `match/7` in `MyPC.launch.path`. Any installed app's id works, not only yours. The path is yours to design (`match/7`, `team/raja?tab=news`...); spaces and quotes are not allowed |
+| `app` or `app?match=7` | the notification's own app; the path is `''` or `?match=7` (older form, still works) |
+| `https://...` | opens the page in My PC's Browser |
+| none | nothing to open (the notification is only shown and listed) |
+
+If the app is not installed on that My PC, the player is told to find it in the App Store. If the app is already open, it
+gets the deep link at once through `onLaunch` (see below) instead of being restarted.
+
 ### In the app: `MyPC.notify` and `MyPC.launch`
 
 ```js
+function route(path) {                       // 'match/7' -> the match screen
+  var m = /^match\/(\d+)$/.exec(path || '');
+  if (m) openMatch(+m[1]);
+}
 MyPC.init({
-  onInit: function () {
-    // the notification that opened the app (the player chose it), or null
-    if (MyPC.launch && /^app\?match=/.test(MyPC.launch.link)) openMatch(MyPC.launch.link.split('=')[1]);
-  }
+  onInit: function () { if (MyPC.launch) route(MyPC.launch.path); },     // opened from a notification
+  onLaunch: function (launch) { route(launch.path); }                     // a notification chosen while the app was open
 });
 // ask at a good moment (for example after the player follows a team); asks only once
 MyPC.notify.request().then(function (s) { /* 'granted' | 'denied' | 'no-account' | 'unavailable' */ });
 MyPC.notify.status().then(function (s) { /* the same without asking; 'default' = not asked yet */ });
 ```
 
-- `MyPC.launch` is `{ link, title, text, at }` when the player opened your app from one of its notifications (the `link`
-  is your row's `link`, `'app?...'`), else `null`.
+- `MyPC.launch` is `{ link, app, path, title, text, at }` when the player opened your app from a notification (`link` is the
+  row's `link`, `path` the part after `<app id>:`), else `null`. `onLaunch(launch)` is called when the player picks one of
+  your notifications while your app is already open (API 12).
 - If your app has a service, My PC asks the player once, a moment after the app starts, when they have not decided yet.
   `request()` asks the same question; after an answer it returns that answer without asking again.
 - `'unavailable'`: standalone (outside My PC) or an older My PC (`MyPC.apiLevel < 12`).
@@ -999,13 +1014,13 @@ MyPC.notify.status().then(function (s) { /* the same without asking; 'default' =
 
 A Windows style card rises in the bottom right corner with your title, the app name and message and your picture (or
 your app's icon), and slides down after 6 seconds; also on top of a game, without taking the focus. Control Panel >
-Notifications lists the last 50 (new ones marked) and opens a notification's link with OK. A TV checks for new ones every 30 minutes
+Notifications keeps a history of the last 7 days on that TV or phone, by day (new ones marked), and opens a notification's link with OK. A TV checks for new ones every 30 minutes
 (at start and when My PC comes back to the front once that time has passed, and at once after a sign-in); accounts the owner
 lists in the App Store Manager > Settings > Fast push notifications check every 2 minutes. So a notification can take up to
 30 minutes to show: don't use it for things that must arrive within seconds.
 
 Protocol (for reference): app → My PC `{ mypc: 1, type: 'notify', data: { rid, op: 'request' | 'status' } }`, answer
-`{ rid, result }`; `init` carries `notify: 1` and `launch`. Firestore: `subs/<app>/users/<username>` (the player's
+`{ rid, result }`; `init` carries `notify: 1` and `launch`; My PC → app `{ type: 'launch', data: launch }` while it runs. Firestore: `subs/<app>/users/<username>` (the player's
 choice), `inbox/<username>/items/<id>` (one notification), `services/<app>__<service>` (owner only). My PC side:
 `js/launcher/push.js`, `js/launcher/game-host.js`; runner: `installer/services.js`, `installer/services-lib.js`. A complete small
 service: `sdk/example/services/notify.js`.

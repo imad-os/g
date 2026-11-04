@@ -205,12 +205,21 @@
         out.push({ kind: 'action', label: t('notifCheck'), primary: true, run: function () {
             Push.check(function (e, n) { App.toast(e ? t('notifOffline') : n ? t('notifNew').replace('%s', n) : t('notifChecked'), { kind: e ? 'err' : 'info' }); notifRedraw(); });
         } });
+        // History (Push keeps 7 days on this device), one heading per day, newest first
+        out.push({ kind: 'text', value: t('notifHistory') });
         if (!list.length) out.push({ kind: 'info', label: t('notifs'), value: t('notifNone') });
+        var day0 = new Date(); day0.setHours(0, 0, 0, 0);
+        var lastDay = null;
         for (i = 0; i < list.length; i++) {
             (function (it) {
-                var when = new Date(it.at);
+                var when = new Date(it.at), d = new Date(it.at); d.setHours(0, 0, 0, 0);
+                if (d.getTime() !== lastDay) {
+                    lastDay = d.getTime();
+                    var ago = Math.round((day0 - d) / 86400000);
+                    out.push({ kind: 'text', value: ago <= 0 ? t('notifToday') : ago === 1 ? t('notifYesterday') : Desktop.dateText(when, { weekday: 'long', day: 'numeric', month: 'long' }) });
+                }
                 out.push({ kind: 'action', label: (it.read ? '' : '\u25CF ') + it.title,
-                           desc: [it.name, it.text, Desktop.dateText(when, { day: 'numeric', month: 'short' }) + ' ' + Desktop.timeText(when)].filter(Boolean).join(' \u00B7 ') + (it.read ? '' : ' \u00B7 ' + t('notifUnread')),
+                           desc: [it.name, it.text, Desktop.timeText(when)].filter(Boolean).join(' \u00B7 ') + (it.read ? '' : ' \u00B7 ' + t('notifUnread')),
                            run: function () { Push.open(it); notifRedraw(); } });
             })(list[i]);
         }

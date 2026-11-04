@@ -442,6 +442,8 @@ console.log('7. Push notification services (installer/services-lib.js)');
     check(r.items.length === 3 && r.items.filter((x) => x.title === 'Goal! Raja').length === 2 && r.items.some((x) => x.user === 'imad12' && x.title === 'Only you') &&
         r.dropped === 5 && r.why['user did not allow notifications'] === 1 && r.state === '{"last":7}' && !r.error,
         'rows: "*" goes to every subscriber, others only to opted-in users; bad pictures, links and rows are dropped; state kept as JSON');
+    check(S.okLink('soccer:match/7') && S.okLink('star-catcher:') && S.okLink('app?x=1') && S.okLink('https://a.b/c') && !S.okLink('http://a.b') && !S.okLink('javascript:alert(1)'.replace('javascript', 'Java Script')) &&
+        !S.okLink('soccer:a b') && !S.okLink('x:' + 'a'.repeat(400)), 'links: <app id>:<path> deep links, app?..., https only; no spaces, not too long');
     const many = { notifications: Array.from({ length: 30 }, (_, i) => ({ username: 'imad12', title: 'n' + i })) };
     const r2 = S.checkRows(many, ['imad12'], {}, now), r3 = S.checkRows({ notifications: Array.from({ length: 150 }, (_, i) => ({ username: '*', title: 'x' + i })) }, Array.from({ length: 10 }, (_, i) => 'u' + i), {}, now);
     check(r2.items.length === 20 && r2.dropped === 10 && r3.items.length === 100, 'limits: 20 per player per hour, 100 per run');

@@ -3741,6 +3741,11 @@ async function main() {
         const nst = await frame.evaluate(() => Promise.all([MyPC.notify.status(), MyPC.notify.request()]).then((a) => a.concat([MyPC.apiLevel, MyPC.launch, MyPC.info().notify])));
         check(nst[0] === 'no-account' && nst[1] === 'no-account' && nst[2] >= 12 && nst[3] === null && nst[4] === 1 && !(await page.evaluate(() => App.dialogOpen())),
             'MyPC.notify (API 12): a profile without an account cannot get notifications, nothing is asked; MyPC.launch is null (' + JSON.stringify(nst) + ')');
+        await frame.evaluate(() => { window.__launches = []; const o = MyPC.info; });
+        const dl = await page.evaluate(() => GameHost.deepLink('app-star-catcher', { link: 'star-catcher:challenge/1', app: 'star-catcher', path: 'challenge/1', title: 'New challenge', text: '', at: 1 }));
+        await frame.waitForFunction(() => MyPC.launch && MyPC.launch.path === 'challenge/1', null, { timeout: 3000 }).catch(() => {});
+        check(dl === true && await frame.evaluate(() => MyPC.launch && MyPC.launch.path === 'challenge/1' && MyPC.launch.app === 'star-catcher') &&
+            await page.evaluate(() => GameHost.deepLink('app-other', { path: 'x' })) === false, 'a deep link for the open app reaches it at once (MyPC.launch, onLaunch); another app\'s is not sent to it');
         // MyPC.net
         const r1 = await frame.evaluate(() => MyPC.net.fetch('https://api.nocors.test/items', { method: 'POST', headers: { 'X-Test': 'abc', Cookie: 'no' }, json: { n: 1 }, responseType: 'json' }).then((r) => ({ status: r.status, body: r.body, json: r.json(), h: r.headers['x-reply'] })));
         check(r1.status === 201 && r1.body.hello === 'world' && r1.json.hello === 'world' && r1.h === 'yes' && seen.net.method === 'POST' && seen.net.header === 'abc' && seen.net.body === '{"n":1}',
@@ -4092,6 +4097,32 @@ async function main() {
         await page.evaluate(() => [...document.querySelectorAll('.set-main .set-row')].find((b) => /Goal! Raja/.test(b.textContent)).click());
         await page.waitForFunction(() => Win.current() === 'browser', null, { timeout: 4000 }).catch(() => {});
         check(await page.evaluate(() => Win.current() === 'browser' && Push.unread() === 1), 'a notification with an https link opens it in the Browser and is read');
+        await page.evaluate(() => Win.close());
+        // deep links: '<app id>:<path>'
+        const pl = await page.evaluate(() => [Push.parseLink('soccer:match/7', 'x'), Push.parseLink('app?match=7', 'soccer'), Push.parseLink('https://a.b/', 'soccer'), Push.parseLink('', 'soccer')]);
+        check(JSON.stringify(pl) === JSON.stringify([{ app: 'soccer', path: 'match/7' }, { app: 'soccer', path: '?match=7' }, { url: 'https://a.b/' }, { app: 'soccer', path: '' }]),
+            'deep links: soccer:match/7 opens Soccer Live with the path match/7; app?... is the notification\'s own app: ' + JSON.stringify(pl));
+        db.apps.other = { id: 'other', name: 'Other App', url: 'https://other.example/', entry: 'https://other.example/index.html', type: 'app', version: '1.0.0', enabled: true, order: 1 };
+        await page.evaluate(() => new Promise((r) => Cloud.refresh(r)));
+        await page.evaluate(() => Push.open({ id: 'x', app: 'soccer', title: 'T', link: 'other:news/1', at: Date.now() }));
+        check(/Other App is not installed/.test(await page.textContent('#toast')) && await page.evaluate(() => Win.current() === null && !sessionStorage.getItem('mypc_launch')), 'a deep link to an app that is not installed says so and opens nothing');
+        await page.evaluate(() => { window.__played = null; const p = Desktop.play; Desktop.play = (g) => { window.__played = g.id; }; Push.open({ id: 'y', app: 'other', title: 'Goal', text: '1-0', link: 'soccer:match/7', at: 5 }); Desktop.play = p; });
+        const lj = await page.evaluate(() => ({ played: window.__played, s: JSON.parse(sessionStorage.getItem('mypc_launch') || 'null') }));
+        check(lj.played === 'app-soccer' && lj.s.id === 'app-soccer' && lj.s.launch.path === 'match/7' && lj.s.launch.app === 'soccer' && lj.s.launch.link === 'soccer:match/7' && lj.s.launch.title === 'Goal',
+            'a deep link opens that app and hands it the path (MyPC.launch): ' + JSON.stringify(lj));
+        // history: 7 days on this device, by day
+        const hist = await page.evaluate(() => {
+            const now = Date.now(), d = 86400000;
+            Store.set('notifs', [{ id: 'h1', app: 'soccer', title: 'Now one', at: now - 1000, read: true }, { id: 'h2', app: 'soccer', title: 'Yesterday one', at: now - d - 60000, read: true },
+                                 { id: 'h3', app: 'soccer', title: 'Six days', at: now - 6 * d, read: true }, { id: 'h4', app: 'soccer', title: 'Too old', at: now - 8 * d, read: true }]);
+            const ids = Push.list().map((x) => x.id).join(',');
+            return { ids, saved: Store.get('notifs').length };
+        });
+        await page.evaluate(() => Win.open('settings', 'notifications'));
+        await page.waitForTimeout(300);
+        const hp = await page.textContent('.set-main');
+        check(hist.ids === 'h1,h2,h3' && hist.saved === 3 && /History: the last 7 days/.test(hp) && /Today/.test(hp) && /Six days/.test(hp) && !/Too old/.test(hp) && hp.indexOf('Now one') < hp.indexOf('Six days'),
+            'the history keeps the last 7 days on this device and lists them by day: ' + JSON.stringify(hist));
         await page.evaluate(() => Win.close());
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();

@@ -11,10 +11,17 @@
     var EVERY = [1, 5, 10, 30];                       // minutes between two runs (the Services tab's choice)
     var LIMITS = { perRun: 100, perHour: 20, title: 60, message: 200, url: 300, state: 10000, runMs: 20000, keepDays: 30 };
     var SVC_ID = /^[a-z0-9-]{1,20}$/;
+    var BAD_SCHEME = /^(javascript|data|vbscript|file|blob|about|filesystem|intent|content|chrome)[:-]/i;   // never an app id
 
     function isObject(o) { return !!o && typeof o === 'object' && !Array.isArray(o); }
     function str(v) { return typeof v === 'string' ? v.trim() : ''; }
     function https(u) { return /^https:\/\/[^\s"'<>]+$/.test(u) && u.length <= LIMITS.url; }
+    // a notification's link: an https page, a deep link '<app id>:<path>' (opens that app with the path), or 'app' / 'app?...' (its own app)
+    function okLink(l) {
+        if (/^https?:/i.test(l)) return https(l);
+        if (BAD_SCHEME.test(l)) return false;
+        return l.length <= LIMITS.url && (/^app(\?[^\s"'<>]*)?$/.test(l) || /^[a-z0-9-]{2,32}:[^\s"'<>]*$/.test(l));
+    }
 
     // "services" of mypc-app.json -> what goes into the app's store document (throws an Error with a readable message)
     function parseServices(list, base) {
@@ -74,8 +81,7 @@
             if (text.length > LIMITS.message) text = text.slice(0, LIMITS.message - 1) + '…';
             var image = str(r.image), link = str(r.link);
             if (image && !https(image)) { drop('image not https'); continue; }
-            if (link && !https(link) && !/^app(\?[^\s"'<>]*)?$/.test(link)) { drop('link not https or app?...'); continue; }
-            if (link.length > LIMITS.url) { drop('link too long'); continue; }
+            if (link && !okLink(link)) { drop('link not https://, <app id>:<path> or app?...'); continue; }
             var to = str(r.username !== undefined ? r.username : r.to).toLowerCase();
             var users = to === '*' ? Object.keys(subs) : subs[to] ? [to] : [];
             if (!users.length) { drop(to ? 'user did not allow notifications' : 'no username'); continue; }
@@ -120,7 +126,7 @@
         '};'
     ].join('\n');
 
-    var api = { EVERY: EVERY, LIMITS: LIMITS, parseServices: parseServices, due: due, checkRows: checkRows, inboxItem: inboxItem, itemId: itemId, WORKER: WORKER };
+    var api = { EVERY: EVERY, LIMITS: LIMITS, okLink: okLink, parseServices: parseServices, due: due, checkRows: checkRows, inboxItem: inboxItem, itemId: itemId, WORKER: WORKER };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.ServicesLib = api;
 })(this);

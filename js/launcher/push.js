@@ -7,7 +7,7 @@
  *   Push.start()             reads the inbox when it is due: every 2 minutes for the accounts listed in the App Store Manager >
  *                            Settings > Fast push notifications (GlobalSettings.notifyFast), every 30 minutes for the others
  *                            (Firestore free quota, owner decision 2026-11-04); also at start / back to the front once due
- *   Push.check(cb)           one read; new items are saved (last 50 per profile, key notifs) and shown as toasts (Notify)
+ *   Push.check(cb)           one read; new items are saved (history: the last 7 days on this device, max 300 per profile, key notifs) and shown as toasts (Notify)
  *   Push.state(appId)        'granted' | 'denied' | 'default' | 'no-account'
  *   Push.set(appId, on, cb)  allow / block an app (cb(err)); writes / deletes the opt-in document with the player's token
  *   Push.ask(ctx, cb)        the permission question (once per app), cb(state)
@@ -16,11 +16,19 @@
 var Push = (function () {
     'use strict';
 
-    var FAST = 120000, SLOW = 30 * 60000, KEEP = 50, timer = 0, busy = false, started = false, listeners = [], asking = false;
+    var FAST = 120000, SLOW = 30 * 60000, KEEP = 300, DAYS = 7, timer = 0, busy = false, started = false, listeners = [], asking = false;
 
     function user() { var p = Profiles.current(); return p && p.user && Accounts.signedIn(p.id) ? p.user : ''; }
-    function items() { var l = Store.get('notifs', []); return l && l.length !== undefined ? l : []; }
-    function saveItems(l) { Store.set('notifs', l.slice(0, KEEP)); emit(); }
+    // the history: saved on this device only (per profile), the last 7 days (at most 300)
+    function fresh7(l) { var old = Date.now() - DAYS * 86400000; return l.filter(function (x) { return x && +x.at >= old; }); }
+    function items() {
+        var l = Store.get('notifs', []);
+        if (!l || l.length === undefined) return [];
+        var k = fresh7(l);
+        if (k.length !== l.length) Store.set('notifs', k);       // older than 7 days: gone
+        return k;
+    }
+    function saveItems(l) { Store.set('notifs', fresh7(l).slice(0, KEEP)); emit(); }
     function emit() { for (var i = 0; i < listeners.length; i++) { try { listeners[i](); } catch (e) {} } }
     function allowMap() { var m = Store.get('notif_allow', {}); return m && typeof m === 'object' ? m : {}; }
 
@@ -117,14 +125,28 @@ var Push = (function () {
 
     function openPanel() { if (typeof Win !== 'undefined' && !GameHost.active()) Win.open('settings', 'notifications'); }
 
-    // a notification's link: https -> the Browser; 'app' or 'app?…' -> opens that app (MyPC.launch tells it which notification)
+    // a notification's link -> what it opens: { url } (https: the Browser) or { app, path } (that app, which gets the path)
+    //   'soccer:match/7'  deep link: opens the app 'soccer', MyPC.launch.path = 'match/7'
+    //   'app' / 'app?x=1' the notification's own app (path '' / '?x=1')
+    function parseLink(link, own) {
+        link = String(link || '');
+        if (/^https:\/\//.test(link)) return { url: link };
+        var m = /^app(\?.*)?$/.exec(link);
+        if (m) return { app: own, path: m[1] || '' };
+        m = /^([a-z0-9-]{2,32}):(.*)$/.exec(link);
+        if (m && !/^(https?|javascript|data|vbscript|file|blob|about|filesystem|intent|content|chrome)$/.test(m[1])) return { app: m[1], path: m[2] };
+        return own ? { app: own, path: '' } : {};
+    }
     function open(it) {
         markRead(it.id);
-        var link = it.link || '';
-        if (/^https:\/\//.test(link)) { if (typeof Win !== 'undefined' && !GameHost.active()) Win.open('browser', link); return; }
-        var a = appOf(it.app);
-        if (!a || !Cloud.isInstalled(a.id) || GameHost.active()) return;
-        try { sessionStorage.setItem('mypc_launch', JSON.stringify({ id: 'app-' + a.id, launch: { link: link, title: it.title, text: it.text, at: it.at } })); } catch (e) {}
+        var t = parseLink(it.link, it.app);
+        if (t.url) { if (typeof Win !== 'undefined' && !GameHost.active()) Win.open('browser', t.url); return; }
+        var a = t.app ? appOf(t.app) : null;
+        if (!a) return;
+        var launch = { link: it.link || '', app: a.id, path: t.path, title: it.title, text: it.text, at: it.at };
+        if (GameHost.active()) { GameHost.deepLink('app-' + a.id, launch); return; }       // that app is open: it gets the path at once
+        if (!Cloud.isInstalled(a.id)) { App.toast(I18n.t('notifNoApp').replace('%s', a.name), { kind: 'warn' }); return; }
+        try { sessionStorage.setItem('mypc_launch', JSON.stringify({ id: 'app-' + a.id, launch: launch })); } catch (e) {}
         Desktop.play(Desktop.fromCloud(a));
     }
     // read by game-host.js when the app says hello: the notification that opened this app, once
@@ -166,6 +188,6 @@ var Push = (function () {
 
     return {
         start: start, check: check, every: every, state: state, set: set, ask: ask, list: items, unread: unread, markRead: markRead,
-        remove: remove, clear: clear, open: open, takeLaunch: takeLaunch, onChange: function (fn) { listeners.push(fn); }
+        remove: remove, clear: clear, open: open, parseLink: parseLink, takeLaunch: takeLaunch, onChange: function (fn) { listeners.push(fn); }
     };
 })();

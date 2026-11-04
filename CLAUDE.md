@@ -86,8 +86,9 @@
   `subs/<app>/users/<username>` written with the player's token (rules match `request.auth.token.email`). Built in: "App updates" on a
   new `version`. TV: `js/launcher/push.js` (player accounts only; reads its inbox every 30 min, or every 2 min for the usernames in
   App Store Manager > Settings > Fast push notifications (`settings/mypc.notifyFast`, owner decision 2026-11-04: Firestore free quota); its "Send a test notification" form writes one item to any username, app `mypc`),
-  at start / resume only once due (`notif_last`), toasts via `Notify`, last 50 in
-  `notifs`, Control Panel > Notifications, permission once per app, `MyPC.notify` / `MyPC.launch`, API 12). Docs: GUIDE.md section 16.
+  at start / resume only once due (`notif_last`), toasts via `Notify`, history of the last 7 days (owner request 2026-11-04; on the device only, max 300) in
+  `notifs`, Control Panel > Notifications, permission once per app, `MyPC.notify` / `MyPC.launch`, API 12). Deep links (owner request 2026-11-04): `link` = `<app id>:<path>` opens
+  that app with `MyPC.launch.path` (`Push.parseLink`; already open: `GameHost.deepLink` -> SDK `onLaunch`), `https://` = Browser, old `app?...` = own app). Docs: GUIDE.md section 16.
 - `apps/store.js`: the App Store app (Home / Games / Apps / Library / Search, Install / Open / Uninstall).
 - **Settings of every My PC** (owner decision): App Store Manager > Settings writes Firestore `settings/mypc` (admins only, read by
   every TV): backgrounds (`wallpapers: [{ url, title, thumb }]`, an empty title is taken from the address) and the background of new

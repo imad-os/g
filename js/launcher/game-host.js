@@ -296,6 +296,8 @@ var GameHost = (function () {
             start: function () { send('start'); },
             pause: function () { br.pause(); send('pause'); },
             resume: function () { send('resume'); },
+            // a push notification's deep link for this app while it runs (MyPC.init({ onLaunch }))
+            launch: function (d) { send('launch', d); },
             destroy: function () { pushCtx.dead = true; br.destroy(); Input.onPadRaw(null); Input.offDevices(padsChanged); ble.destroy(); if (mp) { mp.destroy(); mp = null; } send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
             menuItems: function () { return items; },
             onMenu: function (mid) { send('menu', { id: String(mid).slice(4) }); },
@@ -643,6 +645,8 @@ var GameHost = (function () {
     return {
         init: init, launch: launch, exit: exit, onAction: onAction, openPause: openPause, background: background, hold: hold, release: release,
         active: function () { return state !== 'idle'; },
+        // a notification for the app that is open: its deep link goes to it (MyPC.launch + onLaunch); true when delivered
+        deepLink: function (gameId, launch) { if (!game || game.id !== gameId || !api || !api.launch) return false; api.launch(launch); return true; },
         state: function () { return state; },
         frame: function () { return iframe; }
     };

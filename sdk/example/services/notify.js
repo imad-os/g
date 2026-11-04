@@ -9,7 +9,7 @@ export default async function (ctx) {
       username: '*',
       title: 'New daily challenge',
       message: 'Catch 50 stars without touching a rock. Today only!',
-      link: 'app?challenge=' + day
+      link: 'star-catcher:challenge/' + day      // deep link: opens Star Catcher, MyPC.launch.path = 'challenge/2026-11-04'
     }],
     state: { day }
   };
