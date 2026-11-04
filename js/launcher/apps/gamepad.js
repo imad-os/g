@@ -2,9 +2,15 @@
  * The TV side is js/launcher/controllers.js (Settings > Devices > Phone controller shows the code). Signalling goes through
  * Firestore (js/core/rooms.js, app 'controller'), everything else through a direct WebRTC channel on the same Wi-Fi
  * (js/core/netlink.js). When the TV changes page (opens a game, quits) the link drops and this app reconnects by itself.
- * Six modes, picked before connecting:
+ * Five modes, picked before connecting:
  *   pad             the virtual pad My PC already draws over games (js/core/virtual-pad.js: stick, A B X Y in the Nintendo
- *                   diamond, gear to customize, pause), here full screen as a controller: { t: 'k', a, d } per press / release
+ *                   diamond, +, Home, gear to customize), here full screen as a controller ({ t: 'gp' } raw buttons + stick),
+ *                   plus its microphone button (top centre) and this phone is the TV's microphone (Samsung keeps the remote's
+ *                   mic for Bixby). The mic button is the Record key ({ t: 'k', a: 'record' }: Memo starts / stops); when the
+ *                   TV records (Mic on the TV asks { t: 'mic', on: 1 }) this phone opens its microphone (js/core/mic.js) and
+ *                   sends 16-bit PCM ({ t: 'au' }); the button is red while it does. Only this mode opens the phone's mic.
+ *                   The pad's round gear (top left) opens its panel with Mode, Advanced settings (the phone settings) and
+ *                   Leave at the top; the connection state stays at the bottom centre (green dot: connected, red: not).
  *   sensor-actions  the phone in the right hand, the player facing the TV: moves (LEFT RIGHT JUMP DUCK DUCK_END, or what the game
  *                   defines) found by js/core/motion.js; only the moves the TV's config asks for are sent, plus metrics when asked.
  *                   Live screen (gait, pace, speed, cadence, steps, distance, last move, link and sensor state, start / stop,
@@ -18,12 +24,8 @@
  *                   maps each key to a control (A B X Y, L R ZL ZR, − +, Home, Capture, D-pad, both sticks and their clicks;
  *                   ZQSD = D-pad by default), kept on the phone; it sends the same gamepad message as pad mode (with the right
  *                   stick), never keys. The screen shows the controller with each control's key; a pressed control lights up
- *   mic             Microphone: the same pad as Buttons mode (same layout, same gamepad message) plus its microphone button
- *                   (top centre), and this phone is the TV's microphone (Samsung keeps the remote's mic for Bixby). The mic
- *                   button is the Record key ({ t: 'k', a: 'record' }: Memo starts / stops); when the TV records (Mic on the
- *                   TV asks { t: 'mic', on: 1 }) this phone opens its microphone (js/core/mic.js) and sends 16-bit PCM
- *                   ({ t: 'au' }); the button is red while it does. Only this mode ever opens the phone's microphone.
- * Phone settings (Settings button on every screen, kept on the phone in arc_dev_ctrlphone.opt): Screen rotation (Auto /
+ *   (the old Microphone mode 'mic' was merged into Buttons mode: a saved 'mic' opens Buttons mode)
+ * Phone settings (Settings button on every screen; Advanced settings in the Buttons pad's gear panel, kept on the phone in arc_dev_ctrlphone.opt): Screen rotation (Auto /
  * Portrait / Landscape / Manual, js/core/rotation.js = Control Panel > Display; this app itself stays sideways while open),
  * Vibration 0..3 (shared with My PC itself through js/core/haptics.js), Stay awake,
  * Background (the Android app keeps the link with the screen off) and GamePad (a D-pad in place of the stick). The Android
@@ -36,22 +38,22 @@
 
     // Keyboard mode and Vibration / Auto rotate strings (the last ones also in Control Panel > Devices)
     I18n.add({
-        en: { gcModeMic: 'Microphone', gcMicDenied: 'This phone did not give its microphone to My PC. Allow it in the browser or phone settings.', gcMicUpdate: 'Update the My PC app on this phone (Get the app on the TV\'s desktop) to use its microphone.', gcVib: 'Vibration', gcVibDesc: 'A short buzz on every button press: 0 = off, 3 = strongest. Also used by the touch pad over games on this phone.',
+        en: { gcAdvanced: 'Advanced settings', gcMicDenied: 'This phone did not give its microphone to My PC. Allow it in the browser or phone settings.', gcMicUpdate: 'Update the My PC app on this phone (Get the app on the TV\'s desktop) to use its microphone.', gcVib: 'Vibration', gcVibDesc: 'A short buzz on every button press: 0 = off, 3 = strongest. Also used by the touch pad over games on this phone.',
               gcModeKeys: 'Keyboard', gcKHelp: 'Plug a keyboard into this phone (USB or Bluetooth): each key presses the controller button that shows it. Tap a button to give it another key.', gcKMap: 'Map keys', gcKDefault: 'Default keys', gcKSkip: 'Skip', gcKClear: 'No key', gcKStop: 'Done', gcKPress: 'Press a key for %s', gcKNone: 'no key',
               gcKDpad: 'D-pad', gcKLs: 'Left stick', gcKRs: 'Right stick', gcKLclick: 'Left stick click', gcKRclick: 'Right stick click', gcKHome: 'Home', gcKCapture: 'Capture' },
-        fr: { gcModeMic: 'Micro', gcMicDenied: 'Ce téléphone n’a pas donné son micro à My PC. Autorisez-le dans les réglages du navigateur ou du téléphone.', gcMicUpdate: 'Mettez à jour l’appli My PC sur ce téléphone (Obtenir l’appli sur le bureau de la TV) pour utiliser son micro.', gcVib: 'Vibration', gcVibDesc: 'Une courte vibration à chaque bouton : 0 = désactivée, 3 = la plus forte. Aussi pour la manette tactile sur les jeux de ce téléphone.',
+        fr: { gcAdvanced: 'Paramètres avancés', gcMicDenied: 'Ce téléphone n’a pas donné son micro à My PC. Autorisez-le dans les réglages du navigateur ou du téléphone.', gcMicUpdate: 'Mettez à jour l’appli My PC sur ce téléphone (Obtenir l’appli sur le bureau de la TV) pour utiliser son micro.', gcVib: 'Vibration', gcVibDesc: 'Une courte vibration à chaque bouton : 0 = désactivée, 3 = la plus forte. Aussi pour la manette tactile sur les jeux de ce téléphone.',
               gcModeKeys: 'Clavier', gcKHelp: 'Branchez un clavier sur ce téléphone (USB ou Bluetooth) : chaque touche appuie sur le bouton de la manette qui l’affiche. Touchez un bouton pour lui donner une autre touche.', gcKMap: 'Assigner les touches', gcKDefault: 'Touches par défaut', gcKSkip: 'Passer', gcKClear: 'Aucune touche', gcKStop: 'Terminé', gcKPress: 'Appuyez sur une touche pour %s', gcKNone: 'aucune touche',
               gcKDpad: 'Croix', gcKLs: 'Joystick gauche', gcKRs: 'Joystick droit', gcKLclick: 'Clic du joystick gauche', gcKRclick: 'Clic du joystick droit', gcKHome: 'Accueil', gcKCapture: 'Capture' },
-        es: { gcModeMic: 'Micrófono', gcMicDenied: 'Este teléfono no dio su micrófono a My PC. Permítelo en los ajustes del navegador o del teléfono.', gcMicUpdate: 'Actualiza la app My PC en este teléfono (Obtener la app en el escritorio de la TV) para usar su micrófono.', gcVib: 'Vibración', gcVibDesc: 'Una vibración corta en cada botón: 0 = desactivada, 3 = la más fuerte. También para el mando táctil sobre los juegos en este teléfono.',
+        es: { gcAdvanced: 'Ajustes avanzados', gcMicDenied: 'Este teléfono no dio su micrófono a My PC. Permítelo en los ajustes del navegador o del teléfono.', gcMicUpdate: 'Actualiza la app My PC en este teléfono (Obtener la app en el escritorio de la TV) para usar su micrófono.', gcVib: 'Vibración', gcVibDesc: 'Una vibración corta en cada botón: 0 = desactivada, 3 = la más fuerte. También para el mando táctil sobre los juegos en este teléfono.',
               gcModeKeys: 'Teclado', gcKHelp: 'Conecta un teclado a este teléfono (USB o Bluetooth): cada tecla pulsa el botón del mando que la muestra. Toca un botón para darle otra tecla.', gcKMap: 'Asignar teclas', gcKDefault: 'Teclas por defecto', gcKSkip: 'Saltar', gcKClear: 'Sin tecla', gcKStop: 'Listo', gcKPress: 'Pulsa una tecla para %s', gcKNone: 'sin tecla',
               gcKDpad: 'Cruceta', gcKLs: 'Joystick izquierdo', gcKRs: 'Joystick derecho', gcKLclick: 'Clic del joystick izquierdo', gcKRclick: 'Clic del joystick derecho', gcKHome: 'Inicio', gcKCapture: 'Captura' },
-        ar: { gcModeMic: 'الميكروفون', gcMicDenied: 'لم يمنح هذا الهاتف الميكروفون لـ My PC. اسمح به في إعدادات المتصفح أو الهاتف.', gcMicUpdate: 'حدّث تطبيق My PC على هذا الهاتف (تنزيل التطبيق على سطح مكتب التلفاز) لاستخدام الميكروفون.', gcVib: 'الاهتزاز', gcVibDesc: 'اهتزاز قصير عند كل ضغطة زر: 0 = متوقف، 3 = الأقوى. يُستخدم أيضاً لذراع اللمس فوق الألعاب على هذا الهاتف.',
+        ar: { gcAdvanced: 'إعدادات متقدمة', gcMicDenied: 'لم يمنح هذا الهاتف الميكروفون لـ My PC. اسمح به في إعدادات المتصفح أو الهاتف.', gcMicUpdate: 'حدّث تطبيق My PC على هذا الهاتف (تنزيل التطبيق على سطح مكتب التلفاز) لاستخدام الميكروفون.', gcVib: 'الاهتزاز', gcVibDesc: 'اهتزاز قصير عند كل ضغطة زر: 0 = متوقف، 3 = الأقوى. يُستخدم أيضاً لذراع اللمس فوق الألعاب على هذا الهاتف.',
               gcModeKeys: 'لوحة المفاتيح', gcKHelp: 'صِل لوحة مفاتيح بهذا الهاتف (USB أو بلوتوث): كل مفتاح يضغط زر اليد الذي يظهر عليه. المس زراً لتعطيه مفتاحاً آخر.', gcKMap: 'تعيين المفاتيح', gcKDefault: 'المفاتيح الافتراضية', gcKSkip: 'تخطي', gcKClear: 'بلا مفتاح', gcKStop: 'تم', gcKPress: 'اضغط مفتاحاً لـ %s', gcKNone: 'بلا مفتاح',
               gcKDpad: 'أزرار الاتجاه', gcKLs: 'العصا اليسرى', gcKRs: 'العصا اليمنى', gcKLclick: 'ضغط العصا اليسرى', gcKRclick: 'ضغط العصا اليمنى', gcKHome: 'الرئيسية', gcKCapture: 'التقاط' }
     });
 
     var KEY = 'arc_dev_ctrlphone', REC_MAX = 60 * 120;      // 2 minutes at 60 Hz
-    var MODES = ['pad', 'sensor-actions', 'sensor-raw', 'pointer', 'keyboard', 'mic'], MODE_NAMES = ['gcModePad', 'gcModeActions', 'gcModeRaw', 'gcModePointer', 'gcModeKeys', 'gcModeMic'];
+    var MODES = ['pad', 'sensor-actions', 'sensor-raw', 'pointer', 'keyboard'], MODE_NAMES = ['gcModePad', 'gcModeActions', 'gcModeRaw', 'gcModePointer', 'gcModeKeys'];
     var MIC_CHUNK = 2400, MIC_APP = 4;          // bytes of PCM per message; the Android app gives its microphone from Bridge version 4
     // The pad is THE pad My PC draws over games (owner rule: identical): js/core/pad-spec.js gives both the same buttons, sizes,
     // settings and saved layout. A B X Y in the Nintendo places, sending EXACTLY what the same button of a real Nintendo
@@ -131,21 +133,28 @@
         if (ui.kDot) ui.kDot.className = 'gc-dot' + (ok ? ' ok' : '');
     }
     function pick(p) { player = p; ui.p1.className = 'btn' + (p === 1 ? ' btn-primary' : ''); ui.p2.className = 'btn' + (p === 2 ? ' btn-primary' : ''); if (ui.badge) ui.badge.textContent = 'P' + p; if (ui.sBadge) ui.sBadge.textContent = 'P' + p; if (ui.pBadge) ui.pBadge.textContent = 'P' + p; if (ui.kBadge) ui.kBadge.textContent = 'P' + p; }
+    // an unknown or old saved mode ('mic', now Buttons mode) is Buttons mode
     function pickMode(m) { mode = MODES.indexOf(m) >= 0 ? m : 'pad'; for (var i = 0; i < MODES.length; i++) ui['m' + i].className = 'btn' + (MODES[i] === mode ? ' btn-primary' : ''); }
     function pointing() { return mode === 'pointer' && !!(cfg && cfg.pointer); }
     function show(on) {
         inPad = on; ui.join.hidden = on;
-        var padUi = on && (mode === 'pad' || mode === 'mic'), ptrUi = on && mode === 'pointer', kbUi = on && mode === 'keyboard', senseUi = on && !padUi && !ptrUi && !kbUi;
-        ui.bar.hidden = ui.padBg.hidden = ui.setBtn.hidden = !padUi;
+        var padUi = on && mode === 'pad', ptrUi = on && mode === 'pointer', kbUi = on && mode === 'keyboard', senseUi = on && !padUi && !ptrUi && !kbUi;
+        ui.bar.hidden = ui.padBg.hidden = !padUi;
         ui.ptr.hidden = !ptrUi;
         ui.kb.hidden = !kbUi;
         ui.sense.hidden = !senseUi;
-        if (padUi) VirtualPad.init(PadSpec.options({ onAction: padAction, mic: mode === 'mic' ? true : null }));
+        if (padUi) VirtualPad.init(PadSpec.options({ onAction: padAction, mic: true, actions: padActions(), onSettings: function (open) { if (ui.bar) ui.bar.hidden = open || !inPad; } }));
         else if (VirtualPad.active()) VirtualPad.hide();
         if (ptrUi) paintPtr();
         if (kbUi) { kStop(); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); }   // keys go to the controller, not to a button
         if (senseUi) { ui.modeName.textContent = t(mode === 'sensor-raw' ? 'gcModeRaw' : 'gcModeActions'); setTab('live'); }
         if (!on && ui.go) Focus.focus(ui.go);
+    }
+
+    // the host buttons at the top of the pad's gear panel (owner request 2026-11-04: no buttons over the pad itself)
+    function padActions() {
+        return [{ id: 'mode', label: t('gcMode'), onClick: openModes }, { id: 'advanced', label: t('gcAdvanced'), onClick: openPhone },
+                { id: 'leave', label: t('gcLeave'), danger: true, onClick: function () { stop(); } }];
     }
 
     /* ---------- link ---------- */
@@ -214,7 +223,7 @@
         run = true; session = SensorProto.session(); cfg = null;
         sess = new Rooms.Session('controller', name(), onEvent);
         show(true); state(t('gcConnecting'), false); Rotation.hold('landscape'); wake(); native('active', true);
-        if (mode !== 'pad' && mode !== 'keyboard' && mode !== 'mic') sensorsOn();     // the tap on Connect also answers the motion permission prompt (iPhone)
+        if (mode !== 'pad' && mode !== 'keyboard') sensorsOn();     // the tap on Connect also answers the motion permission prompt (iPhone)
         attempt();
     }
     function stop() {
@@ -254,12 +263,12 @@
     function onVis() { if (document.hidden) { release(); micStop(true); } else if (run) wake(); }
     function onBlur() { if (mode === 'keyboard') kbRelease(); }        // a key let go elsewhere never comes back as keyup
 
-    /* ---------- Microphone mode: this phone's microphone for the TV, only while the TV records ---------- */
+    /* ---------- Buttons mode's microphone: this phone's microphone for the TV, only while the TV records ---------- */
     function micCmd(m) {
         if (!m.on) { if (m.id === micId) micStop(false); return; }
         micStop(false);
         var id = m.id;
-        if (mode !== 'mic' || typeof id !== 'number') return send({ t: 'ms', id: id, err: 'off' });
+        if (mode !== 'pad' || typeof id !== 'number') return send({ t: 'ms', id: id, err: 'off' });
         micId = id;
         Mic.start({ format: 'pcm16', sampleRate: Math.max(8000, Math.min(16000, +m.rate || 16000)), chunkMs: 100, keep: false, level: true, maxSeconds: 600 }, function (type, d) {
             if (micId !== id) return;
@@ -715,7 +724,7 @@
     function closeModes() {
         if (ui.modes && ui.modes.parentNode) ui.modes.parentNode.removeChild(ui.modes);
         ui.modes = null;
-        if (inPad && (mode === 'pad' || mode === 'mic') && !VirtualPad.active()) show(true);
+        if (inPad && mode === 'pad' && !VirtualPad.active()) show(true);
         else if (!inPad && ui.go) Focus.focus(ui.go);
     }
     // the phone settings, over everything like the mode list (Back closes it); the pad is drawn again on close
@@ -1089,19 +1098,14 @@
         ui.join.appendChild(ui.err);
         root.appendChild(ui.join);
 
-        // pad mode: the virtual pad covers the screen (over a plain background); this small bar sits above it (bottom centre;
-        // its buttons stay right of the middle: the left half is the pad's floating stick zone)
+        // pad mode: the virtual pad covers the screen (over a plain background); this small status bar sits above it (bottom
+        // centre, taps go through it to the stick zone). Mode, Advanced settings and Leave are in the pad's gear panel.
         ui.padBg = el('div', 'gc-padbg'); ui.padBg.hidden = true; root.appendChild(ui.padBg);
         ui.bar = el('div', 'gc-bar');
         ui.dot = el('span', 'gc-dot'); ui.badge = el('span', 'gc-badge', 'P1'); ui.state = el('span', 'gc-state');
         ui.bar.appendChild(ui.dot); ui.bar.appendChild(ui.badge); ui.bar.appendChild(ui.state);
-        ui.bar.appendChild(btn('gc-leave gc-modebtn', t('gcMode'), openModes));
-        ui.bar.appendChild(btn('gc-leave', t('gcLeave'), function () { stop(); }));
         ui.bar.hidden = true;
         root.appendChild(ui.bar);
-        // the phone settings: top right, out of the stick zone (left half) and away from the face buttons
-        ui.setBtn = btn('gc-leave gc-setbtn', t('gcSettings'), openPhone); ui.setBtn.hidden = true;
-        root.appendChild(ui.setBtn);
         ui.sense = buildSense();
         root.appendChild(ui.sense);
         ui.ptr = buildPointer();

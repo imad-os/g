@@ -25,8 +25,8 @@
  *   .tune() / .setTune(t)   the Motion moves settings of this TV (arc_dev_ctrltune; Settings > Devices > Phone controller >
  *                           Motion moves), sent to every motion phone in its config and used there at once
  *   .monitor(fn(player, msg)) | .monitor(null)   that screen's live test: the moves arrive there and do not press buttons
- * Microphone mode ('mic'): the same pad as Buttons mode plus a microphone button, and the phone is this TV's microphone
- * (Samsung keeps the remote's mic for Bixby). Its mic button sends { t: 'k', a: 'record' } (the Record key: Memo starts /
+ * The phone's microphone (Buttons mode; older phones call it Microphone mode, 'mic', and are treated the same): the pad's
+ * microphone button, and the phone is this TV's microphone (Samsung keeps the remote's mic for Bixby). Its mic button sends { t: 'k', a: 'record' } (the Record key: Memo starts /
  * stops). Recording goes through Mic (js/core/mic.js), which takes the phone as its source (Mic.source below):
  *   TV -> phone { t: 'mic', on: 1, id, rate } / { t: 'mic', on: 0, id }
  *   phone -> TV { t: 'ms', id, ok: 1, rate } | { t: 'ms', id, err: 'denied' | 'no-mic' | 'off' }, then { t: 'au', id, d: base64 of
@@ -51,7 +51,7 @@ var Controllers = (function () {
         return { on: c.on === true, code: typeof c.code === 'string' && /^[a-z0-9]{6,16}$/.test(c.code) ? c.code : '', ok: c.ok instanceof Array ? c.ok : [] };
     }
     function save(c) { Store.rawSet(KEY, c); }
-    // Buttons, Keyboard and Microphone modes: the phone is a gamepad (no sensor config, no moves)
+    // Buttons and Keyboard modes (and 'mic' from older phones): the phone is a gamepad (no sensor config, no moves)
     function padLike(slot) { return slot.mode === 'pad' || slot.mode === 'keyboard' || slot.mode === 'mic'; }
     function makeCode() {
         var out = '', b = new Uint8Array(8), i;
@@ -111,7 +111,7 @@ var Controllers = (function () {
             if (m.t === 'ms' || m.t === 'au' || m.t === 'me') return micMessage(slot, m);
             if (m.t === 'k') {
                 if (typeof m.a !== 'string' || !ACTIONS.hasOwnProperty(m.a)) return;
-                if (m.a === 'record' && slot.mode === 'mic') micLast = slot.p;     // that phone is the microphone
+                if (m.a === 'record' && micMode(slot)) micLast = slot.p;     // that phone is the microphone
                 if (m.d === 1 && Pointer.visible()) {
                     if (m.a === 'ok' && Pointer.press()) return;              // clicked something that is not a focusable item
                     if (DIRS[m.a]) Pointer.hide();                            // arrows: back to the focus ring, like the remote
@@ -129,10 +129,11 @@ var Controllers = (function () {
         conn.onClose(function () { clearTimeout(t); if (slot) drop(slot.p, slot); });
     }
 
-    /* ---------- Microphone mode: a phone is this TV's microphone (Mic.source) ---------- */
+    /* ---------- a Buttons mode phone is this TV's microphone (Mic.source) ---------- */
+    function micMode(slot) { return slot.mode === 'pad' || slot.mode === 'mic'; }
     function micSlot() {
         var order = [micLast, 1, 2];
-        for (var i = 0; i < order.length; i++) { var s = slots[order[i]]; if (s && s.mode === 'mic') return s; }
+        for (var i = 0; i < order.length; i++) { var s = slots[order[i]]; if (s && micMode(s)) return s; }
         return null;
     }
     function micEnd(r) {

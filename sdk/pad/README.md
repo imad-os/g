@@ -68,6 +68,7 @@ VirtualPad.init({
 | `mic` | not set | `true`: a round microphone button at the top centre under **+**, action `'mic'` (key 82), shown; `null`: offered in the settings panel, hidden at first; not set: never. `VirtualPad.micLive(on, level)` paints it red while the host records *(My PC addition)* |
 | `dpadSwitch` | `false` | `true`: the settings panel offers **Stick / D-pad**; the choice is saved with the layout and wins over `dpad`. The D-pad does not take the left half of the screen, so taps there reach the game *(My PC addition)* |
 | `onHide` | none | `function ()`: the settings panel gets a **Hide the pad** button that calls it (your host shows the pad again) *(My PC addition)* |
+| `actions` | none | `[{ label, onClick, primary, danger, id }]`: the host's own buttons in a row at the top of the settings panel; a tap closes the panel and calls `onClick` (the phone controller puts Mode, Advanced settings and Leave there) *(My PC addition)* |
 | `storage` | none | `{ get(key), set(key, value) }`: where the layout is saved besides `localStorage` *(My PC addition)* |
 | `force` | `false` | show the pad anywhere; by default only on touch devices when running standalone (not inside My PC) |
 

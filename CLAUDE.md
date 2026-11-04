@@ -65,7 +65,7 @@
   too many icons scroll sideways in `#desk-icons`.
 - **Memo** (`apps/memo.js`, voice memos): list screen, then a memo screen; each recording is up to 15 s (`Mic`, Opus WebM or 16 kHz WAV;
   owner decision 2026-10-31: Samsung keeps the remote's mic for Bixby, so the TV's microphone is a phone in the Game controller's
-  **Microphone mode** (`mic`): the same VirtualPad as Buttons mode + a mic button (VirtualPad option `mic`, also offered in the shell's
+  **Buttons mode** (owner request 2026-11-04: the separate Microphone mode was removed; old `mic` = `pad`): the VirtualPad + a mic button (VirtualPad option `mic`, also offered in the shell's
   touch pad: the same pad, never a separate design) = the Record key; while one is connected `Mic` records from it (`Mic.source`,
   set by `controllers.js`; messages `mic` / `ms` / `au` / `me`, 16 kHz PCM). The APK needs 2.3.0+ (RECORD_AUDIO + WebView permission))
   and the record key on a memo's screen adds a part to it. Record key = Input action `record` (remote Record key, or a voice / mic
@@ -118,6 +118,8 @@
   **Keyboard mode** (`keyboard`): a keyboard plugged into the phone is a whole Switch Pro style controller; keys mapped per control on the phone
   (`arc_dev_ctrlphone.keys`, ZQSD = D-pad by default), sends the same `gp` message (18 buttons, Capture = 17, `rx` / `ry` right stick), never keys;
   the screen draws the controller and lights the pressed control. The Buttons pad shows L and R by default (shoulder pills, VirtualPad `place: 'l' | 'r' | 'zl' | 'zr'`); its gear adds ZL ZR − Capture L3 R3.
+  **Buttons mode layout** (owner request 2026-11-04): nothing over the pad but the status (bottom centre, green / red dot); Mode,
+  **Advanced settings** (the phone settings) and Leave are at the top of the pad's gear panel (top-left round button; VirtualPad option `actions`).
   **Phone settings** (Game controller > Settings, `arc_dev_ctrlphone.opt`): Auto rotate (owner decision: off by default, the screen never turns
   even when the phone is flipped; whole app, also in Control Panel > Devices on a phone), Vibration 0-3 (`vib`, buzz per press, also the shell's touch pad;
   both in `js/core/haptics.js`, which re-applies Auto rotate at every start, so no APK rebuild was needed), Stay awake, Background (native in the APK 2.1.0+ via

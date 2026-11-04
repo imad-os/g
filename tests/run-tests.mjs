@@ -2846,12 +2846,22 @@ async function main() {
         await tv.waitForFunction(() => Input.isDownDev('pad0', 'guide'), null, { timeout: 3000 });
         check(true, 'a real pad\'s Home button is the same Guide action');
         await tv.evaluate(() => { __gp.buttons[16] = { pressed: false, value: 0 }; navigator.getGamepads = window.__orig; window.dispatchEvent(new Event('gamepaddisconnected')); });
-        // phone settings: Settings in the bar; a browser shows only what it can do (no Background); big checkboxes; GamePad
+        // nothing over the pad but the status (bottom centre); the gear (top left) panel has Mode, Advanced settings, Leave
+        const lay = await P2.evaluate(() => {
+            const bar = document.querySelector('.gc-bar'), r = bar.getBoundingClientRect();
+            const gear = [...document.querySelectorAll('div')].find((d) => d.textContent === '⚙');
+            gear.click();
+            const acts = [...document.querySelectorAll('[data-act]')].map((b) => b.getAttribute('data-act') + ':' + b.textContent);
+            return { btns: bar.querySelectorAll('button, .btn').length, mid: Math.abs(r.left + r.width / 2 - innerWidth / 2), low: innerHeight - r.bottom, state: bar.textContent, setbtn: !!document.querySelector('.gc-setbtn'), acts, barHidden: bar.hidden };
+        });
+        check(lay.btns === 0 && !lay.setbtn && lay.mid < 3 && lay.low < 40 && /P[12]/.test(lay.state), 'Buttons mode: no buttons over the pad, only the connection status at the bottom centre (' + JSON.stringify(lay) + ')');
+        check(lay.acts.join() === 'mode:Mode,advanced:Advanced settings,leave:Leave' && lay.barHidden, 'the pad\'s gear panel (top left) has Mode, Advanced settings and Leave at the top; the status hides under it');
+        // Advanced settings: a browser shows only what it can do (no Background); big checkboxes; GamePad
         // draws a D-pad in place of the stick, kept on the phone
-        await P2.click('.gc-setbtn');
+        await P2.evaluate(() => document.querySelector('[data-act="advanced"]').click());
         const ps = await P2.evaluate(() => ({ opts: [...document.querySelectorAll('.gc-phoneset input[type=checkbox]')].map((c) => c.getAttribute('data-opt') + ':' + c.checked), pad: VirtualPad.active(),
             size: document.querySelector('.gc-phoneset input[type=checkbox]').getBoundingClientRect().height }));
-        check(ps.opts.indexOf('dpad:false') >= 0 && ps.opts.join() === 'awake:true,bg:true,dpad:false' && !ps.pad, 'Settings (top right) always lists Stay awake, Background and GamePad, even in a browser, over a hidden pad (' + ps.opts + ')');
+        check(ps.opts.indexOf('dpad:false') >= 0 && ps.opts.join() === 'awake:true,bg:true,dpad:false' && !ps.pad, 'Advanced settings always lists Stay awake, Background and GamePad, even in a browser, over a hidden pad (' + ps.opts + ')');
         check(await P2.evaluate(() => { const r = document.querySelector('.gc-phoneset .gc-rot'); return !!r && /Screen rotation/.test(r.textContent) && /Landscape/.test(r.textContent); }), 'Settings has Screen rotation (Landscape at first: the screen never turns), the same setting as Control Panel > Display');
         check(ps.size >= 24, 'the checkboxes are finger-sized (' + Math.round(ps.size) + ' px)');
         await P2.click('.gc-phoneset [data-opt=dpad]');
@@ -2904,7 +2914,7 @@ async function main() {
         await P1.waitForFunction(() => VirtualPad.active(), null, { timeout: 5000 });
         check(await P1.evaluate(() => [...document.querySelectorAll('div')].some((d) => d.textContent === 'Y' && d.style.borderRadius === '50%' && d.style.display === 'none') && [...document.querySelectorAll('div')].some((d) => d.textContent === 'X' && d.style.borderRadius === '50%' && d.style.display === 'flex') && !!Store.rawGet('arc_dev_vpad:controller2')), 'the pad settings are kept after closing the app and reloading (no setting up again; Y hidden here)');
         // Settings: Disconnect / Forget TV; a phone with no TV opens on Connect (not the code box: no keyboard popping up)
-        await P1.evaluate(() => document.querySelector('.gc-setbtn').click());      // at once: the boot screen may still be fading out over it
+        await P1.evaluate(() => document.querySelector('[data-act="advanced"]').click());      // at once: the boot screen may still be fading out over it
         check(await P1.evaluate(() => !!document.querySelector('.gc-phoneset .gc-disc') && /^Forget TV/.test(document.querySelector('.gc-phoneset .gc-forget').textContent)), 'Settings has Disconnect and Forget TV while connected');
         await P1.click('.gc-phoneset .gc-forget');
         check(await P1.evaluate(() => !GamepadApp.running() && !Store.rawGet('arc_dev_ctrlphone').paired && !Store.rawGet('arc_dev_ctrlphone').code && document.querySelector('.gc-code').value === ''), 'Forget TV disconnects and forgets the code');
@@ -2915,8 +2925,8 @@ async function main() {
         for (const pg of [tv, P1, P2, P3]) await pg.context().close();
     }
 
-    // ---- 34b. Microphone mode: the same pad + a mic button; the phone is the TV's microphone (Memo records from it)
-    console.log('34b. phone controller Microphone mode (phone mic -> TV, Memo)');
+    // ---- 34b. Buttons mode's mic button: the phone is the TV's microphone (Memo records from it); no Microphone mode any more
+    console.log('34b. phone controller microphone in Buttons mode (phone mic -> TV, Memo)');
     {
         const db = {};
         const tv = await newPage(browser, base, db);
@@ -2931,10 +2941,10 @@ async function main() {
         await ph.evaluate(() => Win.open('gamepad'));
         await ph.fill('.gc-code', code);
         const names = await ph.evaluate(() => [...document.querySelectorAll('.gc-modes .btn')].map((b) => b.textContent));
-        check(names[names.length - 1] === 'Microphone', 'the Game controller offers a Microphone mode (' + names.join(', ') + ')');
-        await ph.evaluate(() => [...document.querySelectorAll('.gc-modes .btn')].find((b) => b.textContent === 'Microphone').click());
+        check(names.indexOf('Microphone') < 0 && names[0] === 'Buttons', 'there is no separate Microphone mode any more (' + names.join(', ') + ')');
+        await ph.evaluate(() => [...document.querySelectorAll('.gc-modes .btn')][0].click());
         await ph.click('.gc-go');
-        await tv.waitForFunction(() => Controllers.modes()[1] === 'mic', null, { timeout: 40000 });
+        await tv.waitForFunction(() => Controllers.modes()[1] === 'pad', null, { timeout: 40000 });
         await ph.waitForFunction(() => window.GamepadApp && GamepadApp.linked() && VirtualPad.active(), null, { timeout: 10000 });
         const pad = await ph.evaluate(() => {
             const vis = (e) => !!e && e.style.display !== 'none';
@@ -2942,7 +2952,7 @@ async function main() {
             const m = document.getElementById('vp-mic'), pl = document.getElementById('vp-plus'), r = m && m.getBoundingClientRect(), q = pl.getBoundingClientRect();
             return { face, stick: !!document.getElementById('vp-stick'), home: vis(document.getElementById('vp-home')), plus: vis(pl), mic: vis(m), mx: r && r.left + r.width / 2, my: r && r.top, plusBottom: q.bottom, plusX: q.left + q.width / 2 };
         });
-        check(pad.face && pad.stick && pad.home && pad.plus && pad.mic, 'Microphone mode shows the same virtual pad as Buttons mode (stick, A B X Y, +, Home) plus its microphone button');
+        check(pad.face && pad.stick && pad.home && pad.plus && pad.mic, 'Buttons mode shows the virtual pad (stick, A B X Y, +, Home) with its microphone button');
         check(Math.abs(pad.mx - pad.plusX) < 2 && pad.my > pad.plusBottom, 'the microphone button sits at the top centre, under the + button');
         await tv.evaluate(() => Win.open('memo'));
         await tv.waitForFunction(() => document.activeElement && document.activeElement.id === 'memo-new', null, { timeout: 5000 });
@@ -2976,11 +2986,11 @@ async function main() {
         await tv.evaluate(() => document.getElementById('memo-rec').click());
         await ph.waitForFunction(() => Mic.active(), null, { timeout: 8000 });
         await tv.waitForTimeout(700);
-        await ph.evaluate(() => document.querySelector('.gc-bar .gc-leave:not(.gc-modebtn)').click());
+        await ph.evaluate(() => document.querySelector('[data-act="leave"]').click());
         await tv.waitForFunction(() => !Mic.active(), null, { timeout: 10000 });
         const n3 = await tv.evaluate(() => new Promise((ok) => MemoStore.list((e, l) => ok(l[0].parts.length))));
         check(n3 === 3 && await tv.evaluate(() => !Mic.phone()), 'a phone that leaves while recording ends the recording, and what was recorded is kept');
-        // Buttons mode never opens the phone's microphone; the mic button is only offered in its gear panel
+        // the shell's touch pad over games: the mic button is only offered in its gear panel
         check(await ph.evaluate(() => { VirtualPad.hide(); VirtualPad.init({ force: true, id: 't', home: true, mic: null }); const m = document.getElementById('vp-mic'); const r = m && m.style.display === 'none'; VirtualPad.hide(); return r; }), 'with mic: null the pad only offers the microphone button (hidden at first, in the gear panel)');
         check(tv.errors.length === 0 && ph.errors.length === 0, 'no page errors ' + tv.errors.concat(ph.errors).join('; '));
         await tv.evaluate(() => Win.close());
@@ -3167,7 +3177,7 @@ async function main() {
         check(await tv.evaluate(() => !!Controllers.players()[1]) && await Q.evaluate(() => !/pair=/.test(location.search)), 'scanning the QR code (opening its link) pairs the phone at once, and the link is cleaned from the address');
         check(await Q.evaluate(() => GamepadApp.scanCode('https://x.test/index.html?pair=' + 'ab') === '' && GamepadApp.scanCode('not a code!') === ''), 'a scanned QR code that is not a My PC pairing link is ignored');
         // switching mode while connected: Mode > Motion moves reconnects as a motion controller, same player
-        await Q.click('.gc-bar .gc-modebtn');
+        await Q.evaluate(() => document.querySelector('[data-act="mode"]').click());
         await Q.click('.gc-modepick .btn:nth-of-type(2)');
         await Q.waitForFunction(() => GamepadApp.mode() === 'sensor-actions' && GamepadApp.linked() && !document.querySelector('.gc-sense').hidden && !VirtualPad.active(), null, { timeout: 40000 });
         await tv.waitForFunction(() => Controllers.modes()[1] === 'sensor-actions', null, { timeout: 10000 });

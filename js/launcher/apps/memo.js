@@ -7,7 +7,7 @@
  * Smart Remote's mic button for Bixby), X or Y on a controller, R on a keyboard. Play key (▶ / ⏯, Start's short press is
  * the + menu and is not used) plays or stops.
  * The sound: Opus in WebM when the TV has MediaRecorder (about 30 KB per 15 s), else 16 kHz WAV. One <audio>, freed on close.
- * A phone in the Game controller's Microphone mode is the microphone when one is connected (js/core/mic.js; 16 kHz WAV then):
+ * A phone in the Game controller's Buttons mode is the microphone when one is connected (js/core/mic.js; 16 kHz WAV then):
  * its mic button is the Record key, so a memo starts and stops from the phone or from the TV. */
 (function () {
     'use strict';

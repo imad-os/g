@@ -19,7 +19,7 @@
  *   TouchPad.canShow() / .hidden() / .setHidden(bool)   pause menu entry "Hide / Show touch pad": the player hides it for this app
  *                                                       (e.g. to play by tapping), kept per app on the device (arc_dev_padhide)
  * The settings panel also offers Stick / D-pad (the D-pad leaves the left half free for taps), and +, Home and the microphone
- * (the Record key, like the phone controller's Microphone mode: the same pad) as movable buttons.
+ * (the Record key, like the phone controller's Buttons mode: the same pad) as movable buttons.
  *   TouchPad.clean(t)                                   validates a "touch" value (also used on what the store delivers) */
 var TouchPad = (function () {
     'use strict';

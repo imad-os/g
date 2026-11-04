@@ -16,7 +16,7 @@
  *   Mic.cancel()    stops and drops the recording       Mic.active()
  * Errors: { code: 'no-mic' | 'denied' | 'busy' | 'cancelled', message }
  *
- * A phone in the Game controller's Microphone mode is a microphone for this device (Samsung keeps the remote's mic for
+ * A phone in the Game controller's Buttons mode is a microphone for this device (Samsung keeps the remote's mic for
  * Bixby): while one is connected, Mic.start records from it instead of getUserMedia (js/launcher/controllers.js gives the
  * source with Mic.source(src)). The phone sends 16-bit PCM over the controller link; 'webm' is then recorded as 'wav'
  * (the result's format / mime say so), and the rate is the phone's (16000 asked, at most 16000).
@@ -48,7 +48,7 @@ var Mic = (function () {
         }
     }
 
-    // the phone's microphone (Microphone mode): same events and result as a local one
+    // the phone's microphone (the Game controller's Buttons mode): same events and result as a local one
     function startRemote(c, opts, cb) {
         if (c.format === 'webm') c.format = 'wav';
         var per = 0;
@@ -204,6 +204,6 @@ var Mic = (function () {
         cancel: function () { if (cur) finish(cur, 'cancel', null); },
         active: function () { return !!cur; },
         source: function (src) { source = src && typeof src.open === 'function' ? src : null; },
-        phone: function () { return !!(source && source.available()); }      // a phone in Microphone mode is connected
+        phone: function () { return !!(source && source.available()); }      // a phone in Buttons mode is connected
     };
 })();

@@ -17,7 +17,7 @@ var SensorProto = (function () {
     'use strict';
 
     var VERSION = 1;
-    var MODES = ['pad', 'sensor-actions', 'sensor-raw', 'pointer', 'keyboard', 'mic'];
+    var MODES = ['pad', 'sensor-actions', 'sensor-raw', 'pointer', 'keyboard', 'mic'];   // 'mic': older phones (now Buttons mode)
     var POSITIONS = ['waist', 'left arm', 'right arm', 'left hand', 'right hand'];
     var READY_POSITIONS = ['right hand'];                 // the others are accepted and fall back to right hand for now
     var GAITS = ['IDLE', 'WALK', 'RUN'];
