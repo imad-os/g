@@ -1,5 +1,5 @@
 {
-  "build": 95,
+  "build": 96,
   "version": "2.23.0",
   "shell": 1,
   "css": [
@@ -44,6 +44,7 @@
     "js/launcher/notify.js",
     "js/launcher/push.js",
     "js/launcher/keyboard.js",
+    "js/launcher/textin.js",
     "js/launcher/themes.js",
     "js/launcher/desktop.js",
     "js/launcher/window.js",

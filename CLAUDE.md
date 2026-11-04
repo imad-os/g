@@ -133,6 +133,9 @@
   **Keyboard mode** (`keyboard`): a keyboard plugged into the phone is a whole Switch Pro style controller; keys mapped per control on the phone
   (`arc_dev_ctrlphone.keys`, ZQSD = D-pad by default), sends the same `gp` message (18 buttons, Capture = 17, `rx` / `ry` right stick), never keys;
   the screen draws the controller and lights the pressed control. The Buttons pad shows L and R by default (shoulder pills, VirtualPad `place: 'l' | 'r' | 'zl' | 'zr'`); its gear adds ZL ZR − Capture L3 R3.
+  **Text mode** (`text`, owner request 2026-11-04): the phone's own keyboard types into the field the TV uses now (`js/launcher/textin.js`:
+  on-screen `Keyboard` first, then a focused My PC field, then the running app's focused field via the SDK `field` / `text` messages, `MyPC.text`, API 13);
+  Live (default) or Send; no key mapping while typing (Backspace never = Back). Web pages in the Browser are cross-origin: only its address bar.
   **Buttons mode layout** (owner request 2026-11-04): nothing over the pad but the status (bottom centre, green / red dot); Mode,
   **Advanced settings** (the phone settings) and Leave are at the top of the pad's gear panel (top-left round button; VirtualPad option `actions`).
   **Phone settings** (Game controller > Settings, `arc_dev_ctrlphone.opt`): Auto rotate (owner decision: off by default, the screen never turns

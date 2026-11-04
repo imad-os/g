@@ -24,6 +24,11 @@
  *                   maps each key to a control (A B X Y, L R ZL ZR, − +, Home, Capture, D-pad, both sticks and their clicks;
  *                   ZQSD = D-pad by default), kept on the phone; it sends the same gamepad message as pad mode (with the right
  *                   stick), never keys. The screen shows the controller with each control's key; a pressed control lights up
+ *   text            this phone's own keyboard types into the text field the TV uses now (the on-screen keyboard, e.g. the
+ *                   browser's address bar, a My PC field, or the running app's field through the SDK): { t: 'tx', v: the whole
+ *                   text, go } live while typing (Live on) or only with Send; the TV says which field is open ({ t: 'tf' }).
+ *                   No key mapping at all here: Backspace deletes a letter, Enter sends, never Back / the pause menu.
+ *                   Small arrows and A (right, back) / B (bottom, OK) move to a field on the TV ({ t: 'k' }, like a remote)
  *   (the old Microphone mode 'mic' was merged into Buttons mode: a saved 'mic' opens Buttons mode)
  * Phone settings (Settings button on every screen; Advanced settings in the Buttons pad's gear panel, kept on the phone in arc_dev_ctrlphone.opt): Screen rotation (Auto /
  * Portrait / Landscape / Manual, js/core/rotation.js = Control Panel > Display; this app itself stays sideways while open),
@@ -38,22 +43,26 @@
 
     // Keyboard mode and Vibration / Auto rotate strings (the last ones also in Control Panel > Devices)
     I18n.add({
-        en: { gcAdvanced: 'Advanced settings', gcMicDenied: 'This phone did not give its microphone to My PC. Allow it in the browser or phone settings.', gcMicUpdate: 'Update the My PC app on this phone (Get the app on the TV\'s desktop) to use its microphone.', gcVib: 'Vibration', gcVibDesc: 'A short buzz on every button press: 0 = off, 3 = strongest. Also used by the touch pad over games on this phone.',
+        en: { gcModeText: 'Text', gcTxInto: 'Typing into: %s', gcTxField: 'the text field', gcTxNone: 'No text field is open on the TV. Go to one with the arrows and press B.', gcTxLive: 'Live (letters appear on the TV as you type)', gcTxSend: 'Send', gcTxClear: 'Clear', gcTxHint: 'Type here', gcTxNoField: 'Open a text field on the TV first.', gcTxSent: 'Sent',
+              gcAdvanced: 'Advanced settings', gcMicDenied: 'This phone did not give its microphone to My PC. Allow it in the browser or phone settings.', gcMicUpdate: 'Update the My PC app on this phone (Get the app on the TV\'s desktop) to use its microphone.', gcVib: 'Vibration', gcVibDesc: 'A short buzz on every button press: 0 = off, 3 = strongest. Also used by the touch pad over games on this phone.',
               gcModeKeys: 'Keyboard', gcKHelp: 'Plug a keyboard into this phone (USB or Bluetooth): each key presses the controller button that shows it. Tap a button to give it another key.', gcKMap: 'Map keys', gcKDefault: 'Default keys', gcKSkip: 'Skip', gcKClear: 'No key', gcKStop: 'Done', gcKPress: 'Press a key for %s', gcKNone: 'no key',
               gcKDpad: 'D-pad', gcKLs: 'Left stick', gcKRs: 'Right stick', gcKLclick: 'Left stick click', gcKRclick: 'Right stick click', gcKHome: 'Home', gcKCapture: 'Capture' },
-        fr: { gcAdvanced: 'Paramètres avancés', gcMicDenied: 'Ce téléphone n’a pas donné son micro à My PC. Autorisez-le dans les réglages du navigateur ou du téléphone.', gcMicUpdate: 'Mettez à jour l’appli My PC sur ce téléphone (Obtenir l’appli sur le bureau de la TV) pour utiliser son micro.', gcVib: 'Vibration', gcVibDesc: 'Une courte vibration à chaque bouton : 0 = désactivée, 3 = la plus forte. Aussi pour la manette tactile sur les jeux de ce téléphone.',
+        fr: { gcModeText: 'Texte', gcTxInto: 'Saisie dans : %s', gcTxField: 'le champ de texte', gcTxNone: 'Aucun champ de texte n’est ouvert sur la TV. Allez sur un champ avec les flèches et appuyez sur B.', gcTxLive: 'En direct (les lettres s’affichent sur la TV pendant la saisie)', gcTxSend: 'Envoyer', gcTxClear: 'Effacer', gcTxHint: 'Écrivez ici', gcTxNoField: 'Ouvrez d’abord un champ de texte sur la TV.', gcTxSent: 'Envoyé',
+              gcAdvanced: 'Paramètres avancés', gcMicDenied: 'Ce téléphone n’a pas donné son micro à My PC. Autorisez-le dans les réglages du navigateur ou du téléphone.', gcMicUpdate: 'Mettez à jour l’appli My PC sur ce téléphone (Obtenir l’appli sur le bureau de la TV) pour utiliser son micro.', gcVib: 'Vibration', gcVibDesc: 'Une courte vibration à chaque bouton : 0 = désactivée, 3 = la plus forte. Aussi pour la manette tactile sur les jeux de ce téléphone.',
               gcModeKeys: 'Clavier', gcKHelp: 'Branchez un clavier sur ce téléphone (USB ou Bluetooth) : chaque touche appuie sur le bouton de la manette qui l’affiche. Touchez un bouton pour lui donner une autre touche.', gcKMap: 'Assigner les touches', gcKDefault: 'Touches par défaut', gcKSkip: 'Passer', gcKClear: 'Aucune touche', gcKStop: 'Terminé', gcKPress: 'Appuyez sur une touche pour %s', gcKNone: 'aucune touche',
               gcKDpad: 'Croix', gcKLs: 'Joystick gauche', gcKRs: 'Joystick droit', gcKLclick: 'Clic du joystick gauche', gcKRclick: 'Clic du joystick droit', gcKHome: 'Accueil', gcKCapture: 'Capture' },
-        es: { gcAdvanced: 'Ajustes avanzados', gcMicDenied: 'Este teléfono no dio su micrófono a My PC. Permítelo en los ajustes del navegador o del teléfono.', gcMicUpdate: 'Actualiza la app My PC en este teléfono (Obtener la app en el escritorio de la TV) para usar su micrófono.', gcVib: 'Vibración', gcVibDesc: 'Una vibración corta en cada botón: 0 = desactivada, 3 = la más fuerte. También para el mando táctil sobre los juegos en este teléfono.',
+        es: { gcModeText: 'Texto', gcTxInto: 'Escribiendo en: %s', gcTxField: 'el campo de texto', gcTxNone: 'No hay ningún campo de texto abierto en la TV. Ve a uno con las flechas y pulsa B.', gcTxLive: 'En directo (las letras aparecen en la TV mientras escribes)', gcTxSend: 'Enviar', gcTxClear: 'Borrar', gcTxHint: 'Escribe aquí', gcTxNoField: 'Abre primero un campo de texto en la TV.', gcTxSent: 'Enviado',
+              gcAdvanced: 'Ajustes avanzados', gcMicDenied: 'Este teléfono no dio su micrófono a My PC. Permítelo en los ajustes del navegador o del teléfono.', gcMicUpdate: 'Actualiza la app My PC en este teléfono (Obtener la app en el escritorio de la TV) para usar su micrófono.', gcVib: 'Vibración', gcVibDesc: 'Una vibración corta en cada botón: 0 = desactivada, 3 = la más fuerte. También para el mando táctil sobre los juegos en este teléfono.',
               gcModeKeys: 'Teclado', gcKHelp: 'Conecta un teclado a este teléfono (USB o Bluetooth): cada tecla pulsa el botón del mando que la muestra. Toca un botón para darle otra tecla.', gcKMap: 'Asignar teclas', gcKDefault: 'Teclas por defecto', gcKSkip: 'Saltar', gcKClear: 'Sin tecla', gcKStop: 'Listo', gcKPress: 'Pulsa una tecla para %s', gcKNone: 'sin tecla',
               gcKDpad: 'Cruceta', gcKLs: 'Joystick izquierdo', gcKRs: 'Joystick derecho', gcKLclick: 'Clic del joystick izquierdo', gcKRclick: 'Clic del joystick derecho', gcKHome: 'Inicio', gcKCapture: 'Captura' },
-        ar: { gcAdvanced: 'إعدادات متقدمة', gcMicDenied: 'لم يمنح هذا الهاتف الميكروفون لـ My PC. اسمح به في إعدادات المتصفح أو الهاتف.', gcMicUpdate: 'حدّث تطبيق My PC على هذا الهاتف (تنزيل التطبيق على سطح مكتب التلفاز) لاستخدام الميكروفون.', gcVib: 'الاهتزاز', gcVibDesc: 'اهتزاز قصير عند كل ضغطة زر: 0 = متوقف، 3 = الأقوى. يُستخدم أيضاً لذراع اللمس فوق الألعاب على هذا الهاتف.',
+        ar: { gcModeText: 'نص', gcTxInto: 'الكتابة في: %s', gcTxField: 'حقل النص', gcTxNone: 'لا يوجد حقل نص مفتوح على التلفاز. انتقل إلى حقل بالأسهم واضغط B.', gcTxLive: 'مباشر (تظهر الحروف على التلفاز أثناء الكتابة)', gcTxSend: 'إرسال', gcTxClear: 'مسح', gcTxHint: 'اكتب هنا', gcTxNoField: 'افتح حقل نص على التلفاز أولاً.', gcTxSent: 'تم الإرسال',
+              gcAdvanced: 'إعدادات متقدمة', gcMicDenied: 'لم يمنح هذا الهاتف الميكروفون لـ My PC. اسمح به في إعدادات المتصفح أو الهاتف.', gcMicUpdate: 'حدّث تطبيق My PC على هذا الهاتف (تنزيل التطبيق على سطح مكتب التلفاز) لاستخدام الميكروفون.', gcVib: 'الاهتزاز', gcVibDesc: 'اهتزاز قصير عند كل ضغطة زر: 0 = متوقف، 3 = الأقوى. يُستخدم أيضاً لذراع اللمس فوق الألعاب على هذا الهاتف.',
               gcModeKeys: 'لوحة المفاتيح', gcKHelp: 'صِل لوحة مفاتيح بهذا الهاتف (USB أو بلوتوث): كل مفتاح يضغط زر اليد الذي يظهر عليه. المس زراً لتعطيه مفتاحاً آخر.', gcKMap: 'تعيين المفاتيح', gcKDefault: 'المفاتيح الافتراضية', gcKSkip: 'تخطي', gcKClear: 'بلا مفتاح', gcKStop: 'تم', gcKPress: 'اضغط مفتاحاً لـ %s', gcKNone: 'بلا مفتاح',
               gcKDpad: 'أزرار الاتجاه', gcKLs: 'العصا اليسرى', gcKRs: 'العصا اليمنى', gcKLclick: 'ضغط العصا اليسرى', gcKRclick: 'ضغط العصا اليمنى', gcKHome: 'الرئيسية', gcKCapture: 'التقاط' }
     });
 
     var KEY = 'arc_dev_ctrlphone', REC_MAX = 60 * 120;      // 2 minutes at 60 Hz
-    var MODES = ['pad', 'sensor-actions', 'sensor-raw', 'pointer', 'keyboard'], MODE_NAMES = ['gcModePad', 'gcModeActions', 'gcModeRaw', 'gcModePointer', 'gcModeKeys'];
+    var MODES = ['pad', 'sensor-actions', 'sensor-raw', 'pointer', 'keyboard', 'text'], MODE_NAMES = ['gcModePad', 'gcModeActions', 'gcModeRaw', 'gcModePointer', 'gcModeKeys', 'gcModeText'];
     var MIC_CHUNK = 2400, MIC_APP = 4;          // bytes of PCM per message; the Android app gives its microphone from Bridge version 4
     // The pad is THE pad My PC draws over games (owner rule: identical): js/core/pad-spec.js gives both the same buttons, sizes,
     // settings and saved layout. A B X Y in the Nintendo places, sending EXACTLY what the same button of a real Nintendo
@@ -76,6 +85,8 @@
     var aim = null, aimLast = 0, calib = null;
     // phone settings (Stay awake and Background on, GamePad off), Vibration 0..3 (js/core/haptics.js) and Screen rotation (js/core/rotation.js)
     var OPT_DEF = { awake: true, bg: true, dpad: false }, OPT_NAMES = [['awake', 'gcAwake'], ['bg', 'gcBackground'], ['dpad', 'gcDpad']];
+    // Text mode: the field the TV has open ({ id, kind, label, v, max } or null), sends at most every TX_MS while typing live
+    var TX_MS = 70, field = null, txTimer = 0, txDirty = false;
     var ROT_KEYS = { auto: 'rotAuto', portrait: 'rotPortrait', landscape: 'rotLandscape', manual: 'rotManual' };
 
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
@@ -89,7 +100,7 @@
     function save() {
         var cur = (Store.rawGet(KEY) || {}).opt || {}, o = saved.opt = saved.opt || {};
         ['orient', 'side'].forEach(function (k) { if (cur[k] !== undefined) o[k] = cur[k]; else delete o[k]; });
-        Store.rawSet(KEY, { cid: cid, code: code, p: player, mode: mode, prefs: saved.prefs || {}, ptr: saved.ptr || {}, opt: saved.opt || {}, keys: saved.keys || null, paired: !!saved.paired });
+        Store.rawSet(KEY, { cid: cid, code: code, p: player, mode: mode, prefs: saved.prefs || {}, ptr: saved.ptr || {}, opt: saved.opt || {}, keys: saved.keys || null, txt: saved.txt || null, paired: !!saved.paired });
     }
     function opts() {
         var o = saved.opt || {}, r = {};
@@ -131,22 +142,26 @@
         if (ui.pDot) ui.pDot.className = 'gc-dot' + (ok ? ' ok' : '');
         if (ui.kState) ui.kState.textContent = text;
         if (ui.kDot) ui.kDot.className = 'gc-dot' + (ok ? ' ok' : '');
+        if (ui.tState) ui.tState.textContent = text;
+        if (ui.tDot) ui.tDot.className = 'gc-dot' + (ok ? ' ok' : '');
     }
-    function pick(p) { player = p; ui.p1.className = 'btn' + (p === 1 ? ' btn-primary' : ''); ui.p2.className = 'btn' + (p === 2 ? ' btn-primary' : ''); if (ui.badge) ui.badge.textContent = 'P' + p; if (ui.sBadge) ui.sBadge.textContent = 'P' + p; if (ui.pBadge) ui.pBadge.textContent = 'P' + p; if (ui.kBadge) ui.kBadge.textContent = 'P' + p; }
+    function pick(p) { player = p; ui.p1.className = 'btn' + (p === 1 ? ' btn-primary' : ''); ui.p2.className = 'btn' + (p === 2 ? ' btn-primary' : ''); if (ui.badge) ui.badge.textContent = 'P' + p; if (ui.sBadge) ui.sBadge.textContent = 'P' + p; if (ui.pBadge) ui.pBadge.textContent = 'P' + p; if (ui.kBadge) ui.kBadge.textContent = 'P' + p; if (ui.tBadge) ui.tBadge.textContent = 'P' + p; }
     // an unknown or old saved mode ('mic', now Buttons mode) is Buttons mode
     function pickMode(m) { mode = MODES.indexOf(m) >= 0 ? m : 'pad'; for (var i = 0; i < MODES.length; i++) ui['m' + i].className = 'btn' + (MODES[i] === mode ? ' btn-primary' : ''); }
     function pointing() { return mode === 'pointer' && !!(cfg && cfg.pointer); }
     function show(on) {
         inPad = on; ui.join.hidden = on;
-        var padUi = on && mode === 'pad', ptrUi = on && mode === 'pointer', kbUi = on && mode === 'keyboard', senseUi = on && !padUi && !ptrUi && !kbUi;
+        var padUi = on && mode === 'pad', ptrUi = on && mode === 'pointer', kbUi = on && mode === 'keyboard', txUi = on && mode === 'text', senseUi = on && !padUi && !ptrUi && !kbUi && !txUi;
         ui.bar.hidden = ui.padBg.hidden = !padUi;
         ui.ptr.hidden = !ptrUi;
         ui.kb.hidden = !kbUi;
+        ui.txt.hidden = !txUi;
         ui.sense.hidden = !senseUi;
         if (padUi) VirtualPad.init(PadSpec.options({ onAction: padAction, mic: true, actions: padActions(), onSettings: function (open) { if (ui.bar) ui.bar.hidden = open || !inPad; } }));
         else if (VirtualPad.active()) VirtualPad.hide();
         if (ptrUi) paintPtr();
         if (kbUi) { kStop(); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); }   // keys go to the controller, not to a button
+        if (txUi) { field = null; paintTx(); }
         if (senseUi) { ui.modeName.textContent = t(mode === 'sensor-raw' ? 'gcModeRaw' : 'gcModeActions'); setTab('live'); }
         if (!on && ui.go) Focus.focus(ui.go);
     }
@@ -206,10 +221,11 @@
             }
             else if (m.type === 'ack') onAck(SensorProto.ack(m));
             else if (m.t === 'mic') micCmd(m);
+            else if (m.t === 'tf') onField(m);
         });
         c.onClose(function () {
             if (conn !== c) return;
-            conn = null; linked = false; busy = false; release(); micStop(false);
+            conn = null; linked = false; busy = false; release(); micStop(false); field = null; paintTx();
             if (run) { state(t('gcConnecting'), false); clearTimeout(retry); retry = setTimeout(attempt, 1200); }
         });
         c.send({ t: 'hi', p: player, cid: cid, name: name(), proto: SensorProto.VERSION, mode: mode, session: session || SensorProto.session(), caps: { motion: caps.motion, orientation: 'DeviceOrientationEvent' in window }, now: Date.now() });
@@ -223,7 +239,7 @@
         run = true; session = SensorProto.session(); cfg = null;
         sess = new Rooms.Session('controller', name(), onEvent);
         show(true); state(t('gcConnecting'), false); Rotation.hold('landscape'); wake(); native('active', true);
-        if (mode !== 'pad' && mode !== 'keyboard') sensorsOn();     // the tap on Connect also answers the motion permission prompt (iPhone)
+        if (mode !== 'pad' && mode !== 'keyboard' && mode !== 'text') sensorsOn();     // the tap on Connect also answers the motion permission prompt (iPhone)
         attempt();
     }
     function stop() {
@@ -239,7 +255,7 @@
 
     /* ---------- pad mode: the existing virtual pad ---------- */
     function padAction(a, down) {
-        if (mode === 'pointer') {                                          // the pointer screen's A / B: plain actions
+        if (mode === 'pointer' || mode === 'text') {                       // the pointer / text screens' buttons: plain actions
             if (!!want[a] !== down) { want[a] = down; send({ t: 'k', a: a, d: down ? 1 : 0 }); if (down) Haptics.buzz(); }
             return;
         }
@@ -461,6 +477,110 @@
         [ui.kMapBtn, ui.kDef, ui.kSkip, ui.kClear, ui.kStop].forEach(function (b) { acts.appendChild(b); });
         s.appendChild(acts);
         kbPaint();
+        return s;
+    }
+
+    /* ---------- Text mode: this phone's keyboard types into the TV's text field ---------- */
+    function txLive() { var o = saved.txt || {}; return o.live !== false; }       // live by default
+    function setLive(v) { saved.txt = { live: !!v }; save(); }
+    // the TV opened another field (its text comes with it) or has none any more
+    function onField(m) {
+        var had = field;
+        if (!m.on) { field = null; paintTx(); return; }
+        var f = { id: +m.id || 0, kind: typeof m.kind === 'string' ? m.kind : 'text', label: typeof m.label === 'string' ? m.label.slice(0, 60) : '', v: typeof m.v === 'string' ? m.v : '', max: +m.max > 0 ? Math.min(2000, +m.max) : 2000 };
+        if (had && had.id === f.id) return;
+        field = f;
+        var box = ui.tIn;
+        // typed before a field was open (Live): it goes into the new empty field; otherwise the field's own text comes here
+        if (!had && !f.v && box.value && txLive()) txSend(false);
+        else box.value = f.v.slice(0, f.max);
+        kindAttrs(f.kind);
+        box.maxLength = f.max;
+        paintTx();
+        try { box.focus(); var n = box.value.length; box.setSelectionRange(n, n); } catch (e) {}   // the phone's keyboard comes up
+    }
+    // the phone keyboard that fits the field: addresses, e-mail, numbers, passwords (no suggestions), names
+    function kindAttrs(k) {
+        var b = ui.tIn, plain = k === 'url' || k === 'email' || k === 'password' || k === 'code';
+        b.setAttribute('inputmode', k === 'url' ? 'url' : k === 'email' ? 'email' : k === 'number' ? 'decimal' : k === 'search' ? 'search' : 'text');
+        b.setAttribute('autocapitalize', plain ? 'off' : k === 'name' ? 'words' : 'sentences');
+        b.setAttribute('autocorrect', plain ? 'off' : 'on');
+        b.setAttribute('autocomplete', 'off');
+        b.spellcheck = !plain && k !== 'number';
+        b.setAttribute('enterkeyhint', k === 'multi' ? 'enter' : k === 'url' ? 'go' : k === 'search' ? 'search' : 'send');
+        b.classList.toggle('gc-secret', k === 'password');
+    }
+    function txSend(go) {
+        clearTimeout(txTimer); txTimer = 0; txDirty = false;
+        if (!field) return false;
+        var m = { t: 'tx', v: ui.tIn.value.slice(0, field.max) };
+        if (go) m.go = 1;
+        return send(m);
+    }
+    // Live: the whole text, at most every TX_MS (the first letter at once, the last one always)
+    function txTyped() {
+        if (!txLive() || !field) return;
+        if (txTimer) { txDirty = true; return; }
+        txSend(false);
+        txTimer = setTimeout(function () { txTimer = 0; if (txDirty) { txDirty = false; txTyped(); } }, TX_MS);
+    }
+    function txGo() {
+        if (!field) { txCue(t('gcTxNoField'), 'warn'); Haptics.buzz(); return; }
+        if (txSend(true)) { ui.tIn.value = ''; txCue(t('gcTxSent'), 'go'); Haptics.buzz(); }
+    }
+    function txCue(text, kind) { if (!ui.tCue) return; ui.tCue.textContent = text; ui.tCue.className = 'gc-tcue' + (kind ? ' ' + kind : ''); clearTimeout(ui.tCueT); ui.tCueT = setTimeout(function () { if (ui.tCue) { ui.tCue.textContent = ''; ui.tCue.className = 'gc-tcue'; } }, 2500); }
+    function paintTx() {
+        if (!ui.txt) return;
+        ui.tInto.textContent = field ? t('gcTxInto').replace('%s', field.label || t('gcTxField')) : t('gcTxNone');
+        ui.tInto.className = 'gc-line gc-tinto' + (field ? ' on' : '');
+        ui.tLive.checked = txLive();
+        if (!field) kindAttrs('text');
+    }
+    // arrows and A / B: the Nintendo places (A right = back, B bottom = OK), like the remote, to reach a field on the TV
+    function navButton(label, action, cls, aria) {
+        var b = el('button', 'gc-tbtn ' + cls, label);
+        if (aria) b.setAttribute('aria-label', aria);
+        function on(v) { return function (ev) { padAction(action, v); b.classList.toggle('on', v); ev.preventDefault(); }; }
+        b.addEventListener('pointerdown', on(true)); b.addEventListener('pointerup', on(false)); b.addEventListener('pointercancel', on(false)); b.addEventListener('pointerleave', on(false));
+        return b;
+    }
+    function buildText() {
+        var s = el('div', 'gc-txt'), top = el('div', 'gc-stop');
+        s.hidden = true;
+        ui.tDot = el('span', 'gc-dot'); ui.tBadge = el('span', 'gc-badge', 'P1'); ui.tState = el('span', 'gc-state');
+        [ui.tDot, ui.tBadge, el('span', 'gc-mode', t('gcModeText')), ui.tState, el('span', 'gc-grow')].forEach(function (x) { top.appendChild(x); });
+        top.appendChild(btn('gc-modebtn', t('gcMode'), openModes)); top.appendChild(btn('gc-modebtn', t('gcSettings'), openPhone)); top.appendChild(btn('gc-leave2', t('gcLeave'), function () { stop(); }));
+        s.appendChild(top);
+        var body = el('div', 'gc-tbody'), col = el('div', 'gc-tcol');
+        ui.tInto = el('div', 'gc-line gc-tinto'); ui.tInto.setAttribute('aria-live', 'polite'); col.appendChild(ui.tInto);
+        ui.tIn = el('textarea', 'gc-tin');
+        ui.tIn.rows = 2; ui.tIn.placeholder = t('gcTxHint'); ui.tIn.setAttribute('aria-label', t('gcTxHint')); ui.tIn.setAttribute('data-focus', '');
+        // keys here are typing, never controller keys (Input already leaves a focused text field alone)
+        ui.tIn.addEventListener('input', txTyped);
+        ui.tIn.addEventListener('keydown', function (e) {
+            e.stopPropagation();
+            if (e.key === 'Enter' && !e.shiftKey && !(field && field.kind === 'multi')) { e.preventDefault(); txGo(); }
+        });
+        col.appendChild(ui.tIn);
+        var acts = el('div', 'gc-row gc-tacts'), lv = el('label', 'gc-srow gc-tlive');
+        ui.tLive = el('input'); ui.tLive.type = 'checkbox'; ui.tLive.setAttribute('data-focus', '');
+        ui.tLive.onchange = function () { setLive(ui.tLive.checked); if (ui.tLive.checked) txSend(false); };
+        lv.appendChild(ui.tLive); lv.appendChild(el('span', '', t('gcTxLive')));
+        acts.appendChild(lv); acts.appendChild(el('span', 'gc-grow'));
+        acts.appendChild(btn('', t('gcTxClear'), function () { ui.tIn.value = ''; txTyped(); ui.tIn.focus(); }));
+        // pointerdown keeps the phone's keyboard up (the text box keeps the focus)
+        var go = btn('btn-primary gc-tsend', t('gcTxSend'), txGo);
+        go.addEventListener('pointerdown', function (e) { e.preventDefault(); });
+        acts.appendChild(go);
+        col.appendChild(acts);
+        ui.tCue = el('div', 'gc-tcue'); ui.tCue.setAttribute('role', 'status'); col.appendChild(ui.tCue);
+        body.appendChild(col);
+        var nav = el('div', 'gc-tnav');
+        nav.appendChild(navButton('▲', 'up', 'gc-tu')); nav.appendChild(navButton('◀', 'left', 'gc-tl2'));
+        nav.appendChild(navButton('▶', 'right', 'gc-tr')); nav.appendChild(navButton('▼', 'down', 'gc-td'));
+        nav.appendChild(navButton('A', 'b', 'gc-ta')); nav.appendChild(navButton('B', 'ok', 'gc-tb'));
+        body.appendChild(nav);
+        s.appendChild(body);
         return s;
     }
 
@@ -1112,6 +1232,8 @@
         root.appendChild(ui.ptr);
         ui.kb = buildKeys();
         root.appendChild(ui.kb);
+        ui.txt = buildText();
+        root.appendChild(ui.txt);
         body.appendChild(root);
     }
 
@@ -1123,7 +1245,7 @@
             if (saved.opt && typeof saved.opt.dpad === 'boolean') { if (saved.opt.dpad) PadSpec.setDpad(true); delete saved.opt.dpad; }   // the GamePad setting moved into the pad's layout
             cid = typeof saved.cid === 'string' && /^[a-z0-9]{6,24}$/.test(saved.cid) ? saved.cid : '';
             if (!cid) for (var i = 0; i < 12; i++) cid += 'abcdefghijklmnopqrstuvwxyz0123456789'.charAt(Math.floor(Math.random() * 36));
-            want = {}; sent = {}; micId = 0; kHeld = {}; kWait = null; kWizard = -1; gpBits = 0; gpHeld = {}; gpSent = ""; ui = {}; inPad = false; aimLast = 0; calib = null; log = []; plot = []; seq = 0; acks = {}; rtt = 0; lastAction = null; rawSent = 0; rawLast = 0; cfg = null; perm = 'unknown';
+            want = {}; sent = {}; micId = 0; field = null; clearTimeout(txTimer); txTimer = 0; txDirty = false; kHeld = {}; kWait = null; kWizard = -1; gpBits = 0; gpHeld = {}; gpSent = ""; ui = {}; inPad = false; aimLast = 0; calib = null; log = []; plot = []; seq = 0; acks = {}; rtt = 0; lastAction = null; rawSent = 0; rawLast = 0; cfg = null; perm = 'unknown';
             diag = { acked: 0, tvDuplicate: 0, tvStale: 0, unacked: 0 };
             build(body);
             readable(); window.addEventListener('resize', readable); setTimeout(readable, 350);
@@ -1142,7 +1264,7 @@
                                   engine: function () { return eng; }, feed: function (s) { onMotion(s); }, config: function () { return cfg; }, log: function () { return log.slice(); } };
             return ui.go;                                          // Connect, not the code box (no phone keyboard popping up)
         },
-        back: function () { if (ui.modes) { closeModes(); return true; } if (kWait) { kStop(); return true; } if (scan) { stopScan(); return true; } if (!inPad) return false; stop(); return true; },
+        back: function () { if (ui.modes) { closeModes(); return true; } if (ui.tIn && document.activeElement === ui.tIn) { ui.tIn.blur(); return true; } if (kWait) { kStop(); return true; } if (scan) { stopScan(); return true; } if (!inPad) return false; stop(); return true; },
         close: function () {
             stopScan();
             stop();
@@ -1152,6 +1274,7 @@
             document.removeEventListener('visibilitychange', onVis);
             window.removeEventListener('keydown', kbKey, true); window.removeEventListener('keyup', kbKey, true); window.removeEventListener('blur', onBlur);
             window.removeEventListener('resize', readable);
+            clearTimeout(txTimer); txTimer = 0; field = null;
             unwake(); root = null; ui = {}; eng = null;
             Rotation.hold(null);                                    // back to the screen rotation chosen in Control Panel > Display
             delete window.GamepadApp;

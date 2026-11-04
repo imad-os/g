@@ -4,7 +4,8 @@
  * 'name' capitalises each word, 'url' adds . / : - _ and keeps lower case, 'text' is free text,
  * 'user' is a username (lower case letters, digits, _ and .), 'password' hides what is typed (a Show key,
  * a Shift key for capitals, a few symbols) and Voice Guide says only how many characters there are; 'code' is typed as is
- * (Shift for capitals, / : . - _, no space: AI model names, addresses with capitals). Pasting (a PC or phone keyboard) types the text. */
+ * (Shift for capitals, / : . - _, no space: AI model names, addresses with capitals). Pasting (a PC or phone keyboard) types the text.
+ * A phone in the Game controller's Text mode types here too (js/launcher/textin.js: Keyboard.info / setText / submit). */
 var Keyboard = (function () {
     'use strict';
 
@@ -14,7 +15,7 @@ var Keyboard = (function () {
     var USER_EXTRA = ['_', '.'];
     var PASS_EXTRA = ['.', '-', '_', '@', '!', '?', '#', '$', '*'];
     var CODE_EXTRA = ['.', '/', ':', '-', '_', '@', '=', '+'];
-    var cb = null, cancelCb = null, text = '', opts = null, isOpen = false, caps = false, shown = false;
+    var cb = null, cancelCb = null, text = '', opts = null, isOpen = false, caps = false, shown = false, opens = 0;
 
     function $(id) { return document.getElementById(id); }
 
@@ -81,6 +82,8 @@ var Keyboard = (function () {
         $('namer').hidden = false;
         Focus.push($('namer'), box.firstChild);
         A11y.announce((opts.title || '') + '. ' + (opts.hint ? opts.hint + '. ' : '') + I18n.t('namerHint'));
+        opens++;
+        if (typeof TextIn !== 'undefined') TextIn.changed();          // a phone in Text mode can type here
     }
 
     function say(c) {
@@ -88,7 +91,7 @@ var Keyboard = (function () {
         else A11y.announce(c === ' ' ? I18n.t('space') : c);
     }
 
-    function type(c) {
+    function type(c, quiet) {
         if (text.length + c.length > opts.max) return;
         var prev = text.charAt(text.length - 1);
         if (opts.mode === 'name') {
@@ -104,8 +107,19 @@ var Keyboard = (function () {
             if (c === ' ') return;
         } else if (c === ' ' && (!text || prev === ' ')) return;
         text += c;
+        if (quiet) return;
         draw();
         say(c);
+    }
+    // the whole text at once (a phone in Text mode, js/launcher/textin.js): the same rules as typing it key by key
+    function setText(v) {
+        if (!isOpen) return;
+        v = String(v || '').replace(/[\r\n\t]+/g, ' ');
+        text = '';
+        var chars = Array.from ? Array.from(v) : v.split('');
+        for (var i = 0; i < chars.length; i++) type(opts.mode === 'url' || opts.mode === 'user' ? chars[i].toLowerCase() : chars[i], true);
+        draw();
+        if (opts.mode !== 'password' || shown) A11y.announce(text || I18n.t('erase'));
     }
     function erase() { text = text.slice(0, -1); draw(); if (opts.mode === 'password' && !shown) say(''); else A11y.announce(text || I18n.t('erase')); }
 
@@ -127,6 +141,7 @@ var Keyboard = (function () {
         if (quiet !== true) cancelCb = null;
         text = '';
         Focus.pop();
+        if (typeof TextIn !== 'undefined') TextIn.changed();
     }
 
     // A PC keyboard types directly while the keyboard is open. Window capture phase, so these keys
@@ -169,5 +184,6 @@ var Keyboard = (function () {
     window.addEventListener('keydown', onRawKey, true);
     window.addEventListener('keyup', onRawKey, true);
 
-    return { open: open, close: close, isOpen: function () { return isOpen; }, action: action };
+    return { open: open, close: close, isOpen: function () { return isOpen; }, action: action, setText: setText, submit: function () { if (isOpen) submit(); },
+             info: function () { return isOpen ? { n: opens, title: opts.title || '', mode: opts.mode, max: opts.max, text: text } : null; } };
 })();

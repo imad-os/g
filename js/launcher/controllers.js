@@ -25,6 +25,12 @@
  *   .tune() / .setTune(t)   the Motion moves settings of this TV (arc_dev_ctrltune; Settings > Devices > Phone controller >
  *                           Motion moves), sent to every motion phone in its config and used there at once
  *   .monitor(fn(player, msg)) | .monitor(null)   that screen's live test: the moves arrive there and do not press buttons
+ * Text mode ('text'): the phone's own keyboard types into the text field the TV uses now (js/launcher/textin.js: the on-screen
+ *   keyboard, a focused My PC field, or the running app's field through the SDK). Its arrows and A / B send { t: 'k' } like a remote.
+ *   TV -> phone { t: 'tf', on: 1, id, kind: 'text'|'multi'|'password'|'url'|'email'|'number'|'search'|'name'|'code', label, v, max }
+ *   when another field opens (v = its text, '' for a password), { t: 'tf', on: 0 } when there is none.
+ *   phone -> TV { t: 'tx', v: the whole text (at most 2000 characters), go: 1 = then Enter / OK }: live while typing (Live on)
+ *   or only with Send. Backspace / Enter are editing on the phone: they never reach the TV as Back.
  * The phone's microphone (Buttons mode; older phones call it Microphone mode, 'mic', and are treated the same): the pad's
  * microphone button, and the phone is this TV's microphone (Samsung keeps the remote's mic for Bixby). Its mic button sends { t: 'k', a: 'record' } (the Record key: Memo starts /
  * stops). Recording goes through Mic (js/core/mic.js), which takes the phone as its source (Mic.source below):
@@ -54,6 +60,8 @@ var Controllers = (function () {
     function save(c) { Store.rawSet(KEY, c); }
     // Buttons and Keyboard modes (and 'mic' from older phones): the phone is a gamepad (no sensor config, no moves)
     function padLike(slot) { return slot.mode === 'pad' || slot.mode === 'keyboard' || slot.mode === 'mic'; }
+    // Text mode: the phone's own keyboard types into the TV's text field (js/launcher/textin.js); no sensor config either
+    function plain(slot) { return padLike(slot) || slot.mode === 'text'; }
     function makeCode() {
         var out = '', b = new Uint8Array(8), i;
         try { (window.crypto || window.msCrypto).getRandomValues(b); } catch (e) { for (i = 0; i < 8; i++) b[i] = Math.floor(Math.random() * 256); }
@@ -98,7 +106,8 @@ var Controllers = (function () {
                          offset: h.now ? Date.now() - h.now : null, seen: SensorProto.tracker(), stats: { actions: 0, duplicate: 0, stale: 0, invalid: 0, metrics: 0, raw: 0 } };
                 slots[p] = slot;
                 conn.send({ t: 'ok', p: p, proto: SensorProto.VERSION, session: slot.session });
-                if (!padLike(slot)) sendConfig(slot);
+                if (!plain(slot)) sendConfig(slot);
+                if (slot.mode === 'text') sendField(slot, TextIn.current());
                 say(I18n.t('ctrlOn').replace('%s', slot.name).replace('%n', p), { id: 'ctrl' + p, kind: 'ok' });
                 report();
                 return;
@@ -110,6 +119,11 @@ var Controllers = (function () {
                 return;
             }
             if (m.t === 'ms' || m.t === 'au' || m.t === 'me') return micMessage(slot, m);
+            if (m.t === 'tx') {                                                // Text mode: the whole text of the field (go: then Enter / OK)
+                if (slot.mode !== 'text' || typeof m.v !== 'string') return;
+                if (!TextIn.put(m.v, m.go === 1)) sendField(slot, null);      // no field (any more): the phone shows it
+                return;
+            }
             if (m.t === 'k') {
                 if (typeof m.a !== 'string' || !ACTIONS.hasOwnProperty(m.a)) return;
                 if (m.a === 'record' && micMode(slot)) micLast = slot.p;     // that phone is the microphone
@@ -125,7 +139,7 @@ var Controllers = (function () {
                 if (!a) slot.stats.invalid++; else if (a.t === 'pc') Pointer.center(); else Pointer.move(a.x, a.y);
                 return;
             }
-            if (!padLike(slot)) sensorMessage(slot, m);
+            if (!plain(slot)) sensorMessage(slot, m);
         });
         conn.onClose(function () { clearTimeout(t); if (slot) drop(slot.p, slot); });
     }
@@ -250,7 +264,14 @@ var Controllers = (function () {
     function schedule(ms) { clearTimeout(timer); timer = setTimeout(open, ms); }
 
     function tune() { return SensorProto.tune(Store.rawGet(TUNE_KEY)); }
-    function resend() { for (var p = 1; p <= 2; p++) if (slots[p] && !padLike(slots[p])) sendConfig(slots[p]); }
+    function resend() { for (var p = 1; p <= 2; p++) if (slots[p] && !plain(slots[p])) sendConfig(slots[p]); }
+
+    /* ---------- Text mode: tell the phones which text field the TV is typing into ---------- */
+    function sendField(slot, f) {
+        if (!f) return slot.conn.send({ t: 'tf', on: 0 });
+        slot.conn.send({ t: 'tf', on: 1, id: f.id, kind: f.kind, label: f.label, v: f.v, max: f.max });
+    }
+    if (typeof TextIn !== 'undefined') TextIn.on(function (f) { for (var p = 1; p <= 2; p++) if (slots[p] && slots[p].mode === 'text') sendField(slots[p], f); });
 
     function closePhones() { for (var p = 1; p <= 2; p++) if (slots[p]) { var s = slots[p]; slots[p] = null; Input.releaseRemote(p); Input.virtualPad(p, null); micGone(s); s.conn.close(); } }
 

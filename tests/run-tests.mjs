@@ -1186,6 +1186,22 @@ async function main() {
         await page.waitForFunction(() => window.GameHost.state() === 'running');
         await page.waitForTimeout(150);
         check(await frame.evaluate(() => MyPC.bluetooth.capabilities().then(() => 'yes', (e) => e.message)) === 'Bluetooth is not allowed for this app.', 'MyPC.bluetooth is refused to an app that is not allowed to use it');
+        // MyPC.text (API 13): the app's focused text field is told to My PC; a phone in Text mode types into it
+        await frame.evaluate(() => { const i = document.createElement('input'); i.id = '__tx'; i.placeholder = 'Your name'; window.__txi = []; window.__txe = 0; i.addEventListener('input', () => __txi.push(i.value)); i.addEventListener('keydown', (e) => { if (e.keyCode === 13) __txe++; }); document.body.appendChild(i); i.focus(); });
+        await page.waitForFunction(() => TextIn.current() && TextIn.current().src === 'app', null, { timeout: 3000 }).catch(() => {});
+        const af = await page.evaluate(() => TextIn.current());
+        check(af && af.src === 'app' && af.label === 'Your name' && af.kind === 'text' && await frame.evaluate(() => MyPC.apiLevel >= 13), 'the app\'s focused text field reaches My PC (MyPC.text, API 13) ' + JSON.stringify(af));
+        await page.evaluate(() => { TextIn.put('Imad', false); TextIn.put('Imad K', true); });
+        await frame.waitForFunction(() => window.__txe === 1, null, { timeout: 3000 }).catch(() => {});
+        check(await frame.evaluate(() => document.getElementById('__tx').value === 'Imad K' && __txi.join('|') === 'Imad|Imad K' && __txe === 1), 'the phone\'s text is written into the app\'s field (input events), Send presses Enter there');
+        await frame.evaluate(() => { const i = document.getElementById('__tx'); i.blur(); window.__own = []; MyPC.text.open({ value: 'AAA', kind: 'name', label: 'Hero', max: 7, onInput: (v) => __own.push('i:' + v), onSend: (v) => __own.push('s:' + v) }); });
+        await page.waitForFunction(() => TextIn.current() && TextIn.current().label === 'Hero', null, { timeout: 3000 }).catch(() => {});
+        await page.evaluate(() => TextIn.put('Bob the great', true));
+        await frame.waitForFunction(() => __own.length === 2, null, { timeout: 3000 }).catch(() => {});
+        check(await frame.evaluate(() => __own.join('|') === 'i:Bob the|s:Bob the'), 'MyPC.text.open: a canvas field gets the text (onInput, then onSend; max kept) ' + await frame.evaluate(() => __own.join('|')));
+        await frame.evaluate(() => { MyPC.text.close(); document.getElementById('__tx').remove(); });
+        await page.waitForFunction(() => TextIn.current() === null, null, { timeout: 3000 }).catch(() => {});
+        check(await page.evaluate(() => TextIn.current() === null), 'with no field open in the app, My PC has no text field either');
         await tvBack(page);
         const items = await page.evaluate(() => [...document.querySelectorAll('#pause-items button')].map((b) => b.textContent));
         check(await page.evaluate(() => window.GameHost.state()) === 'paused' && items.indexOf('Restart') > 0, 'Back opens My PC\'s pause menu with the app\'s own items (' + items.join(', ') + ')');
@@ -3142,6 +3158,82 @@ async function main() {
         for (const pg of [tv, ph]) await pg.context().close();
     }
 
+    // ---- 34c. Text mode: the phone's own keyboard types into the TV's text field (Browser address bar, a My PC field)
+    console.log('34c. phone controller Text mode (phone keyboard -> TV text field, live or Send)');
+    {
+        const db = {};
+        const tv = await newPage(browser, base, db);
+        await tv.goto(base + 'index.html');
+        await tv.waitForFunction(() => window.Controllers && document.querySelector('[data-game]'), null, { timeout: 20000 });
+        await tv.evaluate(() => Controllers.setOn(true));
+        const code = await tv.evaluate(() => Controllers.code());
+        await tv.waitForFunction(() => Controllers.status().s === 'ready', null, { timeout: 10000 });
+        const ph = await newPage(browser, base, db, { phone: true, viewport: { width: 844, height: 390 } });
+        await ph.goto(base + 'index.html');
+        await ph.waitForFunction(() => window.Win && document.querySelector('[data-game]'), null, { timeout: 20000 });
+        await ph.evaluate(() => Win.open('gamepad'));
+        await ph.fill('.gc-code', code);
+        const names = await ph.evaluate(() => [...document.querySelectorAll('.gc-modes .btn')].map((b) => b.textContent));
+        check(names[names.length - 1] === 'Text', 'the Game controller has a Text mode (' + names.join(', ') + ')');
+        await ph.evaluate(() => [...document.querySelectorAll('.gc-modes .btn')].find((b) => b.textContent === 'Text').click());
+        await ph.click('.gc-go');
+        await tv.waitForFunction(() => Controllers.modes()[1] === 'text', null, { timeout: 40000 });
+        await ph.waitForFunction(() => window.GamepadApp && GamepadApp.linked() && !document.querySelector('.gc-txt').hidden, null, { timeout: 10000 });
+        check(await ph.evaluate(() => !VirtualPad.active() && !document.querySelector('.gc-tinto').classList.contains('on') && /No text field/.test(document.querySelector('.gc-tinto').textContent)), 'Text mode shows its own screen (no pad) and says no text field is open on the TV');
+        const labels = await ph.evaluate(() => [...document.querySelectorAll('.gc-tnav .gc-tbtn')].map((b) => b.textContent).join(''));
+        check(labels === '▲◀▶▼AB', 'Text mode has arrows and A / B to reach a field on the TV (' + labels + ')');
+        // Send with no field: nothing is sent, the phone says so
+        await ph.fill('.gc-tin', 'hello');
+        await ph.click('.gc-tsend');
+        check(await ph.evaluate(() => /Open a text field/.test(document.querySelector('.gc-txt .gc-tcue').textContent) && document.querySelector('.gc-tin').value === 'hello'), 'Send with no text field on the TV keeps the text and says to open a field first');
+        await ph.fill('.gc-tin', '');
+        // the phone's B (bottom) = OK: the Browser's search box opens the on-screen keyboard; the phone sees the field
+        await tv.evaluate(() => Win.open('browser'));
+        await tv.waitForFunction(() => document.activeElement && document.activeElement.classList.contains('br-search'), null, { timeout: 5000 });
+        await ph.dispatchEvent('.gc-tb', 'pointerdown'); await ph.dispatchEvent('.gc-tb', 'pointerup');
+        await tv.waitForFunction(() => Keyboard.isOpen(), null, { timeout: 5000 });
+        await ph.waitForFunction(() => document.querySelector('.gc-tinto').classList.contains('on'), null, { timeout: 5000 });
+        const into = await ph.evaluate(() => ({ t: document.querySelector('.gc-tinto').textContent, im: document.querySelector('.gc-tin').getAttribute('inputmode'), cap: document.querySelector('.gc-tin').getAttribute('autocapitalize') }));
+        check(/Typing into: .*(address|search)/i.test(into.t) && into.im === 'url' && into.cap === 'off', 'B on the phone opened the Browser\'s address keyboard; the phone shows that field and an address keyboard ' + JSON.stringify(into));
+        // live: each letter shows on the TV; Backspace deletes a letter and is never Back
+        await ph.focus('.gc-tin');
+        await ph.keyboard.type('Wikipedia.org', { delay: 15 });
+        await tv.waitForFunction(() => document.getElementById('namer-text').textContent === 'wikipedia.org', null, { timeout: 5000 }).catch(() => {});
+        check(await tv.evaluate(() => document.getElementById('namer-text').textContent) === 'wikipedia.org', 'Live: what is typed on the phone appears in the TV keyboard as it is typed (its rules kept: lower case for an address)');
+        await ph.keyboard.press('Backspace'); await ph.keyboard.press('Backspace'); await ph.keyboard.press('Backspace');
+        await tv.waitForTimeout(400);
+        check(await tv.evaluate(() => Keyboard.isOpen() && document.getElementById('namer-text').textContent === 'wikipedia.' && Win.current() === 'browser') && await ph.evaluate(() => GamepadApp.running() && document.activeElement === document.querySelector('.gc-tin')),
+            'Backspace on the phone deletes a letter on the TV: no Back, the keyboard and the phone screen stay');
+        await ph.keyboard.type('org');
+        await ph.keyboard.press('Enter');
+        await tv.waitForFunction(() => !Keyboard.isOpen(), null, { timeout: 5000 }).catch(() => {});
+        check(await tv.evaluate(() => !Keyboard.isOpen() && /wikipedia\.org/.test((document.querySelector('.br-frame') || {}).src || '')), 'Enter on the phone = Send: the Browser goes to the address');
+        await ph.waitForFunction(() => !document.querySelector('.gc-tinto').classList.contains('on'), null, { timeout: 5000 }).catch(() => {});
+        check(await ph.evaluate(() => !document.querySelector('.gc-tinto').classList.contains('on') && document.querySelector('.gc-tin').value === ''), 'the keyboard closed on the TV: the phone shows no field and its box is empty again');
+        // Send mode (Live off): nothing reaches the TV until Send
+        await ph.click('.gc-tlive input');
+        check(await ph.evaluate(() => JSON.parse(localStorage.getItem('arc_dev_ctrlphone')).txt.live === false), 'Live off is kept on the phone');
+        await tv.evaluate(() => document.querySelector('.br-addr').click());
+        await ph.waitForFunction(() => document.querySelector('.gc-tinto').classList.contains('on'), null, { timeout: 5000 });
+        await ph.fill('.gc-tin', 'example.com');
+        await tv.waitForTimeout(300);
+        check(await tv.evaluate(() => Keyboard.isOpen() && document.getElementById('namer-text').textContent !== 'example.com'), 'Live off: typing on the phone does not change the TV field yet');
+        await ph.click('.gc-tsend');
+        await tv.waitForFunction(() => !Keyboard.isOpen(), null, { timeout: 5000 }).catch(() => {});
+        check(await tv.evaluate(() => /example\.com/.test(document.querySelector('.br-frame').src)), 'Send puts the text in the field and presses OK (the Browser opens example.com)');
+        // a text field of My PC itself (input with the focus): its text comes to the phone, Send writes it and presses Enter
+        await tv.evaluate(() => { Win.close(); const i = document.createElement('input'); i.id = '__f'; i.value = 'old'; i.setAttribute('aria-label', 'Note'); window.__enter = 0; i.addEventListener('keydown', (e) => { if (e.keyCode === 13) __enter++; }); document.body.appendChild(i); i.focus(); });
+        await ph.waitForFunction(() => /Note/.test(document.querySelector('.gc-tinto').textContent), null, { timeout: 5000 });
+        check(await ph.evaluate(() => document.querySelector('.gc-tin').value === 'old'), 'a focused My PC text field: its label and text come to the phone');
+        await ph.fill('.gc-tin', 'new note');
+        await ph.click('.gc-tsend');
+        await tv.waitForFunction(() => window.__enter === 1, null, { timeout: 5000 }).catch(() => {});
+        check(await tv.evaluate(() => document.getElementById('__f').value === 'new note' && __enter === 1), 'Send writes the text into that field and presses Enter on it');
+        await tv.evaluate(() => document.getElementById('__f').remove());
+        check(tv.errors.length === 0 && ph.errors.length === 0, 'no page errors ' + tv.errors.concat(ph.errors).join('; '));
+        for (const pg of [tv, ph]) await pg.context().close();
+    }
+
     // ---- 35. phone controller sensor modes: moves, metrics, raw data, live and debug screens
     console.log('35. phone controller sensor modes (sensor-actions, sensor-raw, protocol v1)');
     {
@@ -3905,7 +3997,7 @@ async function main() {
         const loop = by('error', /loop error/);
         check(loop && loop.n === 5 && reps.filter((r) => /loop error/.test(r.msg)).length === 1, 'the same error 5 times is one report with n = 5 (' + (loop && loop.n) + ')');
         const one = by('error', /boom/) || {};
-        check(one.appv === '2.0.1' && one.sdk === 12 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
+        check(one.appv === '2.0.1' && one.sdk === 13 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
             'each report has the app version, SDK level, TV id and model, My PC version and build, language, place, address, time and a 30-day expiry (' + JSON.stringify(one) + ')');
         const keys = new Set(reps.flatMap((r) => Object.keys(r)));
         const allowed = ['app', 'kind', 'msg', 'stack', 'src', 'stage', 'appv', 'sdk', 'n', 'at', 'exp', 'tv', 'model', 'ver', 'build', 'lang', 'user', 'where', 'ua', 'url'];

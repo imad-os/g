@@ -151,7 +151,7 @@ still slow down a hidden page by itself. Standalone, outside My PC, the SDK does
 itself. Your app only sees `info.profile` and keeps progress with `MyPC.save` / `MyPC.load`, which are already per
 profile and backed up. **Never** build your own login, accounts, cloud saves, name entry for scores, Firebase or backend.
 
-Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch) and hide the feature
+Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text) and hide the feature
 when it is missing.
 
 ### App config: `MyPC.app_config`
@@ -397,6 +397,9 @@ Actions: `left right up down` (directions), `jump` and `confirm` (OK / Enter / S
   or `'pad0'`..`'pad3'`. Use it for local multiplayer (one hero per device).
 - **Every action MUST be reachable with the TV remote alone:** arrows + OK. Don't rely on
   `run`/`cancel` (the remote has no such buttons), and never require a mouse, touch or text typing.
+- **Text fields are typing, not actions.** While one of your `<input>` / `<textarea>` / contenteditable has the focus,
+  its keys stay in it (Backspace deletes, letters are letters: no `cancel`, no pause), on My PC and standalone; Esc and
+  the TV's Back still leave. A phone in the Game controller's **Text mode** types into it (section 17).
 - The TV remote's Back always belongs to My PC (pause menu); you never receive it. A keyboard's Esc and
   Backspace reach you as `cancel` (use it as your own "back": close a sub-menu, leave a screen).
 - `menu`: gamepad Start or Select pressed alone (sent when let go). Sent only to apps that init with
@@ -571,6 +574,7 @@ the World records.
 - [ ] works standalone: open `index.html` in Chrome, play with the arrows + Enter, Esc pauses
 - [ ] requests to other sites through `MyPC.net`, AI through `MyPC.ai`, the microphone through `MyPC.mic` (section 14): no own proxy, AI SDK or `getUserMedia`; each error code handled (`denied`, `no-provider`...)
 - [ ] the SDK `<script>` is the **first** script of the page (so errors of your own scripts are reported, section 15); errors you catch that matter go to `MyPC.report`
+- [ ] text the player types: a real `<input>` / `<textarea>` (or `MyPC.text.open` for a field drawn on a canvas), so a phone in Text mode can type into it (section 17); never required to play
 - [ ] served over https with CORS (GitHub Pages)
 - [ ] every own script, stylesheet and asset is loaded with `?v=<version>`, the same as `version` in `mypc-app.json` (bumped for every release)
 
@@ -1024,3 +1028,44 @@ Protocol (for reference): app → My PC `{ mypc: 1, type: 'notify', data: { rid,
 choice), `inbox/<username>/items/<id>` (one notification), `services/<app>__<service>` (owner only). My PC side:
 `js/launcher/push.js`, `js/launcher/game-host.js`; runner: `installer/services.js`, `installer/services-lib.js`. A complete small
 service: `sdk/example/services/notify.js`.
+
+## 17. Text from a phone: `MyPC.text` (API level 13)
+
+The phone controller has a **Text mode** (Game controller > Mode > Text): the player types with the **phone's own
+keyboard** and the text goes into the text field the TV is using right now: My PC's on-screen keyboard (the Browser's
+address bar, the App Store search, names, passwords...), a focused field of My PC, or **the focused field of the running
+app**. The phone shows which field is open ("Typing into: ...", from the field's `aria-label`, `placeholder`, `title` or
+`<label>`) and picks a fitting keyboard (`type="url"`, `email`, `number` / `inputmode="numeric"`, `password`: no
+suggestions, `search`, `<textarea>`: Enter makes a new line). **Live** on (default): every change reaches the TV at once;
+Live off: only when the player presses **Send** (or Enter). Small arrows and **A** (right, back) / **B** (bottom, OK) on
+the phone move to a field. Backspace and Enter on the phone are editing there: they never reach the TV as Back, so no
+pause menu while deleting a letter.
+
+**Normal fields need nothing.** The SDK (loaded from the hosted URL, so every app already has it) tells My PC when one
+of your `<input>` / `<textarea>` / contenteditable elements gets or loses the focus, and writes the phone's text into it:
+the whole text each time with an `input` event (`maxlength` kept); **Send** / Enter then dispatches an Enter
+`keydown` / `keyup` on it (`keyCode` 13) and `change`, and sends its `<form>` (`requestSubmit`) unless your keydown
+handler called `preventDefault()`. So: give a field the focus when it should be typed in (`input.focus()`), listen to
+`input` (or read `.value`), and handle Enter as "done".
+
+**A field drawn on a canvas** (a name entry in a game) asks for the text itself:
+
+```js
+if (MyPC.apiLevel >= 13) {
+    MyPC.text.open({
+        value: hero.name, kind: 'name', label: 'Hero name', max: 12,   // kind: text multi password url email number search name
+        onInput: function (v) { hero.name = v; draw(); },              // the whole text, each time it changes (Live)
+        onSend: function (v) { MyPC.text.close(); startGame(); }       // Send / Enter on the phone
+    });
+}
+// MyPC.text.close() when the entry screen closes; MyPC.text.active() -> true while open
+```
+
+While `MyPC.text.open` is active it wins over any focused element. Typing is never required: a name entry must still
+work with the arrows + OK (and the remote alone). On a My PC older than API level 13 nothing happens (the phone says no
+text field is open).
+
+Protocol (for reference): app → My PC `{ type: 'field', data: { on: 1, id, kind, label, v, max } }` (v is `''` for a
+password) or `{ on: 0 }`; My PC → app `{ type: 'text', data: { v: whole text, go: 1 | 0 } }`, only while the app runs (not
+under My PC's menu). Phone ↔ TV: `{ t: 'tf', ... }` / `{ t: 'tx', v, go }` (`docs/phone-controller.md`). My PC side:
+`js/launcher/textin.js`, `js/launcher/controllers.js`, `js/launcher/game-host.js`.

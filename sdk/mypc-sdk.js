@@ -31,7 +31,7 @@
 var MyPC = (function () {
     'use strict';
 
-    var VERSION = 1, API = 12, HELLO_WAIT = 1200;
+    var VERSION = 1, API = 13, HELLO_WAIT = 1200;
     var handlers = {}, info = null, data = {}, started = false, destroyed = false, isReady = false;
     var hosted = false, hostWin = null, hostOrigin = '*', helloTimer = 0;
     var down = {};                       // action -> number of keys / buttons holding it
@@ -133,6 +133,7 @@ var MyPC = (function () {
                 multiplayer._enable(d.mp === 1 ? 'shell' : 'none');       // false on an older My PC: apps hide the multiplayer feature
                 errFlushWait();
                 call('onInit', info);
+                text._start();
                 break;
             case 'start': if (!started) { started = true; call('onStart'); } break;
             case 'pause': releaseAll(); gamepad._release(); call('onPause'); break;
@@ -155,6 +156,7 @@ var MyPC = (function () {
             case 'mic': mic._message(d); break;
             case 'notify': notify._message(d); break;
             case 'launch': if (plainObject(d)) { pub.launch = d; call('onLaunch', d); } break;
+            case 'text': text._message(d); break;
         }
     }
 
@@ -166,6 +168,9 @@ var MyPC = (function () {
 
     function standaloneKey(e, isDown) {
         if (uiBlock) return;                 // a multiplayer screen is open (standalone)
+        // typing in the app's own text field: Backspace deletes, P is a letter (no cancel, no pause); Esc still pauses
+        var t = e.target, tag = t && t.tagName;
+        if ((tag === 'TEXTAREA' || (t && t.isContentEditable) || (tag === 'INPUT' && !/^(checkbox|radio|button|submit|reset|range|file|color|image)$/i.test(t.type || ''))) && e.keyCode !== 27) return;
         var acts = KEYS[e.keyCode];
         if (!acts) return;
         e.preventDefault();
@@ -1586,9 +1591,97 @@ var MyPC = (function () {
         };
     })();
 
+    /* ---------------- text from a phone: MyPC.text (API 13) ----------------
+     * A phone in the Game controller's Text mode types with its own keyboard into the text field the TV uses. Nothing to do
+     * for normal fields: while one of the app's <input> / <textarea> / contenteditable has the focus, the SDK tells My PC, and
+     * the phone's text is written into it (an 'input' event each time; Send = an Enter keydown / keyup, then the form is sent).
+     * A field drawn on a canvas (a name entry in a game) asks for the text itself:
+     *   MyPC.text.open({ value, kind: 'text'|'multi'|'password'|'url'|'email'|'number'|'search'|'name', label, max,
+     *                    onInput(v)   the whole text, each time it changes (Live on the phone),
+     *                    onSend(v) })  the player pressed Send / Enter
+     *   MyPC.text.close()   MyPC.text.active() -> true while open
+     * Keys typed on the phone never reach the app as actions (no Back / pause while deleting a letter). */
+    var text = (function () {
+        var NOT = /^(checkbox|radio|button|submit|reset|range|file|color|image|hidden)$/i, own = null, seq = 0, cur = null, sent = '', timer = 0, started = false;
+        function field(el) {
+            if (!el || !el.tagName) return null;
+            var tag = el.tagName;
+            if (tag === 'TEXTAREA' || el.isContentEditable || (tag === 'INPUT' && !NOT.test(el.type || ''))) return el.disabled || el.readOnly ? null : el;
+            return null;
+        }
+        function kindOf(el) {
+            if (el.tagName === 'TEXTAREA' || el.isContentEditable) return 'multi';
+            var ty = (el.type || '').toLowerCase(), im = (el.getAttribute('inputmode') || '').toLowerCase();
+            if (/^(password|url|email|search)$/.test(ty)) return ty;
+            if (ty === 'number' || ty === 'tel' || /^(numeric|decimal|tel)$/.test(im)) return 'number';
+            return 'text';
+        }
+        function describe() {
+            if (own) return { key: 'own' + own.id, f: { on: 1, id: own.id, kind: own.kind, label: own.label, v: own.kind === 'password' ? '' : own.v, max: own.max } };
+            var el = field(document.activeElement);
+            if (!el) return null;
+            if (cur && cur.el === el) return { key: cur.key, el: el, f: cur.f };
+            var k = kindOf(el), v = el.isContentEditable ? el.textContent : el.value, id = ++seq;
+            var label = String(el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.title || (el.labels && el.labels[0] ? el.labels[0].textContent : '') || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+            return { key: 'el' + id, el: el, f: { on: 1, id: id, kind: k, label: label, v: k === 'password' ? '' : String(v || '').slice(0, 2000), max: el.maxLength > 0 ? Math.min(2000, el.maxLength) : 2000 } };
+        }
+        function look() {
+            timer = 0;
+            if (!started || !hosted || !info || info.standalone) return;
+            var d = describe(), key = d ? d.key : '';
+            cur = d && d.el ? d : null;
+            if (key === sent) return;
+            sent = key;
+            post('field', d ? d.f : { on: 0 });
+        }
+        function changed() { if (!timer) timer = setTimeout(look, 40); }
+        function enter(el) {
+            var go = true;
+            ['keydown', 'keyup'].forEach(function (type) {
+                var e;
+                try { e = new KeyboardEvent(type, { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }); Object.defineProperty(e, 'keyCode', { get: function () { return 13; } }); Object.defineProperty(e, 'which', { get: function () { return 13; } }); } catch (x) { return; }
+                if (!el.dispatchEvent(e) && type === 'keydown') go = false;
+            });
+            try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
+            if (go && el.form && el.tagName === 'INPUT') { try { if (el.form.requestSubmit) el.form.requestSubmit(); else el.form.submit(); } catch (e) {} }
+        }
+        return {
+            open: function (o) {
+                o = o || {};
+                own = { id: ++seq, kind: /^(text|multi|password|url|email|number|search|name)$/.test(o.kind) ? o.kind : 'text', label: String(o.label || '').slice(0, 60),
+                        v: String(o.value == null ? '' : o.value).slice(0, 2000), max: o.max > 0 ? Math.min(2000, Math.floor(o.max)) : 2000,
+                        onInput: typeof o.onInput === 'function' ? o.onInput : null, onSend: typeof o.onSend === 'function' ? o.onSend : null };
+                changed();
+            },
+            close: function () { if (!own) return; own = null; changed(); },
+            active: function () { return !!own; },
+            _start: function () {
+                if (started || !hosted) return;
+                started = true;
+                document.addEventListener('focusin', changed, true);
+                document.addEventListener('focusout', changed, true);
+                changed();
+            },
+            _message: function (d) {
+                var v = String(d && d.v != null ? d.v : '').slice(0, 2000), go = !!(d && d.go);
+                if (own) {
+                    own.v = v.slice(0, own.max);
+                    try { if (own.onInput) own.onInput(own.v); if (go && own.onSend) own.onSend(own.v); } catch (e) { report(e, { where: 'MyPC.text' }); }
+                    return;
+                }
+                var el = field(document.activeElement);
+                if (!el) return;
+                if (el.isContentEditable) el.textContent = v;
+                else el.value = el.maxLength > 0 ? v.slice(0, el.maxLength) : v;
+                try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {}
+                if (go) enter(el);
+            }
+        };
+    })();
+
     var pub = {
         version: VERSION,
-        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,
@@ -1598,6 +1691,7 @@ var MyPC = (function () {
         ai: ai,
         mic: mic,
         notify: notify,
+        text: text,
         // The notification that opened the app ({ link, app, path, title, text, at }) or null; read it in onInit.
         // A notification chosen while the app runs: MyPC.init({ onLaunch(launch) }) (and MyPC.launch is updated)
         launch: null,

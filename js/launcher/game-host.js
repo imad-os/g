@@ -196,6 +196,9 @@ var GameHost = (function () {
             if (j !== padsSent) { padsSent = j; send('gp', { e: 'pads', list: out }); }
         }
 
+        // the app's focused text field (the SDK tells): a phone in Text mode types into it (js/launcher/textin.js)
+        function textSend(v, go) { if (state === 'running') send('text', { v: v, go: go ? 1 : 0 }); }
+
         function onMsg(e) {
             if (!iframe || e.source !== iframe.contentWindow) return;     // only our app's frame
             var m = e.data, d;
@@ -260,6 +263,10 @@ var GameHost = (function () {
                     if (d.op === 'request') Push.ask(pushCtx, function (s) { send('notify', { rid: d.rid, result: s }); });
                     else send('notify', { rid: d.rid, result: Push.state(storeId) });
                     break;
+                case 'field':                                                  // { on, id, kind, label, v, max } (API 13)
+                    if (e.origin !== origin || typeof TextIn === 'undefined') break;
+                    TextIn.app(d.on ? d : null, textSend);
+                    break;
                 case 'failed': fail('app: ' + d.reason); break;
                 case 'err':                                                    // MyPC.report and the app's uncaught errors (sent by the SDK, even before MyPC.init)
                     if (e.origin !== origin) break;
@@ -298,7 +305,7 @@ var GameHost = (function () {
             resume: function () { send('resume'); },
             // a push notification's deep link for this app while it runs (MyPC.init({ onLaunch }))
             launch: function (d) { send('launch', d); },
-            destroy: function () { pushCtx.dead = true; br.destroy(); Input.onPadRaw(null); Input.offDevices(padsChanged); ble.destroy(); if (mp) { mp.destroy(); mp = null; } send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
+            destroy: function () { pushCtx.dead = true; br.destroy(); if (typeof TextIn !== 'undefined') TextIn.app(null, textSend); Input.onPadRaw(null); Input.offDevices(padsChanged); ble.destroy(); if (mp) { mp.destroy(); mp = null; } send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
             menuItems: function () { return items; },
             onMenu: function (mid) { send('menu', { id: String(mid).slice(4) }); },
             onAction: function (a, pressed, repeat, dev) { send('input', { action: a, pressed: pressed, repeat: repeat, dev: dev }); }
