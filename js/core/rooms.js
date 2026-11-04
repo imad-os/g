@@ -8,7 +8,7 @@
  *   var s = new Rooms.Session(appId, profileName, function (event, data) { ... });   events: 'request', 'answer', 'denied', 'closed'
  *   s.call(op, args, function (errCode, result) { ... })    op: open list ask accept decline close cancel wake
  * Request polling (the host's only repeated read, one runQuery on rooms/{room}/reqs): every 2 s for the first minute after
- * `open`, a request, a player leaving or `wake`; then slower and slower (x1.5) up to `idle` ms (open's arg, default 5 s, at most
+ * `open`, a request, a player leaving or `wake`; My PC shown again = one check at once (rate unchanged); then slower and slower (x1.5) up to `idle` ms (open's arg, default 5 s, at most
  * 30 s); none while the room is full or the page is hidden (another TV app / source). Firestore REST has no listener.
  * Rooms.status() -> [{ app, room, state: 'fast' | 'slow' | 'off', wait (ms to the next check), why, at (when `why` happened),
  *   polls (checks made), last (time of the last check) }] for every room this page hosts; Rooms.onStatus(fn) is called on every
@@ -187,8 +187,14 @@ var Rooms = (function () {
                         r.beat = setInterval(function () { beat(r); }, L.beat);
                         live.push(r);
                         next(r);
-                        if (typeof document !== 'undefined') {             // back on My PC: look for guests at once
-                            r.vis = function () { if (!hidden() && room === r) fast(r, 'shown'); };
+                        if (typeof document !== 'undefined') {
+                            // back on My PC: ONE check at once, the rate stays as it was (Chrome on Windows also fires this
+                            // each time another window stops covering the browser: it must never restart the fast minute)
+                            r.vis = function () {
+                                if (hidden() || room !== r || r.busy || Date.now() - r.last < L.poll) return;
+                                r.why = 'shown'; r.who = ''; r.whyAt = Date.now();
+                                clearTimeout(r.poll); r.poll = setTimeout(function () { poll(r); }, 0);
+                            };
                             document.addEventListener('visibilitychange', r.vis);
                         }
                         cb(null, { id: r.id, name: r.name, max: r.max });

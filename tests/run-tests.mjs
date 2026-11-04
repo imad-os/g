@@ -2284,7 +2284,11 @@ async function main() {
             check(pq() === h0, 'no polling while My PC is hidden');
             await E.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); });
             const v0 = pq(); await E.waitForTimeout(250);
-            check(pq() - v0 >= 2, 'shown again: polls fast at once');
+            const lv = await light();
+            check(pq() - v0 === 1 && /slow/.test(lv.c) && /shown again/.test(lv.t), 'shown again: one check at once, then still slowed down (' + (pq() - v0) + ', ' + lv.c + ')');
+            await E.evaluate(() => { document.dispatchEvent(new Event('visibilitychange')); document.dispatchEvent(new Event('visibilitychange')); });
+            const v1 = pq(); await E.waitForTimeout(250);
+            check(pq() - v1 <= 1 && /slow/.test((await light()).c), 'shown events in a row (a window uncovering the browser) never restart the fast checks');
             await E.evaluate(() => window.S.destroy());
             const l3 = await light();
             check(/tray-poll off/.test(l3.c) && /No Firestore checks/.test(l3.t), 'taskbar light: grey with "No Firestore checks" once no room is open');
