@@ -211,7 +211,7 @@ var App = (function () {
     }
     // absolute URL of this page (relative URLs would follow the hosted copy's <base href>)
     function page(query) { return location.href.split(/[?#]/)[0] + query; }
-    function goHome(id) { location.replace(page(id ? '?from=' + encodeURIComponent(id) : '')); }
+    function goHome(id) { Playtime.stop(); location.replace(page(id ? '?from=' + encodeURIComponent(id) : '')); }
 
     function play(g) {
         if (benchCancel) { benchCancel(); benchCancel = null; }
@@ -228,6 +228,8 @@ var App = (function () {
             if (!g) return goHome(id);                 // uninstalled or unknown: back to the desktop
             Store.set('last_game', g.id);
             GameHost.launch(g, goHome);
+            Playtime.start(g.id, I18n.pick(g.manifest.title));     // the Playtime widget
+            Widgets.background();                      // only the widgets that run in the background (Control Panel > Widgets)
             Push.start();                              // notifications also arrive during a game (small cards, no focus taken)
         };
         if (id.indexOf('app-') === 0) {

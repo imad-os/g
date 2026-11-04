@@ -1,0 +1,480 @@
+/* Desktop widgets (owner request 2026-11-04): Weather, Playtime, System Monitor, Music Player, plus the widgets that store
+ * apps ship (mypc-app.json "widgets", approved in the App Store Manager > Widgets; rules in js/core/widget-lib.js).
+ *
+ * Cheap on purpose (low-end TVs): one card per widget in #desk-widgets, redrawn only when what it shows changed; one
+ * setTimeout per widget at its own refresh rate; nothing runs for a hidden widget. When an app or a game takes the screen
+ * (Desktop.hide, the game page, My PC in the background) every widget stops, except the ones whose "Run in the background"
+ * is on (Music Player by default): they keep refreshing, so their card is up to date the moment the desktop comes back.
+ * An app widget's code runs in a data: Worker (opaque origin), one at a time, killed after 10 s; between two refreshes it
+ * costs nothing. Per profile (Control Panel > Widgets): show / hide, refresh rate, background, the widget's own settings,
+ * order: profile key widgets = { on, order: [ids], w: { <id>: { show, every (s), bg, s: { settings } } } }.
+ * Last views (instant desktop, offline): arc_dev_wcache; approved app widget code by SHA-256: arc_dev_wcode (both not backed up). */
+var Widgets = (function () {
+    'use strict';
+
+    var WL = window.WidgetLib;
+    var CACHE = 'arc_dev_wcache', CODE = 'arc_dev_wcode';
+    var box = null, onDesk = false, headless = false, timers = {}, last = {}, views = {}, painted = {}, busy = {}, again = {}, queue = [], working = false;
+
+    function t(k) { return I18n.t(k); }
+    function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+    function now() { return Date.now(); }
+
+    // a small GET of JSON (weather), with a timeout; cb(err, json)
+    function getJson(url, ms, cb) {
+        var x = new XMLHttpRequest(), done = false;
+        function end(e, j) { if (!done) { done = true; cb(e, j); } }
+        try {
+            x.open('GET', url, true);
+            x.timeout = ms;
+            x.onload = function () { var j = null; try { j = JSON.parse(x.responseText); } catch (e) {} end(x.status >= 200 && x.status < 300 && j ? null : 'http ' + x.status, j); };
+            x.onerror = x.ontimeout = function () { end('network'); };
+            x.send();
+        } catch (e) { end('network'); }
+    }
+
+    /* ---------------- the built-in widgets ----------------
+     * def: { id, icon, title(), size, every (s), choices [s], bg, settings() (WidgetLib schema), refresh(ctx, done(view)),
+     *        press(button id), open(), idle() (nothing changes: no timer) } */
+
+    // Weather: Open-Meteo (free, no key). The place: the city typed in its settings, else found from the internet address
+    // (GeoJS) once a day. Profile key weather_loc keeps where it is.
+    var WMO = [[0, 'clear', 'sun'], [2, 'partly', 'partly'], [3, 'cloudy', 'cloud'], [48, 'fog', 'fog'], [57, 'drizzle', 'rain'],
+               [67, 'rain', 'rain'], [77, 'snow', 'snow'], [82, 'showers', 'rain'], [86, 'snow', 'snow'], [99, 'storm', 'storm']];
+    function sky(code, day) {
+        for (var i = 0; i < WMO.length; i++) if (code <= WMO[i][0]) return { k: WMO[i][1], ic: WMO[i][2] === 'sun' && !day ? 'moon' : WMO[i][2] };
+        return { k: 'cloudy', ic: 'cloud' };
+    }
+    function place(s, cb) {
+        var q = (s.place || '').trim(), loc = Store.get('weather_loc', null);
+        if (loc && loc.q === q && loc.lat !== undefined && (q || now() - (loc.at || 0) < 86400000)) return cb(null, loc);
+        function keep(l) { l.q = q; l.at = now(); Store.set('weather_loc', l); cb(null, l); }
+        if (q) {
+            return getJson('https://geocoding-api.open-meteo.com/v1/search?count=1&language=' + I18n.lang() + '&name=' + encodeURIComponent(q), 8000, function (e, j) {
+                var r = j && j.results && j.results[0];
+                if (e || !r) return cb(e ? 'offline' : 'notfound', loc && loc.q === q ? loc : null);
+                keep({ lat: r.latitude, lon: r.longitude, name: r.name });
+            });
+        }
+        getJson('https://get.geojs.io/v1/ip/geo.json', 8000, function (e, j) {
+            if (e || !j || !j.latitude) return cb('offline', loc);
+            keep({ lat: +j.latitude, lon: +j.longitude, name: j.city || j.region || j.country || '' });
+        });
+    }
+    function weather(ctx, done) {
+        var s = ctx.settings, f = s.units === 'f';
+        place(s, function (err, loc) {
+            if (!loc) return done(err === 'notfound' ? { icon: 'i:cloud', big: '--', text: t('wgNoPlace').replace('%s', s.place) } : stale(ctx.id, t('wgOffline')));
+            var u = 'https://api.open-meteo.com/v1/forecast?latitude=' + loc.lat + '&longitude=' + loc.lon +
+                    '&current=temperature_2m,weather_code,is_day,relative_humidity_2m,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min' +
+                    '&forecast_days=1&timezone=auto' + (f ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : '');
+            getJson(u, 8000, function (e, j) {
+                var c = j && j.current, d = j && j.daily;
+                if (e || !c) return done(stale(ctx.id, t('wgOffline')));
+                var k = sky(c.weather_code, c.is_day !== 0), v = { icon: 'i:' + k.ic, big: Math.round(c.temperature_2m) + '°', sub: loc.name, text: t('wx_' + k.k) };
+                var hi = d && d.temperature_2m_max ? Math.round(d.temperature_2m_max[0]) : null, lo = d && d.temperature_2m_min ? Math.round(d.temperature_2m_min[0]) : null;
+                v.rows = [];
+                if (hi !== null) v.rows.push({ label: t('wgHiLo'), value: hi + '° / ' + lo + '°' });
+                if (ctx.size === 'large') {
+                    v.rows.push({ label: t('wgHumidity'), value: Math.round(c.relative_humidity_2m) + ' %' });
+                    v.rows.push({ label: t('wgWind'), value: Math.round(c.wind_speed_10m) + (f ? ' mph' : ' km/h') });
+                }
+                done(v);
+            });
+        });
+    }
+    // the last view, marked as old (offline), or a first "loading" view
+    function stale(id, why) {
+        var v = views[id] || cached(id), o = {}, k;
+        if (!v) return { text: why };
+        for (k in v) o[k] = v[k];
+        o.sub = why;
+        return o;
+    }
+
+    function playtime(ctx, done) {
+        var p = Playtime.summary(), h = t('wgH'), m = t('wgMin');
+        var v = { icon: 'i:hourglass', big: Playtime.length(p.today, h, m), sub: t('wgToday'), rows: [{ label: t('wgWeek'), value: Playtime.length(p.week, h, m) }] };
+        if (p.top && ctx.size !== 'small') v.rows.push({ label: t('wgTop'), value: p.top.t + ' · ' + Playtime.length(p.top.s, h, m) });
+        if (p.last && ctx.size === 'large') v.rows.push({ label: t('wgLast'), value: p.last.t });
+        if (!p.top) v.text = t('wgNoPlay');
+        done(v);
+    }
+
+    // System Monitor: what the TV tells (Tizen systeminfo: CPU load, memory), else what the browser tells (My PC's memory)
+    var stor = { at: 0, kb: 0 };
+    function storageKb() {
+        if (now() - stor.at < 60000) return stor.kb;                    // walking localStorage once a minute is enough
+        var n = 0;
+        try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k.indexOf('arc_') === 0) n += (k.length + (localStorage.getItem(k) || '').length) * 2; } } catch (e) {}
+        stor = { at: now(), kb: Math.max(1, Math.round(n / 1024)) };
+        return stor.kb;
+    }
+    function mb(b) { return Math.round(b / 1048576) + ' MB'; }
+    function sysmon(ctx, done) {
+        var v = { icon: 'i:chip', rows: [] }, si = window.tizen && tizen.systeminfo, finished = false;
+        function fin(cpu) {
+            if (finished) return;
+            finished = true;
+            if (cpu !== null && cpu !== undefined) { v.big = Math.round(cpu * 100) + ' %'; v.sub = t('wgCpu'); v.progress = cpu; }
+            try {
+                if (si && si.getTotalMemory) {
+                    var tot = si.getTotalMemory(), av = si.getAvailableMemory();
+                    v.rows.push({ label: t('wgMemory'), value: mb(tot - av) + ' / ' + mb(tot) });
+                    if (v.progress === undefined) { v.big = Math.round((tot - av) * 100 / tot) + ' %'; v.sub = t('wgMemory'); v.progress = (tot - av) / tot; }
+                }
+            } catch (e) {}
+            var pm = window.performance && performance.memory;
+            if (pm && pm.usedJSHeapSize) {
+                if (v.progress === undefined && pm.jsHeapSizeLimit) { v.big = mb(pm.usedJSHeapSize); v.sub = t('wgHeap'); v.progress = pm.usedJSHeapSize / pm.jsHeapSizeLimit; }
+                else v.rows.push({ label: t('wgHeap'), value: mb(pm.usedJSHeapSize) });
+            }
+            if (ctx.size !== 'small') v.rows.push({ label: t('storage'), value: storageKb() + ' KB' });
+            v.rows.push({ label: t('network'), value: t(navigator.onLine === false ? 'netOffShort' : 'netOnShort') });
+            if (ctx.size === 'large' && navigator.hardwareConcurrency) v.rows.push({ label: t('wgCores'), value: String(navigator.hardwareConcurrency) });
+            if (!v.big) { v.big = Perf.profile().tier; v.sub = t('device'); }
+            done(v);
+        }
+        if (si && si.getPropertyValue) {
+            try { si.getPropertyValue('CPU', function (c) { fin(c && typeof c.load === 'number' ? c.load : null); }, function () { fin(null); }); }
+            catch (e) { fin(null); }
+            setTimeout(function () { fin(null); }, 1500);
+        } else fin(null);
+    }
+
+    function music(ctx, done) {
+        var s = Music.state();
+        done({ icon: 'i:music', text: s.title, sub: s.artist + ' · ' + Music.clock(s.pos) + ' / ' + Music.clock(s.dur), progress: s.pos / s.dur,
+               buttons: [{ id: 'prev', icon: 'prev', label: t('wgPrev') }, { id: 'toggle', icon: s.playing ? 'pause' : 'play', label: t(s.playing ? 'wgPause' : 'wgPlay') },
+                         { id: 'next', icon: 'next', label: t('wgNext') }] });
+    }
+
+    var BUILT = [
+        { id: 'weather', icon: 'weather', title: function () { return t('wg_weather'); }, size: 'medium', every: 1800, choices: [900, 1800, 3600, 10800], bg: false,
+          settings: function () {
+              return [{ id: 'place', type: 'text', label: t('wgPlace'), 'default': '' },
+                      { id: 'units', type: 'select', label: t('wgUnits'), 'default': 'c', options: [{ value: 'c', label: t('wgCelsius') }, { value: 'f', label: t('wgFahrenheit') }] }];
+          }, refresh: weather, keep: true },
+        { id: 'playtime', icon: 'hourglass', title: function () { return t('wg_playtime'); }, size: 'small', every: 300, choices: [60, 300, 900, 1800], bg: false, refresh: playtime },
+        { id: 'sysmon', icon: 'chip', title: function () { return t('wg_sysmon'); }, size: 'medium', every: 5, choices: [2, 5, 10, 30, 60], bg: false, refresh: sysmon },
+        { id: 'music', icon: 'music', title: function () { return t('wg_music'); }, size: 'medium', every: 2, choices: [1, 2, 5, 10], bg: true, refresh: music,
+          idle: function () { return !Music.state().playing; },
+          press: function (b) { if (b === 'toggle') Music.toggle(); else if (b === 'next') Music.next(); else if (b === 'prev') Music.prev(); },
+          open: function () { Win.open('music'); } }
+    ];
+
+    /* ---------------- app widgets (installed store apps) ---------------- */
+
+    function appDefs() {
+        var out = [], list = typeof Cloud !== 'undefined' ? Cloud.apps() : [];
+        list.forEach(function (a) {
+            (Array.isArray(a.widgets) ? a.widgets : []).slice(0, WL.LIMITS.widgets).forEach(function (w) {
+                if (!w || !w.id) return;
+                out.push({ id: a.id + '__' + w.id, app: a, w: w, icon: 'appsNav', title: function () { return I18n.pick(w.title) || w.id; },
+                           size: WL.SIZES.indexOf(w.size) >= 0 ? w.size : 'medium', every: (WL.EVERY.indexOf(+w.every) >= 0 ? +w.every : 15) * 60,
+                           choices: WL.EVERY.map(function (m) { return m * 60; }), bg: w.background === true, approved: !!w.sha, keep: true,
+                           settings: function () { return (w.settings || []).map(function (s) { var o = {}, k; for (k in s) o[k] = s[k]; o.label = I18n.pick(s.label) || s.id; return o; }); } });
+            });
+        });
+        return out;
+    }
+    var defs = null;            // built once per render (Cloud.apps() reads storage)
+    function all() { return defs || (defs = BUILT.concat(appDefs())); }
+    function find(id) { var l = all(); for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
+
+    // the approved copy of an app widget's code: from this device, else Firestore widgets/<app>__<widget> (checked against the SHA-256)
+    function code(d, cb) {
+        var c = Store.rawGet(CODE) || {}, have = c[d.id];
+        if (have && have.sha === d.w.sha && have.code) return cb(null, have.code);
+        Cloud.get('widgets/' + encodeURIComponent(d.id), 8000, function (err, doc) {
+            if (err || !doc || !doc.code) return cb(err || 'missing');
+            if (doc.sha !== d.w.sha) return cb('pending');
+            c = Store.rawGet(CODE) || {};
+            for (var k in c) if (!find(k)) delete c[k];                      // uninstalled apps
+            c[d.id] = { sha: doc.sha, code: String(doc.code).slice(0, WL.LIMITS.code) };
+            Store.rawSet(CODE, c);
+            cb(null, c[d.id].code);
+        });
+    }
+    // one Worker at a time for the whole TV
+    function runApp(d, ctx, done) {
+        queue.push(function () {
+            code(d, function (err, src) {
+                if (err) { working = false; next(); return done(err === 'pending' ? { text: t('wgPending') } : stale(d.id, t('wgOffline'))); }
+                var w, timer = 0, end = function (view) { clearTimeout(timer); try { w.terminate(); } catch (e) {} working = false; done(view); next(); };
+                try { w = new Worker('data:text/javascript;charset=utf-8,' + encodeURIComponent(WL.WORKER)); }
+                catch (e) { working = false; next(); return done({ text: t('wgFailed') }); }
+                timer = setTimeout(function () { end(stale(d.id, t('wgFailed'))); }, WL.LIMITS.runMs);
+                var st = null;
+                try { st = JSON.parse(Store.get('wstate_' + d.id, 'null')); } catch (e) { st = null; }
+                w.onmessage = function (e) {
+                    var r = e.data || {};
+                    if (!r.ok) { report(d, r.error); return end(stale(d.id, t('wgFailed'))); }
+                    var res = WL.result(r.out);
+                    if (res.state !== undefined) Store.set('wstate_' + d.id, res.state);
+                    if (res.error && !res.view) report(d, res.error);
+                    end(res.view || { text: t('wgFailed') });
+                };
+                w.onerror = function (e) { report(d, e.message || 'worker error'); if (e.preventDefault) e.preventDefault(); end(stale(d.id, t('wgFailed'))); };
+                w.postMessage({ src: 'data:text/javascript;charset=utf-8,' + encodeURIComponent(src), app: d.app.id, widget: d.w.id, settings: ctx.settings, state: st,
+                                size: ctx.size, lang: I18n.lang(), action: ctx.action || null, now: now(), lastRun: last[d.id] || 0, config: d.app.config || {} });
+            });
+        });
+        next();
+    }
+    function next() { if (working || !queue.length) return; working = true; queue.shift()(); }
+    function report(d, msg) {
+        try { if (typeof Reports !== 'undefined') Reports.add('app-' + d.app.id, { kind: 'error', msg: 'widget ' + d.w.id + ': ' + String(msg).slice(0, 200), stage: 'widget', appv: d.app.version || '' }); } catch (e) {}
+    }
+
+    /* ---------------- the profile's settings ---------------- */
+
+    function prefs() { var p = Store.get('widgets', null); return p && typeof p === 'object' ? p : {}; }
+    function conf(id) {
+        var d = find(id), p = prefs(), c = (p.w && p.w[id]) || {};
+        if (!d) return null;
+        return {
+            show: typeof c.show === 'boolean' ? c.show : !!(d.approved !== false),
+            every: d.choices.indexOf(c.every) >= 0 ? c.every : d.every,
+            bg: typeof c.bg === 'boolean' ? c.bg : d.bg,
+            s: WL.settingsOf(d.settings ? d.settings() : [], c.s)
+        };
+    }
+    function save(id, fn) {
+        var p = prefs();
+        p.w = p.w && typeof p.w === 'object' ? p.w : {};
+        var c = p.w[id] && typeof p.w[id] === 'object' ? p.w[id] : {};
+        fn(c, p);
+        p.w[id] = c;
+        Store.set('widgets', p);
+    }
+    function on() { return prefs().on !== false; }
+    function setOn(v) { var p = prefs(); p.on = !!v; Store.set('widgets', p); render(); }
+    function set(id, k, v) {
+        save(id, function (c) { c[k] = v; });
+        if (k === 'show') { render(); return; }
+        if (k === 'every') { delete last[id]; }
+        plan(id);
+    }
+    function setSetting(id, k, v) {
+        save(id, function (c) { c.s = c.s && typeof c.s === 'object' ? c.s : {}; c.s[k] = v; });
+        if (id === 'weather' && k === 'place') Store.remove('weather_loc');
+        refreshNow(id);
+    }
+    function reset(id) { save(id, function (c) { for (var k in c) delete c[k]; }); render(); }
+    // order on the desktop: the profile's list, then the others in their built-in order
+    function ordered() {
+        var l = all(), o = prefs().order;
+        o = Array.isArray(o) ? o : [];
+        return l.slice().sort(function (a, b) {
+            var x = o.indexOf(a.id), y = o.indexOf(b.id);
+            if (x < 0) x = 100 + l.indexOf(a); if (y < 0) y = 100 + l.indexOf(b);
+            return x - y;
+        });
+    }
+    function move(id, d) {
+        var ids = ordered().map(function (x) { return x.id; }), i = ids.indexOf(id), j = i + d;
+        if (i < 0 || j < 0 || j >= ids.length) return false;
+        ids.splice(i, 1); ids.splice(j, 0, id);
+        var p = prefs(); p.order = ids; Store.set('widgets', p);
+        render();
+        return true;
+    }
+    function shown() { return on() ? ordered().filter(function (d) { var c = conf(d.id); return c && c.show; }) : []; }
+
+    /* ---------------- refreshing ---------------- */
+
+    // a widget may refresh now: shown, and the desktop is on screen (or it runs in the background)
+    function allowed(id) {
+        var c = conf(id);
+        if (!c || !c.show || !on()) return false;
+        return (onDesk && !document.hidden) || c.bg;
+    }
+    function plan(id) {
+        clearTimeout(timers[id]); timers[id] = 0;
+        var d = find(id);
+        if (!d || !allowed(id) || (d.idle && d.idle() && views[id])) return;      // nothing changes (music paused): no timer
+        var c = conf(id), wait = last[id] ? Math.max(0, last[id] + c.every * 1000 - now()) : 0;
+        timers[id] = setTimeout(function () { timers[id] = 0; refresh(id); }, wait);
+    }
+    function refresh(id, action) {
+        var d = find(id), c = conf(id);
+        if (!d || !c) return;
+        if (busy[id]) { again[id] = action || true; return; }           // a setting changed meanwhile: once more when it ends
+        if (d.app && !d.approved) { paint(id, { text: t('wgPending') }); return; }
+        busy[id] = true;
+        var ctx = { id: id, settings: c.s, size: d.size, action: action };
+        var finish = function (v) {
+            busy[id] = false;
+            last[id] = now();
+            v = WL.cleanView(v, !d.app);
+            views[id] = v;
+            if (d.keep && v.sub !== t('wgOffline') && v.sub !== t('wgFailed') && v.text !== t('wgPending') && v.text !== t('wgFailed')) keepCache(id, v);
+            paint(id, v);
+            if (again[id]) { var a = again[id]; delete again[id]; return refresh(id, a === true ? undefined : a); }
+            plan(id);
+        };
+        try { if (d.app) runApp(d, ctx, finish); else d.refresh(ctx, finish); }
+        catch (e) { finish({ text: t('wgFailed') }); }
+    }
+    function refreshNow(id) { delete last[id]; if (allowed(id) || onDesk) refresh(id); }
+    function cached(id) { var c = Store.rawGet(CACHE) || {}, v = c[Store.profile() + ':' + id]; return v && v.v ? v.v : null; }
+    function keepCache(id, v) {
+        var c = Store.rawGet(CACHE) || {}, k = Store.profile() + ':' + id;
+        if (c[k] && JSON.stringify(c[k].v) === JSON.stringify(v)) return;
+        c[k] = { v: v, at: now() };
+        Store.rawSet(CACHE, c);
+    }
+    function stopAll(keepBg) {
+        for (var id in timers) {
+            if (keepBg) { var c = conf(id); if (c && c.bg) continue; }
+            clearTimeout(timers[id]); timers[id] = 0;
+        }
+    }
+
+    /* ---------------- drawing ---------------- */
+
+    function iconEl(ic, fallback) {
+        var s = el('span', 'wdg-ic');
+        if (ic && ic.indexOf('i:') === 0) Icons.put(s, ic.slice(2));
+        else if (ic && /^https:/.test(ic)) { var im = el('img'); im.alt = ''; im.src = ic; im.onerror = function () { this.remove(); }; s.appendChild(im); }
+        else if (ic) s.textContent = ic;
+        else Icons.put(s, fallback);
+        return s;
+    }
+    function card(d) {
+        var c = el('div', 'wdg wdg-' + d.size);
+        c.id = 'wdg-' + d.id;
+        c.setAttribute('data-focus', '');
+        c.setAttribute('data-widget', d.id);
+        c.tabIndex = 0;
+        c.onclick = function (e) {
+            if (e.target !== c && e.target.closest && e.target.closest('.wdg-btn')) return;
+            openWidget(d);
+        };
+        return c;
+    }
+    function openWidget(d) {
+        if (d.open) return d.open();
+        if (d.app) {
+            if (!d.approved) return App.toast(t('wgPending'));
+            var v = views[d.id] || {}, launch = { link: v.link ? d.app.id + ':' + v.link : '', app: d.app.id, path: v.link || '', from: 'widget' };
+            try { sessionStorage.setItem('mypc_launch', JSON.stringify({ id: 'app-' + d.app.id, launch: launch })); } catch (e) {}
+            return Desktop.play(Desktop.fromCloud(d.app));
+        }
+        refreshNow(d.id);
+        A11y.announce(label(d, views[d.id] || {}));
+    }
+    function label(d, v) {
+        var p = [d.title()];
+        ['big', 'sub', 'text'].forEach(function (k) { if (v[k]) p.push(v[k]); });
+        (v.rows || []).forEach(function (r) { p.push(r.label + ' ' + r.value); });
+        return p.join('. ');
+    }
+    // draws a view into its card, only when it changed
+    function paint(id, v) {
+        if (!box || headless) return;
+        var c = document.getElementById('wdg-' + id), d = find(id);
+        if (!c || !d) return;
+        var key = JSON.stringify(v) + I18n.lang();
+        if (painted[id] === key) return;
+        painted[id] = key;
+        var had = document.activeElement, focusBtn = had && c.contains(had) && had !== c ? had.getAttribute('data-b') : null;
+        c.innerHTML = '';
+        c.style.borderTopColor = v.accent || '';
+        var head = el('div', 'wdg-head');
+        head.appendChild(iconEl(v.icon, d.icon));
+        head.appendChild(el('span', 'wdg-title', v.title || d.title()));
+        c.appendChild(head);
+        if (v.image && d.size !== 'small') { var im = el('img', 'wdg-img'); im.alt = ''; im.src = v.image; im.onerror = function () { this.remove(); }; c.appendChild(im); }
+        if (v.big) c.appendChild(el('div', 'wdg-big', v.big));
+        // no big value: the text leads (a song title, then its artist)
+        if (v.sub && v.big) c.appendChild(el('div', 'wdg-sub', v.sub));
+        if (v.text) c.appendChild(el('div', 'wdg-text', v.text));
+        if (v.sub && !v.big) c.appendChild(el('div', 'wdg-sub', v.sub));
+        if (v.progress !== undefined) {
+            var bar = el('div', 'wdg-bar'), fill = el('i');
+            fill.style.width = Math.round(v.progress * 100) + '%';
+            if (v.accent) fill.style.background = v.accent;
+            bar.appendChild(fill);
+            c.appendChild(bar);
+        }
+        if (v.rows) {
+            var rows = el('div', 'wdg-rows');
+            v.rows.forEach(function (r) { var x = el('div', 'wdg-row'); x.appendChild(el('span', '', r.label)); x.appendChild(el('b', '', r.value)); rows.appendChild(x); });
+            c.appendChild(rows);
+        }
+        if (v.buttons) {
+            var bs = el('div', 'wdg-btns');
+            v.buttons.forEach(function (b) {
+                var x = el('button', 'wdg-btn');
+                x.setAttribute('data-focus', '');
+                x.setAttribute('data-b', b.id);
+                x.setAttribute('aria-label', b.label || b.id);
+                if (b.icon) Icons.put(x, b.icon); else x.textContent = b.label;
+                x.onclick = function (e) { e.stopPropagation(); press(d, b.id); };
+                bs.appendChild(x);
+            });
+            c.appendChild(bs);
+        }
+        c.setAttribute('role', v.buttons ? 'group' : 'button');
+        c.setAttribute('aria-label', label(d, v));
+        if (focusBtn) { var nb = c.querySelector('[data-b="' + focusBtn + '"]'); try { (nb || c).focus(); } catch (e) {} }
+    }
+    function press(d, b) {
+        if (d.press) { d.press(b); refresh(d.id); A11y.announce((views[d.id] || {}).text || ''); return; }
+        if (d.app) { delete last[d.id]; refresh(d.id, b); }
+    }
+
+    // builds the cards of the shown widgets (desktop page); each shows its last view at once, then refreshes when due
+    function render() {
+        defs = null;
+        box = document.getElementById('desk-widgets');
+        if (!box || headless) return;
+        var list = shown(), keepFocus = document.activeElement && box.contains(document.activeElement) ? (document.activeElement.closest('.wdg') || {}).id : null;
+        stopAll(false);
+        box.innerHTML = '';
+        painted = {};
+        list.forEach(function (d) { box.appendChild(card(d)); });
+        box.hidden = !list.length;
+        var desk = document.getElementById('desktop');
+        if (desk) desk.classList.toggle('has-wdg', list.length > 0);
+        list.forEach(function (d) {
+            var v = views[d.id] || cached(d.id);
+            paint(d.id, v || { text: d.app && !d.approved ? t('wgPending') : t('wgLoading') });
+            plan(d.id);
+        });
+        if (keepFocus && document.getElementById(keepFocus)) try { document.getElementById(keepFocus).focus(); } catch (e) {}
+    }
+
+    // the desktop is on screen again / an app or a game takes it (Desktop.show / hide)
+    function resume() {
+        onDesk = true;
+        var list = shown();
+        for (var i = 0; i < list.length; i++) { if (views[list[i].id]) paint(list[i].id, views[list[i].id]); plan(list[i].id); }
+    }
+    function pause() { onDesk = false; stopAll(true); }
+
+    // the game page: no desktop, only the widgets that run in the background (no cards, nothing drawn)
+    function background() {
+        headless = true; onDesk = false; defs = null;
+        all().forEach(function (d) { var c = conf(d.id); if (c && c.show && c.bg && on()) plan(d.id); });
+    }
+
+    function init() {
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) stopAll(true);
+            else if (onDesk) resume();
+        });
+        if (typeof Music !== 'undefined') Music.onChange(function () { if (allowed('music')) { refresh('music'); } else plan('music'); });
+    }
+    init();
+
+    return {
+        render: render, pause: pause, resume: resume, background: background, refreshNow: refreshNow,
+        list: function () { return ordered(); }, find: find, conf: conf, set: set, setSetting: setSetting, reset: reset, move: move,
+        on: on, setOn: setOn, shown: shown, view: function (id) { return views[id] || cached(id); },
+        // for tests
+        _timers: function () { var o = []; for (var k in timers) if (timers[k]) o.push(k); return o.sort(); }, _last: function () { return last; }
+    };
+})();

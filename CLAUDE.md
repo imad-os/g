@@ -91,6 +91,15 @@
   at start / resume only once due (`notif_last`), toasts via `Notify`, history of the last 7 days (owner request 2026-11-04; on the device only, max 300) in
   `notifs`, Control Panel > Notifications, permission once per app, `MyPC.notify` / `MyPC.launch`, API 12). Deep links (owner request 2026-11-04): `link` = `<app id>:<path>` opens
   that app with `MyPC.launch.path` (`Push.parseLink`; already open: `GameHost.deepLink` -> SDK `onLaunch`), `https://` = Browser, old `app?...` = own app). Docs: GUIDE.md section 16.
+- **Desktop widgets** (owner request 2026-11-04): `js/launcher/widgets.js` draws cards in `#desk-widgets` (right of the icons; a
+  row above the taskbar on a tall phone): built in Weather (Open-Meteo + GeoJS, no key; keep the `wgPrivacy` line true), Playtime
+  (`js/core/playtime.js`, counted on the game page once a minute), System Monitor (Tizen systeminfo CPU / memory, else JS heap), Music
+  Player (`js/core/music.js` + Win app `music`: a PLACEHOLDER, no sound; owner builds the real one later behind the same API). Per profile
+  (`widgets` key): show, refresh rate, "Run in the background", own settings, order; Control Panel > Widgets (list, then a page per
+  widget). **Owner rule: every refresh stops while an app or game is open (Desktop.hide, the game page, document.hidden) except widgets
+  with background on (Music by default).** App widgets: `"widgets"` in `mypc-app.json` (`js/core/widget-lib.js`, max 3), approved in App
+  Store Manager > Widgets (`installer/widgets.js`; code copied to Firestore `widgets/<app>__<widget>`, SHA-256 in `apps/<id>.widgets[i].sha`);
+  the TV runs only that copy in a `data:` Worker, one at a time, 10 s max, and draws the returned VIEW itself (no app HTML). Docs: GUIDE.md section 18.
 - `apps/store.js`: the App Store app (Home / Games / Apps / Library / Search, Install / Open / Uninstall).
 - **Settings of every My PC** (owner decision): App Store Manager > Settings writes Firestore `settings/mypc` (admins only, read by
   every TV): backgrounds (`wallpapers: [{ url, title, thumb }]`, an empty title is taken from the address) and the background of new

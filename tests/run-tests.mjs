@@ -274,6 +274,14 @@ async function newPage(browser, base, db, opts) {
     if (!opts.phone && !opts.desktop) await ctx.addInitScript(TIZEN_MOCK);
     db = db || {};
     await fakeFirestore(ctx, db);
+    // the Weather widget's services (js/launcher/widgets.js): never the real ones in tests
+    await ctx.route(/^https:\/\/(get\.geojs\.io|geocoding-api\.open-meteo\.com|api\.open-meteo\.com)\//, (r) => {
+        const u = r.request().url(), body = /geojs/.test(u) ? { latitude: '33.59', longitude: '-7.61', city: 'Casablanca' }
+            : /geocoding/.test(u) ? (/name=Nowhere/.test(u) ? {} : { results: [{ latitude: 48.85, longitude: 2.35, name: 'Paris' }] })
+            : { current: { temperature_2m: /latitude=48/.test(u) ? 12.4 : 21.4, weather_code: 2, is_day: 1, relative_humidity_2m: 60, wind_speed_10m: 14 }, daily: { temperature_2m_max: [24], temperature_2m_min: [15] } };
+        (db.weather = db.weather || []).push(u);
+        return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(body) });
+    });
     const page = await ctx.newPage();
     page.errors = [];
     page.on('pageerror', (e) => page.errors.push(e.message));
@@ -939,7 +947,7 @@ async function main() {
         check(/\d{1,2}:\d{2}/.test(await page.textContent('#tray-time')) && (await page.textContent('#tray-date')).length > 5, 'taskbar clock shows time and date (' + await page.textContent('#tray-time') + ')');
         check(await page.evaluate(() => document.querySelectorAll('#desk-icons [data-game]').length === 7 && !!document.querySelector('#desk-icons [data-app="explorer"]')), 'desktop icons: 7 games plus apps');
         await page.focus('#tb-start'); await key('Enter');
-        check(await page.evaluate(() => Desktop.startOpen() && document.querySelectorAll('#start-pinned [data-focus]').length === 15), 'Start menu lists 8 apps (with the App Store and Memo) and 7 games');
+        check(await page.evaluate(() => Desktop.startOpen() && document.querySelectorAll('#start-pinned [data-focus]').length === 16), 'Start menu lists 9 apps (with the App Store, Memo and Music) and 7 games');
         await key('Escape');
         check(await page.evaluate(() => !Desktop.startOpen() && document.activeElement.id === 'tb-start'), 'Back closes Start');
         // shortcut menu: hold OK on a shortcut (a short press still opens it), a long press with the mouse or a finger, a right click
@@ -1055,15 +1063,15 @@ async function main() {
         check(await page.evaluate(() => Win.current() === null && !Mic.active()), 'Memo closes with the microphone off');
         // the Control Panel (was Settings) opens on a grid of categories
         await page.evaluate(() => Win.open('settings'));
-        check(await page.evaluate(() => document.querySelectorAll('.cp-tile').length === 13 && document.getElementById('win-title').textContent === 'Control Panel' &&
-            document.activeElement.getAttribute('data-page') === 'system' && document.querySelector('.set-nav').hidden), 'the Control Panel opens on a grid of 13 categories, focus on the first');
+        check(await page.evaluate(() => document.querySelectorAll('.cp-tile').length === 14 && document.getElementById('win-title').textContent === 'Control Panel' &&
+            document.activeElement.getAttribute('data-page') === 'system' && document.querySelector('.set-nav').hidden), 'the Control Panel opens on a grid of 14 categories, focus on the first');
         await key('ArrowRight', 'Enter');
         check(await page.evaluate(() => !document.querySelector('.cp-home') .offsetParent && document.querySelector('.set-title').textContent === 'Personalization' &&
             document.activeElement.getAttribute('data-theme') === 'win11'), 'OK on a card opens its page, focus on its first row (the theme)');
         // settings with the remote: background (the row under the themes)
         await key('ArrowDown', 'ArrowRight', 'Enter');
         check(await page.evaluate(() => Store.get('wallpaper') === 'aurora' && document.getElementById('wallpaper').className.indexOf('wp-aurora') >= 0), 'Settings > Personalization changes the background');
-        await key('Escape', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowRight', 'ArrowLeft');   // Personalization > Apps > Accounts > Sound
+        await key('Escape', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowRight', 'ArrowLeft');   // Personalization > Widgets > Apps > Accounts > Sound
         check(await page.evaluate(() => AudioPrefs.music()) === 6, 'Settings > Sound: left lowers the music volume');
         await key('Escape', 'Escape');
         check(await page.evaluate(() => Win.current() === 'settings' && !!document.querySelector('.cp-grid') && !document.querySelector('.cp-home').hidden &&
@@ -1396,9 +1404,9 @@ async function main() {
         check(rows.some((t) => /Star Catcher.*Not in store/.test(t)) && rows.some((t) => /Old Game.*In store/.test(t)) && rows.some((t) => /g_broken.*not a My PC app/.test(t)),
             'each app shows its status: not in the store, in the store, or not a My PC app');
         check(/App Store Manager/.test(await page.title()) && /App Store Manager/.test(await page.textContent('.brand')), 'the installer is now the App Store Manager');
-        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,AI services,Services,Settings,Devices,World records,Errors'
+        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,AI services,Services,Widgets,Settings,Devices,World records,Errors'
             && document.querySelector('.nav a.on').dataset.page === 'add' && !document.querySelector('[data-view="add"]').hidden && document.querySelector('[data-view="overview"]').hidden),
-            'a menu with one page each: Overview, Apps, Add apps, AI services, Services, Settings, Devices, World records, Errors');
+            'a menu with one page each: Overview, Apps, Add apps, AI services, Services, Widgets, Settings, Devices, World records, Errors');
         check(await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].find((r) => /Old Game/.test(r.textContent)).querySelector('input').disabled), 'installed apps cannot be selected again');
         await page.check('#sel-all');
         await page.click('#btn-install-sel');
@@ -4233,6 +4241,130 @@ async function main() {
         check(hist.ids === 'h1,h2,h3' && hist.saved === 3 && /History: the last 7 days/.test(hp) && /Today/.test(hp) && /Six days/.test(hp) && !/Too old/.test(hp) && hp.indexOf('Now one') < hp.indexOf('Six days'),
             'the history keeps the last 7 days on this device and lists them by day: ' + JSON.stringify(hist));
         await page.evaluate(() => Win.close());
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('42. desktop widgets: Weather, Playtime, System Monitor, Music Player; Control Panel > Widgets; paused while an app runs; app widgets');
+    {
+        const code = "export default async function (ctx) { const st = ctx.state || { n: 0 }; if (ctx.action === 'add') st.n++; " +
+            "return { view: { big: st.n + ' / ' + ctx.settings.goal, sub: 'stars', icon: '⭐', buttons: [{ id: 'add', label: '+1' }], link: 'level/2', html: '<b>no</b>' }, state: st }; }";
+        const sha = 'a'.repeat(64);
+        const app = (widgets) => ({ id: 'stars', name: 'Star Catcher', url: 'https://stars.example/', entry: 'https://stars.example/index.html', icon: '', type: 'game', version: '1.0.0', enabled: true, order: 0, widgets });
+        const w = { id: 'stars', title: 'Stars', file: 'https://stars.example/widgets/stars.js', size: 'medium', every: 15, background: false,
+            settings: [{ id: 'goal', label: 'Daily goal', type: 'select', default: '50', options: [{ value: '20', label: '20' }, { value: '50', label: '50' }] }] };
+        const db = { apps: { stars: app([Object.assign({ sha }, w)]), pending: Object.assign(app([w]), { id: 'pending', name: 'Pending' }) },
+            widgets: { stars__stars: { app: 'stars', widget: 'stars', code, sha, at: 1 } } };
+        const page = await newPage(browser, base, db);
+        await page.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'stars', at: 1 }, { id: 'pending', at: 1 }])); });
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon');
+        await page.waitForFunction(() => /21/.test((document.getElementById('wdg-weather') || {}).textContent || ''), null, { timeout: 8000 }).catch(() => {});
+        const cards = await page.evaluate(() => [...document.querySelectorAll('#desk-widgets .wdg')].map((c) => c.id + ':' + c.textContent));
+        check(['wdg-weather', 'wdg-playtime', 'wdg-sysmon', 'wdg-music'].every((id) => cards.some((c) => c.indexOf(id + ':') === 0)) && cards.some((c) => /wdg-weather:.*21°.*Casablanca.*Partly cloudy/.test(c)) &&
+            cards.some((c) => /wdg-sysmon:.*(Memory|My PC memory)/.test(c)) && cards.some((c) => /wdg-music:.*Morning Pixels/.test(c)) && cards.some((c) => /wdg-playtime:.*0 min/.test(c)),
+            'the desktop shows Weather (place from the internet address), Playtime, System Monitor and Music Player: ' + JSON.stringify(cards).slice(0, 400));
+        const layout = await page.evaluate(() => { const i = document.getElementById('desk-icons').getBoundingClientRect(), w = document.getElementById('desk-widgets').getBoundingClientRect(); return { iconsRight: i.right, wLeft: w.left, h: w.bottom, bar: document.getElementById('taskbar').getBoundingClientRect().top }; });
+        check(layout.iconsRight <= layout.wLeft + 1 && layout.h <= layout.bar, 'the widgets sit on the right, beside the icons and above the taskbar ' + JSON.stringify(layout));
+        // the approved app widget ran in its Worker; the one waiting for approval did not
+        await page.waitForFunction(() => /0 \/ 50/.test((document.getElementById('wdg-stars__stars') || {}).textContent || ''), null, { timeout: 8000 }).catch(() => {});
+        const st = await page.evaluate(() => ({ t: (document.getElementById('wdg-stars__stars') || {}).textContent || '', html: /&lt;b&gt;|<b>no<\/b>/.test(document.getElementById('wdg-stars__stars').innerHTML),
+            pending: !!document.getElementById('wdg-pending__stars'), code: !!(JSON.parse(localStorage.getItem('arc_dev_wcode') || '{}').stars__stars) }));
+        check(/Stars/.test(st.t) && /0 \/ 50/.test(st.t) && /stars/.test(st.t) && !st.html && !st.pending && st.code,
+            'an approved app widget runs its approved code (default settings, no HTML); one waiting for approval is not shown; the code is kept on the TV: ' + JSON.stringify(st));
+        await page.click('#wdg-stars__stars .wdg-btn');
+        await page.waitForFunction(() => /1 \/ 50/.test(document.getElementById('wdg-stars__stars').textContent), null, { timeout: 5000 }).catch(() => {});
+        check(await page.evaluate(() => /1 \/ 50/.test(document.getElementById('wdg-stars__stars').textContent)), 'a card button runs the widget again with ctx.action and keeps its state');
+        const reads = db.log.filter((x) => /widgets\/stars__stars/.test(x)).length;
+        await page.evaluate(() => Widgets.refreshNow('stars__stars'));
+        await page.waitForTimeout(400);
+        check(db.log.filter((x) => /widgets\/stars__stars/.test(x)).length === reads && reads === 1, 'the approved code is read from Firestore once, then from the TV');
+
+        // refreshing: every shown widget has its timer on the desktop; an open app stops them all but the background ones
+        await page.evaluate(() => Music.play());
+        await page.waitForTimeout(100);
+        const onDesk = await page.evaluate(() => Widgets._timers());
+        await page.evaluate(() => Win.open('calculator'));
+        await page.waitForTimeout(200);
+        const inApp = await page.evaluate(() => Widgets._timers());
+        check(onDesk.indexOf('sysmon') >= 0 && onDesk.indexOf('weather') >= 0 && onDesk.indexOf('music') >= 0 && onDesk.indexOf('stars__stars') >= 0 && inApp.join() === 'music',
+            'refresh timers: all on the desktop ' + onDesk + '; only Music (background by default) while an app is open: ' + inApp);
+        const before = await page.evaluate(() => Music.state().pos);
+        await page.waitForTimeout(1200);
+        check(await page.evaluate((b) => Music.state().playing && Music.state().pos >= b + 1, before), 'the music keeps playing while the app is open');
+        await page.evaluate(() => Win.close());
+        await page.waitForTimeout(200);
+        check((await page.evaluate(() => Widgets._timers())).indexOf('sysmon') >= 0, 'back on the desktop the widgets refresh again');
+
+        // Control Panel > Widgets: the list, then a page per widget (show, refresh rate, background, own settings)
+        await page.evaluate(() => Win.open('settings', 'widgets'));
+        await page.waitForTimeout(200);
+        const cp = await page.textContent('.set-main');
+        check(/Show widgets on the desktop/.test(cp) && /Weather/.test(cp) && /Playtime/.test(cp) && /System Monitor/.test(cp) && /Music Player/.test(cp) && /Stars/.test(cp) && /every 30 min/.test(cp) && /every 5 s/.test(cp),
+            'Control Panel > Widgets lists every widget with its state and refresh rate');
+        await page.evaluate(() => { const b = [...document.querySelectorAll('.set-main .set-row')].find((x) => /System Monitor/.test(x.textContent)); b.click(); });
+        await page.waitForTimeout(200);
+        const sp = await page.textContent('.set-main');
+        check(/Show on the desktop/.test(sp) && /Refresh/.test(sp) && /Run in the background/.test(sp) && /Refresh now/.test(sp) && /Move up/.test(sp), 'a widget\'s page: show, refresh rate, background, refresh now, order');
+        // the refresh rate changes with the arrows
+        await page.evaluate(() => { const b = [...document.querySelectorAll('.set-main .set-row')].find((x) => /^Refresh/.test(x.textContent) && !/now/.test(x.textContent)); b.focus(); });
+        await page.keyboard.press('ArrowRight');
+        check(await page.evaluate(() => Widgets.conf('sysmon').every) === 10 && /every 10 s/.test(await page.textContent('.set-main')), 'Right picks the next refresh rate (5 s -> 10 s)');
+        await page.evaluate(() => Widgets.set('sysmon', 'bg', true));
+        await page.evaluate(() => Widgets.set('sysmon', 'show', false));
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(150);
+        check(await page.evaluate(() => !!document.querySelector('.set-main') && /Show widgets/.test(document.querySelector('.set-main').textContent)), 'Back returns to the list');
+        await page.evaluate(() => Win.close());
+        await page.waitForTimeout(200);
+        check(await page.evaluate(() => !document.getElementById('wdg-sysmon') && Widgets._timers().indexOf('sysmon') < 0), 'a hidden widget has no card and no timer');
+        await page.evaluate(() => { Widgets.set('sysmon', 'show', true); Win.open('calculator'); });
+        await page.waitForTimeout(200);
+        check((await page.evaluate(() => Widgets._timers())).indexOf('sysmon') >= 0, 'with "Run in the background" on, it keeps refreshing while an app is open');
+        await page.evaluate(() => Win.close());
+
+        // Weather: a typed place, units
+        await page.evaluate(() => { Widgets.setSetting('weather', 'units', 'c'); Widgets.setSetting('weather', 'place', 'Paris'); });
+        await page.waitForFunction(() => /12°.*Paris/.test(document.getElementById('wdg-weather').textContent), null, { timeout: 5000 }).catch(() => {});
+        check(await page.evaluate(() => /12°.*Paris/.test(document.getElementById('wdg-weather').textContent)) && db.weather.some((u) => /geocoding.*name=Paris/.test(u)), 'Weather: a typed city is looked up (Open-Meteo geocoding) and shown');
+        await page.evaluate(() => Widgets.setSetting('weather', 'units', 'f'));
+        await page.waitForTimeout(500);
+        check(db.weather.some((u) => /temperature_unit=fahrenheit/.test(u)), 'Weather: Fahrenheit asks the forecast in °F');
+
+        // per profile: another profile has its own widgets
+        const other = await page.evaluate(() => { const mine = Store.get('widgets'); const p2 = Profiles.create('Sara'); Store.setProfile(p2.id); const o = Store.get('widgets', null); const c = Widgets.conf('sysmon').every; Store.setProfile('p1'); return { mine: !!mine, other: o, every: c }; });
+        check(other.mine && other.other === null && other.every === 5, 'widget settings are per profile: a new profile starts from the defaults ' + JSON.stringify(other));
+        // master switch
+        await page.evaluate(() => Widgets.setOn(false));
+        check(await page.evaluate(() => document.getElementById('desk-widgets').hidden && Widgets._timers().length === 0 && !document.getElementById('desktop').classList.contains('has-wdg')), 'Show widgets off: no cards, no timers, the icons get the whole desktop');
+        await page.evaluate(() => Widgets.setOn(true));
+        // Music app and the card's buttons
+        await page.evaluate(() => Win.open('music'));
+        await page.waitForTimeout(150);
+        check(await page.evaluate(() => /Morning Pixels|Neon Avenue|Level Two/.test(document.querySelector('.mu').textContent) && document.querySelectorAll('.mu-track').length === 5), 'the Music app (placeholder) shows its tracks');
+        await page.evaluate(() => Win.close());
+        await page.waitForTimeout(150);
+        const t0 = await page.evaluate(() => Music.state().index);
+        await page.click('#wdg-music .wdg-btn[data-b="next"]');
+        check(await page.evaluate((t) => Music.state().index === (t + 1) % 5, t0), 'the Music Player card\'s Next button changes the track');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('42b. widgets on the game page: only the background ones run, Playtime counts');
+    {
+        const page = await newPage(browser, base);
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('[data-game="blocks"]');
+        await page.focus('[data-game="blocks"]');
+        await Promise.all([page.waitForURL(/play=blocks/), page.keyboard.press('Enter')]);
+        await page.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 15000 });
+        check(await page.evaluate(() => Widgets._timers().length === 0 && !document.querySelector('#desk-widgets .wdg')), 'the game page builds no widget and runs none (Music is paused)');
+        await page.evaluate(() => { Playtime._check(); });
+        const pt = await page.evaluate(() => { const l = Date.now; Date.now = () => l() + 40000; Playtime._check(); Date.now = l; return Playtime.summary(); });
+        check(pt.today >= 39 && pt.top && pt.top.id === 'blocks', 'Playtime counts the time the game runs: ' + JSON.stringify(pt));
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }

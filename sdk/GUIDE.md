@@ -94,6 +94,7 @@ The site **MUST** be served over **https** and must allow other sites to read `m
 | `scores` | games only: `false` if the game has no points (no top-10 table) |
 | `config` | optional default settings, a JSON object (see "App config" below); 8000 characters at most |
 | `services` | optional push notification services, up to 3: `[{ "id": "goals", "file": "services/notify.js", "every": 5, "title": "Goal alerts" }]` (section 16) |
+| `widgets` | optional desktop widgets, up to 3: `[{ "id": "stars", "title": "Star Catcher", "file": "widgets/stars.js", "size": "medium", "every": 15 }]` (section 18) |
 
 ## 4. The SDK API
 
@@ -1069,3 +1070,115 @@ Protocol (for reference): app → My PC `{ type: 'field', data: { on: 1, id, kin
 password) or `{ on: 0 }`; My PC → app `{ type: 'text', data: { v: whole text, go: 1 | 0 } }`, only while the app runs (not
 under My PC's menu). Phone ↔ TV: `{ t: 'tf', ... }` / `{ t: 'tx', v, go }` (`docs/phone-controller.md`). My PC side:
 `js/launcher/textin.js`, `js/launcher/controllers.js`, `js/launcher/game-host.js`.
+
+## 18. Desktop widgets: `"widgets"` in `mypc-app.json`
+
+My PC's desktop shows **widgets**: small cards on the right (Weather, Playtime, System Monitor, Music Player are built
+in). Your app can add its own: today's score, the next match, a daily goal. Each player turns widgets on or off, picks
+how often they refresh, whether they run in the background, and their settings in **Control Panel > Widgets** (every
+profile has its own).
+
+How it fits together:
+1. You list the widget in `mypc-app.json` (what it is, its size, its refresh rate, its settings with their defaults) and
+   put its `.js` file on your site.
+2. The owner adds or updates the app in the App Store Manager; its **Widgets** page shows your widget. The owner reads the
+   code, tests it (it draws the card) and **approves** it: the approved code is copied into the store, so **TVs run that
+   copy, never your live file**. A later change of the file reaches TVs only when the owner approves it again.
+3. A player who installed your app sees the widget on the desktop (Control Panel > Widgets hides it or changes it).
+4. At each refresh My PC runs your function once and draws what it returns. **OK on the card opens your app**; buttons
+   on the card run your function again with `ctx.action`.
+
+### `mypc-app.json`
+
+```json
+"widgets": [
+  { "id": "stars", "title": "Star Catcher", "file": "widgets/stars.js", "size": "medium", "every": 15, "background": false,
+    "description": "Your stars of the day",
+    "settings": [
+      { "id": "goal", "label": "Daily goal", "type": "select", "default": "50",
+        "options": [{ "value": "20", "label": "20 stars" }, { "value": "50", "label": "50 stars" }] },
+      { "id": "tips", "label": { "en": "Show tips", "fr": "Afficher les astuces" }, "type": "toggle", "default": true },
+      { "id": "team", "label": "Team", "type": "text", "default": "" }
+    ] }
+]
+```
+
+| Field | Rules |
+|---|---|
+| `id` | **MUST**, 1–20 characters `a-z 0-9 -`, unique in the app, never change it (the players' settings are keyed by it) |
+| `file` | **MUST**, the widget's file, relative to the manifest (or an `https://` address); 60 000 characters at most |
+| `title` | the card's title and its name in Control Panel > Widgets (40 characters); text or `{ "en", "fr", "es", "ar" }` |
+| `size` | `small` (180 px tall), `medium` (230 px, default) or `large` (330 px); the card is 400 px wide |
+| `every` | default minutes between refreshes: `1`, `5`, `15` (default), `30` or `60`; the player can pick another |
+| `background` | default of "Run in the background" (`false`): `true` keeps refreshing while an app or a game is open. Leave it `false` unless the card must be current the moment the player comes back |
+| `description` | one line in Control Panel > Widgets (120 characters) |
+| `settings` | up to 8: `toggle` (`default` true / false), `select` (`options` `[{ value, label }]`, up to 12, `default` one of the values) or `text` (typed with the on-screen keyboard or a phone, 60 characters). `label` is text or `{ "en", "fr", "es", "ar" }` |
+
+At most 3 widgets per app.
+
+### The widget file
+
+An ES module whose **default export** is a function (it can be `async`). It runs in a **Web Worker started from a
+`data:` address** (its own empty origin): no page, no DOM, no `MyPC` object, no access to My PC's storage or sign-ins.
+It is started for one refresh and **stopped after 10 seconds**; one widget runs at a time on a TV.
+
+```js
+// widgets/stars.js
+export default async function (ctx) {
+  // ctx.settings  this profile's settings: { goal: '50', tips: true, team: '' } (the defaults until the player changes them)
+  // ctx.state     what the last run returned as state (null the first time); 4000 characters of JSON at most, per profile
+  // ctx.action    the id of the card button the player pressed, else null (a normal refresh)
+  // ctx.size      'small' | 'medium' | 'large'; ctx.lang: 'en' | 'fr' | 'es' | 'ar'
+  // ctx.now       this run's time (ms); ctx.lastRun: the previous refresh (ms) or 0
+  // ctx.config    the app's config (MyPC.app_config, set in the App Store Manager); ctx.app / ctx.widget: the ids
+  // ctx.fetch     the normal fetch (the API must allow CORS: Access-Control-Allow-Origin *)
+  const st = ctx.state || { caught: 0 };
+  if (ctx.action === 'add') st.caught += 1;
+  return {
+    view: {
+      icon: '⭐',                        // 1-4 characters (an emoji) or an https:// picture
+      big: st.caught + ' / ' + ctx.settings.goal,
+      sub: 'stars caught today',
+      text: 'Catch two in a row for a bonus.',
+      progress: st.caught / +ctx.settings.goal,
+      buttons: [{ id: 'add', label: '+1' }],
+      accent: '#ffc83d',
+      link: 'level/3'                       // OK on the card opens your app with MyPC.launch.path = 'level/3'
+    },
+    state: st
+  };
+}
+```
+
+The **view** (anything else is dropped; text is plain text, never HTML):
+
+| Field | What My PC draws |
+|---|---|
+| `title` | replaces the card's title (40 characters) |
+| `icon` | top left: an emoji or 1–4 characters, or an `https://` picture |
+| `big` / `sub` | a big value (24 characters) and a line under it (60); without `big`, `sub` goes under `text` |
+| `text` | up to two lines (160 characters) |
+| `image` | an `https://` picture on the right (medium and large cards) |
+| `progress` | a bar, `0` to `1` |
+| `rows` | up to 5 `{ label, value }` lines (24 / 40 characters); a small card has room for about 2 |
+| `buttons` | up to 3 `{ id, label }` at the bottom; pressing one refreshes the widget with `ctx.action = id` |
+| `accent` | `#rrggbb`, the colour of the card's top edge and of the bar |
+| `link` | the path your app gets in `MyPC.launch.path` (with `MyPC.launch.from = 'widget'`) when the player opens the card with OK (section 16) |
+
+Return `{ view, state }`, or just the view. My PC keeps the last view and shows it at once when the desktop opens (and
+offline). A run that throws or times out leaves the last view with "Could not refresh" and is sent to the error reports
+(App Store Manager > Errors, `app-<id>`).
+
+Rules:
+- **Cheap:** nothing of yours runs between two refreshes, and widgets stop while an app or a game is open (unless the player
+  turned on Run in the background). Do one small request per refresh; never loop or wait for long.
+- No `import` of other files (the widget is one file). Never put secret keys in it: anyone can read the file on your site.
+- The card must make sense with the remote alone: OK opens your app, the arrows reach the buttons. Button labels are plain
+  words or `+1` style text; for controller hints use A B X Y and **+** (never A B C or "Menu").
+- Test it yourself: open the file's address in a browser to check it loads, and ask the owner to press **Test** in the
+  Widgets page (it runs it in the same sandbox and draws the card).
+
+Protocol (for reference): My PC → Worker `{ src, app, widget, settings, state, size, lang, action, now, lastRun, config }`,
+Worker → My PC `{ ok: true, out }` or `{ ok: false, error }`. Firestore: `apps/<id>.widgets[i].sha` (the approved SHA-256),
+`widgets/<app>__<widget>` `{ code, sha }` (read by TVs, written by the owner). My PC side: `js/launcher/widgets.js`,
+`js/core/widget-lib.js`; Manager: `installer/widgets.js`. A complete small widget: `sdk/example/widgets/stars.js`.

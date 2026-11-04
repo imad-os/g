@@ -82,7 +82,29 @@ var Icons = (function () {
         appsNav: '<rect x="7" y="7" width="15" height="15" rx="3" fill="#fff"/><rect x="26" y="7" width="15" height="15" rx="3" fill="#fff"/><rect x="7" y="26" width="15" height="15" rx="3" fill="#fff"/><rect x="26" y="26" width="15" height="15" rx="3" fill="#fff"/>',
         globe: '<circle cx="24" cy="24" r="17" fill="none" stroke="#4fc3ff" stroke-width="3"/><path d="M7 24h34M24 7c6 6 6 28 0 34M24 7c-6 6-6 28 0 34" fill="none" stroke="#4fc3ff" stroke-width="3"/>',
         tv: '<rect x="5" y="9" width="38" height="25" rx="3" fill="#8fd3ff"/><rect x="16" y="37" width="16" height="3" rx="1.5" fill="#8fd3ff"/>',
-        trash: '<path d="M10 12h28M19 12V8h10v4M13 12l2 29h18l2-29" fill="none" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"/>'
+        trash: '<path d="M10 12h28M19 12V8h10v4M13 12l2 29h18l2-29" fill="none" stroke="#fff" stroke-width="3.5" stroke-linejoin="round"/>',
+        // desktop widgets (js/launcher/widgets.js) and the Music app
+        widgets: '<rect x="5" y="5" width="17" height="22" rx="4" fill="#4fc3ff"/><rect x="26" y="5" width="17" height="12" rx="4" fill="#9a7bff"/>' +
+                 '<rect x="26" y="21" width="17" height="22" rx="4" fill="#ffb84d"/><rect x="5" y="31" width="17" height="12" rx="4" fill="#4cd97b"/>',
+        music: '<path d="M18 10l22-5v26" fill="none" stroke="#ff6fa8" stroke-width="4" stroke-linejoin="round"/><path d="M18 10v25" stroke="#ff6fa8" stroke-width="4"/>' +
+               '<ellipse cx="12.5" cy="36" rx="7" ry="5.5" fill="#ff6fa8"/><ellipse cx="34.5" cy="32" rx="7" ry="5.5" fill="#ff6fa8"/>',
+        weather: '<circle cx="18" cy="17" r="9" fill="#ffc83d"/><path d="M15 40a8 8 0 0 1 1-16 11 11 0 0 1 21 3 7 7 0 0 1 0 13z" fill="#e8f1ff"/>',
+        sun: '<circle cx="24" cy="24" r="9" fill="#ffc83d"/><g stroke="#ffc83d" stroke-width="3.5" stroke-linecap="round"><path d="M24 4v6M24 38v6M4 24h6M38 24h6M9.9 9.9l4.2 4.2M33.9 33.9l4.2 4.2M9.9 38.1l4.2-4.2M33.9 14.1l4.2-4.2"/></g>',
+        moon: '<path d="M30 6a17 17 0 1 0 12 26A14 14 0 0 1 30 6z" fill="#cfd8ff"/>',
+        partly: '<circle cx="18" cy="17" r="9" fill="#ffc83d"/><path d="M15 40a8 8 0 0 1 1-16 11 11 0 0 1 21 3 7 7 0 0 1 0 13z" fill="#e8f1ff"/>',
+        cloud: '<path d="M13 38a9 9 0 0 1 1-18 13 13 0 0 1 25 3 7.5 7.5 0 0 1 0 15z" fill="#dfe7f2"/>',
+        rain: '<path d="M13 30a9 9 0 0 1 1-18 13 13 0 0 1 25 3 7.5 7.5 0 0 1 0 15z" fill="#c9d4e4"/><g stroke="#4fa8ff" stroke-width="3.5" stroke-linecap="round"><path d="M16 35l-2 6M25 35l-2 6M34 35l-2 6"/></g>',
+        snow: '<path d="M13 30a9 9 0 0 1 1-18 13 13 0 0 1 25 3 7.5 7.5 0 0 1 0 15z" fill="#dfe7f2"/><g fill="#fff"><circle cx="15" cy="38" r="2.5"/><circle cx="24" cy="41" r="2.5"/><circle cx="33" cy="38" r="2.5"/></g>',
+        storm: '<path d="M13 30a9 9 0 0 1 1-18 13 13 0 0 1 25 3 7.5 7.5 0 0 1 0 15z" fill="#9aa6b8"/><path d="M26 28l-7 10h6l-3 8 9-11h-6l3-7z" fill="#ffd23d"/>',
+        fog: '<g stroke="#dfe7f2" stroke-width="4" stroke-linecap="round"><path d="M8 16h32M5 24h38M10 32h30M14 40h20"/></g>',
+        hourglass: '<path d="M13 5h22M13 43h22" stroke="#c6b6ff" stroke-width="3.5" stroke-linecap="round"/><path d="M15 6c0 10 9 12 9 18s-9 8-9 18h18c0-10-9-12-9-18s9-8 9-18z" fill="none" stroke="#c6b6ff" stroke-width="3"/>' +
+                   '<path d="M18 40c1-5 6-7 6-9s5 4 6 9z" fill="#9a7bff"/>',
+        chip: '<rect x="11" y="11" width="26" height="26" rx="4" fill="#3ad29f"/><rect x="18" y="18" width="12" height="12" rx="2" fill="#0f5b43"/>' +
+              '<g stroke="#3ad29f" stroke-width="3" stroke-linecap="round"><path d="M18 4v5M24 4v5M30 4v5M18 39v5M24 39v5M30 39v5M4 18h5M4 24h5M4 30h5M39 18h5M39 24h5M39 30h5"/></g>',
+        play: '<path d="M15 9l25 15-25 15z" fill="#fff"/>',
+        pause: '<rect x="12" y="9" width="9" height="30" rx="2" fill="#fff"/><rect x="27" y="9" width="9" height="30" rx="2" fill="#fff"/>',
+        next: '<path d="M9 10l20 14-20 14z" fill="#fff"/><rect x="32" y="10" width="6" height="28" rx="2" fill="#fff"/>',
+        prev: '<path d="M39 10L19 24l20 14z" fill="#fff"/><rect x="10" y="10" width="6" height="28" rx="2" fill="#fff"/>'
     };
 
     function svg(name) {

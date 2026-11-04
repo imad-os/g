@@ -206,3 +206,13 @@ My PC (`subs/<app>/users/<username>`); My PC on their TV or phone reads their ow
 Cost: a signed-in My PC reads its inbox every 30 minutes (one read when nothing is new), or every 2 minutes for the accounts
 listed in App Store Manager > Settings > Fast push notifications (`settings/mypc` field `notifyFast`, readable by anyone like the
 rest of that document). Each notification is one write; the Manager reads each app's opt-in list once every 10 minutes.
+
+## 4d. Desktop widgets (`widgets`): rules (once)
+Apps list desktop widgets in their `mypc-app.json`; the App Store Manager's **Widgets** page shows them. Approving one copies
+its code into `widgets/<app>__<widget>` and its SHA-256 into the app's document (`apps/<id>.widgets[i].sha`). TVs read that
+copy once per approved version (then keep it on the device) and run it in a sandboxed Worker.
+
+1. Publish `firebase/firestore.rules` again (step 1): it adds `widgets` (anyone may read one document, admins write) and
+   `widgets` in the `apps` documents. Until then, adding an app with widgets is refused ("Firebase refused it").
+2. No index, no TTL. Cost: one read per TV per approved widget version; the built-in Weather widget uses Open-Meteo and
+   GeoJS (free, no key), never Firestore.

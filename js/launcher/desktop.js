@@ -18,6 +18,7 @@ var Desktop = (function () {
         { id: 'calculator', icon: 'calculator', label: 'calculator' },
         { id: 'calendar', icon: 'calendar', label: 'calendar' },
         { id: 'memo', icon: 'memo', label: 'memo' },
+        { id: 'music', icon: 'music', label: 'music' },
         { id: 'scores', icon: 'scores', label: 'leaderboards' },
         { id: 'gamepad', icon: 'controller', label: 'gamepad' },
         { id: 'settings', icon: 'settings', label: 'settings' }
@@ -440,6 +441,7 @@ var Desktop = (function () {
 
     function render() {
         renderIcons();
+        if (window.Widgets) Widgets.render();
         renderTaskbar();
         if (startOpen()) renderStart();
         paintWallpaper();
@@ -456,7 +458,7 @@ var Desktop = (function () {
     function focusKey(e) {
         if (!e || !e.getAttribute || !$('desktop').contains(e)) return null;
         return {
-            z: $('start').contains(e) ? 'start' : $('desk-icons').contains(e) ? 'icons' : 'bar',
+            z: $('start').contains(e) ? 'start' : $('desk-icons').contains(e) ? 'icons' : 'bar',      // a widget: 'bar' with its id (wdg-<id>)
             id: e.id || '', g: e.getAttribute('data-game') || '', a: e.getAttribute('data-app') || ''
         };
     }
@@ -483,6 +485,7 @@ var Desktop = (function () {
         restoreImages();
         updateTray();
         tick();
+        if (window.Widgets) Widgets.resume();
         Focus.reset();
         Focus.set($('desktop'), remembered() || focusEl || tileFor(lastPlayed) || firstIcon());
     }
@@ -495,6 +498,7 @@ var Desktop = (function () {
         closeStart(true);
         $('desktop').hidden = true;
         stopClock();
+        if (window.Widgets) Widgets.pause();      // only the widgets that run in the background keep refreshing
     }
 
     // Frees decoded cover images while a game or app runs (RAM on low-end TVs).

@@ -9,5 +9,8 @@
   "version": "1.0.0",
   "scores": true,
   "config": { "speed": 1 },
+  "widgets": [{ "id": "stars", "title": "Star Catcher", "file": "widgets/stars.js", "size": "medium", "every": 15,
+                "settings": [{ "id": "goal", "label": "Daily goal", "type": "select", "default": "50", "options": [{ "value": "20", "label": "20 stars" }, { "value": "50", "label": "50 stars" }, { "value": "100", "label": "100 stars" }] },
+                             { "id": "tips", "label": "Show tips", "type": "toggle", "default": true }] }],
   "touch": { "buttons": [{ "label": "A", "action": "ok", "place": "right" }, { "label": "B", "action": "b", "place": "bottom" }], "catalog": [{ "label": "A", "action": "ok", "place": "right" }, { "label": "B", "action": "b", "place": "bottom" }, { "label": "X", "action": "menu", "place": "top" }, { "label": "Y", "action": "run", "place": "left" }] }
 }

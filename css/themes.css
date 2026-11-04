@@ -189,3 +189,15 @@ html.th-ios { --acc: #0a84ff; --ink: #fff; }
     background-image: radial-gradient(45% 40% at 75% 70%, rgba(54, 209, 220, 0.8) 0%, rgba(54, 209, 220, 0) 100%),
                       radial-gradient(40% 35% at 20% 30%, rgba(255, 120, 200, 0.45) 0%, rgba(255, 120, 200, 0) 100%),
                       linear-gradient(160deg, #141e48 0%, #2a5298 50%, #1c8fb0 100%); }
+
+/* desktop widgets (js/launcher/widgets.js) under the top bar and above the dock; Mac style: icons on the right, so widgets on the left */
+:is(.th-mac, .th-android, .th-ios) .desk-widgets { top: 78px; height: calc(var(--sh) - 250px); }
+.compact:is(.th-mac, .th-android, .th-ios) .desk-widgets { top: 104px; height: calc(var(--sh) - 320px); }
+.th-mac .desk-widgets { right: auto; left: 24px; }
+.th-mac .has-wdg .desk-icons { left: auto; right: 24px; }
+[dir="rtl"].th-mac .desk-widgets { left: auto; right: 24px; }
+[dir="rtl"].th-mac .has-wdg .desk-icons { right: auto; left: 24px; }
+.th-xp .wdg { border-radius: 8px; background: rgba(20, 50, 120, 0.82); }
+.th-win7 .wdg { border-radius: 10px; background: rgba(30, 50, 80, 0.78); border-color: rgba(255, 255, 255, 0.3); }
+.tall:is(.th-mac, .th-android, .th-ios) .desk-widgets, [dir="rtl"].tall.th-mac .desk-widgets { top: auto; left: 24px; right: 24px; height: 320px; }
+.tall.compact:is(.th-mac, .th-android, .th-ios) .desk-widgets { height: 420px; }

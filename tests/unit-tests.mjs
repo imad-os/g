@@ -7,6 +7,8 @@
 //   4. Android controller app bridge (android-controller/app/src/main/assets/bridge.js)
 //   5. app bridges: WebProxy (local network check, base64, .wav) and AI (request shapes for Gemini, OpenAI-compatible, Claude, NVIDIA speech)
 //   6. GlobalSettings: titles taken from a picture's address, cleaning of settings/mypc
+//   8. Desktop widgets (js/core/widget-lib.js): mypc-app.json "widgets", settings, approvals kept on update, views cleaned, the Worker;
+//      Music (placeholder player) and Playtime
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -454,6 +456,74 @@ console.log('7. Push notification services (installer/services-lib.js)');
     const it = S.inboxItem(r.items[0], { id: 'soccer', name: 'Soccer Live' }, now, 'EXP');
     check(it.app === 'soccer' && it.name === 'Soccer Live' && it.title === 'Goal! Raja' && it.link === 'app?match=7' && it.at === now && it.exp === 'EXP' && S.itemId('soccer', now, 3).indexOf('soccer-') === 0,
         'an inbox document carries the app, its name, the text, the time and the expiry');
+}
+
+console.log('8. Desktop widgets (js/core/widget-lib.js), Music, Playtime');
+{
+    const W = load('js/core/widget-lib.js', vm.createContext({ JSON, Array, String, Object, URL, Error, Math, isFinite })).WidgetLib;
+    const base = 'https://imad-os.github.io/g_stars/';
+    const l = W.parseWidgets([{ id: 'Stars', title: { en: 'Stars', fr: 'Étoiles' }, file: 'widgets/stars.js', size: 'large', every: 5, background: true,
+        settings: [{ id: 'goal', type: 'select', default: '9', options: [{ value: '20' }, { value: '50', label: '50 stars' }] }, { id: 'tips', label: 'Tips', type: 'toggle', default: true }, { id: 'team', type: 'text' }] }], base);
+    check(l.length === 1 && l[0].id === 'stars' && l[0].file === base + 'widgets/stars.js' && l[0].size === 'large' && l[0].every === 5 && l[0].background === true &&
+        l[0].title.fr === 'Étoiles' && l[0].settings[0]['default'] === '20' && l[0].settings[0].options[0].label === '20' && l[0].settings[1]['default'] === true && l[0].settings[2]['default'] === '',
+        'mypc-app.json "widgets": id lowercased, file made absolute, size / every / background, settings with valid defaults');
+    const d = W.parseWidgets([{ id: 'x', file: 'x.js' }], base)[0];
+    check(d.size === 'medium' && d.every === 15 && d.background === false && !d.settings, 'defaults: medium, every 15 min, not in the background');
+    const bad = (w, re) => { try { W.parseWidgets(w, base); return false; } catch (e) { return re.test(e.message); } };
+    check(bad({}, /must be a list/) && bad([{ id: 'a b', file: 'x.js' }], /"id"/) && bad([{ id: 'a' }], /"file"/) && bad([{ id: 'a', file: 'http://x.com/a.js' }], /https/) &&
+        bad([{ id: 'a', file: 'a.js', every: 7 }], /"every"/) && bad([{ id: 'a', file: 'a.js', size: 'huge' }], /"size"/) && bad([{ id: 'a', file: 'a.js' }, { id: 'a', file: 'b.js' }], /twice/) &&
+        bad([1, 2, 3, 4].map((i) => ({ id: 'w' + i, file: 'a.js' })), /more than 3/) && bad([{ id: 'a', file: 'a.js', settings: [{ id: 's', type: 'select' }] }], /options/) &&
+        bad([{ id: 'a', file: 'a.js', settings: [{ id: 's', type: 'slider' }] }], /type/),
+        'readable errors: not a list, bad id, no file, not https, bad every / size, a repeated id, more than 3, a select without options, an unknown type');
+    const kept = W.keepApprovals([{ id: 'stars', file: 'a.js' }, { id: 'new', file: 'b.js' }], [{ id: 'stars', file: 'a.js', sha: 'abc', approvedAt: 5 }]);
+    check(kept[0].sha === 'abc' && kept[0].approvedAt === 5 && !kept[1].sha, 'an update of the app keeps the approval of each widget it still has; a new widget waits');
+    const st = W.settingsOf(l[0].settings, { goal: '50', tips: 'yes', team: 'Raja' });
+    check(st.goal === '50' && st.tips === true && st.team === 'Raja' && W.settingsOf(l[0].settings, { goal: '7' }).goal === '20', 'settings: saved values over the defaults, invalid ones fall back');
+    const v = W.cleanView({ big: 21, text: '<b>x</b>'.repeat(40), icon: 'javascript:alert(1)', image: 'http://x/a.png', progress: 3, rows: [{ label: 'a', value: 1 }, 5, {}],
+        buttons: [{ id: 'add', label: '+1', icon: 'play' }, { id: 'x' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C' }], accent: 'red', link: 'level/3', html: '<script>' });
+    check(v.big === '21' && v.text.length === 160 && !v.icon && !v.image && v.progress === 1 && v.rows.length === 1 && v.rows[0].value === '1' && v.buttons.length === 2 && !v.buttons[0].icon &&
+        !v.accent && v.link === 'level/3' && !v.html, 'views: numbers become text, long text cut, no script / http pictures, progress 0..1, empty rows and buttons dropped, unknown fields dropped');
+    check(W.cleanView({ icon: '⭐' }).icon === '⭐' && W.cleanView({ icon: 'https://x.y/i.png' }).icon === 'https://x.y/i.png' && W.cleanView({ icon: 'i:sun' }, true).icon === 'i:sun' && !W.cleanView({ icon: 'i:sun' }).icon,
+        'icons: an emoji, an https picture; a built-in icon (i:...) only for My PC\'s own widgets');
+    const r = W.result({ view: { big: 'x' }, state: { n: 1 } }), r2 = W.result({ big: 'y' }), r3 = W.result('no'), r4 = W.result({ view: {}, state: 'x'.repeat(5000) });
+    check(r.view.big === 'x' && r.state === '{"n":1}' && r2.view.big === 'y' && r2.state === undefined && r3.error && /bigger/.test(r4.error), 'results: { view, state } or the view itself; a huge state is refused');
+    check(/import\(d\.src\)/.test(W.WORKER) && /m\.default/.test(W.WORKER) && !/localStorage|document/.test(W.WORKER), 'the Worker imports the approved code and calls its default export (no page, no storage)');
+    const IL = load('installer/installer-lib.js', vm.createContext({ JSON, Array, String, Object, URL, Error, Math, isFinite, WidgetLib: W, ServicesLib: { parseServices: () => [] } })).InstallerLib;
+    const app = IL.toApp({ mypc: 1, id: 'stars', name: 'Stars', widgets: [{ id: 'stars', file: 'widgets/stars.js' }] }, base, 0);
+    check(app.widgets && app.widgets[0].file === base + 'widgets/stars.js' && IL.status([Object.assign({}, app, { widgets: [Object.assign({ sha: 'x' }, app.widgets[0])] })], app) === 'installed' &&
+        IL.status([Object.assign({}, app, { widgets: [] })], app) === 'update', 'the App Store Manager reads "widgets"; an approval alone is not an update, a new widget is');
+    const ex = JSON.parse(fs.readFileSync(path.join(ROOT, 'sdk/example/mypc-app.json'), 'utf8'));
+    check(W.parseWidgets(ex.widgets, base).length === 1, 'the example app\'s widget (sdk/example) is valid');
+
+    // Music (placeholder) and Playtime, with a fake clock and storage
+    let now = 1000000, mem = {};
+    const store = { get: (k, def) => (k in mem ? JSON.parse(mem[k]) : def), set: (k, v) => { mem[k] = JSON.stringify(v); return true; } };
+    const RealDate = Date;
+    function FakeDate(...a) { return a.length ? new RealDate(...a) : new RealDate(now); }
+    FakeDate.now = () => now;
+    const mc = load('js/core/music.js', vm.createContext({ Store: store, Date: FakeDate, Math, JSON, Object, Array, String }));
+    const M = mc.Music;
+    M.play(); now += 160000;
+    const s1 = M.state();
+    check(s1.index === 1 && s1.playing && s1.pos === 6, 'Music keeps playing with the clock (the next track after the first one ended), even with no timer');
+    M.pause(); now += 60000;
+    check(M.state().pos === 6 && !M.state().playing, 'paused: the position stays');
+    M.next(); M.prev();
+    check(M.state().index === 1 && M.state().pos === 0 && M.clock(125) === '2:05', 'next / previous (back to the start of the track) and the clock text');
+    let hidden = false, state = 'running', iv = null;
+    const doc = { get hidden() { return hidden; } };
+    const pc = load('js/core/playtime.js', vm.createContext({ Store: store, Date: FakeDate, Math, JSON, Object, Array, String, document: doc, GameHost: { state: () => state },
+        setInterval: (f) => { iv = f; return 1; }, clearInterval: () => { iv = null; }, window: { addEventListener() {}, removeEventListener() {} } }));
+    const P = pc.Playtime;
+    P.start('blocks', 'Block Drop');
+    now += 60000; iv();
+    state = 'paused'; now += 60000; iv();
+    state = 'running'; hidden = true; now += 60000; iv();
+    hidden = false; now += 3600000; iv();               // a TV that slept: at most one minute and a bit
+    now += 30000; P.stop();
+    const sm = P.summary();
+    check(sm.today === 60 + 65 + 30 && sm.top.id === 'blocks' && sm.top.t === 'Block Drop' && sm.week === sm.today && !iv, 'Playtime counts only while the game runs and My PC is on screen, a long gap adds at most one tick');
+    check(P.length(3725, 'h', 'min') === '1 h 02 min' && P.length(59, 'h', 'min') === '0 min', 'Playtime text: 1 h 02 min');
 }
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall unit checks passed');
 process.exit(failures ? 1 : 0);

@@ -98,6 +98,12 @@
             var sv = SL.parseServices(m.services, base);
             if (sv.length) app.services = sv;
         }
+        // optional desktop widgets (js/core/widget-lib.js, sdk/GUIDE.md "Desktop widgets"); each one waits for an approval
+        if (m.widgets !== undefined) {
+            var WL = typeof WidgetLib !== 'undefined' ? WidgetLib : typeof require === 'function' ? require('../js/core/widget-lib.js') : null;
+            var wg = WL.parseWidgets(m.widgets, base);
+            if (wg.length) app.widgets = wg;
+        }
         return app;
     }
 
@@ -116,11 +122,15 @@
         return out;
     }
 
+    // a widget as mypc-app.json describes it (without the approval the Manager adds)
+    function plainWidget(w) { var o = {}, k; for (k in w) if (k !== 'sha' && k !== 'approvedAt') o[k] = w[k]; return o; }
+
     // installed list + a catalog app -> 'new' | 'installed' | 'update' (same id, other version or address)
     function status(installed, app) {
         for (var i = 0; i < (installed || []).length; i++) {
             var a = installed[i];
-            if (a.id === app.id || a.url === app.url) return a.version === app.version && a.entry === app.entry && a.name === app.name && a.icon === app.icon && JSON.stringify(a.services || []) === JSON.stringify(app.services || []) ? 'installed' : 'update';
+            if (a.id === app.id || a.url === app.url) return a.version === app.version && a.entry === app.entry && a.name === app.name && a.icon === app.icon && JSON.stringify(a.services || []) === JSON.stringify(app.services || []) &&
+                   JSON.stringify((a.widgets || []).map(plainWidget)) === JSON.stringify((app.widgets || []).map(plainWidget)) ? 'installed' : 'update';
         }
         return 'new';
     }

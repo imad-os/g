@@ -1,0 +1,112 @@
+/* Strings of the desktop widgets (js/launcher/widgets.js), Control Panel > Widgets and the Music app, in the 4 languages. */
+(function () {
+    'use strict';
+    var S = {
+        en: {
+            sysWidgets: 'Widgets', cpd_widgets: 'Weather, playtime, system monitor, music on the desktop',
+            wg_weather: 'Weather', wg_playtime: 'Playtime', wg_sysmon: 'System Monitor', wg_music: 'Music Player',
+            music: 'Music', musicNote: 'This is a preview of the Music app: the songs are examples and play no sound yet.',
+            wgShowAll: 'Show widgets on the desktop', wgShowAllDesc: 'Small cards on the right of the desktop. Only for your profile.',
+            wgHelp: 'Widgets stop refreshing while an app or a game is open, so they cost nothing then. A widget with "Run in the background" on keeps going. Pick a widget to change it.',
+            wgAppsHelp: 'Apps from the App Store can add their own widgets: they show up here once the app is installed and an App Store manager approved them.',
+            wgShow: 'Show on the desktop', wgShowDesc: 'Hidden, it does not refresh at all.',
+            wgEvery: 'Refresh', wgEveryDesc: 'How often it updates while the desktop is on screen. Less often costs less.',
+            wgBg: 'Run in the background', wgBgDesc: 'Keeps refreshing while an app or a game is open (costs a little more).',
+            wgBgMusic: 'The music keeps playing while an app or a game is open.', wgBgShort: 'background',
+            wgFrom: 'From %s', wgPending: 'Waiting for approval by an App Store manager',
+            wgSec: 'every %n s', wgMinN: 'every %n min', wgHourN: 'every %n h',
+            wgNow: 'Refresh now', wgNowDone: '%s refreshed.', wgUp: 'Move up', wgDown: 'Move down', wgMoved: 'Moved.',
+            wgReset: 'Back to the default settings', wgResetDone: 'Default settings again.',
+            wgAuto: 'Automatic (from your internet connection)', wgPlace: 'Place', wgPlaceHint: 'A city, like Paris. Empty: found automatically.',
+            wgUnits: 'Units', wgCelsius: 'Celsius (°C)', wgFahrenheit: 'Fahrenheit (°F)',
+            wgNoPlace: 'Place not found: %s. Change it in Control Panel > Widgets.', wgOffline: 'Offline', wgFailed: 'Could not refresh', wgLoading: 'Loading…',
+            wgHiLo: 'High / low', wgHumidity: 'Humidity', wgWind: 'Wind',
+            wx_clear: 'Clear', wx_partly: 'Partly cloudy', wx_cloudy: 'Cloudy', wx_fog: 'Fog', wx_drizzle: 'Drizzle', wx_rain: 'Rain', wx_snow: 'Snow', wx_showers: 'Showers', wx_storm: 'Thunderstorm',
+            wgH: 'h', wgMin: 'min', wgToday: 'Played today', wgWeek: 'This week', wgTop: 'Most played', wgLast: 'Last played', wgNoPlay: 'Play a game and your time shows here.',
+            wgCpu: 'Processor', wgMemory: 'Memory', wgHeap: 'My PC memory', wgCores: 'Processor cores',
+            wgPrev: 'Previous', wgNext: 'Next', wgPlay: 'Play', wgPause: 'Pause',
+            wgPrivacy: 'Weather widget: to find your place, your internet address is looked up by GeoJS (get.geojs.io), unless you type a city; the place, without your name, is then sent to Open-Meteo (open-meteo.com) for the forecast. Hide the widget in Control Panel > Widgets to stop it.'
+        },
+        fr: {
+            sysWidgets: 'Widgets', cpd_widgets: 'Météo, temps de jeu, moniteur système, musique sur le bureau',
+            wg_weather: 'Météo', wg_playtime: 'Temps de jeu', wg_sysmon: 'Moniteur système', wg_music: 'Lecteur de musique',
+            music: 'Musique', musicNote: 'Ceci est un aperçu de l’app Musique : les titres sont des exemples et ne jouent pas encore de son.',
+            wgShowAll: 'Afficher les widgets sur le bureau', wgShowAllDesc: 'Petites cartes à droite du bureau. Seulement pour votre profil.',
+            wgHelp: 'Les widgets ne se mettent plus à jour quand une app ou un jeu est ouvert : ils ne coûtent alors rien. Un widget avec « Exécuter en arrière-plan » continue. Choisissez un widget pour le modifier.',
+            wgAppsHelp: 'Les apps de l’App Store peuvent ajouter leurs propres widgets : ils apparaissent ici une fois l’app installée et approuvés par un gestionnaire de l’App Store.',
+            wgShow: 'Afficher sur le bureau', wgShowDesc: 'Masqué, il ne se met pas à jour du tout.',
+            wgEvery: 'Mise à jour', wgEveryDesc: 'À quelle fréquence il se met à jour quand le bureau est affiché. Moins souvent coûte moins.',
+            wgBg: 'Exécuter en arrière-plan', wgBgDesc: 'Continue de se mettre à jour quand une app ou un jeu est ouvert (coûte un peu plus).',
+            wgBgMusic: 'La musique continue quand une app ou un jeu est ouvert.', wgBgShort: 'arrière-plan',
+            wgFrom: 'De %s', wgPending: 'En attente d’approbation par un gestionnaire de l’App Store',
+            wgSec: 'toutes les %n s', wgMinN: 'toutes les %n min', wgHourN: 'toutes les %n h',
+            wgNow: 'Mettre à jour maintenant', wgNowDone: '%s mis à jour.', wgUp: 'Monter', wgDown: 'Descendre', wgMoved: 'Déplacé.',
+            wgReset: 'Revenir aux réglages par défaut', wgResetDone: 'Réglages par défaut rétablis.',
+            wgAuto: 'Automatique (selon votre connexion internet)', wgPlace: 'Lieu', wgPlaceHint: 'Une ville, comme Paris. Vide : trouvé automatiquement.',
+            wgUnits: 'Unités', wgCelsius: 'Celsius (°C)', wgFahrenheit: 'Fahrenheit (°F)',
+            wgNoPlace: 'Lieu introuvable : %s. Changez-le dans Panneau de configuration > Widgets.', wgOffline: 'Hors ligne', wgFailed: 'Mise à jour impossible', wgLoading: 'Chargement…',
+            wgHiLo: 'Max / min', wgHumidity: 'Humidité', wgWind: 'Vent',
+            wx_clear: 'Dégagé', wx_partly: 'Partiellement nuageux', wx_cloudy: 'Nuageux', wx_fog: 'Brouillard', wx_drizzle: 'Bruine', wx_rain: 'Pluie', wx_snow: 'Neige', wx_showers: 'Averses', wx_storm: 'Orage',
+            wgH: 'h', wgMin: 'min', wgToday: 'Joué aujourd’hui', wgWeek: 'Cette semaine', wgTop: 'Le plus joué', wgLast: 'Dernier joué', wgNoPlay: 'Jouez à un jeu et votre temps s’affiche ici.',
+            wgCpu: 'Processeur', wgMemory: 'Mémoire', wgHeap: 'Mémoire de My PC', wgCores: 'Cœurs du processeur',
+            wgPrev: 'Précédent', wgNext: 'Suivant', wgPlay: 'Lecture', wgPause: 'Pause',
+            wgPrivacy: 'Widget Météo : pour trouver votre lieu, votre adresse internet est consultée par GeoJS (get.geojs.io), sauf si vous tapez une ville ; le lieu, sans votre nom, est ensuite envoyé à Open-Meteo (open-meteo.com) pour les prévisions. Masquez le widget dans Panneau de configuration > Widgets pour l’arrêter.'
+        },
+        es: {
+            sysWidgets: 'Widgets', cpd_widgets: 'Tiempo, tiempo de juego, monitor del sistema, música en el escritorio',
+            wg_weather: 'Tiempo', wg_playtime: 'Tiempo de juego', wg_sysmon: 'Monitor del sistema', wg_music: 'Reproductor de música',
+            music: 'Música', musicNote: 'Esta es una vista previa de la app Música: las canciones son ejemplos y aún no suenan.',
+            wgShowAll: 'Mostrar widgets en el escritorio', wgShowAllDesc: 'Tarjetas pequeñas a la derecha del escritorio. Solo para tu perfil.',
+            wgHelp: 'Los widgets dejan de actualizarse mientras hay una app o un juego abierto, así no cuestan nada. Un widget con «Ejecutar en segundo plano» sigue. Elige un widget para cambiarlo.',
+            wgAppsHelp: 'Las apps de la App Store pueden añadir sus propios widgets: aparecen aquí cuando la app está instalada y un gestor de la App Store los aprobó.',
+            wgShow: 'Mostrar en el escritorio', wgShowDesc: 'Oculto, no se actualiza nada.',
+            wgEvery: 'Actualizar', wgEveryDesc: 'Cada cuánto se actualiza mientras el escritorio está en pantalla. Menos a menudo cuesta menos.',
+            wgBg: 'Ejecutar en segundo plano', wgBgDesc: 'Sigue actualizándose mientras hay una app o un juego abierto (cuesta un poco más).',
+            wgBgMusic: 'La música sigue sonando mientras hay una app o un juego abierto.', wgBgShort: 'segundo plano',
+            wgFrom: 'De %s', wgPending: 'Esperando la aprobación de un gestor de la App Store',
+            wgSec: 'cada %n s', wgMinN: 'cada %n min', wgHourN: 'cada %n h',
+            wgNow: 'Actualizar ahora', wgNowDone: '%s actualizado.', wgUp: 'Subir', wgDown: 'Bajar', wgMoved: 'Movido.',
+            wgReset: 'Volver a los ajustes por defecto', wgResetDone: 'Ajustes por defecto otra vez.',
+            wgAuto: 'Automático (según tu conexión a internet)', wgPlace: 'Lugar', wgPlaceHint: 'Una ciudad, como Madrid. Vacío: se busca solo.',
+            wgUnits: 'Unidades', wgCelsius: 'Celsius (°C)', wgFahrenheit: 'Fahrenheit (°F)',
+            wgNoPlace: 'Lugar no encontrado: %s. Cámbialo en Panel de control > Widgets.', wgOffline: 'Sin conexión', wgFailed: 'No se pudo actualizar', wgLoading: 'Cargando…',
+            wgHiLo: 'Máx. / mín.', wgHumidity: 'Humedad', wgWind: 'Viento',
+            wx_clear: 'Despejado', wx_partly: 'Parcialmente nublado', wx_cloudy: 'Nublado', wx_fog: 'Niebla', wx_drizzle: 'Llovizna', wx_rain: 'Lluvia', wx_snow: 'Nieve', wx_showers: 'Chubascos', wx_storm: 'Tormenta',
+            wgH: 'h', wgMin: 'min', wgToday: 'Jugado hoy', wgWeek: 'Esta semana', wgTop: 'Más jugado', wgLast: 'Último jugado', wgNoPlay: 'Juega a un juego y tu tiempo aparecerá aquí.',
+            wgCpu: 'Procesador', wgMemory: 'Memoria', wgHeap: 'Memoria de My PC', wgCores: 'Núcleos del procesador',
+            wgPrev: 'Anterior', wgNext: 'Siguiente', wgPlay: 'Reproducir', wgPause: 'Pausa',
+            wgPrivacy: 'Widget del tiempo: para encontrar tu lugar, GeoJS (get.geojs.io) consulta tu dirección de internet, salvo que escribas una ciudad; el lugar, sin tu nombre, se envía luego a Open-Meteo (open-meteo.com) para la previsión. Oculta el widget en Panel de control > Widgets para detenerlo.'
+        },
+        ar: {
+            sysWidgets: 'الأدوات المصغّرة', cpd_widgets: 'الطقس، وقت اللعب، مراقب النظام، الموسيقى على سطح المكتب',
+            wg_weather: 'الطقس', wg_playtime: 'وقت اللعب', wg_sysmon: 'مراقب النظام', wg_music: 'مشغّل الموسيقى',
+            music: 'الموسيقى', musicNote: 'هذه معاينة لتطبيق الموسيقى: الأغاني أمثلة ولا يصدر عنها صوت بعد.',
+            wgShowAll: 'إظهار الأدوات على سطح المكتب', wgShowAllDesc: 'بطاقات صغيرة على يمين سطح المكتب. لملفك الشخصي فقط.',
+            wgHelp: 'تتوقف الأدوات عن التحديث عند فتح تطبيق أو لعبة، فلا تكلّف شيئاً حينها. الأداة التي فُعّل لها «التشغيل في الخلفية» تستمر. اختر أداة لتغييرها.',
+            wgAppsHelp: 'يمكن لتطبيقات متجر التطبيقات إضافة أدواتها الخاصة: تظهر هنا بعد تثبيت التطبيق وموافقة أحد مديري المتجر عليها.',
+            wgShow: 'إظهار على سطح المكتب', wgShowDesc: 'عند إخفائها لا تتحدّث إطلاقاً.',
+            wgEvery: 'التحديث', wgEveryDesc: 'كم مرة تتحدّث أثناء ظهور سطح المكتب. الأقل تكراراً يكلّف أقل.',
+            wgBg: 'التشغيل في الخلفية', wgBgDesc: 'تستمر في التحديث أثناء فتح تطبيق أو لعبة (تكلّف أكثر قليلاً).',
+            wgBgMusic: 'تستمر الموسيقى أثناء فتح تطبيق أو لعبة.', wgBgShort: 'في الخلفية',
+            wgFrom: 'من %s', wgPending: 'بانتظار موافقة أحد مديري متجر التطبيقات',
+            wgSec: 'كل %n ث', wgMinN: 'كل %n د', wgHourN: 'كل %n س',
+            wgNow: 'تحديث الآن', wgNowDone: 'تم تحديث %s.', wgUp: 'نقل للأعلى', wgDown: 'نقل للأسفل', wgMoved: 'تم النقل.',
+            wgReset: 'العودة إلى الإعدادات الافتراضية', wgResetDone: 'عادت الإعدادات الافتراضية.',
+            wgAuto: 'تلقائي (حسب اتصالك بالإنترنت)', wgPlace: 'المكان', wgPlaceHint: 'مدينة، مثل الرباط. فارغ: يُحدَّد تلقائياً.',
+            wgUnits: 'الوحدات', wgCelsius: 'مئوية (°C)', wgFahrenheit: 'فهرنهايت (°F)',
+            wgNoPlace: 'لم يُعثر على المكان: %s. غيّره في لوحة التحكم > الأدوات المصغّرة.', wgOffline: 'غير متصل', wgFailed: 'تعذّر التحديث', wgLoading: 'جارٍ التحميل…',
+            wgHiLo: 'العظمى / الصغرى', wgHumidity: 'الرطوبة', wgWind: 'الرياح',
+            wx_clear: 'صافٍ', wx_partly: 'غائم جزئياً', wx_cloudy: 'غائم', wx_fog: 'ضباب', wx_drizzle: 'رذاذ', wx_rain: 'مطر', wx_snow: 'ثلج', wx_showers: 'زخات', wx_storm: 'عاصفة رعدية',
+            wgH: 'س', wgMin: 'د', wgToday: 'لُعب اليوم', wgWeek: 'هذا الأسبوع', wgTop: 'الأكثر لعباً', wgLast: 'آخر لعبة', wgNoPlay: 'العب لعبة وسيظهر وقتك هنا.',
+            wgCpu: 'المعالج', wgMemory: 'الذاكرة', wgHeap: 'ذاكرة My PC', wgCores: 'أنوية المعالج',
+            wgPrev: 'السابق', wgNext: 'التالي', wgPlay: 'تشغيل', wgPause: 'إيقاف مؤقت',
+            wgPrivacy: 'أداة الطقس: لتحديد مكانك يُستعلم عن عنوانك على الإنترنت لدى GeoJS (get.geojs.io)، إلا إذا كتبت مدينة؛ ثم يُرسل المكان، دون اسمك، إلى Open-Meteo (open-meteo.com) لجلب التوقعات. أخفِ الأداة في لوحة التحكم > الأدوات المصغّرة لإيقافها.'
+        }
+    };
+    // Privacy & security: the weather widget's line comes first (keep it true when the widget changes)
+    for (var l in S) {
+        var p = I18n.raw(l, 'privacyText');
+        if (p && p.length !== undefined) S[l].privacyText = [S[l].wgPrivacy].concat(p);
+    }
+    I18n.add(S);
+})();

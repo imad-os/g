@@ -13,6 +13,7 @@
         { id: 'system', icon: 'system', label: 'sysSystem' },
         { id: 'display', icon: 'rotate', label: 'sysDisplay' },          // phones and tablets only (removed below on a TV)
         { id: 'personal', icon: 'brush', label: 'sysPersonal' },
+        { id: 'widgets', icon: 'widgets', label: 'sysWidgets' },
         { id: 'apps', icon: 'folder', label: 'sysApps' },
         { id: 'accounts', icon: 'accounts', label: 'sysAccounts' },
         { id: 'sound', icon: 'sound', label: 'sysSound' },
@@ -43,6 +44,7 @@
         if (sub === 'phonectrl' && id === 'devices') { phoneRows(out); return out; }
         if (sub === 'motionmoves' && id === 'devices') { movesRows(out); return out; }
         if (id === 'ai') { aiRows(out); return out; }
+        if (id === 'widgets') { if (sub === 'widget') widgetRows(out); else widgetsRows(out); return out; }
         if (id === 'notifications') { notifRows(out); return out; }
         if (sub === 'users' && id === 'accounts') { usersRows(out); return out; }
         if (sub === 'user' && id === 'accounts') { userRows(out); return out; }
@@ -452,7 +454,76 @@
         }
     }
 
+    /* ---------- Widgets (js/launcher/widgets.js): per profile, the list, then a page per widget ---------- */
+    var widgetId = null;
+    function everyText(sec) {
+        return sec < 60 ? t('wgSec').replace('%n', sec) : sec < 3600 ? t('wgMinN').replace('%n', sec / 60) : t('wgHourN').replace('%n', sec / 3600);
+    }
+    function widgetDesc(d) {
+        var c = Widgets.conf(d.id), p = [t(c.show ? 'on' : 'off'), everyText(c.every)];
+        if (c.bg) p.push(t('wgBgShort'));
+        if (d.app) p.push(d.approved ? t('wgFrom').replace('%s', d.app.name) : t('wgPending'));
+        return p.join(' \u00B7 ');
+    }
+    function widgetsRows(out) {
+        out.push({ kind: 'toggle', label: t('wgShowAll'), desc: t('wgShowAllDesc'), get: function () { return Widgets.on(); }, set: function (v) { Widgets.setOn(v); } });
+        out.push({ kind: 'text', value: t('wgHelp') });
+        Widgets.list().forEach(function (d) {
+            out.push({ kind: 'action', label: d.title(), desc: widgetDesc(d), run: function () { sub = 'widget'; widgetId = d.id; var f = renderMain(1); if (f) Focus.focus(f); } });
+        });
+        out.push({ kind: 'text', value: t('wgAppsHelp') });
+    }
+    function widgetRows(out) {
+        var d = Widgets.find(widgetId);
+        out.push({ kind: 'action', label: t('back'), run: function () { leaveSub(); } });
+        if (!d) return;
+        var id = d.id;
+        if (d.app) {
+            out.push({ kind: 'info', label: d.title(), value: d.approved ? t('wgFrom').replace('%s', d.app.name) : t('wgPending'), desc: I18n.pick(d.w.description) || '' });
+        }
+        out.push({ kind: 'toggle', label: t('wgShow'), desc: t('wgShowDesc'), get: function () { return Widgets.conf(id).show; }, set: function (v) { Widgets.set(id, 'show', v); } });
+        out.push({ kind: 'select', label: t('wgEvery'), desc: t('wgEveryDesc'), value: function () { return everyText(Widgets.conf(id).every); }, adjust: function (k) {
+            var l = d.choices, i = l.indexOf(Widgets.conf(id).every);
+            Widgets.set(id, 'every', l[Math.max(0, Math.min(l.length - 1, i + k))]);
+        } });
+        out.push({ kind: 'toggle', label: t('wgBg'), desc: t(id === 'music' ? 'wgBgMusic' : 'wgBgDesc'), get: function () { return Widgets.conf(id).bg; }, set: function (v) { Widgets.set(id, 'bg', v); } });
+        (d.settings ? d.settings() : []).forEach(function (st) {
+            if (st.type === 'toggle') out.push({ kind: 'toggle', label: st.label, get: function () { return !!Widgets.conf(id).s[st.id]; }, set: function (v) { Widgets.setSetting(id, st.id, v); } });
+            else if (st.type === 'select') out.push({ kind: 'select', label: st.label, value: function () {
+                var v = Widgets.conf(id).s[st.id], o = st.options.filter(function (x) { return x.value === v; })[0];
+                return o ? I18n.pick(o.label) : v;
+            }, adjust: function (k) {
+                var l = st.options, i = 0, v = Widgets.conf(id).s[st.id];
+                for (var j = 0; j < l.length; j++) if (l[j].value === v) i = j;
+                Widgets.setSetting(id, st.id, l[(i + k + l.length) % l.length].value);
+            } });
+            else out.push({ kind: 'action', label: st.label, desc: Widgets.conf(id).s[st.id] || (id === 'weather' ? t('wgAuto') : '\u2014'), run: function () {
+                var c = Focus.current(), idx = c ? +c.getAttribute('data-row') : 1;
+                Keyboard.open({ title: st.label, text: Widgets.conf(id).s[st.id] || '', max: 60, hint: id === 'weather' ? t('wgPlaceHint') : '' }, function (v) {
+                    Widgets.setSetting(id, st.id, String(v || '').trim());
+                    if (Win.current() === 'settings' && sub === 'widget') { var f = renderMain(idx); if (f) Focus.focus(f); }
+                });
+            } });
+        });
+        out.push({ kind: 'action', label: t('wgNow'), run: function () { Widgets.refreshNow(id); App.toast(t('wgNowDone').replace('%s', d.title())); } });
+        out.push({ kind: 'action', label: t('wgUp'), run: function () { if (Widgets.move(id, -1)) App.toast(t('wgMoved')); } });
+        out.push({ kind: 'action', label: t('wgDown'), run: function () { if (Widgets.move(id, 1)) App.toast(t('wgMoved')); } });
+        out.push({ kind: 'action', label: t('wgReset'), run: function () {
+            Widgets.reset(id);
+            var c = Focus.current(), idx = c ? +c.getAttribute('data-row') : 1, f = renderMain(idx);
+            if (f) Focus.focus(f);
+            App.toast(t('wgResetDone'));
+        } });
+    }
+
     function leaveSub() {
+        if (sub === 'widget') {
+            var at = 0, l = Widgets.list();
+            for (var w = 0; w < l.length; w++) if (l[w].id === widgetId) at = w;
+            sub = null; widgetId = null;
+            var fw = renderMain(2 + at); if (fw) Focus.focus(fw);
+            return;
+        }
         if (sub === 'user') { sub = 'users'; var f0 = renderMain(1); if (f0) Focus.focus(f0); return; }
         var back = sub === 'motionmoves' ? 'phonectrl' : null;
         if (sub === 'motionmoves') { Controllers.monitor(null); monEl = null; }
@@ -602,6 +673,8 @@
         main.innerHTML = '';
         var lbl = '';
         for (var i = 0; i < PAGES.length; i++) if (PAGES[i].id === page) lbl = t(PAGES[i].label);
+        var wd = page === 'widgets' && sub === 'widget' ? Widgets.find(widgetId) : null;
+        if (wd) lbl += ' \u203A ' + wd.title();                      // Widgets > Weather
         main.appendChild(el('h3', 'set-title', lbl));
         try { rows = rowsFor(page); } catch (e) { rows = [{ kind: 'text', value: String(e && e.message || e) }]; }   // a broken row never blocks the page
         var target = null;
