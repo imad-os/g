@@ -1,5 +1,5 @@
 {
-  "build": 87,
+  "build": 88,
   "version": "2.22.0",
   "shell": 1,
   "css": [
@@ -41,6 +41,7 @@
     "js/core/input.js",
     "js/core/focus.js",
     "js/launcher/icons.js",
+    "js/launcher/notify.js",
     "js/launcher/keyboard.js",
     "js/launcher/themes.js",
     "js/launcher/desktop.js",

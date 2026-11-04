@@ -633,17 +633,42 @@ async function main() {
         page.on('response', (r) => { if (/favicon\.ico|icon-32\.png|icon\.png/.test(r.url())) icons.push(r.status()); });
         await page.goto(base + 'index.html');
         await page.waitForSelector('.dicon');
-        check(await page.evaluate(() => document.getElementById('netpop').hidden), 'no network popup while online');
+        check(await page.evaluate(() => document.getElementById('toast').hidden), 'no network notice while online');
         await page.focus('[data-game="snake"]'); await page.keyboard.press('Enter');
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running');
         await page.context().setOffline(true);
         await page.waitForTimeout(200);
-        const off = await page.evaluate(() => { const e = document.getElementById('netpop'); return !e.hidden && e.getAttribute('role') === 'alert' && e.textContent; });
+        const off = await page.evaluate(() => { const e = document.querySelector('#toast .nt-err'); return !!e && e.getAttribute('role') === 'alert' && e.textContent; });
         check(!!off && /No network/.test(off), 'network loss during a game shows a popup: "' + off + '"');
         check(await page.evaluate(() => window.GameHost.state()) === 'running', 'the game keeps running offline');
         await page.context().setOffline(false);
         await page.waitForTimeout(200);
-        check(/Network connected/.test(await page.textContent('#netpop')), 'reconnecting shows "Network connected"');
+        check(/Network connected/.test(await page.evaluate(() => { const e = document.querySelector('#toast .nt-ok'); return e ? e.textContent : ''; })), 'reconnecting shows "Network connected" (green)');
+        check(await page.evaluate(() => document.querySelectorAll('#toast .nt:not(.out)').length) === 1, 'the network notice is updated in place, not stacked');
+        // the one notification look: bottom right, rises in, slides down on timeout, same id updates, 3 at most
+        const nt = await page.evaluate(async () => {
+            Notify.clear();
+            const r = {};
+            Notify.show({ id: 'a', kind: 'ok', text: 'one', title: 'Title' });
+            const el = document.querySelector('#toast .nt');
+            r.cls = el.className; r.title = el.querySelector('.nt-title').textContent;
+            const box = document.getElementById('toast').getBoundingClientRect();
+            r.right = box.right > window.innerWidth * 0.8;
+            Notify.show({ id: 'a', kind: 'err', text: 'two' });
+            r.same = document.querySelectorAll('#toast .nt').length === 1 && /nt-err/.test(el.className) && el.textContent === 'two';
+            for (let i = 0; i < 5; i++) Notify.show('n' + i);
+            r.max = Notify.count();
+            Notify.show({ text: 'short', timeout: 50 });
+            await new Promise((ok) => setTimeout(ok, 120));
+            r.out = !!document.querySelector('#toast .nt.out');
+            Notify.clear();
+            r.empty = document.getElementById('toast').hidden && !document.querySelector('#toast .nt');
+            return r;
+        });
+        check(/nt-ok/.test(nt.cls) && nt.title === 'Title' && nt.right, 'a notification is a green card in the bottom right corner: ' + JSON.stringify(nt));
+        check(nt.same, 'the same id updates the card (red now) instead of adding one');
+        check(nt.max === 3, 'at most 3 notifications on screen');
+        check(nt.out && nt.empty, 'on timeout the card slides down, then everything is removed');
         const fav = await page.evaluate(() => [...document.querySelectorAll('link[rel~="icon"]')].map((l) => l.getAttribute('href')));
         // headless Chromium never requests favicons itself: fetch the declared files
         let served = true;

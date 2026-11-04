@@ -60,7 +60,7 @@ var Controllers = (function () {
         return out;
     }
     function changed() { for (var i = 0; i < listeners.length; i++) { try { listeners[i](); } catch (e) {} } }
-    function say(text) { if (typeof App !== 'undefined' && App.toast) App.toast(text); }
+    function say(text, opts) { if (typeof App !== 'undefined' && App.toast) App.toast(text, opts); }
     function count() { return 1 + (slots[1] ? 1 : 0) + (slots[2] ? 1 : 0); }
     function report() { if (sess) sess.call('count', { room: cfg().code, n: count() }, function () {}); changed(); }
 
@@ -70,7 +70,7 @@ var Controllers = (function () {
         Input.releaseRemote(p); Input.virtualPad(p, null);
         if (slot.mode === 'pointer') Pointer.hide();
         micGone(slot);
-        say(I18n.t('ctrlGone').replace('%s', slot.name).replace('%n', p));
+        say(I18n.t('ctrlGone').replace('%s', slot.name).replace('%n', p), { id: 'ctrl' + p, kind: 'err' });
         report();
     }
 
@@ -98,7 +98,7 @@ var Controllers = (function () {
                 slots[p] = slot;
                 conn.send({ t: 'ok', p: p, proto: SensorProto.VERSION, session: slot.session });
                 if (!padLike(slot)) sendConfig(slot);
-                say(I18n.t('ctrlOn').replace('%s', slot.name).replace('%n', p));
+                say(I18n.t('ctrlOn').replace('%s', slot.name).replace('%n', p), { id: 'ctrl' + p, kind: 'ok' });
                 report();
                 return;
             }

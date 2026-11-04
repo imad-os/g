@@ -72,6 +72,10 @@
   key when `getSupportedKeys()` lists one; Samsung keeps the Smart Remote's mic button for Bixby) + red button / R (`runToggle`) + X / Y.
   Memos are per profile in IndexedDB through `js/core/memo-store.js` (`MemoStore.use(adapter)` swaps in a cloud store later; not in
   the TV backup yet). Mic needs the `mediacapture` privilege (package 1.5.0+, already in `config.xml`).
+- **Notifications** (owner request 2026-11-04): ONE look for every notice, `js/launcher/notify.js` (`Notify.show({ text, title, kind:
+  'ok' | 'err' | 'warn' | 'info', image, id, timeout, onClick })`, `hide(id)`, `clear()`; `App.toast(text, opts)` wraps it). Windows style
+  cards in `#toast` (bottom right, newest at the bottom, max 3): rise in, slide down on timeout; green = connected, red = disconnected /
+  failed (role alert). Same `id` updates a card in place (`net`, `pad`, `ctrl1` / `ctrl2`). Reuse it for push notifications; never add another popup.
 - `apps/store.js`: the App Store app (Home / Games / Apps / Library / Search, Install / Open / Uninstall).
 - **Settings of every My PC** (owner decision): App Store Manager > Settings writes Firestore `settings/mypc` (admins only, read by
   every TV): backgrounds (`wallpapers: [{ url, title, thumb }]`, an empty title is taken from the address) and the background of new

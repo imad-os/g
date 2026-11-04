@@ -2,7 +2,7 @@
 var App = (function () {
     'use strict';
 
-    var dialogOpen = false, dialogYes = null, dialogNo = null, toastTimer = 0, benchCancel = null;
+    var dialogOpen = false, dialogYes = null, dialogNo = null, benchCancel = null;
 
     function $(id) { return document.getElementById(id); }
 
@@ -77,27 +77,20 @@ var App = (function () {
     }
     function dialogRefused() { var cb = dialogNo; closeDialog(); if (cb) cb(); }
 
-    function toast(text) {
-        var t = $('toast');
-        t.textContent = text;
-        t.hidden = false;
-        A11y.announce(text);
-        clearTimeout(toastTimer);
-        toastTimer = setTimeout(function () { t.hidden = true; }, 2600);
+    // every notice uses the one toast look (js/launcher/notify.js); opts: { kind, title, id, timeout, image, onClick }
+    function toast(text, opts) {
+        var o = {}, k;
+        if (opts) for (k in opts) if (Object.prototype.hasOwnProperty.call(opts, k)) o[k] = opts[k];
+        o.text = text;
+        return Notify.show(o);
     }
 
-    /* ---------- network status popup ----------
+    /* ---------- network status notice ----------
      * Uses the browser online/offline events and, on the TV, webapis.network (privilege
      * network.public). The app keeps working offline; this only informs the user. */
-    var netDown = false, netTimer = 0;
+    var netDown = false;
     function showNet(ok) {
-        var el = $('netpop');
-        $('netpop-text').textContent = I18n.t(ok ? 'netOn' : 'netOff');
-        el.className = 'netpop' + (ok ? ' ok' : '');
-        el.hidden = false;
-        A11y.announce(I18n.t(ok ? 'netOn' : 'netOff'));
-        clearTimeout(netTimer);
-        netTimer = setTimeout(function () { el.hidden = true; }, ok ? 3000 : 7000);
+        Notify.show({ id: 'net', kind: ok ? 'ok' : 'err', text: I18n.t(ok ? 'netOn' : 'netOff'), timeout: ok ? 3000 : 7000 });
     }
     function netChange(online) {
         if (online === !netDown) return;
@@ -128,7 +121,7 @@ var App = (function () {
     /* ---------- router ---------- */
     function route(action, pressed, repeat, dev) {
         if (Welcome.open()) { Welcome.action(action, pressed); return; }
-        if (action === 'padConnected') { toast(I18n.t('padOn')); return; }
+        if (action === 'padConnected') { toast(I18n.t('padOn'), { id: 'pad', kind: 'ok' }); return; }
 
         if (dialogOpen) {
             if (!pressed) return;
@@ -149,7 +142,7 @@ var App = (function () {
 
         if (GameHost.active()) return GameHost.onAction(action, pressed, repeat, dev);
 
-        if (action === 'padLost') { toast(I18n.t('padOff').split('.')[0]); return; }
+        if (action === 'padLost') { toast(I18n.t('padOff').split('.')[0], { id: 'pad', kind: 'err' }); return; }
         if (!pressed) {
             // OK let go on the desktop: opens the shortcut (held long, it showed the shortcut menu instead)
             if (action === 'confirm' && !Keyboard.isOpen() && !ProfilesUI.screenOpen() && !Win.isOpen()) Desktop.action(action, repeat, false);

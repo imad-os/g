@@ -17,7 +17,7 @@ var Multiplayer = (function () {
     function $(id) { return document.getElementById(id); }
     function t(k) { return I18n.t(k); }
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
-    function toast(text) { try { App.toast(text); } catch (e) {} }
+    function toast(text, kind) { try { App.toast(text, kind ? { kind: kind } : null); } catch (e) {} }
     function profileName() { return Profiles.name(null, t('player')); }
     function newId(p) { return p + (++seq).toString(36) + Math.floor(Math.random() * 1679616).toString(36); }
 
@@ -157,7 +157,7 @@ var Multiplayer = (function () {
                 var id = addPeer(conn, q.name);
                 session.count++; session.peers.push(id);
                 emit('peer', { session: session.id, id: id, name: q.name });
-                toast(t('mpJoined').replace('%s', q.name));
+                toast(t('mpJoined').replace('%s', q.name), 'ok');
                 if (session.count >= session.max && session.open) { session.open = false; call('close', { room: session.room }, function () {}); }   // full: the room closes by itself
             }).catch(function () { if (session) session.pending--; });
         }
@@ -179,7 +179,7 @@ var Multiplayer = (function () {
                     hostBusy = false;
                     closeUI();
                     if (dead) return;
-                    if (err) { toast(t(err === 'offline' ? 'mpErr_offline' : err === 'denied' ? 'mpErr_rate' : 'mpErr_service')); return reply(err === 'offline' ? 'offline' : err === 'denied' ? 'denied' : 'unavailable'); }
+                    if (err) { toast(t(err === 'offline' ? 'mpErr_offline' : err === 'denied' ? 'mpErr_rate' : 'mpErr_service'), 'err'); return reply(err === 'offline' ? 'offline' : err === 'denied' ? 'denied' : 'unavailable'); }
                     queue = [];
                     session = { id: newId('s'), room: r.id, max: max, count: 0, pending: 0, peers: [], open: true };
                     reply(null, { session: session.id, max: max });
