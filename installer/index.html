@@ -100,6 +100,8 @@
   pre.code { background: #0c0d0f; border: 1px solid var(--line); border-radius: 8px; padding: 12px; max-height: 50vh; overflow: auto; font-size: 12px; white-space: pre-wrap; }
   .modal .box.wide { width: min(900px, 100%); }
   #sv-mbody table { margin-bottom: 12px; }
+  .nt-form { display: grid; gap: 10px; margin-bottom: 8px; }
+  .nt-form label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 3px; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .empty { padding: 26px; text-align: center; color: var(--muted); }
 
@@ -445,7 +447,7 @@
           checks every 30 minutes, to keep Firebase within its free quota. One username per line or separated by commas, 200 at most.
           Like the rest of these settings, every My PC can read this list.</p>
         <textarea id="gs-fast" spellcheck="false" rows="4" style="min-height:96px" aria-label="Usernames with fast notifications" placeholder="imad12&#10;sara.k"></textarea>
-        <p id="gs-fast-count" class="muted small"></p>
+        <div class="row"><span id="gs-fast-count" class="muted small grow"></span><button id="nt-open">Send a test notification</button></div>
       </div>
     </section>
 
@@ -466,6 +468,23 @@
     <h3 id="sv-mtitle">Service</h3>
     <div id="sv-mbody"></div>
     <div class="row"><span class="grow"></span><button id="sv-close">Close</button><button id="sv-approve" class="primary" hidden>Approve this code</button></div>
+  </div>
+</div>
+
+<div id="nt-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="nt-title">
+  <div class="box">
+    <h3 id="nt-title">Send a test notification</h3>
+    <p class="muted small" style="margin:0 0 12px">It goes straight to that account's inbox (no app permission needed) and shows on its My PC at the next check:
+      within 2 minutes for a fast account, up to 30 minutes for the others, at once with Control Panel &gt; Notifications &gt; Check now.</p>
+    <div class="nt-form">
+      <div><label for="nt-to">To (username)</label><input id="nt-to" spellcheck="false" autocomplete="off" placeholder="imad12"></div>
+      <div><label for="nt-t">Title</label><input id="nt-t" maxlength="60"></div>
+      <div><label for="nt-m">Message</label><input id="nt-m" maxlength="200"></div>
+      <div><label for="nt-i">Picture (optional, https)</label><input id="nt-i" type="url" spellcheck="false"></div>
+      <div><label for="nt-l">Link (optional: https address)</label><input id="nt-l" type="url" spellcheck="false"></div>
+    </div>
+    <p id="nt-msg" class="small"></p>
+    <div class="row"><span class="grow"></span><button id="nt-cancel">Close</button><button id="nt-send" class="primary">Send</button></div>
   </div>
 </div>
 
@@ -1208,6 +1227,35 @@
     $('gs-fast-count').textContent = (gs.notifyFast || []).length + ' / 200 accounts every 2 minutes';
   }
   $('gs-fast').addEventListener('input', () => { gs.notifyFast = $('gs-fast').value.split(/[\s,;]+/).filter(Boolean); gsChanged(); });
+
+  // a test notification, written straight into one account's inbox (the same document a service writes)
+  const NT_DEFAULT = { t: 'Test notification', m: 'Hello from the App Store Manager. Notifications work on this My PC.',
+    i: 'https://imad-os.github.io/g/icon.png', l: 'https://imad-os.github.io/g/' };
+  $('nt-open').onclick = () => {
+    const first = (gs.notifyFast || [])[0] || '';
+    if (!$('nt-to').value) $('nt-to').value = first;
+    ['t', 'm', 'i', 'l'].forEach((k) => { if (!$('nt-' + k).value) $('nt-' + k).value = NT_DEFAULT[k]; });
+    say('nt-msg', '');
+    $('nt-modal').hidden = false;
+    ($('nt-to').value ? $('nt-send') : $('nt-to')).focus();
+  };
+  const ntClose = () => { $('nt-modal').hidden = true; };
+  $('nt-cancel').onclick = ntClose;
+  $('nt-modal').addEventListener('keydown', (e) => { if (e.key === 'Escape') ntClose(); });
+  $('nt-send').onclick = async () => {
+    const to = $('nt-to').value.trim().toLowerCase();
+    if (!/^[a-z0-9][a-z0-9_.]{1,14}[a-z0-9_]$/.test(to) || to.indexOf('..') >= 0) return say('nt-msg', 'Type the username of a player account (3 to 16 letters, digits, _ or .).', 'err');
+    const c = ServicesLib.checkRows([{ username: to, title: $('nt-t').value, message: $('nt-m').value, image: $('nt-i').value.trim(), link: $('nt-l').value.trim() }], [to], {}, Date.now());
+    if (!c.items.length) return say('nt-msg', 'Not sent: ' + (Object.keys(c.why)[0] || 'check the fields') + '. The title is needed; picture and link must start with https://.', 'err');
+    const now = Date.now(), app = { id: 'mypc', name: 'My PC' };
+    $('nt-send').disabled = true;
+    try {
+      await setDoc(doc(db, 'inbox/' + to + '/items', ServicesLib.itemId('test', now, 0)), ServicesLib.inboxItem(c.items[0], app, now, new Date(now + ServicesLib.LIMITS.keepDays * 86400000)));
+      say('nt-msg', 'Sent to ' + to + '. It shows on that account\'s My PC at its next check.', 'ok');
+      toast('Test notification sent to ' + to);
+    } catch (e) { say('nt-msg', fbErr(e), 'err'); }
+    finally { $('nt-send').disabled = false; }
+  };
   $('gs-wps').addEventListener('input', (e) => {
     const t = e.target, row = t.closest('.wp-row');
     if (!t.dataset.f || !row) return;

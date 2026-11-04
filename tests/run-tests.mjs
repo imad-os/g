@@ -1507,6 +1507,21 @@ async function main() {
             gm.wallpapers[1].title === 'Blue lake at night' && gm.wallpaper === 'u:https://pics.example/dunes.png' && gm.updatedBy === 'owner@example.com' && /Saved/.test(await page.textContent('#gs-msg')),
             'Save writes the backgrounds in their order (empty titles filled from the address) and the one of new profiles into settings/mypc');
         check(JSON.stringify(gm.notifyFast) === '["imad12","sara.k"]' && /2 \/ 200/.test(await page.textContent('#gs-fast-count')), 'and the accounts with fast push notifications (lower case, once each): ' + JSON.stringify(gm.notifyFast));
+        // Send a test notification: a form with default values, written into that account's inbox
+        await page.click('#nt-open');
+        const ntv = await page.evaluate(() => ['to', 't', 'm', 'i', 'l'].map((k) => document.getElementById('nt-' + k).value));
+        check(!(await page.evaluate(() => document.getElementById('nt-modal').hidden)) && ntv[0] === 'imad12' && ntv[1] === 'Test notification' && /^https:\/\//.test(ntv[3]) && /^https:\/\//.test(ntv[4]),
+            'Send a test notification opens a form filled with default values, to the first fast account: ' + JSON.stringify(ntv));
+        await page.fill('#nt-to', 'no!'); await page.click('#nt-send');
+        check(/username/.test(await page.textContent('#nt-msg')), 'a wrong username is refused');
+        await page.fill('#nt-to', 'Tester'); await page.fill('#nt-i', 'http://x.com/a.png'); await page.click('#nt-send');
+        check(/https/.test(await page.textContent('#nt-msg')) && !(await page.evaluate(() => window.__db['inbox/tester/items'])), 'a picture that is not https is refused');
+        await page.fill('#nt-i', ''); await page.fill('#nt-t', 'Hello TV'); await page.click('#nt-send');
+        await page.waitForFunction(() => window.__db['inbox/tester/items'], null, { timeout: 4000 }).catch(() => {});
+        const ntd = await page.evaluate(() => Object.values(window.__db['inbox/tester/items'] || {}));
+        check(ntd.length === 1 && ntd[0].title === 'Hello TV' && ntd[0].app === 'mypc' && ntd[0].name === 'My PC' && /App Store Manager/.test(ntd[0].text) && !ntd[0].image && /^https:/.test(ntd[0].link) && /Sent to tester/.test(await page.textContent('#nt-msg')),
+            'Send writes it into inbox/<username>/items like a service would: ' + JSON.stringify(ntd));
+        await page.click('#nt-cancel');
         // Services: push notification services of the store apps (installer/services.js)
         let svcCode = "export default async function (ctx) { return { notifications: [{ username: '*', title: 'Goal! Raja', message: 'origin ' + self.origin + ' ' + (() => { try { indexedDB.open('x'); return 'idb-open'; } catch (e) { return 'idb-blocked'; } })() + ' ' + (ctx.state ? ctx.state.n : 0), link: 'app?match=7' }, { username: 'stranger', title: 'No' }], state: { n: ((ctx.state && ctx.state.n) || 0) + 1 } }; }";
         await page.route('https://imad-os.github.io/g_soccer/services/notify.js', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: svcCode }));

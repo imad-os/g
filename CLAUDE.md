@@ -85,7 +85,7 @@
   (opted-in users only, 100 per run, 20 per user per hour) -> Firestore `inbox/<username>/items/<id>` (TTL `exp` 30 d). Opt-in
   `subs/<app>/users/<username>` written with the player's token (rules match `request.auth.token.email`). Built in: "App updates" on a
   new `version`. TV: `js/launcher/push.js` (player accounts only; reads its inbox every 30 min, or every 2 min for the usernames in
-  App Store Manager > Settings > Fast push notifications (`settings/mypc.notifyFast`, owner decision 2026-11-04: Firestore free quota),
+  App Store Manager > Settings > Fast push notifications (`settings/mypc.notifyFast`, owner decision 2026-11-04: Firestore free quota); its "Send a test notification" form writes one item to any username, app `mypc`),
   at start / resume only once due (`notif_last`), toasts via `Notify`, last 50 in
   `notifs`, Control Panel > Notifications, permission once per app, `MyPC.notify` / `MyPC.launch`, API 12). Docs: GUIDE.md section 16.
 - `apps/store.js`: the App Store app (Home / Games / Apps / Library / Search, Install / Open / Uninstall).
