@@ -1,3 +1,6 @@
 menu.wav: "maximize_008" from Kenney's Interface Sounds (https://kenney.nl/assets/interface-sounds),
 via github.com/Calinou/kenney-interface-sounds. Copyright (c) Kenney, CC0 1.0 Universal
 (public domain, https://creativecommons.org/publicdomain/zero/1.0/). Made mono 22 kHz, trimmed and quieter for My PC.
+
+notify-crystal.wav, notify-glass.wav, notify-bubble.wav, notify-marimba.wav: made for My PC (synthesized bells and
+sweeps, no samples), same licence as the app. Mono 22 kHz.

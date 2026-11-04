@@ -77,6 +77,8 @@
   'ok' | 'err' | 'warn' | 'info', image, id, timeout, onClick })`, `hide(id)`, `clear()`; `App.toast(text, opts)` wraps it). Windows style
   cards in `#toast` (bottom right, newest at the bottom, max 3): rise in, slide down on timeout; green = connected, red = disconnected /
   failed (role alert). Same `id` updates a card in place (`net`, `pad`, `ctrl1` / `ctrl2`). Reuse it for push notifications; never add another popup.
+  Sound: `AudioPrefs.notify()` on each new card (not `silent: true`, once per 400 ms), the profile's choice in Control Panel > Sound (`notif_sound`:
+  crystal (default) / glass / bubble / marimba / off; `sounds/notify-*.wav`, synthesized for My PC, one `<audio>`, no AudioContext).
 - **Push notifications** (owner request 2026-11-04, plan doc https://claude.ai/artifact/SQK1PHrBMrFvkzJkHJcwT3): apps list `services`
   in `mypc-app.json` (`[{ id, file, every: 1|5|10|30, title }]`, parsed by `installer/services-lib.js`, max 3); App Store Manager >
   **Services** (`installer/services.js`) runs them ONLY while a Manager tab is open (lease `services/_runner`), each file in a `data:`

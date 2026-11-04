@@ -98,6 +98,10 @@
         } else if (id === 'sound') {
             out.push({ kind: 'slider', label: t('musicVol'), value: function () { return AudioPrefs.music(); }, adjust: function (d) { AudioPrefs.setMusic(AudioPrefs.music() + d); } });
             out.push({ kind: 'slider', label: t('sfxVol'), value: function () { return AudioPrefs.sfx(); }, adjust: function (d) { AudioPrefs.setSfx(AudioPrefs.sfx() + d); } });
+            out.push({ kind: 'select', label: t('ntSound'), desc: t('ntSoundDesc'), value: function () { return t('nts_' + AudioPrefs.notifySound()); }, adjust: function (d) {
+                var l = AudioPrefs.NOTIFY_SOUNDS, k = (l.indexOf(AudioPrefs.notifySound()) + d + l.length) % l.length;
+                AudioPrefs.setNotifySound(l[k]);                       // plays it, so the user hears the choice
+            } });
         } else if (id === 'time') {
             out.push({ kind: 'select', label: t('language'), value: function () { return I18n.NAMES[I18n.lang()]; }, adjust: function (d) {
                 var l = I18n.LANGS, k = (l.indexOf(I18n.lang()) + d + l.length) % l.length;

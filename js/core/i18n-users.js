@@ -5,6 +5,7 @@
     var OLD = { en: 'Settings >', fr: 'Paramètres >', es: 'Ajustes >', ar: 'الإعدادات >' };
     var S = {
         en: {
+            ntSound: 'Notification sound', ntSoundDesc: 'Plays when a notification shows. ‹ › to choose, you hear each one.', nts_crystal: 'Crystal', nts_glass: 'Glass', nts_bubble: 'Bubble', nts_marimba: 'Marimba', nts_off: 'Off',
             settings: 'Control Panel', startWord: 'start',
             roleAdmin: 'Administrator', roleUser: 'User', role: 'Role', yourRole: 'Your role',
             roleDesc: 'Administrators install and uninstall apps, add and remove users and change the settings of the whole TV. Users use the apps and change their own things: theme, background, home screen, language, password.',
@@ -39,6 +40,7 @@
             rotNow: 'Rotate screen', rotUpdate: 'Update the My PC app on this phone (Get the app on the desktop) to use it upright.'
         },
         fr: {
+            ntSound: 'Son des notifications', ntSoundDesc: 'Joué quand une notification s’affiche. ‹ › pour choisir, vous entendez chacun.', nts_crystal: 'Cristal', nts_glass: 'Verre', nts_bubble: 'Bulle', nts_marimba: 'Marimba', nts_off: 'Désactivé',
             settings: 'Panneau de configuration', startWord: 'démarrer',
             roleAdmin: 'Administrateur', roleUser: 'Utilisateur', role: 'Rôle', yourRole: 'Votre rôle',
             roleDesc: 'Les administrateurs installent et désinstallent les applis, ajoutent et retirent des utilisateurs et règlent toute la TV. Les utilisateurs se servent des applis et changent leurs propres réglages : thème, fond d’écran, écran d’accueil, langue, mot de passe.',
@@ -73,6 +75,7 @@
             rotNow: 'Pivoter l’écran', rotUpdate: 'Mettez à jour l’app My PC sur ce téléphone (Obtenir l’app sur le bureau) pour l’utiliser debout.'
         },
         es: {
+            ntSound: 'Sonido de notificaciones', ntSoundDesc: 'Suena cuando aparece una notificación. ‹ › para elegir, oyes cada uno.', nts_crystal: 'Cristal', nts_glass: 'Vidrio', nts_bubble: 'Burbuja', nts_marimba: 'Marimba', nts_off: 'Desactivado',
             settings: 'Panel de control', startWord: 'inicio',
             roleAdmin: 'Administrador', roleUser: 'Usuario', role: 'Función', yourRole: 'Tu función',
             roleDesc: 'Los administradores instalan y desinstalan apps, añaden y quitan usuarios y cambian los ajustes de toda la TV. Los usuarios usan las apps y cambian lo suyo: tema, fondo, pantalla de inicio, idioma, contraseña.',
@@ -107,6 +110,7 @@
             rotNow: 'Girar pantalla', rotUpdate: 'Actualiza la app My PC en este teléfono (Obtener la app en el escritorio) para usarla en vertical.'
         },
         ar: {
+            ntSound: 'صوت الإشعارات', ntSoundDesc: 'يُشغَّل عند ظهور إشعار. ‹ › للاختيار، وتسمع كل صوت.', nts_crystal: 'كريستال', nts_glass: 'زجاج', nts_bubble: 'فقاعة', nts_marimba: 'ماريمبا', nts_off: 'إيقاف',
             settings: 'لوحة التحكم', startWord: 'ابدأ',
             roleAdmin: 'مسؤول', roleUser: 'مستخدم', role: 'الدور', yourRole: 'دورك',
             roleDesc: 'المسؤولون يثبتون التطبيقات ويزيلونها، ويضيفون المستخدمين ويحذفونهم، ويغيرون إعدادات التلفاز كله. المستخدمون يستعملون التطبيقات ويغيرون أشياءهم الخاصة: السمة والخلفية والشاشة الرئيسية واللغة وكلمة المرور.',

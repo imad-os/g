@@ -10,7 +10,8 @@
  *     image: 'https://…/logo.png',   // optional picture in place of the status icon
  *     id: 'net',                     // same id = the card is updated in place (no second card)
  *     timeout: 4000,                 // ms on screen; 0 = stays until Notify.hide(id)
- *     onClick: fn                    // touch / mouse click on the card (the card then closes)
+ *     onClick: fn,                   // touch / mouse click on the card (the card then closes)
+ *     silent: true                   // no sound (the sound is the profile's choice: Control Panel > Sound)
  * }) -> the card's id.  Notify.hide(id), Notify.clear().
  *
  * Built for low-end TVs: only transform / opacity animate (no blur, no layout per frame),
@@ -77,6 +78,7 @@ var Notify = (function () {
         cards.push(c);
         b.appendChild(c.el);
         b.hidden = false;
+        if (!o.silent && typeof AudioPrefs !== 'undefined' && AudioPrefs.notify) AudioPrefs.notify();
         while (cards.length - gone() > MAX) for (var i = 0; i < cards.length; i++) if (!cards[i].gone) { hide(cards[i].id); break; }
         void c.el.offsetWidth;                                     // start below, then rise
         c.shown = true;

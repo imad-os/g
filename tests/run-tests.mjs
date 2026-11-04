@@ -670,6 +670,23 @@ async function main() {
         check(nt.same, 'the same id updates the card (red now) instead of adding one');
         check(nt.max === 3, 'at most 3 notifications on screen');
         check(nt.out && nt.empty, 'on timeout the card slides down, then everything is removed');
+        // notification sound: the profile's choice (Control Panel > Sound), one small <audio>, 'off' and silent: true play nothing
+        const snd = await page.evaluate(async () => {
+            const played = []; const orig = HTMLMediaElement.prototype.play;
+            HTMLMediaElement.prototype.play = function () { played.push(this.src.split('/').pop()); return Promise.resolve(); };
+            const wait = () => new Promise((ok) => setTimeout(ok, 450));
+            const r = { def: AudioPrefs.notifySound() };
+            Notify.clear(); await wait(); Notify.show('ding'); r.first = played.slice();
+            await wait(); played.length = 0; Notify.show({ text: 'quiet', silent: true }); r.silent = played.length;
+            await wait(); AudioPrefs.setNotifySound('bubble'); r.preview = played.slice(); r.saved = Store.get('notif_sound');
+            await wait(); played.length = 0; AudioPrefs.setNotifySound('off'); Notify.show('nothing'); r.off = played.length;
+            AudioPrefs.setNotifySound('crystal'); Notify.clear();
+            HTMLMediaElement.prototype.play = orig;
+            return r;
+        });
+        check(snd.def === 'crystal' && snd.first.join() === 'notify-crystal.wav', 'a notification plays the default sound: ' + JSON.stringify(snd));
+        check(snd.silent === 0 && snd.off === 0, 'silent: true and the Off choice play no sound');
+        check(snd.preview.join() === 'notify-bubble.wav' && snd.saved === 'bubble', 'choosing a sound plays it and saves it for the profile');
         const fav = await page.evaluate(() => [...document.querySelectorAll('link[rel~="icon"]')].map((l) => l.getAttribute('href')));
         // headless Chromium never requests favicons itself: fetch the declared files
         let served = true;
