@@ -36,6 +36,7 @@ var Controllers = (function () {
     'use strict';
 
     var KEY = 'arc_dev_ctrl', TUNE_KEY = 'arc_dev_ctrltune', APP = 'controller', MAX_PHONES = 8, PAIR_MS = 300000, HELLO_MS = 4000;
+    var IDLE_POLL = 10000;            // ms between looks for a new phone once the room is quiet (2 s the first minute, while pairing, after a drop)
     var ACTIONS = { left: 1, right: 1, up: 1, down: 1, ok: 1, run: 1, cancel: 1, b: 1, menu: 1, pause: 1, guide: 1, record: 1 };
     var DIRS = { left: 1, right: 1, up: 1, down: 1 };
     var ALPHA = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -237,7 +238,7 @@ var Controllers = (function () {
         if (!c.on || sess || !NetLink.supported()) return;
         sess = new Rooms.Session(APP, 'TV', onEvent);
         status = { s: 'opening', err: '' }; changed();
-        sess.call('open', { id: c.code, max: 3, name: 'TV' }, function (err) {
+        sess.call('open', { id: c.code, max: 3, name: 'TV', idle: IDLE_POLL }, function (err) {
             if (err) { stop(); status = { s: 'error', err: err }; changed(); schedule(err === 'offline' ? 10000 : 20000); }
             else { status = { s: 'ready', err: '' }; changed(); }
         });
@@ -273,7 +274,7 @@ var Controllers = (function () {
         },
         status: function () { return status; },
         newCode: function () { var c = cfg(); c.code = makeCode(); c.ok = []; save(c); closePhones(); stop(); if (c.on) { pairUntil = Date.now() + PAIR_MS; open(); } changed(); },
-        pair: function (sec) { pairUntil = Date.now() + (sec === undefined ? PAIR_MS : sec * 1000); changed(); },
+        pair: function (sec) { pairUntil = Date.now() + (sec === undefined ? PAIR_MS : sec * 1000); if (sess) sess.call('wake', { room: cfg().code }, function () {}); changed(); },
         pairing: function () { return Math.max(0, Math.ceil((pairUntil - Date.now()) / 1000)); },
         forget: function () { var c = cfg(); c.ok = []; save(c); closePhones(); changed(); },
         phones: function () { return cfg().ok.length; },

@@ -6,12 +6,15 @@
  * A Session belongs to ONE running app (its appId scopes every room it can list or open) and is destroyed with it:
  * the room and its requests are deleted. Payloads (offer / answer) are opaque strings, never parsed here.
  *   var s = new Rooms.Session(appId, profileName, function (event, data) { ... });   events: 'request', 'answer', 'denied', 'closed'
- *   s.call(op, args, function (errCode, result) { ... })    op: open list ask accept decline close cancel
+ *   s.call(op, args, function (errCode, result) { ... })    op: open list ask accept decline close cancel wake
+ * Request polling (the host's only repeated read, one runQuery on rooms/{room}/reqs): every 2 s for the first minute after
+ * `open`, a request, a player leaving or `wake`; then slower and slower (x1.5) up to `idle` ms (open's arg, default 5 s, at most
+ * 30 s); none while the room is full or the page is hidden (another TV app / source). Firestore REST has no listener.
  * Error codes: offline denied full gone invalid unavailable. */
 var Rooms = (function () {
     'use strict';
 
-    var L = { name: 24, payload: 6000, ttl: 45000, beat: 15000, askTtl: 60000, poll: 2000, askPoll: 1500, listMax: 20,
+    var L = { name: 24, payload: 6000, ttl: 45000, beat: 15000, askTtl: 60000, poll: 2000, pollIdle: 5000, pollMaxIdle: 30000, fastFor: 60000, askPoll: 1500, listMax: 20,
               minMax: 2, maxMax: 8, defMax: 2, asksPerMin: 5, opensPerMin: 6, timeout: 6000 };
     var ALPHA = 'abcdefghjkmnpqrstuvwxyz23456789';
     var asks = [], opens = [];                       // TV-wide rate limits (timestamps)
@@ -56,7 +59,8 @@ var Rooms = (function () {
         /* ---------- host: heartbeat + request polling ---------- */
         function stopRoom() {
             if (!room) return;
-            clearInterval(room.beat); clearInterval(room.poll);
+            clearInterval(room.beat); clearTimeout(room.poll);
+            if (room.vis) document.removeEventListener('visibilitychange', room.vis);
             room = null;
         }
         function beat(r) {
@@ -64,18 +68,35 @@ var Rooms = (function () {
                 if ((err === 'notfound' || err === 'conflict') && room === r) { stopRoom(); fire('closed', { room: r.id }); }
             });
         }
+        function hidden() { return typeof document !== 'undefined' && document.hidden === true; }
+        // the next poll: fast for a while after something happened, then backs off to the room's idle rate
+        function next(r) {
+            if (room !== r) return;
+            clearTimeout(r.poll);
+            var t = Date.now(), wait;
+            if (t < r.fastUntil) wait = L.poll;
+            else wait = r.wait = Math.min(r.idle, Math.max(L.poll, Math.round((r.wait || L.poll) * 1.5)));
+            r.poll = setTimeout(function () { poll(r); }, wait);
+        }
+        function fast(r) {                           // a guest is likely to come soon: poll every 2 s for a minute
+            r.fastUntil = Date.now() + L.fastFor; r.wait = 0;
+            if (!r.busy) { clearTimeout(r.poll); r.poll = setTimeout(function () { poll(r); }, 0); }
+        }
         function poll(r) {
-            if (r.busy) return;
+            if (room !== r || r.busy) return;
+            if (r.n >= r.max || hidden()) return next(r);                    // full (asks are refused anyway) or nobody watching
             r.busy = true;
             Cloud.query('rooms/' + r.id, { from: [{ collectionId: 'reqs' }], limit: 25 }, L.timeout, function (err, docs) {
                 r.busy = false;
-                if (err || room !== r) return;
-                for (var i = 0; i < docs.length; i++) {
+                if (room !== r) return;
+                for (var i = 0; !err && i < docs.length; i++) {
                     var q = docs[i], d = q.data;
                     if (r.seen[q.id] || d.answer || d.no || !str(d.offer, L.payload) || ms(d.exp) < now()) continue;
                     r.seen[q.id] = 1;
+                    r.fastUntil = Date.now() + L.fastFor; r.wait = 0;            // more may follow (a second phone, friends)
                     fire('request', { room: r.id, id: q.id, name: cleanName(d.name, ''), offer: d.offer });
                 }
+                next(r);
             });
         }
         function wipe(r, cb) {                       // deletes the requests, then the room
@@ -124,7 +145,10 @@ var Rooms = (function () {
                 var max = Math.floor(+args.max || L.defMax);
                 if (max < L.minMax || max > L.maxMax) max = Math.max(L.minMax, Math.min(L.maxMax, max));
                 var fixed = typeof args.id === 'string' && /^[a-z0-9]{6,16}$/.test(args.id) ? args.id : null;     // a room that keeps its code across pages (phone controllers)
-                var r = { id: fixed || id(8), name: cleanName(args.name, profileName), max: max, n: 1, seen: {}, busy: false, beat: 0, poll: 0 };
+                var idle = Math.floor(+args.idle || L.pollIdle);
+                idle = Math.max(L.poll, Math.min(L.pollMaxIdle, idle));
+                var r = { id: fixed || id(8), name: cleanName(args.name, profileName), max: max, n: 1, seen: {}, busy: false, beat: 0, poll: 0,
+                          idle: idle, wait: 0, fastUntil: Date.now() + L.fastFor };
                 room = r;                                                    // reserved while the write is in flight
                 sync(function (e0) {
                     if (room !== r) return;
@@ -133,7 +157,11 @@ var Rooms = (function () {
                         if (room !== r) return;                              // closed meanwhile
                         if (err) { room = null; return cb(code(err)); }
                         r.beat = setInterval(function () { beat(r); }, L.beat);
-                        r.poll = setInterval(function () { poll(r); }, L.poll);
+                        next(r);
+                        if (typeof document !== 'undefined') {             // back on My PC: look for guests at once
+                            r.vis = function () { if (!hidden() && room === r) fast(r); };
+                            document.addEventListener('visibilitychange', r.vis);
+                        }
                         cb(null, { id: r.id, name: r.name, max: r.max });
                     }
                     Cloud.patch('rooms/' + r.id, { app: appId, name: r.name, max: r.max, n: 1, at: now(), exp: new Date(now() + L.ttl) }, { exists: false }, L.timeout, function (err) {
@@ -146,8 +174,16 @@ var Rooms = (function () {
             count: function (args, cb) {                                     // players connected now (host included)
                 var r = room;
                 if (!r || r.id !== args.room) return cb('gone');
-                r.n = Math.max(1, Math.min(r.max, args.n | 0));
+                var n = Math.max(1, Math.min(r.max, args.n | 0)), less = n < r.n;
+                r.n = n;
                 beat(r);
+                if (less) fast(r);                                           // a player left: they often come back at once
+                cb(null, true);
+            },
+            wake: function (args, cb) {                                      // a guest is expected (pairing screen open): poll fast again
+                var r = room;
+                if (!r || r.id !== args.room) return cb('gone');
+                fast(r);
                 cb(null, true);
             },
             list: function (args, cb) {

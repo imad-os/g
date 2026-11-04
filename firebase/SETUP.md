@@ -174,8 +174,10 @@ there**. After publishing the new rules (step 1), do these two things in the con
    TTL deletes within about a day of `exp`; the apps already ignore expired rooms, and the shell deletes its own
    room and requests when the app closes.
 
-Cost: a room costs a few writes (heartbeat every 15 s while a host waits), requests are polled every 1.5-2 s. Both stop when
-the room closes or the app is closed. Rate limits (1 open room, 5 asks per minute per TV) are in `js/core/rooms.js`.
+Cost: a room costs a few writes (heartbeat every 15 s while a host waits), the host looks for requests every 2 s
+for the first minute (and again after a request, a player leaving or the pairing screen), then slower and slower up to
+5 s (multiplayer) or 10 s (the TV's phone controller room), and not at all while the room is full or My PC is hidden; a
+guest checks its own request every 1.5 s while it waits. All of it stops when the room closes or the app is closed. Rate limits (1 open room, 5 asks per minute per TV) are in `js/core/rooms.js`.
 
 ## 4b. Error reports (`errors`): index and TTL (once)
 My PC saves why an app could not open or start, and what an app threw (`js/core/reports.js`, SDK `MyPC.report`), in

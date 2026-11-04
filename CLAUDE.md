@@ -94,7 +94,9 @@
   list, waiting, accept dialog) in `js/launcher/multiplayer.js` (markup `#mp` in `app.html`), signalling in `js/core/rooms.js`
   (Firestore `rooms/{room}` + `reqs`, rules / index / TTL in `firebase/SETUP.md` section 4), the WebRTC data channel in
   `js/core/netlink.js` (its code is also inside `sdk/mypc-sdk.js` for standalone mode; a test keeps both identical). Apps only get
-  peers; never room ids, offers or Firebase. `game-host.js` relays peers over postMessage (`mp`).
+  peers; never room ids, offers or Firebase. **Firestore cost** (owner complaint 2026-11-04): a host polls its requests every 2 s only for a minute after open /
+  a request / a player leaving / `wake` (pairing screen), then backs off to `idle` (5 s multiplayer, 10 s phone controller room), and not at all
+  while full or `document.hidden`; never add a fixed fast `setInterval` on Firestore. `game-host.js` relays peers over postMessage (`mp`).
 - **Touch controls**: on phones / tablets the shell draws the virtual pad (`js/launcher/touchpad.js`, library `js/core/virtual-pad.js`)
   above every app, feeding `Input.touch` (device `'touch'`). Per-app config: `touch` in `mypc-app.json` / the Firestore `apps` doc,
   `MyPC.init({ pad })`, `MyPC.pad` in the SDK. The library's one source is `sdk/pad/virtual-pad.js` (from github.com/imad-os/g_rpg `pad/`,

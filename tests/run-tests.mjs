@@ -2179,6 +2179,41 @@ async function main() {
         await A.waitForTimeout(500);
         check(Object.keys(db.rooms || {}).length === 0, 'destroying the session (app closed) deletes the room');
 
+        // request polling backs off once the room is quiet, stops while it is full, and `wake` makes it fast again
+        {
+            const E = await mk(); await mkSession(E, 'ping-game', 'Eve');
+            await E.evaluate(() => { Rooms.LIMITS.poll = 100; Rooms.LIMITS.fastFor = 600; });
+            const oe = await call(E, 'open', { name: 'Quiet', max: 2, idle: 1 });       // idle is clamped to at least the fast rate
+            const polls = () => db.queries.filter((q) => q.col === 'rooms/' + oe.r.id + '/reqs').length;
+            await E.evaluate(() => { Rooms.LIMITS.pollMaxIdle = 800; });
+            await E.waitForTimeout(600); const fastN = polls();
+            await call(E, 'close', { room: oe.r.id });
+            await E.evaluate(() => { Rooms.LIMITS.poll = 100; Rooms.LIMITS.fastFor = 300; });
+            const oq = await call(E, 'open', { name: 'Quiet2', max: 2, idle: 600 });
+            const pq = () => db.queries.filter((q) => q.col === 'rooms/' + oq.r.id + '/reqs').length;
+            await E.waitForTimeout(400); const a0 = pq();
+            await E.waitForTimeout(1800); const a1 = pq() - a0;
+            check(fastN >= 4 && a1 >= 1 && a1 <= 8, 'polls every 2 s (shortened) at first, then backs off to the idle rate (' + fastN + ' fast, ' + a1 + ' in 1.8 s idle)');
+            await call(E, 'wake', { room: oq.r.id });
+            const w0 = pq(); await E.waitForTimeout(250);
+            check(pq() - w0 >= 2, 'wake: polls fast again (' + (pq() - w0) + ' in 250 ms)');
+            await call(E, 'count', { room: oq.r.id, n: 2 });
+            await E.waitForTimeout(400); const f0 = pq(); await E.waitForTimeout(1500);
+            check(pq() === f0, 'a full room is not polled');
+            await call(E, 'count', { room: oq.r.id, n: 1 });
+            const g0 = pq(); await E.waitForTimeout(250);
+            check(pq() - g0 >= 2, 'a player left: polls fast again');
+            await E.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); });
+            await E.waitForTimeout(400); const h0 = pq(); await E.waitForTimeout(1500);
+            check(pq() === h0, 'no polling while My PC is hidden');
+            await E.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); });
+            const v0 = pq(); await E.waitForTimeout(250);
+            check(pq() - v0 >= 2, 'shown again: polls fast at once');
+            await E.evaluate(() => window.S.destroy());
+            check(E.errors.length === 0, 'no page errors while polling ' + E.errors.join('; '));
+            await E.context().close();
+        }
+
         // a TV whose clock is wrong: exp follows the server's time
         db.skewMs = 3600000;
         const D = await mk(); await mkSession(D, 'ping-game', 'Dee');
