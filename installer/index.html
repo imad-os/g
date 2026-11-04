@@ -439,6 +439,14 @@
         <p class="muted small" style="margin:0 0 8px">Also used by profiles that never picked one.</p>
         <select id="gs-default" aria-label="Background of new profiles"></select>
       </div>
+      <div class="card">
+        <h2>Fast push notifications</h2>
+        <p class="muted small" style="margin:0 0 8px">Player accounts (usernames) whose My PC checks for new notifications every 2 minutes. Every other account
+          checks every 30 minutes, to keep Firebase within its free quota. One username per line or separated by commas, 200 at most.
+          Like the rest of these settings, every My PC can read this list.</p>
+        <textarea id="gs-fast" spellcheck="false" rows="4" style="min-height:96px" aria-label="Usernames with fast notifications" placeholder="imad12&#10;sara.k"></textarea>
+        <p id="gs-fast-count" class="muted small"></p>
+      </div>
     </section>
 
     <!-- World records -->
@@ -1196,7 +1204,10 @@
           '<button class="small danger" data-del>Remove</button></div>' +
       '</div>').join('') : '<div class="empty">No background added yet. Every My PC shows its built-in ones.</div>';
     renderGsDefault();
+    if (document.activeElement !== $('gs-fast')) $('gs-fast').value = (gs.notifyFast || []).join('\n');
+    $('gs-fast-count').textContent = (gs.notifyFast || []).length + ' / 200 accounts every 2 minutes';
   }
+  $('gs-fast').addEventListener('input', () => { gs.notifyFast = $('gs-fast').value.split(/[\s,;]+/).filter(Boolean); gsChanged(); });
   $('gs-wps').addEventListener('input', (e) => {
     const t = e.target, row = t.closest('.wp-row');
     if (!t.dataset.f || !row) return;
@@ -1242,8 +1253,10 @@
     $('gs-save').disabled = true;
     try {
       // an empty title is filled from the address, so every My PC shows the same name
-      const clean = GlobalSettings.clean({ wallpapers: list, wallpaper: gs.wallpaper });
-      await setDoc(doc(db, 'settings', 'mypc'), { wallpapers: clean.wallpapers, wallpaper: clean.wallpaper, updatedAt: serverTimestamp(), updatedBy: (user && user.email) || '' });
+      const clean = GlobalSettings.clean({ wallpapers: list, wallpaper: gs.wallpaper, notifyFast: gs.notifyFast || [] });
+      const badUser = (gs.notifyFast || []).map((u) => u.toLowerCase()).filter((u) => clean.notifyFast.indexOf(u) < 0);
+      if (badUser.length) { $('gs-save').disabled = false; return say('gs-msg', 'Not a username: ' + badUser.slice(0, 5).join(', ') + ' (3 to 16 letters, digits, _ or .).', 'err'); }
+      await setDoc(doc(db, 'settings', 'mypc'), { wallpapers: clean.wallpapers, wallpaper: clean.wallpaper, notifyFast: clean.notifyFast, updatedAt: serverTimestamp(), updatedBy: (user && user.email) || '' });
       gs = clean; gsDirty = false;
       renderGs();
       say('gs-msg', 'Saved. Each My PC uses it from its next start (or when Settings > Personalization opens).', 'ok');

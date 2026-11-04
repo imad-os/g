@@ -1,16 +1,18 @@
 /* Settings for every My PC, set by admins in the App Store Manager > Settings (Firestore settings/mypc):
- *   { wallpapers: [{ url, title, thumb }], wallpaper: '<default background>', updatedAt, updatedBy }
+ *   { wallpapers: [{ url, title, thumb }], wallpaper: '<default background>', notifyFast: ['<username>'], updatedAt, updatedBy }
  * Each My PC copies the document at start (GlobalSettings.sync) into arc_dev_global (TV-wide; not in the backup,
  * it comes back from the cloud) so the desktop has it before the network answers and when offline.
  * Also loaded by the App Store Manager (installer/index.html), which uses clean() and titleFromUrl().
  *
  *   GlobalSettings.wallpapers()         [{ id: 'u:<url>', url, title, thumb }]   (pictures added by admins)
  *   GlobalSettings.defaultWallpaper()   '' or the wallpaper new profiles get (a built-in name or a picture id)
+ *   GlobalSettings.notifyFast(user)    true: this player account checks its notifications every 2 minutes (others every 30)
  *   GlobalSettings.sync(cb)             reads settings/mypc again; cb(err, changed) */
 var GlobalSettings = (function () {
     'use strict';
 
-    var KEY = 'arc_dev_global', MAX_WP = 40, MAX_URL = 1000, MAX_TITLE = 60;
+    var KEY = 'arc_dev_global', MAX_WP = 40, MAX_URL = 1000, MAX_TITLE = 60, MAX_FAST = 200;
+    var USER = /^[a-z0-9][a-z0-9_.]{1,14}[a-z0-9_]$/;
     var data = null, waiting = null;
 
     function str(v, n) { return typeof v === 'string' ? v.trim().slice(0, n) : ''; }
@@ -43,6 +45,13 @@ var GlobalSettings = (function () {
             out.wallpapers.push(o);
         }
         out.wallpaper = str(d.wallpaper, MAX_URL + 2);
+        // player accounts allowed to check their push notifications every 2 minutes (Firestore cost: the others every 30)
+        out.notifyFast = [];
+        var fl = Array.isArray(d.notifyFast) ? d.notifyFast : [];
+        for (i = 0; i < fl.length && out.notifyFast.length < MAX_FAST; i++) {
+            var u = String(fl[i] || '').toLowerCase().replace(/\s+/g, '');
+            if (USER.test(u) && u.indexOf('..') < 0 && out.notifyFast.indexOf(u) < 0) out.notifyFast.push(u);
+        }
         return out;
     }
 
@@ -75,7 +84,9 @@ var GlobalSettings = (function () {
         });
     }
 
-    return { wallpapers: wallpapers, defaultWallpaper: defaultWallpaper, sync: sync, clean: clean, titleFromUrl: titleFromUrl,
+    function notifyFast(user) { return !!user && load().notifyFast.indexOf(String(user).toLowerCase()) >= 0; }
+
+    return { wallpapers: wallpapers, defaultWallpaper: defaultWallpaper, notifyFast: notifyFast, sync: sync, clean: clean, titleFromUrl: titleFromUrl,
              _reset: function () { data = null; } };
 })();
 if (typeof module !== 'undefined') module.exports = GlobalSettings;

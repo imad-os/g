@@ -999,8 +999,10 @@ MyPC.notify.status().then(function (s) { /* the same without asking; 'default' =
 
 A Windows style card rises in the bottom right corner with your title, the app name and message and your picture (or
 your app's icon), and slides down after 6 seconds; also on top of a game, without taking the focus. Control Panel >
-Notifications lists the last 50 (new ones marked) and opens a notification's link with OK. A TV checks for new ones at start,
-at sign-in, when My PC comes back to the front and every 2 minutes.
+Notifications lists the last 50 (new ones marked) and opens a notification's link with OK. A TV checks for new ones every 30 minutes
+(at start and when My PC comes back to the front once that time has passed, and at once after a sign-in); accounts the owner
+lists in the App Store Manager > Settings > Fast push notifications check every 2 minutes. So a notification can take up to
+30 minutes to show: don't use it for things that must arrive within seconds.
 
 Protocol (for reference): app → My PC `{ mypc: 1, type: 'notify', data: { rid, op: 'request' | 'status' } }`, answer
 `{ rid, result }`; `init` carries `notify: 1` and `launch`. Firestore: `subs/<app>/users/<username>` (the player's

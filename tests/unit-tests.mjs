@@ -418,6 +418,8 @@ console.log('6. GlobalSettings (settings of every My PC)');
     check(c.wallpapers.length === 2 && c.wallpapers[0].title === '1' && c.wallpapers[1].title === 'Lake' && !c.wallpapers[1].thumb && c.wallpaper === 'u:https://a.b/1.jpg',
         'only https pictures are kept, once each, with a safe address; an empty title is filled');
     check(G.clean(null).wallpapers.length === 0 && G.clean({ wallpapers: 'x' }).wallpaper === '', 'a missing or broken document gives empty settings');
+    check(JSON.stringify(G.clean({ notifyFast: ['Imad12', 'imad12', 'a', 'x..y', 'sara.k', 5, null] }).notifyFast) === '["imad12","sara.k"]' && G.clean({}).notifyFast.length === 0,
+        'fast push notifications: valid usernames only, lower case, once each');
 }
 console.log('7. Push notification services (installer/services-lib.js)');
 {

@@ -1496,12 +1496,17 @@ async function main() {
         await page.click('.wp-row[data-i="2"] button[data-del]');
         await page.selectOption('#gs-default', 'u:https://pics.example/dunes.png');
         await page.click('.wp-row[data-i="1"] button[data-mv="-1"]');
+        await page.fill('#gs-fast', 'Imad12, bad name!');
+        await page.click('#gs-save');
+        check(/Not a username: name!/.test(await page.textContent('#gs-msg')) && !(await page.evaluate(() => window.__db.settings.mypc)), 'Fast push notifications: a wrong username is refused before saving');
+        await page.fill('#gs-fast', 'Imad12\nsara.k, imad12');
         await page.click('#gs-save');
         await page.waitForFunction(() => window.__db.settings.mypc);
         const gm = await page.evaluate(() => window.__db.settings.mypc);
         check(gm.wallpapers.length === 2 && gm.wallpapers[0].title === 'Golden dunes' && gm.wallpapers[0].thumb === 'https://pics.example/dunes-small.png' &&
             gm.wallpapers[1].title === 'Blue lake at night' && gm.wallpaper === 'u:https://pics.example/dunes.png' && gm.updatedBy === 'owner@example.com' && /Saved/.test(await page.textContent('#gs-msg')),
             'Save writes the backgrounds in their order (empty titles filled from the address) and the one of new profiles into settings/mypc');
+        check(JSON.stringify(gm.notifyFast) === '["imad12","sara.k"]' && /2 \/ 200/.test(await page.textContent('#gs-fast-count')), 'and the accounts with fast push notifications (lower case, once each): ' + JSON.stringify(gm.notifyFast));
         // Services: push notification services of the store apps (installer/services.js)
         let svcCode = "export default async function (ctx) { return { notifications: [{ username: '*', title: 'Goal! Raja', message: 'origin ' + self.origin + ' ' + (() => { try { indexedDB.open('x'); return 'idb-open'; } catch (e) { return 'idb-blocked'; } })() + ' ' + (ctx.state ? ctx.state.n : 0), link: 'app?match=7' }, { username: 'stranger', title: 'No' }], state: { n: ((ctx.state && ctx.state.n) || 0) + 1 } }; }";
         await page.route('https://imad-os.github.io/g_soccer/services/notify.js', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: svcCode }));
@@ -4035,6 +4040,15 @@ async function main() {
         check(db.pushAuth.some((x) => /^POST \/inbox\/imad12:runQuery Bearer id-/.test(x)) && await page.evaluate(() => Push.list().length === 2 && Push.unread() === 2 && Store.get('notif_seen') > 0),
             'the inbox is read with the account\'s token; both are kept, unread');
         check(await page.evaluate(() => new Promise((r) => Push.check((e, n) => r(n)))) === 0, 'reading again brings nothing twice');
+        // Firestore free quota: every 30 minutes, every 2 minutes only for the accounts listed in the App Store Manager
+        check(await page.evaluate(() => Push.every()) === 30 * 60000, 'an account not listed for fast notifications reads its inbox every 30 minutes');
+        db.settings = { mypc: { wallpapers: [], notifyFast: ['imad12'] } };
+        await page.evaluate(() => new Promise((r) => GlobalSettings.sync(r)));
+        check(await page.evaluate(() => Push.every()) === 2 * 60000 && await page.evaluate(() => Store.get('notif_last') > Date.now() - 60000), 'a listed account reads it every 2 minutes; the last read time is kept');
+        const reads = () => db.pushAuth.filter((x) => /runQuery/.test(x)).length, before = reads();
+        await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); });
+        await page.waitForTimeout(300);
+        check(reads() === before, 'coming back to the front does not read again before the interval has passed');
         // Control Panel > Notifications
         await page.evaluate(() => Win.open('settings', 'notifications'));
         await page.waitForSelector('.set-main .set-row');

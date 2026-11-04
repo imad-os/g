@@ -4,17 +4,19 @@
  * one Firestore document per notification in inbox/<username>/items/<id>. Only player accounts get them (the inbox is
  * keyed by username, the same on every TV or phone), and only from apps the player allowed: subs/<app>/users/<username>.
  *
- *   Push.start()             reads the inbox now, then every 2 minutes and when My PC comes back to the front
+ *   Push.start()             reads the inbox when it is due: every 2 minutes for the accounts listed in the App Store Manager >
+ *                            Settings > Fast push notifications (GlobalSettings.notifyFast), every 30 minutes for the others
+ *                            (Firestore free quota, owner decision 2026-11-04); also at start / back to the front once due
  *   Push.check(cb)           one read; new items are saved (last 50 per profile, key notifs) and shown as toasts (Notify)
  *   Push.state(appId)        'granted' | 'denied' | 'default' | 'no-account'
  *   Push.set(appId, on, cb)  allow / block an app (cb(err)); writes / deletes the opt-in document with the player's token
  *   Push.ask(ctx, cb)        the permission question (once per app), cb(state)
  *   Push.list() / unread() / markRead() / clear() / remove(id) / open(item) / onChange(fn)
- * Per profile: notifs (list), notif_seen (newest time read), notif_allow ({ app: 1 | 0 }). */
+ * Per profile: notifs (list), notif_seen (newest time read), notif_last (last read), notif_allow ({ app: 1 | 0 }). */
 var Push = (function () {
     'use strict';
 
-    var POLL = 120000, KEEP = 50, timer = 0, busy = false, started = false, listeners = [], asking = false;
+    var FAST = 120000, SLOW = 30 * 60000, KEEP = 50, timer = 0, busy = false, started = false, listeners = [], asking = false;
 
     function user() { var p = Profiles.current(); return p && p.user && Accounts.signedIn(p.id) ? p.user : ''; }
     function items() { var l = Store.get('notifs', []); return l && l.length !== undefined ? l : []; }
@@ -87,6 +89,7 @@ var Push = (function () {
                 limit: 20
             }, 8000, function (e, rows) {
                 busy = false;
+                if (!e) Store.set('notif_last', Date.now());
                 if (e || !rows) return cb(e || 'error', 0);
                 if (Profiles.current().id !== pid) return cb(null, 0);          // the profile changed meanwhile
                 var l = items(), have = {}, fresh = [], max = seen, i;
@@ -142,20 +145,27 @@ var Push = (function () {
     function remove(id) { saveItems(items().filter(function (x) { return x.id !== id; })); }
     function clear() { saveItems([]); }
 
+    // how often this account reads its inbox; the time left before the next read
+    function every() { return GlobalSettings.notifyFast(user()) ? FAST : SLOW; }
+    function wait() {
+        var last = +Store.get('notif_last', 0) || 0, left = last + every() - Date.now();
+        return last > Date.now() ? 0 : Math.max(0, left);      // a clock set back: read now
+    }
+    function checkIfDue() { if (user() && !document.hidden && wait() === 0) check(); }
     function schedule() {
         clearTimeout(timer);
-        timer = setTimeout(function () { if (!document.hidden) check(); schedule(); }, POLL);
+        timer = setTimeout(function () { checkIfDue(); schedule(); }, Math.max(wait(), 15000));
     }
     function start() {
         if (started) return;
         started = true;
-        setTimeout(function () { check(); }, 1500);
+        setTimeout(checkIfDue, 1500);                             // a new sign-in has no notif_last yet: read at once
         schedule();
-        document.addEventListener('visibilitychange', function () { if (!document.hidden) { check(); schedule(); } });
+        document.addEventListener('visibilitychange', function () { if (!document.hidden) { checkIfDue(); schedule(); } });
     }
 
     return {
-        start: start, check: check, state: state, set: set, ask: ask, list: items, unread: unread, markRead: markRead,
+        start: start, check: check, every: every, state: state, set: set, ask: ask, list: items, unread: unread, markRead: markRead,
         remove: remove, clear: clear, open: open, takeLaunch: takeLaunch, onChange: function (fn) { listeners.push(fn); }
     };
 })();

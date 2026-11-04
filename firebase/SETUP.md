@@ -203,5 +203,6 @@ My PC (`subs/<app>/users/<username>`); My PC on their TV or phone reads their ow
    (CLI: `gcloud firestore fields ttls update exp --collection-group=items --enable-ttl`.)
 3. No new index: the inbox query (`at` newer than the last one seen, newest first) uses the automatic single-field index.
 
-Cost: a signed-in My PC reads its inbox at start, at sign-in, when it comes back to the front and every 2 minutes (one read
-when nothing is new). Each notification is one write; the Manager reads each app's opt-in list once every 10 minutes.
+Cost: a signed-in My PC reads its inbox every 30 minutes (one read when nothing is new), or every 2 minutes for the accounts
+listed in App Store Manager > Settings > Fast push notifications (`settings/mypc` field `notifyFast`, readable by anyone like the
+rest of that document). Each notification is one write; the Manager reads each app's opt-in list once every 10 minutes.
