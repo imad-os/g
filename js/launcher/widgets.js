@@ -200,7 +200,7 @@ var Widgets = (function () {
         var d = find(id), p = prefs(), c = (p.w && p.w[id]) || {};
         if (!d) return null;
         return {
-            show: typeof c.show === 'boolean' ? c.show : !!(d.approved !== false),
+            show: typeof c.show === 'boolean' ? c.show : d.id === 'weather',       // owner decision 2026-11-05: only Weather is on until the user turns one on
             every: d.choices.indexOf(c.every) >= 0 ? c.every : d.every,
             bg: typeof c.bg === 'boolean' ? c.bg : d.bg,
             s: WL.settingsOf(d.settings ? d.settings() : [], c.s)

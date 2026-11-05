@@ -4299,6 +4299,11 @@ async function main() {
             Music.playList(['Morning Pixels', 'Neon Avenue', 'Level Two', 'Night Drive', 'Last Boss'].map((t, i) => ({ s: 't', p: '/t/' + i + '.mp3', n: i + '.mp3', t, a: 'Lab' })), 0);
             Music.pause();
         });
+        // owner decision 2026-11-05: only Weather is on by default; the others (and app widgets) are turned on by the user
+        check(await page.evaluate(() => [...document.querySelectorAll('#desk-widgets .wdg')].map((c) => c.id).join() === 'wdg-weather' &&
+            ['playtime', 'sysmon', 'music', 'stars__stars'].every((id) => Widgets.conf(id).show === false) && Widgets._timers().join() === 'weather'),
+            'a new profile shows only the Weather widget; the others are off and run nothing');
+        await page.evaluate(() => ['playtime', 'sysmon', 'music', 'stars__stars'].forEach((id) => Widgets.set(id, 'show', true)));
         await page.waitForFunction(() => /21/.test((document.getElementById('wdg-weather') || {}).textContent || ''), null, { timeout: 8000 }).catch(() => {});
         await page.waitForFunction(() => /Morning Pixels/.test((document.getElementById('wdg-music') || {}).textContent || ''), null, { timeout: 5000 }).catch(() => {});
         const cards = await page.evaluate(() => [...document.querySelectorAll('#desk-widgets .wdg')].map((c) => c.id + ':' + c.textContent));
@@ -4489,6 +4494,7 @@ async function main() {
             days[k(0)] = 1500; days[k(1)] = 3900; days[k(2)] = 600; days[k(8)] = 900; days[k(20)] = 7200;
             Store.set('playtime', { days, games: { blocks: { s: 9000, t: 'Block Drop', at: Date.now(), n: 6, best: 3000 }, gone: { s: 1200, t: 'Old Game', at: Date.now() - 86400000 * 3 } } });
         });
+        await page.evaluate(() => Widgets.set('playtime', 'show', true));      // off by default
         await page.waitForSelector('#wdg-playtime');
         await page.focus('#wdg-playtime'); await page.keyboard.press('Enter');          // OK on the Playtime widget opens the app
         await page.waitForSelector('.pt-card');
@@ -4839,7 +4845,7 @@ async function musicTests(browser, base) {
     check(await page.evaluate(() => !MusicSaver._armed()), 'paused: no screensaver timer');
 
     // the widget on the desktop follows the player
-    await page.evaluate(() => { Win.close(); Music.play(); });
+    await page.evaluate(() => { Win.close(); Widgets.set('music', 'show', true); Music.play(); });      // the widget is off by default
     await page.waitForTimeout(300);
     await shot('7-widget');
     check(await page.evaluate(() => /Harbor/.test(document.getElementById('wdg-music').textContent)), 'the Music Player widget shows the song playing');

@@ -96,7 +96,7 @@
   (`js/core/playtime.js`, counted on the game page once a minute; OK opens the **Playtime app** `apps/playtime.js`: today / week / daily average /
   streak cards, 7 or 30 day CSS bars, games with sessions + longest + last played (OK plays), Clear; per profile key `playtime`, 120 days kept), System Monitor (Tizen systeminfo CPU / memory, else JS heap), Music
   Player (the real Music app, below). Per profile
-  (`widgets` key): show, refresh rate, "Run in the background", own settings, order; Control Panel > Widgets (list, then a page per
+  (`widgets` key; owner decision 2026-11-05: only Weather is shown by default, every other widget incl. app ones is off until turned on): show, refresh rate, "Run in the background", own settings, order; Control Panel > Widgets (list, then a page per
   widget). **Owner rule: every refresh stops while an app or game is open (Desktop.hide, the game page, document.hidden) except widgets
   with background on (Music by default).** App widgets: `"widgets"` in `mypc-app.json` (`js/core/widget-lib.js`, max 3), approved in App
   Store Manager > Widgets (`installer/widgets.js`; code copied to Firestore `widgets/<app>__<widget>`, SHA-256 in `apps/<id>.widgets[i].sha`);

@@ -1088,7 +1088,8 @@ How it fits together:
 2. The owner adds or updates the app in the App Store Manager; its **Widgets** page shows your widget. The owner reads the
    code, tests it (it draws the card) and **approves** it: the approved code is copied into the store, so **TVs run that
    copy, never your live file**. A later change of the file reaches TVs only when the owner approves it again.
-3. A player who installed your app sees the widget on the desktop (Control Panel > Widgets hides it or changes it).
+3. A player who installed your app finds the widget in Control Panel > Widgets and turns it on there (widgets are **off by
+   default**; only the built-in Weather is on), then changes its refresh rate and settings.
 4. At each refresh My PC runs your function once and draws what it returns. **OK on the card opens your app**; buttons
    on the card run your function again with `ctx.action`.
 
