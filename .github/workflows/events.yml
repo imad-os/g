@@ -1,0 +1,31 @@
+# Refreshes data/events-ma.json (the calendar's Moroccan holidays and big events, read by every My PC: js/core/events.js)
+# from Google Calendar's public "Holidays in Morocco" calendars. Weekly, by hand (Actions > Calendar events > Run workflow),
+# and when data/big-events.json changes. Commits only when the file changed.
+name: Calendar events
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['data/big-events.json', 'tools/fetch-events.mjs', 'js/core/events.js']
+permissions:
+  contents: write
+concurrency: { group: calendar-events, cancel-in-progress: false }
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: node tools/fetch-events.mjs
+      - name: Commit when changed
+        run: |
+          if git diff --quiet -- data/events-ma.json; then echo "no change"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/events-ma.json
+          git commit -m "Calendar: holidays and big events refreshed from Google Calendar"
+          git pull --rebase origin main
+          git push origin HEAD:main

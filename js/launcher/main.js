@@ -256,6 +256,7 @@ var App = (function () {
             Playtime.start(g.id, I18n.pick(g.manifest.title));     // the Playtime widget
             Widgets.background();                      // only the widgets that run in the background (Control Panel > Widgets)
             Push.start();                              // notifications also arrive during a game (small cards, no focus taken)
+            CalRemind.start();                         // the profile's calendar reminders, also over a game
             Music.init({ resume: true, lite: true });  // the music goes on under the game (the game menu can pause it)
         };
         if (id.indexOf('app-') === 0) {
@@ -384,10 +385,11 @@ var App = (function () {
             Backup.start();
             Accounts.start();
             Push.start();                                        // push notifications of a signed-in player account (js/launcher/push.js)
+            CalRemind.start();                                   // the profile's calendar reminders (js/launcher/cal-remind.js)
             World.flush();
             Bridges.syncAi();                                    // the AI services set in the App Store Manager
             GDrive.syncSoon();                                   // the Google client of every My PC (settings/google), twice a day at most
-            GlobalSettings.sync(function (e, changed) { if (changed) Desktop.paintWallpaper(); });   // its Settings (backgrounds)
+            GlobalSettings.sync(function (e, changed) { if (changed) Desktop.paintWallpaper(); });   // its Settings (backgrounds, events)
             // One-time device benchmark while the menu is idle.
             setTimeout(function () {
                 if (!GameHost.active()) benchCancel = Perf.benchmark(function () { benchCancel = null; });

@@ -151,6 +151,12 @@
             if (Array.isArray(v.alerts)) out.alerts = v.alerts.filter(isObject).slice(0, 2).map(function (a) { return { level: a.level === 'danger' ? 'danger' : 'warn', text: cut(a.text, 80) }; }).filter(function (a) { return a.text; });
             if (out.alerts && !out.alerts.length) delete out.alerts;
             if (+v.loaded >= 0 && +v.loaded <= 1) out.loaded = +v.loaded;
+            // a tear-off calendar page beside the big value, and a list of events with their kind (Calendar)
+            if (isObject(v.page) && str(v.page.num)) out.page = { top: cut(v.page.top, 16), num: cut(v.page.num, 4), bottom: cut(v.page.bottom, 16) };
+            if (Array.isArray(v.events)) out.events = v.events.filter(isObject).slice(0, 4).map(function (e) {
+                return { when: cut(e.when, 24), text: cut(e.text, 80), kind: /^(holiday|observance|event|mine)$/.test(str(e.kind)) ? e.kind : 'event' };
+            }).filter(function (e) { return e.text; });
+            if (out.events && !out.events.length) delete out.events;
         }
         if (/^#[0-9a-fA-F]{6}$/.test(str(v.accent))) out.accent = str(v.accent);
         var l = str(v.link);

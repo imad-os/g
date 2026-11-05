@@ -115,11 +115,24 @@
   while drawing) and `dyn_events` (holidays and football, else the season; summer = beach). Drawn ONCE on a canvas (stage size x 1 / 0.75 / 0.5
   by Perf tier) when what it shows changes (checked every 10 min, events 30 min); no timer while an app / game is open (Desktop.hide),
   on the game page or in the background. Optional moving rain / snow = one tile slid by CSS transform (profile `dynwall.motion`, off by
-  default); `dynwall.caption` shows the event's name. **Events** (`js/core/events.js`, also meant for the Calendar): Google's public holiday
+  default); `dynwall.caption` shows the event's name. **Events** (`js/core/events.js`, shared with the Calendar below): Google's public holiday
   calendar `en.<cc>#holiday@group.v.calendar.google.com` (Calendar API with `Cloud.key` if the owner turned it on, else its .ics, else
   built-in Moroccan days + Islamic days via Intl `islamic-umalqura`), football from ESPN's public scoreboard (UCL, World Cup, AFCON,
   Morocco's other matches); cache `arc_dev_events` (holidays 2 days, football 6 h); per profile `events` { country, football }.
   Tests: `MYPC_ONLY=wall node tests/run-tests.mjs` (`MYPC_SHOTS=<folder>` for screenshots). Keep `evPrivacy` true.
+- **Calendar** (owner request 2026-11-05: Moroccan calendar, widget + app, reliable free source): one data module with the live backgrounds,
+  `js/core/events.js` (`Events.day(ymd, withMine)` / `range` / `list(ymd)` for the app / `next`; own events only with `withMine`, so the wallpaper
+  never shows them). Morocco's holidays: `data/events-ma.json` on the site FIRST (works on the web / phone, Google's .ics has no CORS), refreshed
+  weekly by the GitHub Action `.github/workflows/events.yml` (`tools/fetch-events.mjs`, Google's public "Holidays in Morocco" .ics, no key); when
+  it has no Google data the TV asks Google itself (API, then .ics), then built-in rules (`est` = expected date). Big events (`kind: 'event'`):
+  the same file's `events` from `data/big-events.json` (Champions League nights, AFCON 2027...) + App Store Manager > Settings > Events
+  (`settings/mypc.events`, one line each `2027-06-19..2027-07-17 21:00 AFCON #afcon`; rules changed: republish); a big event ESPN already has that
+  day is skipped. Hijri "as in Morocco" (`Events.hijri` / `hijriText`) = Umm al-Qura (Intl) moved per Hijri month by the lag of the nearest
+  official Moroccan Eid / new year / Mawlid (Google's dates + `KNOWN`; 2025 = +1 day, 2026 = 0) minus the profile's `cal_hijri_adj`; the built-in
+  Islamic holidays use it too. Own events per profile `cal_events` (`Events.add / update / remove / mine / onChange`; old `cal_notes` migrated),
+  reminders `js/launcher/cal-remind.js` (one timer, Notify, also on the game page, `cal_fired`). Widget `calendar` (off by default) tells
+  tomorrow's holiday once (`cal_told`). Strings `js/core/i18n-calendar.js` (+ `calPrivacy`, keep it and `evPrivacy` true).
+  Tests: `node tests/unit-tests.mjs` (section 9), `MYPC_ONLY=calendar node tests/run-tests.mjs` (fixture `tests/calendar-fixtures.mjs`).
 - **Music app** (owner request 2026-11-05, Win app `music`): `js/core/music-src.js` (sources: `usb` = Tizen filesystem drives under
   `/opt/media`, needs package **1.6.0** privileges filesystem.read / write + externalstorage; `gd` = Google Drive through My PC's own sign-in
   (`GDrive`, see "Google Drive" below; scope drive.file); Google refuses a token in the address, so a Drive song plays: on the web / phone app through `sw.js` (`__music/gd/<id>?t=`, adds the header, passes Range: every format, seeking); else MP3 / AAC / WebM read in Range pieces into a Media Source (`msStream`); else a download that plays from its first 512 KB and moves to the whole file at the same place when done (`growDl`, `HTML.swap`; an M4A with its index at the end gets it read first and put at the front, `faststart`). Proof in a real browser with real songs on a slow line + screenshots: `tests/drive-stream-proof.mjs` (needs ffmpeg-made songs and a local cert, see its header); `gdStatus` codes noconfig / nouser / reauth each have their own message (nouser / reauth: a Sign in with Google button right in Music); `loc` = PC folders via

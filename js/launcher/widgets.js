@@ -119,6 +119,49 @@ var Widgets = (function () {
         } else fin(null);
     }
 
+    // Calendar: today in the Gregorian and the Moroccan Hijri calendars, then today's and tomorrow's events (holidays, big events,
+    // the profile's own), else the next one. No network here (Events.refresh reads the holidays when stale).
+    function calendar(ctx, done) {
+        var s = ctx.settings, now = new Date(), k = Events.ymd(now), k1 = Events.addDays(k, 1), l = I18n.lang();
+        var dt = function (o) { return Desktop.dateText(now, o); };
+        var v = { icon: 'i:calendar', page: { top: dt({ month: 'short' }).replace('.', ''), num: String(now.getDate()), bottom: String(now.getFullYear()) },
+                  big: dt({ weekday: 'long' }), sub: dt({ day: 'numeric', month: 'long', year: 'numeric' }), events: [] };
+        if (s.hijri !== 'no') v.text = Events.hijriText(k, l);
+        // tomorrow: only what starts tomorrow (not the second day of today's Eid)
+        var today = Events.list(k), tom = Events.list(k1).filter(function (e) { return !(e.first && e.first < k1) && !(e.src.id === 'ramadan' && e.src.day > 1); });
+        var max = ctx.size === 'large' ? 4 : 3;
+        today.forEach(function (e) { if (v.events.length < max) v.events.push({ when: t('calToday'), text: line(e), kind: e.kind }); });
+        tom.forEach(function (e) { if (v.events.length < max) v.events.push({ when: t('calTomorrow'), text: line(e), kind: e.kind }); });
+        if (!v.events.length) {
+            var nx = null, d2 = Events.addDays(k, 2);
+            for (var i = 0; i < 60 && !nx; i++) {
+                nx = Events.list(d2).filter(function (e) { return !(e.first && e.first < d2) && e.src.id !== 'ramadan' || e.src.day === 1; })[0] || null;
+                if (!nx) d2 = Events.addDays(d2, 1);
+            }
+            if (nx) v.events.push({ when: t('calNext'), text: nx.title + ' · ' + Desktop.dateText(Events.parseYmd(d2), { day: 'numeric', month: 'short' }), kind: nx.kind });
+            else v.events.push({ when: '', text: t('calNothing'), kind: 'observance' });
+        }
+        if (s.notify !== 'no') told(tom, k1);
+        done(v);
+        Events.refresh(function (changed) { if (changed) refresh('calendar'); });
+    }
+    function line(e) { return e.title + (e.time ? ' · ' + Desktop.timeText(new Date(2000, 0, 1, +e.time.slice(0, 2), +e.time.slice(3))) : ''); }
+    // tomorrow's holidays and big events, told once as a notification the day before (while the desktop is on screen)
+    function told(list, k1) {
+        if (!onDesk || typeof Notify === 'undefined') return;
+        var seen = Store.get('cal_told', []);
+        seen = Array.isArray(seen) ? seen : [];
+        list.forEach(function (e) {
+            if (e.kind === 'observance' || e.kind === 'mine') return;              // own events have their own reminders
+            var id = k1 + ':' + (e.src.id || '') + ':' + e.title;
+            if (seen.indexOf(id) >= 0) return;
+            seen.push(id);
+            Notify.show({ id: 'cal-' + (e.src.id || 'ev'), kind: 'info', timeout: 10000, title: t('wg_calendar'), text: t('calTomorrowIs').replace('%s', e.title),
+                          onClick: function () { Win.open('calendar'); } });
+        });
+        Store.set('cal_told', seen.slice(-30));
+    }
+
     var musicArt = '';
     function music(ctx, done) {
         var s = Music.state();
@@ -142,6 +185,11 @@ var Widgets = (function () {
                       { id: 'warn', type: 'select', label: t('wxWarn'), 'default': '6', options: [{ value: '0', label: t('wxWarnOff') }].concat(['1', '2', '4', '6', '8', '24'].map(function (h) { return { value: h, label: t('wxWarnH').replace('%n', h) }; })) },
                       sz('tsize', 'wxTSize'), sz('isize', 'wxISize'), { id: 'anim', type: 'toggle', label: t('wxAnim'), 'default': true }];
           }, refresh: weather, keep: true, open: function () { Win.open('weather'); } },
+        { id: 'calendar', icon: 'calendar', title: function () { return t('wg_calendar'); }, size: 'medium', every: 900, choices: [300, 900, 1800, 3600], bg: false,
+          settings: function () {
+              var yn = function (id, label) { return { id: id, type: 'select', label: t(label), 'default': 'yes', options: [{ value: 'yes', label: t('calYes') }, { value: 'no', label: t('calNo') }] }; };
+              return [yn('hijri', 'calShowHijri'), yn('notify', 'calNotify')];
+          }, refresh: calendar, open: function () { Win.open('calendar'); } },
         { id: 'playtime', icon: 'hourglass', title: function () { return t('wg_playtime'); }, size: 'small', every: 300, choices: [60, 300, 900, 1800], bg: false, refresh: playtime,
           open: function () { Win.open('playtime'); } },
         { id: 'sysmon', icon: 'chip', title: function () { return t('wg_sysmon'); }, size: 'medium', every: 5, choices: [2, 5, 10, 30, 60], bg: false, refresh: sysmon },
@@ -357,6 +405,7 @@ var Widgets = (function () {
         var p = [d.title()];
         ['big', 'sub', 'text'].forEach(function (k) { if (v[k]) p.push(v[k]); });
         (v.alerts || []).forEach(function (a) { p.push(a.text); });
+        (v.events || []).forEach(function (e) { p.push((e.when ? e.when + ': ' : '') + e.text); });
         (v.rows || []).forEach(function (r) { p.push(r.label + ' ' + r.value); });
         return p.join('. ');
     }
@@ -376,7 +425,18 @@ var Widgets = (function () {
         head.appendChild(el('span', 'wdg-title', v.title || d.title()));
         c.appendChild(head);
         if (v.image && d.size !== 'small') { var im = el('img', 'wdg-img'); im.alt = ''; im.src = v.image; im.onerror = function () { this.remove(); }; c.appendChild(im); }
-        if (v.art) {
+        if (v.page) {
+            // the day's names on the left, a tear-off calendar page on the right (Calendar)
+            var hero2 = el('div', 'wdg-hero'), col2 = el('div', 'wdg-col'), pg = el('div', 'wdg-page');
+            col2.appendChild(el('div', 'wdg-big wdg-day', v.big || ''));
+            if (v.sub) col2.appendChild(el('div', 'wdg-sub', v.sub));
+            if (v.text) col2.appendChild(el('div', 'wdg-hijri', v.text));
+            pg.appendChild(el('span', 'wdg-pg-top', v.page.top));
+            pg.appendChild(el('span', 'wdg-pg-num', v.page.num));
+            if (v.page.bottom) pg.appendChild(el('span', 'wdg-pg-bot', v.page.bottom));
+            hero2.appendChild(col2); hero2.appendChild(pg);
+            c.appendChild(hero2);
+        } else if (v.art) {
             // big value + its text on the left, a big picture on the right (Weather)
             var hero = el('div', 'wdg-hero'), col = el('div', 'wdg-col'), big = el('div', 'wdg-big', v.big || '');
             if (v.bigSize) big.style.fontSize = v.bigSize + 'px';
@@ -397,6 +457,16 @@ var Widgets = (function () {
             if (v.sub && !v.big) c.appendChild(el('div', 'wdg-sub', v.sub));
         }
         if (v.alerts) v.alerts.forEach(function (a) { c.appendChild(el('div', 'wdg-alert wdg-' + a.level, a.text)); });
+        if (v.events) {
+            var evs = el('div', 'wdg-evs');
+            v.events.forEach(function (e) {
+                var x = el('div', 'wdg-ev wdg-ev-' + e.kind);
+                if (e.when) x.appendChild(el('span', 'wdg-ev-w', e.when));
+                x.appendChild(el('span', 'wdg-ev-t', e.text));
+                evs.appendChild(x);
+            });
+            c.appendChild(evs);
+        }
         if (v.progress !== undefined) {
             var bar = el('div', 'wdg-bar'), fill = el('i');
             fill.style.width = Math.round(v.progress * 100) + '%';

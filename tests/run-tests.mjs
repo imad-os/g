@@ -348,6 +348,7 @@ async function main() {
     // MYPC_ONLY=music node tests/run-tests.mjs: only the Music app's checks (quick while working on it)
     if (process.env.MYPC_ONLY === 'wall') { await wallTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'drive') { await driveTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'calendar') { await calendarTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'music') { await musicTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
 
     console.log('1. hosted newer build runs');
@@ -1061,8 +1062,11 @@ async function main() {
         await key('Enter');
         await page.keyboard.type('match');
         await page.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
-        const notes = await page.evaluate(() => Store.get('cal_notes', {}));
-        check(Object.keys(notes).length === 1 && Object.values(notes)[0][0] === 'Match' && await page.evaluate(() => !!document.querySelector('.cal-today .cal-dot')), 'a note is saved on the day and marked');
+        await page.waitForSelector('.cal-save');
+        await page.click('.cal-save');
+        const mine = await page.evaluate(() => Events.mine().map((e) => Object.assign({ today: e.date === Events.ymd(new Date()) }, e)));
+        check(mine.length === 1 && mine[0].title === 'Match' && mine[0].today && await page.evaluate(() => /Match/.test(document.querySelector('.cal-today').textContent)),
+            'an event is saved on the day and shown in it');
         await key('Escape');
         // Memo: the record key (R = the red button) records a new memo, again on its screen adds a part, Play plays both
         await page.evaluate(() => Win.open('memo'));
@@ -4559,6 +4563,7 @@ async function main() {
     }
     await musicTests(browser, base);
     await driveTests(browser, base);
+    await calendarTests(browser, base);
 
     console.log('42d. remote shortcuts (per profile): Play / Pause = music, Guide = users; Control Panel > Shortcuts; the game menu\'s music button');
     {
@@ -4944,6 +4949,94 @@ async function driveTests(browser, base) {
     check(sp.errors.length === 0, 'standalone: no page errors ' + sp.errors.join('; '));
     await ctx2.close();
     solo.close();
+}
+
+// MYPC_ONLY=calendar node tests/run-tests.mjs: only these checks. The TV's clock is set to Thursday 5 November 2026, 10:00.
+async function calendarTests(browser, base) {
+    console.log('45. Calendar: Moroccan holidays from Google, Hijri date, widget (off by default), own events, reminders, Manager events');
+    const CalFix = await import('./calendar-fixtures.mjs');
+    const db = { ics: CalFix.ics('en'), settings: { mypc: { wallpapers: [], events: [{ date: '2026-11-07', title: 'Raja – Wydad derby', tag: 'derby', time: '20:00' }] } } };
+    const page = await newPage(browser, base, db);
+    await routeHosted(page, { offline: true });
+    const calErrors = [];
+    page.on('pageerror', (e) => calErrors.push(e.message));
+    page.on('console', (m) => { if (m.type() === 'warning' || m.type() === 'error') calErrors.push(m.text()); });
+    await page.clock.setSystemTime(new Date(2026, 10, 5, 10, 0, 0));
+    const shot = async (name) => { if (process.env.MYPC_SHOTS) { await page.waitForTimeout(200); await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'calendar-' + name + '.png') }); } };
+    await page.goto(base + 'index.html');
+    await page.waitForSelector('#desk-icons .dicon');
+    check(await page.evaluate(() => Widgets.conf('calendar').show === false && !document.getElementById('wdg-calendar')), 'the Calendar widget is off by default (only Weather is on)');
+    await page.evaluate(() => { Widgets.set('weather', 'show', false); Widgets.set('calendar', 'show', true); });
+    // the site's copy has no holidays yet (the weekly Action fills it): the TV asks Google's .ics itself; the big events come from the copy
+    await page.waitForFunction(() => Events.source().holidays === 'ics', null, { timeout: 8000 }).catch(() => {});
+    check(await page.evaluate(() => Events.source().holidays === 'ics') && db.events.some((u) => /calendar\.google\.com\/calendar\/ical\/en\.ma/.test(u)),
+        'holidays: the site\'s copy first, then Google\'s "Holidays in Morocco" .ics (no Calendar API key here)');
+    await page.waitForFunction(() => /Tomorrow/.test((document.getElementById('wdg-calendar') || {}).textContent || ''), null, { timeout: 5000 }).catch(() => {});
+    const w = await page.evaluate(() => { const c = document.getElementById('wdg-calendar'); return { text: c.textContent, page: c.querySelector('.wdg-page').textContent, label: c.getAttribute('aria-label'), kinds: [...c.querySelectorAll('.wdg-ev')].map((x) => x.className) }; });
+    check(/Thursday/.test(w.text) && /November 5, 2026/.test(w.text) && /25 Jumada al-Ula 1448 AH/.test(w.text) && /Nov5/.test(w.page.replace(/\s/g, '')),
+        'widget: weekday, Gregorian date, Moroccan Hijri date, a calendar page: ' + w.text);
+    check(/Tomorrow: Green March Day/.test(w.label) && w.kinds.join().indexOf('wdg-ev-holiday') >= 0, 'widget: tomorrow\'s holiday (Green March) for Voice Guide too');
+    check(/Tomorrow: Green March Day/.test(await page.textContent('#toast')), 'the day before a holiday: told once as a notification');
+    check(await page.evaluate(() => { const n = Widgets._timers(); return n.join() === 'calendar'; }), 'one timer for the widget');
+    await shot('widget');
+    // the Manager's events reach every calendar (settings/mypc, read at start)
+    check(await page.evaluate(() => Events.day('2026-11-07').some((e) => e.t === 'Raja – Wydad derby' && e.kind === 'event' && e.time === '20:00')), 'events set in the App Store Manager show on the TV\'s calendar');
+    // the old day notes become all-day events
+    check(await page.evaluate(() => { Store.remove('cal_events'); Store.set('cal_notes', { '2026-11-20': ['Buy bread'] }); const m = Events.mine(); return m.length === 1 && m[0].title === 'Buy bread' && m[0].date === '2026-11-20' && Store.get('cal_notes', null) === null; }),
+        'old Calendar notes become events once');
+    // the app: Hijri day in each cell, holiday chips, OK on a day adds an event (title, then time / reminder / repeat), Back leaves the editor
+    await page.evaluate(() => Win.open('calendar'));
+    await page.waitForSelector('.cal-day[data-day="6"]', { timeout: 8000 }).catch(() => {});
+    check(await page.evaluate(() => !!document.querySelector('.cal-day[data-day="6"]')), 'the Calendar app opens' + (calErrors.length ? ': ' + calErrors.filter((m) => /\[Win\]|Error/.test(m)).join(' | ') : ''));
+    const cells = await page.evaluate(() => ({ six: document.querySelector('.cal-day[data-day="6"]').textContent, five: document.querySelector('.cal-day[data-day="5"]').className, sub: document.querySelector('.cal-hmonths').textContent,
+                                              side: document.querySelector('.cal-side').textContent }));
+    check(/^626Green March Day$/.test(cells.six) && /cal-today/.test(cells.five) && cells.sub === 'Jumada al-Ula – Jumada al-Akhira 1448', 'the month: Hijri day numbers, holiday chip, today, the Hijri months: ' + cells.six + ' / ' + cells.sub);
+    check(/25 Jumada al-Ula 1448 AH/.test(cells.side) && /Google Calendar/.test(cells.side), 'the side: the day\'s Hijri date; where the holidays come from');
+    await page.focus('.cal-day[data-day="12"]');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => Keyboard.info && Keyboard.info());
+    await page.evaluate(() => { Keyboard.setText('Dentist'); Keyboard.submit(); });
+    await page.waitForSelector('[data-f="title"]');
+    check(await page.evaluate(() => document.activeElement.getAttribute('data-f') === 'title' && /Dentist/.test(document.activeElement.textContent)), 'OK on a day: type the title, then the event\'s page opens on it');
+    for (let i = 0; i < 2; i++) await page.click('[data-f="time"] [data-s="1"]');
+    await page.click('[data-f="remind"]'); await page.click('[data-f="remind"]'); await page.click('[data-f="remind"]');
+    await page.click('[data-f="repeat"]');
+    await shot('editor');
+    await page.click('.cal-save');
+    const saved = await page.evaluate(() => Events.mine().filter((e) => e.title === 'Dentist')[0]);
+    check(saved && saved.date === '2026-11-12' && saved.time === '09:15' && saved.remind === 60 && saved.yearly === true, 'saved: day, time (09:00 + 15 min), 1 hour before, every year ' + JSON.stringify(saved));
+    check(await page.evaluate(() => /Dentist/.test(document.querySelector('.cal-day[data-day="12"]').textContent) && document.activeElement.getAttribute('data-day') === '12'), 'the day shows it; focus back on the day');
+    check(await page.evaluate(() => Events.day('2027-11-12', true).some((e) => e.t === 'Dentist') && !Events.day('2026-11-12').some((e) => e.kind === 'mine')), 'a yearly event comes back next year; the wallpaper never sees own events');
+    check(await page.evaluate(() => Events.hijriText('2027-05-17') === '10 Dhu al-Hijjah 1448 AH' && Events.hijriText('2027-05-16') === '9 Dhu al-Hijjah 1448 AH'),
+        'Google\'s Eid al-Adha 2027 (a day after Umm al-Qura in the fixture) moves that month\'s Hijri dates');
+    await page.evaluate(() => document.querySelector('.cal-ev.cal-k-mine').click());
+    check(await page.evaluate(() => !!document.querySelector('.cal-del')), 'OK on one of your events opens it (Delete there)');
+    await tvBack(page);
+    check(await page.evaluate(() => !document.querySelector('.cal-del') && !document.getElementById('window').hidden), 'Back leaves the event\'s page, not the app');
+    await page.keyboard.press('PageDown');
+    check(await page.evaluate(() => /December 2026/.test(document.querySelector('.cal-title').textContent) && /Champions League night/.test(document.querySelector('.cal-grid').textContent)), 'next month (Channel Down): big events (Champions League nights)');
+    await page.keyboard.press('PageUp');
+    await page.focus('.cal-day[data-day="5"]');
+    await shot('app');
+    // Hijri correction for this profile
+    await page.click('[data-step="plus"]');
+    check(await page.evaluate(() => /26 Jumada al-Ula/.test(document.querySelector('.cal-side').textContent) && Events.hijriAdj() === 1), 'Hijri date correction (+1 day) for this profile');
+    await page.click('[data-step="minus"]');
+    // reminders: one timer to the next one; a card at the time
+    await page.evaluate(() => { Win.close(); Events.add({ date: '2026-11-05', time: '10:30', title: 'Call the bank', remind: 15 }); });
+    check(await page.evaluate(() => CalRemind._due().some((r) => r.e.t === 'Call the bank' && r.at === new Date(2026, 10, 5, 10, 15).getTime())), 'reminder due 15 minutes before');
+    await page.clock.setSystemTime(new Date(2026, 10, 5, 10, 16, 0));
+    await page.evaluate(() => CalRemind.check());
+    check(/Call the bank/.test(await page.textContent('#toast')), 'the reminder shows as a notification card');
+    check(await page.evaluate(() => { const n = document.querySelectorAll('#toast .ntf, #toast > *').length; CalRemind.check(); return document.querySelectorAll('#toast .ntf, #toast > *').length === n; }), 'and only once');
+    // Arabic
+    await page.evaluate(() => { I18n.setLang('ar'); Widgets.render(); Widgets.refreshNow('calendar'); });
+    await page.waitForTimeout(200);
+    check(await page.evaluate(() => { const t = document.getElementById('wdg-calendar').textContent; return /الخميس/.test(t) && /جمادى الأولى 1448 هـ/.test(t) && t.indexOf(I18n.t('ev_greenmarch')) >= 0 && /غدًا/.test(t); }),
+        'Arabic: the holiday\'s Arabic name, the Hijri date in Arabic');
+    await shot('widget-ar');
+    check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+    await page.context().close();
 }
 
 // Its own function so that MYPC_ONLY=music runs just these checks.
@@ -5542,6 +5635,7 @@ async function wallTests(browser, base) {
         await page.evaluate(() => Desktop.setWallpaper('dyn_events'));
         check(await painted(page, 'e,eidadha'), 'Eid al-Adha from the built-in dates when Google cannot be reached: ' + await page.evaluate(() => DynWall._key()));
         check(/Eid al-Adha/.test(await cap(page)) && /Eid Mubarak/.test(await cap(page)), 'caption: ' + await cap(page));
+        for (let i = 0; i < 50 && !db.events.some((u) => /calendar\.google\.com\/calendar\/ical\//.test(u)); i++) await page.waitForTimeout(100);   // My PC's own copy is asked first
         check(db.events.some((u) => /calendar\.google\.com\/calendar\/ical\//.test(u)), 'after the API, the public .ics was tried');
         await shot(page, 'event-eid-adha');
         for (const [when, id, name] of [['2026-07-30T12:00:00+01:00', 'throne', 'event-throne'], ['2026-01-14T12:00:00+01:00', 'yennayer', 'event-yennayer'],

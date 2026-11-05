@@ -1,6 +1,6 @@
 {
-  "build": 117,
-  "version": "2.28.0",
+  "build": 118,
+  "version": "2.29.0",
   "shell": 1,
   "css": [
     "css/launcher.css",
@@ -49,6 +49,7 @@
     "js/core/i18n-playtime.js",
     "js/core/i18n-weather.js",
     "js/core/i18n-dynwall.js",
+    "js/core/i18n-calendar.js",
     "js/core/i18n-music.js",
     "js/core/i18n-shortcuts.js",
     "js/core/i18n-drive.js",
@@ -61,6 +62,7 @@
     "js/launcher/icons.js",
     "js/launcher/notify.js",
     "js/launcher/push.js",
+    "js/launcher/cal-remind.js",
     "js/launcher/keyboard.js",
     "js/launcher/textin.js",
     "js/launcher/themes.js",

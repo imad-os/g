@@ -22,7 +22,7 @@
             ev_ramadan: 'Ramadan', ev_christmas: 'Christmas', ev_ucl: 'Champions League night', ev_uclfinal: 'Champions League final',
             ev_worldcup: 'World Cup', ev_afcon: 'Africa Cup of Nations', ev_morocco: 'Morocco plays today',
             evg_eid: 'Eid Mubarak', evg_ramadan: 'Ramadan Kareem', evg_newyear: 'Happy New Year',
-            evPrivacy: 'Holidays and events background: the public holidays come from Google Calendar (google.com) and the football matches from ESPN (espn.com); nothing about you is sent. Live weather uses the weather service below. Choose another background to stop it.'
+            evPrivacy: 'Holidays and events background: the public holidays come from My PC’s own website (a weekly copy of Google Calendar’s) or from Google Calendar (google.com) and the football matches from ESPN (espn.com); nothing about you is sent. Live weather uses the weather service below. Choose another background to stop it.'
         },
         fr: {
             dwCaptionAstro: 'Afficher le titre et la phase de la Lune',
@@ -44,7 +44,7 @@
             ev_ramadan: 'Ramadan', ev_christmas: 'Noël', ev_ucl: 'Soirée de Ligue des champions', ev_uclfinal: 'Finale de la Ligue des champions',
             ev_worldcup: 'Coupe du monde', ev_afcon: 'Coupe d’Afrique des nations', ev_morocco: 'Le Maroc joue aujourd’hui',
             evg_eid: 'Aïd Moubarak', evg_ramadan: 'Ramadan Karim', evg_newyear: 'Bonne année',
-            evPrivacy: 'Arrière-plan Fêtes et événements : les jours fériés viennent de Google Agenda (google.com) et les matchs de football d’ESPN (espn.com) ; rien sur vous n’est envoyé. Météo en direct utilise le service météo ci-dessous. Choisissez un autre arrière-plan pour l’arrêter.'
+            evPrivacy: 'Arrière-plan Fêtes et événements : les jours fériés viennent du site de My PC (une copie hebdomadaire de Google Agenda) ou de Google Agenda (google.com) et les matchs de football d’ESPN (espn.com) ; rien sur vous n’est envoyé. Météo en direct utilise le service météo ci-dessous. Choisissez un autre arrière-plan pour l’arrêter.'
         },
         es: {
             dwCaptionAstro: 'Mostrar el título y la fase de la Luna',
@@ -66,7 +66,7 @@
             ev_ramadan: 'Ramadán', ev_christmas: 'Navidad', ev_ucl: 'Noche de Liga de Campeones', ev_uclfinal: 'Final de la Liga de Campeones',
             ev_worldcup: 'Mundial', ev_afcon: 'Copa Africana de Naciones', ev_morocco: 'Marruecos juega hoy',
             evg_eid: 'Eid Mubarak', evg_ramadan: 'Ramadán Karim', evg_newyear: 'Feliz Año Nuevo',
-            evPrivacy: 'Fondo Fiestas y eventos: los festivos vienen de Google Calendar (google.com) y los partidos de fútbol de ESPN (espn.com); no se envía nada sobre ti. Tiempo en directo usa el servicio del tiempo de abajo. Elige otro fondo para detenerlo.'
+            evPrivacy: 'Fondo Fiestas y eventos: los festivos vienen del sitio de My PC (una copia semanal de Google Calendar) o de Google Calendar (google.com) y los partidos de fútbol de ESPN (espn.com); no se envía nada sobre ti. Tiempo en directo usa el servicio del tiempo de abajo. Elige otro fondo para detenerlo.'
         },
         ar: {
             dwCaptionAstro: 'إظهار العنوان وطور القمر',
@@ -88,7 +88,7 @@
             ev_ramadan: 'رمضان', ev_christmas: 'عيد الميلاد', ev_ucl: 'أمسية دوري أبطال أوروبا', ev_uclfinal: 'نهائي دوري أبطال أوروبا',
             ev_worldcup: 'كأس العالم', ev_afcon: 'كأس أمم أفريقيا', ev_morocco: 'المغرب يلعب اليوم',
             evg_eid: 'عيد مبارك', evg_ramadan: 'رمضان كريم', evg_newyear: 'سنة سعيدة',
-            evPrivacy: 'خلفية الأعياد والمناسبات: تأتي العطل الرسمية من تقويم Google (google.com) ومباريات كرة القدم من ESPN (espn.com)؛ لا يُرسل أي شيء عنك. تستخدم خلفية الطقس المباشر خدمة الطقس أدناه. اختر خلفية أخرى لإيقاف ذلك.'
+            evPrivacy: 'خلفية الأعياد والمناسبات: تأتي العطل الرسمية من موقع My PC (نسخة أسبوعية من تقويم Google) أو من تقويم Google (google.com) ومباريات كرة القدم من ESPN (espn.com)؛ لا يُرسل أي شيء عنك. تستخدم خلفية الطقس المباشر خدمة الطقس أدناه. اختر خلفية أخرى لإيقاف ذلك.'
         }
     };
     // Privacy & security: this line goes first (keep it true when the backgrounds change)

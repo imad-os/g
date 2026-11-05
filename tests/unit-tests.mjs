@@ -9,6 +9,8 @@
 //   6. GlobalSettings: titles taken from a picture's address, cleaning of settings/mypc
 //   8. Desktop widgets (js/core/widget-lib.js): mypc-app.json "widgets", settings, approvals kept on update, views cleaned, the Worker;
 //      Music (placeholder player) and Playtime
+//   9. Calendar (js/core/events.js): Google's holiday calendar (.ics, the site copy), the Moroccan Hijri date, built-in dates;
+//      the App Store Manager's event lines (GlobalSettings)
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -580,6 +582,39 @@ console.log('8. sw.js: the Music app\'s Google Drive songs stream through the se
     const c = calls[0] || { o: { headers: {} } };
     check(c.u === 'https://www.googleapis.com/drive/v3/files/1AbC_d-9?alt=media' && c.o.headers.Authorization === 'Bearer ya29.TOKEN' && c.o.headers.Range === 'bytes=1000-' && !/TOKEN/.test(c.u) && !!answer,
         'a __music/gd/<id> request becomes the Drive file with the token as a header and the player\'s Range ' + JSON.stringify(c));
+}
+console.log('9. Calendar: Google holidays (.ics, the site copy), Hijri date as in Morocco, admin events');
+{
+    const { createRequire } = await import('node:module');
+    const req = createRequire(import.meta.url);
+    const E = req(path.join(ROOT, 'js/core/events.js')), G = req(path.join(ROOT, 'js/core/global-settings.js'));
+    const C = await import('./calendar-fixtures.mjs');
+    const h = E._fromIcs(C.ics('en'));
+    const gm = h[0], ind = h[1], nye = h.find((x) => x.id === 'nye'), adha = h.filter((x) => x.id === 'eidadha');
+    check(h.length === 6 && gm.id === 'greenmarch' && gm.d === '2026-11-06' && gm.pub && ind.t === 'Independence Day' && nye && !nye.pub && adha.length === 2 && adha[0].kind === 'islamic',
+        'Google .ics: folded lines, ids, public holiday vs observance, a 2-day Eid');
+    const site = E._fromSite(JSON.stringify({ source: 'Google Calendar: Holidays in Morocco', holidays: h, events: [{ d: '2027-06-19', e: '2027-07-17', id: 'afcon' }, { d: 'bad' }] }));
+    const built = E._fromSite(JSON.stringify({ source: 'built-in', holidays: [], events: [] }));
+    check(site.hol.length === 6 && site.big.length === 1 && site.big[0].kind === 'event' && site.big[0].e === '2027-07-17' && built.hol === null && built.big.length === 0,
+        'the site\'s copy: Google\'s holidays + big events; an empty "built-in" copy is not used for holidays');
+    check(E.hijriText('2026-11-05', 'en') === '25 Jumada al-Ula 1448 AH' && E.hijriText('2026-03-20', 'ar') === '1 شوال 1447 هـ' && E.hijriText('2026-05-27', 'fr') === '10 Dhou al-hijja 1447 H' &&
+          E.hijriText('2025-06-07', 'en') === '10 Dhu al-Hijjah 1446 AH',
+        'Moroccan Hijri date: official Eids of 2025 (a day after Umm al-Qura) and 2026 (the same day): ' + E.hijriText('2026-11-05', 'en'));
+    const c = E._civil(2461350), u = E._umalqura('2026-11-05');
+    check(Math.abs(c.d - u.d) <= 2 && c.m === u.m && c.y === u.y, 'tabular Hijri fallback agrees with Umm al-Qura: ' + JSON.stringify([c, u]));
+    let k = '2024-01-01', prev = null, jumps = 0;
+    while (k < '2029-12-31') {
+        const x = E.hijri(k);
+        if (prev && !((x.y === prev.y && x.m === prev.m && x.d === prev.d + 1) || (x.d === 1 && (prev.d === 29 || prev.d === 30) && ((x.m === prev.m + 1 && x.y === prev.y) || (x.m === 1 && prev.m === 12 && x.y === prev.y + 1))))) jumps++;
+        prev = x; k = E.addDays(k, 1);
+    }
+    check(jumps === 0, 'Hijri months of 29 or 30 days only, no day shown twice or skipped where Morocco\'s lag changes (2024-2029): ' + jumps);
+    const b25 = E._builtin(2025);
+    check(b25.filter((e) => e.id === 'eidadha').map((e) => e.d).join() === '2025-06-07,2025-06-08' && b25.filter((e) => e.id === 'eidfitr')[0].d === '2025-03-31', 'built-in Eids follow the Moroccan Hijri date (2025: Eid al-Fitr 31 March, Eid al-Adha 7 June)');
+    const a = G.parseEventLine('2027-06-19..2027-07-17 AFCON 2027 #afcon'), b = G.parseEventLine('2026-11-24 21:00 Real Madrid – Wydad #ucl');
+    check(a.end === '2027-07-17' && a.tag === 'afcon' && a.title === 'AFCON 2027' && b.time === '21:00' && b.tag === 'ucl' && !G.parseEventLine('next friday party') && !G.parseEventLine('2026-13-40 x'),
+        'Manager event lines: ranges, times, tags; bad lines refused');
+    check(G.eventLine(a) === '2027-06-19..2027-07-17 AFCON 2027 #afcon' && G.clean({ events: [a, { date: 'x', title: 'y' }] }).events.length === 1, 'event lines round trip; settings/mypc events cleaned');
 }
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall unit checks passed');
 process.exit(failures ? 1 : 0);

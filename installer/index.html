@@ -489,6 +489,15 @@
         <select id="gs-default" aria-label="Background of new profiles"></select>
       </div>
       <div class="card">
+        <h2>Events on every calendar</h2>
+        <p class="muted small" style="margin:0 0 8px">Big events every My PC shows in its Calendar app and widget, next to the Moroccan holidays (those come from Google
+          Calendar by themselves): a World Cup, the AFCON, a big match night. One per line: <code>2027-06-19..2027-07-17 AFCON 2027 #afcon</code> or
+          <code>2026-11-24 21:00 Real Madrid – Wydad #ucl</code> (end date, time and <code>#tag</code> are optional; the tag lets the dynamic backgrounds
+          match it: worldcup, afcon, ucl, ucl-final…). 100 at most.</p>
+        <textarea id="gs-events" spellcheck="false" rows="5" style="min-height:120px" aria-label="Events on every calendar" placeholder="2027-06-19..2027-07-17 AFCON 2027 #afcon"></textarea>
+        <span id="gs-events-count" class="muted small"></span>
+      </div>
+      <div class="card">
         <h2>Fast push notifications</h2>
         <p class="muted small" style="margin:0 0 8px">Player accounts (usernames) whose My PC checks for new notifications every 2 minutes. Every other account
           checks every 30 minutes, to keep Firebase within its free quota. One username per line or separated by commas, 200 at most.
@@ -1292,9 +1301,18 @@
       '</div>').join('') : '<div class="empty">No background added yet. Every My PC shows its built-in ones.</div>';
     renderGsDefault();
     if (document.activeElement !== $('gs-fast')) $('gs-fast').value = (gs.notifyFast || []).join('\n');
+    if (document.activeElement !== $('gs-events')) $('gs-events').value = (gs.events || []).map(GlobalSettings.eventLine).join('\n');
+    $('gs-events-count').textContent = (gs.events || []).length + ' / 100 events';
     $('gs-fast-count').textContent = (gs.notifyFast || []).length + ' / 200 accounts every 2 minutes';
   }
   $('gs-fast').addEventListener('input', () => { gs.notifyFast = $('gs-fast').value.split(/[\s,;]+/).filter(Boolean); gsChanged(); });
+  $('gs-events').addEventListener('input', () => {
+    const lines = $('gs-events').value.split('\n').filter((l) => l.trim());
+    gs.events = lines.map(GlobalSettings.parseEventLine).filter(Boolean);
+    gs.badEvents = lines.filter((l) => !GlobalSettings.parseEventLine(l));
+    $('gs-events-count').textContent = gs.events.length + ' / 100 events' + (gs.badEvents.length ? ' · not understood: ' + gs.badEvents[0] : '');
+    gsChanged();
+  });
 
   // a test notification, written straight into one account's inbox (the same document a service writes)
   const NT_DEFAULT = { t: 'Test notification', m: 'Hello from the App Store Manager. Notifications work on this My PC.',
@@ -1369,10 +1387,11 @@
     $('gs-save').disabled = true;
     try {
       // an empty title is filled from the address, so every My PC shows the same name
-      const clean = GlobalSettings.clean({ wallpapers: list, wallpaper: gs.wallpaper, notifyFast: gs.notifyFast || [] });
+      if ((gs.badEvents || []).length) { $('gs-save').disabled = false; return say('gs-msg', 'Event not understood: "' + gs.badEvents[0] + '". Write a date (YYYY-MM-DD), then the title.', 'err'); }
+      const clean = GlobalSettings.clean({ wallpapers: list, wallpaper: gs.wallpaper, notifyFast: gs.notifyFast || [], events: gs.events || [] });
       const badUser = (gs.notifyFast || []).map((u) => u.toLowerCase()).filter((u) => clean.notifyFast.indexOf(u) < 0);
       if (badUser.length) { $('gs-save').disabled = false; return say('gs-msg', 'Not a username: ' + badUser.slice(0, 5).join(', ') + ' (3 to 16 letters, digits, _ or .).', 'err'); }
-      await setDoc(doc(db, 'settings', 'mypc'), { wallpapers: clean.wallpapers, wallpaper: clean.wallpaper, notifyFast: clean.notifyFast, updatedAt: serverTimestamp(), updatedBy: (user && user.email) || '' });
+      await setDoc(doc(db, 'settings', 'mypc'), { wallpapers: clean.wallpapers, wallpaper: clean.wallpaper, notifyFast: clean.notifyFast, events: clean.events, updatedAt: serverTimestamp(), updatedBy: (user && user.email) || '' });
       gs = clean; gsDirty = false;
       renderGs();
       say('gs-msg', 'Saved. Each My PC uses it from its next start (or when Settings > Personalization opens).', 'ok');
