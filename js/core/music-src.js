@@ -340,6 +340,7 @@ var MusicSrc = (function () {
                 size: e.size || 0,
                 dur: e.d || 0,
                 read: function (at, len, done) { gdRead(e, at, len, done); },
+                name: e.n, mime: e.mime || '',
                 sizeOf: function () { return e.size || 0; },
                 blob: function (progress, done) {
                     var parts = [], at = 0, CH = 2 * 1024 * 1024, MAXB = 80 * 1024 * 1024, errs = 0;

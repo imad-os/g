@@ -125,6 +125,7 @@ var Music = (function () {
             seek: function (s) { if (el) { try { el.currentTime = Math.max(0, s); } catch (e) {} } },
             time: function () { return swapAt >= 0 ? swapAt : el ? el.currentTime || 0 : 0; },
             duration: function () { return el && isFinite(el.duration) ? el.duration : 0; },
+            bufEnd: function () { try { var b = el && el.buffered; return b && b.length ? b.end(b.length - 1) : 0; } catch (e) { return 0; } },
             paused: function () { return !el || el.paused; },
             _src: function () { return el ? el.src : ''; },
             // the same song, a bigger copy (a download that grew): same place, same play / pause
@@ -155,26 +156,100 @@ var Music = (function () {
         try { return tp && window.MediaSource && MediaSource.isTypeSupported(tp) ? tp : ''; } catch (x2) { return ''; }
     }
     // reads a whole song in pieces: first(url of the first 512 KB) once, prog(0..1), done(err, url of the whole song)
+    /* MP4 / M4A "fast start" in the browser. Many M4A files keep their index (the moov box) after the sound (mdat): a player
+     * cannot start one from its first pieces. faststart() reads the index from the end first (one Range read) and builds the
+     * file as [what is before mdat] + index + mdat, with the index's chunk offsets (stco / co64) moved by the index's size,
+     * like qt-faststart does. Then the copies of the first pieces play like any other song. cb(null, null): nothing to do. */
+    function u32(b, o) { return ((b[o] << 24) >>> 0) + (b[o + 1] << 16) + (b[o + 2] << 8) + b[o + 3]; }
+    function put32(b, o, v) { b[o] = (v >>> 24) & 255; b[o + 1] = (v >>> 16) & 255; b[o + 2] = (v >>> 8) & 255; b[o + 3] = v & 255; }
+    function isMp4(src) { return /\.(m4a|mp4|m4b|aac|mov)$/i.test(src.name || '') || /audio\/(mp4|x-m4a|m4a|aac)|video\/mp4/i.test(src.mime || ''); }
+    function moveOffsets(moov, delta) {
+        var stack = [[8, moov.length]], ok = true;
+        while (stack.length) {
+            var r = stack.pop(), o = r[0], end = r[1];
+            while (o + 8 <= end) {
+                var sz = u32(moov, o), ty = String.fromCharCode(moov[o + 4], moov[o + 5], moov[o + 6], moov[o + 7]);
+                if (sz < 8 || o + sz > end) break;
+                if (/^(trak|mdia|minf|stbl|edts|udta|meta)$/.test(ty)) stack.push([o + 8 + (ty === 'meta' ? 4 : 0), o + sz]);
+                else if (ty === 'stco') {
+                    for (var n = u32(moov, o + 12), k = 0; k < n; k++) { var v = u32(moov, o + 16 + k * 4) + delta; if (v > 4294967295) ok = false; put32(moov, o + 16 + k * 4, v); }
+                } else if (ty === 'co64') {
+                    for (var n2 = u32(moov, o + 12), k2 = 0; k2 < n2; k2++) {
+                        var p = o + 16 + k2 * 8, lo = u32(moov, p + 4) + delta, hi = u32(moov, p) + Math.floor(lo / 4294967296);
+                        put32(moov, p, hi); put32(moov, p + 4, lo % 4294967296);
+                    }
+                }
+                o += sz;
+            }
+        }
+        return ok;
+    }
+    function faststart(src, cb) {
+        if (!isMp4(src)) return cb(null, null);
+        src.read(0, 65536, function (x, head) {
+            if (x || !head || head.length < 16) return cb(null, null);
+            var o = 0, size = src.size || (src.sizeOf && src.sizeOf()) || 0, mdat = -1, mdatEnd = 0;
+            while (o + 8 <= head.length) {
+                var sz = u32(head, o), ty = String.fromCharCode(head[o + 4], head[o + 5], head[o + 6], head[o + 7]);
+                if (ty === 'moov') return cb(null, null);                       // already at the front
+                if (sz === 1 && o + 16 <= head.length) sz = u32(head, o + 8) * 4294967296 + u32(head, o + 12);
+                if (sz === 0 && size) sz = size - o;
+                if (ty === 'mdat') { mdat = o; mdatEnd = o + sz; break; }
+                if (sz < 8) return cb(null, null);
+                o += sz;
+            }
+            if (mdat < 0 || !size || mdatEnd + 8 > size) return cb(null, null);
+            src.read(mdatEnd, 8, function (x2, h) {
+                if (x2 || !h || h.length < 8 || String.fromCharCode(h[4], h[5], h[6], h[7]) !== 'moov') return cb(null, null);
+                var msz = u32(h, 0);
+                if (msz < 8 || msz > 16 * 1024 * 1024) return cb(null, null);
+                src.read(mdatEnd, msz, function (x3, moov) {
+                    if (x3 || !moov || moov.length < msz) return cb(null, null);
+                    moov = new Uint8Array(moov);                                 // our own copy: the offsets change
+                    if (!moveOffsets(moov, msz)) return cb(null, null);
+                    cb(null, { at: mdat, moov: moov, end: mdatEnd });
+                });
+            });
+        });
+    }
+    // reads a whole song in pieces: first(url of the first 512 KB, its part of the file) once, prog(0..1), done(err, url of the whole song)
     function growDl(src, first, prog, done) {
         var parts = [], at = 0, size = src.size || 0, stopped = false, sent = false, errs = 0, FIRST = 512 * 1024, CH = 1024 * 1024, MAXB = 80 * 1024 * 1024;
-        var type = src.mime || 'audio/mpeg';
-        function blob() { return URL.createObjectURL(new Blob(parts, { type: type })); }
-        (function next() {
-            src.read(at, at ? CH : FIRST, function (x, b) {
+        var type = src.mime || 'audio/mpeg', fs = null, last = 0;
+        // the copy: the pieces, with the moved index put in just before mdat (fast start)
+        function blob() {
+            if (!fs) return URL.createObjectURL(new Blob(parts, { type: type }));
+            var out = [], pos = 0, put = false;
+            for (var i = 0; i < parts.length; i++) {
+                var p = parts[i], e = pos + p.length;
+                if (!put && e > fs.at) { out.push(p.subarray(0, fs.at - pos)); out.push(fs.moov); out.push(p.subarray(fs.at - pos)); put = true; }
+                else out.push(p);
+                pos = e;
+            }
+            return URL.createObjectURL(new Blob(out, { type: type }));
+        }
+        function next() {
+            var want = at ? CH : FIRST;
+            if (last && at + want > last) want = last - at;
+            src.read(at, want, function (x, b) {
                 if (stopped) return;
                 if (x) { if (++errs <= 3) return setTimeout(next, 1000 * errs); stopped = true; return done(x); }
                 errs = 0;
                 if (!size && src.sizeOf) size = src.sizeOf() || 0;
-                var len = at ? CH : FIRST;
                 if (b && b.length) { parts.push(b); at += b.length; }
-                var end = !b || !b.length || b.length < len || (size && at >= size);
-                if (size) prog(Math.min(1, at / size));
+                var end = !b || !b.length || b.length < want || (last ? at >= last : size && at >= size);
+                if (size) prog(Math.min(1, (at + (fs ? size - fs.end : 0)) / size));
                 if (end) { stopped = true; return done(null, blob()); }
-                if (!sent) { sent = true; first(blob()); }
+                if (!sent && (!fs || at > fs.at)) { sent = true; first(blob(), size ? at / size : 0); }
                 if (at >= MAXB) { stopped = true; return done({ code: 'toobig' }); }
                 next();
             });
-        })();
+        }
+        faststart(src, function (x, r) {
+            if (stopped) return;
+            if (r) { fs = r; last = r.end; }                 // the index is here already: the download stops where it starts
+            next();
+        });
         return function () { stopped = true; };
     }
     function msStream(src, now, fail) {
@@ -353,7 +428,12 @@ var Music = (function () {
     function position() { return engine && !loading ? engine.time() : lastPos; }
     function duration() {
         var d = engine && !loading ? engine.duration() : 0, c = current();
-        if (stream && c && c.d > d) d = c.d;                // streaming: the player knows only what arrived
+        // streaming or a growing download: the player knows only what arrived; the song's length from its details, else
+        // from how many seconds the part that arrived holds and how much of the file that part is
+        if ((stream || (grow && !grow.done)) && engine === HTML && !loading) {
+            var part = stream ? loadedF : grow.partF || 0, be = HTML.bufEnd();
+            d = c && c.d ? c.d : part > 0.01 && part < 1 && be > 0 ? be / part : d;
+        }
         if (d > 0) lastDur = d;
         return d > 0 ? d : (lastDur || (c && c.d) || 0);
     }
@@ -425,7 +505,8 @@ var Music = (function () {
                 var gr = { part: '', full: '', done: false, started: false, waiting: false, stop: function () {} };
                 grow = gr; mode = 'grow'; loadedF = 0;
                 error = t('muDownloading'); emit('loading');
-                gr.stop = growDl(gsrc, function (u) {
+                gr.stop = growDl(gsrc, function (u, partF) {
+                    gr.partF = partF;
                     if (my !== gen || grow !== gr) { URL.revokeObjectURL(u); return; }
                     gr.part = u; blobUrl = u;
                     HTML.open(u, lastPos, function () { if (my !== gen) return; if (!gr.done) { gr.waiting = true; error = t('muDownloading'); emit('loading'); } else ended(); },

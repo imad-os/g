@@ -70,7 +70,9 @@ var PWA = (function () {
             document.head.appendChild(l);
         }
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+            // this file is loaded by the loader after the page's load event: register now in that case (else it never was)
+            var reg = function () { navigator.serviceWorker.register('sw.js').catch(function () {}); };
+            if (document.readyState === 'complete') reg(); else window.addEventListener('load', reg);
         }
         if (phone()) {
             lock();
