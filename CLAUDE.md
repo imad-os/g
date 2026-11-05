@@ -139,7 +139,7 @@
   showDirectoryPicker), `js/core/music-tags.js` (ID3 / FLAC / Ogg / MP4 / WAV tags + covers), `js/core/music.js` (queue, engines: Samsung
   **AVPlay** first, then HTML audio, then a blob download; per profile `music`, `music_lists`, `music_recent`, `music_prefs`; position in
   `arc_dev_music_pos`, not backed up; with `prefs.resume` it plays on across page changes: the game page runs `Music.init({ resume, lite })`, player only, so music goes on under a game and its menu can pause it), UI `js/launcher/apps/music.js` (hold OK / + = item menu
-  via `Win.release`), screensaver `js/launcher/music-saver.js` (Bars / Waves canvas 480x270, Cover CSS only; `MusicSaver.input` in the router),
+  via `Win.release`), screensaver `js/launcher/music-saver.js` (Bars / Waves canvas 480x270, Cover CSS, Ring canvas 640x360 around a round cover; song top left, time top right; owner rule 2026-11-05: it moves with the song's REAL sound, never a made-up beat: the web player live via `captureStream` + AnalyserNode (AudioContext closed on hide), AVPlay songs read + decoded once (OfflineAudioContext 12 kHz, FFT 1024 Blackman, 30 frames/s table) and shown at the player's position, else flat; proof `tests/saver-proof.mjs` (ffmpeg tone / silence pattern, live and file modes, screenshots); `MusicSaver.input` in the router),
   strings `js/core/i18n-music.js`, look `css/music.css` (per theme). Remote media keys = Input actions `mediaNext` / `mediaPrev` / `mediaFf` /
   `mediaRew` / `mediaStop` (+ `pause`), handled in `main.js mediaKey`, never sent to games. Keyboard mode `title` keeps capitals and spaces.
   Tests: `MYPC_ONLY=music node tests/run-tests.mjs` (fixtures `tests/music-fixtures.mjs`), `MYPC_SHOTS=<folder>` saves screenshots.

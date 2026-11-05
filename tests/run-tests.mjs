@@ -5251,7 +5251,14 @@ async function musicTests(browser, base) {
     await page.waitForTimeout(1200);
     await shot('6-saver-waves');
     await page.evaluate(() => { MusicSaver.hide(); Music.setPref('saver', 'cover'); MusicSaver.show(true); });
-    check(await page.evaluate(() => !!document.querySelector('.mxs-cover') && !document.querySelector('.mxs canvas')), 'the Cover screensaver needs no drawing loop');
+    check(await page.evaluate(() => !!document.querySelector('.mxs-cover') && !document.querySelector('.mxs canvas')), 'the Cover screensaver needs no canvas');
+    // the song top left, the time top right
+    const lay = await page.evaluate(() => { const r = (s) => document.querySelector(s).getBoundingClientRect(); const t = r('.mxs-title'), c = r('.mxs-clock'); return { tl: t.left < innerWidth * 0.1 && t.top < innerHeight * 0.15, tr: c.right > innerWidth * 0.9 && c.top < innerHeight * 0.15 }; });
+    check(lay.tl && lay.tr, 'the screensaver shows the song top left and the time top right ' + JSON.stringify(lay));
+    await page.evaluate(() => { MusicSaver.hide(); Music.setPref('saver', 'ring'); MusicSaver.show(true); });
+    await page.waitForTimeout(300);
+    await shot('6-saver-ring');
+    check(await page.evaluate(() => !!document.querySelector('.mxs-s-ring canvas') && getComputedStyle(document.querySelector('.mxs-s-ring .mxs-cover')).borderRadius === '50%'), 'the Ring screensaver draws its bars around a round cover');
     await page.evaluate(() => MusicSaver.hide());
     // Now playing's Screensaver button: with the remote's OK, and with a mouse click (the click and a resting pointer do not close it)
     await page.evaluate(() => { Music.setPref('saver', 'bars'); Win.open('music', 'np'); });
@@ -5277,6 +5284,23 @@ async function musicTests(browser, base) {
     check(await page.evaluate(() => MusicSaver._armed()), 'while a song plays the screensaver waits for the remote to rest');
     await page.evaluate(() => Music.pause());
     check(await page.evaluate(() => !MusicSaver._armed()), 'paused: no screensaver timer');
+    // real sound on the TV's player: AVPlay gives no sound data, so the song file is read and analysed, shown at the player's
+    // position. A 440 Hz tone: the middle bars move, the low and the high ones stay down; paused: everything goes flat.
+    const q0 = await page.evaluate(() => { const q = Music.queue(); return { list: q.list.slice(), i: q.order[q.at] }; });
+    await page.evaluate(([p, b]) => { const r = atob(b), u = new Uint8Array(r.length); for (let i = 0; i < r.length; i++) u[i] = r.charCodeAt(i); __usb.tree[p] = u; Music.setPref('saver', 'bars');
+        Music.playList([{ s: 'usb', p: p, n: 'Tone 440.wav', t: 'Tone 440' }], 0); }, [D + '/Music/Tone 440.wav', Buffer.from(F.wav({ title: 'Tone 440', seconds: 30 })).toString('base64')]);
+    await page.waitForFunction(() => Music.engineName() === 'av' && Music.state().playing && !Music.state().loading, null, { timeout: 5000 }).catch(() => {});
+    await page.evaluate(() => MusicSaver.show(true));
+    await page.waitForFunction(() => MusicSaver._src() === 'file' && Math.max(...MusicSaver._levels()) > 0.5, null, { timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(400);
+    const lvT = await page.evaluate(() => ({ src: MusicSaver._src(), lv: MusicSaver._levels() }));
+    const mid = Math.max(...lvT.lv.slice(16, 21)), lowB = Math.max(...lvT.lv.slice(0, 8)), highB = Math.max(...lvT.lv.slice(30));
+    check(lvT.src === 'file' && mid > 0.5 && lowB < 0.1 && highB < 0.1, 'on the TV player the screensaver shows the song\'s real sound (440 Hz: the middle bars only) ' + JSON.stringify({ src: lvT.src, mid, lowB, highB }));
+    await page.evaluate(() => Music.pause());
+    await page.waitForTimeout(900);
+    check(await page.evaluate(() => Math.max(...MusicSaver._levels()) < 0.05), 'paused: the bars go flat (nothing made up)');
+    await page.evaluate(() => MusicSaver.hide());
+    await page.evaluate((q) => { Music.playList(q.list, q.i); Music.pause(); }, q0);           // the queue as it was, for the checks below
 
     // the widget on the desktop follows the player
     await page.evaluate(() => { Win.close(); Widgets.set('music', 'show', true); Music.play(); });      // the widget is off by default

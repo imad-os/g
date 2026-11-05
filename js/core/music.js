@@ -128,6 +128,7 @@ var Music = (function () {
             bufEnd: function () { try { var b = el && el.buffered; return b && b.length ? b.end(b.length - 1) : 0; } catch (e) { return 0; } },
             paused: function () { return !el || el.paused; },
             _src: function () { return el ? el.src : ''; },
+            _el: function () { return el; },               // the screensaver listens to it (js/launcher/music-saver.js)
             // the same song, a bigger copy (a download that grew): same place, same play / pause
             swap: function (url, at, play) {
                 var a = get();
@@ -719,6 +720,7 @@ var Music = (function () {
         has: function () { return q.length > 0; },
         queue: function () { return { list: q, order: order, at: at }; },
         engineName: function () { return engine ? engine.name : ''; },
+        time: position,                                   // where the song is now (cheap: no state object), for the screensaver
         onChange: function (fn) { if (listeners.indexOf(fn) < 0) listeners.push(fn); },
         offChange: function (fn) { var i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); },
         _msType: msType, _streaming: function () { return !!stream; }, _grow: function () { return grow ? (grow.done ? 'whole' : grow.waiting ? 'waiting' : grow.started ? 'piece' : 'loading') : ''; },
