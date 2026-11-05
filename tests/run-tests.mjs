@@ -51,7 +51,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HOSTED = 'https://imad-os.github.io/g/';
 // the build in the repo, and a newer one for the update tests (so they keep working at every build bump)
 const BUILD = JSON.parse(fs.readFileSync(path.join(ROOT, 'app-manifest.json'), 'utf8')).build, NEXT = BUILD + 1;
-const TYPES = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
+const TYPES = { '.jpg': 'image/jpeg', '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
 
 let failures = 0;
 function check(cond, msg) { console.log((cond ? '  ok   ' : '  FAIL ') + msg); if (!cond) failures++; }
@@ -287,7 +287,7 @@ function forecastBody(temp) {
 // opts.phone: a touch phone (no Tizen mock); opts.viewport; opts.touch: touch screen without the phone flags (a desktop with a touch screen)
 async function newPage(browser, base, db, opts) {
     opts = opts || {};
-    const ctx = await browser.newContext(opts.phone ? { viewport: opts.viewport || { width: 844, height: 390 }, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 720 }, hasTouch: !!opts.touch });
+    const ctx = await browser.newContext(Object.assign(opts.phone ? { viewport: opts.viewport || { width: 844, height: 390 }, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 720 }, hasTouch: !!opts.touch }, opts.tz ? { timezoneId: opts.tz } : {}));
     if (!opts.phone && !opts.desktop) await ctx.addInitScript(TIZEN_MOCK);
     db = db || {};
     await fakeFirestore(ctx, db);
@@ -298,6 +298,15 @@ async function newPage(browser, base, db, opts) {
             : forecastBody(/latitude=48/.test(u) ? 12.4 : 21.4);
         (db.weather = db.weather || []).push(u);
         return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(body) });
+    });
+    // the events services (js/core/events.js): never the real ones in tests (db.cal / db.espn give the answers, else nothing)
+    await ctx.route(/^https:\/\/(www\.googleapis\.com\/calendar|calendar\.google\.com|site\.api\.espn\.com)\//, (r) => {
+        const u = r.request().url();
+        (db.events = db.events || []).push(u);
+        const json = (b) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(b) });
+        if (/espn/.test(u)) { const lg = /soccer\/([^/]+)\//.exec(u)[1]; return json({ events: (db.espn && db.espn[lg]) || [] }); }
+        if (/googleapis/.test(u)) return db.cal ? json({ items: db.cal }) : r.fulfill({ status: 403, body: '{}' });
+        return db.ics ? r.fulfill({ status: 200, contentType: 'text/calendar', body: db.ics }) : r.fulfill({ status: 404, body: '' });
     });
     const page = await ctx.newPage();
     page.errors = [];
@@ -337,6 +346,7 @@ async function main() {
     const base = `http://localhost:${srv.address().port}/`;
     const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--autoplay-policy=no-user-gesture-required', '--disable-features=WebRtcHideLocalIpsWithMdns', '--js-flags=--expose-gc', '--enable-precise-memory-info', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
     // MYPC_ONLY=music node tests/run-tests.mjs: only the Music app's checks (quick while working on it)
+    if (process.env.MYPC_ONLY === 'wall') { await wallTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'music') { await musicTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
 
     console.log('1. hosted newer build runs');
@@ -4131,7 +4141,7 @@ async function main() {
         await page.keyboard.press('Escape');
         // themes: per profile, one class on <html>, the theme's background, nothing broken
         await page.evaluate(() => Win.open('settings', 'personal'));
-        check(await page.evaluate(() => document.querySelectorAll('.set-th').length === 6 && document.querySelectorAll('.set-wp:not(.set-th)').length === Desktop.WALLPAPERS.length), 'Personalization has the 6 themes and the backgrounds');
+        check(await page.evaluate(() => document.querySelectorAll('.set-th').length === 6 && document.querySelectorAll('.set-wp:not(.set-th)').length === Desktop.WALLPAPERS.length + DynWall.IDS.length), 'Personalization has the 6 themes and the backgrounds (+ the 3 live ones)');
         await page.evaluate(() => document.querySelector('.set-th[data-theme="xp"]').click());
         check(await page.evaluate(() => document.documentElement.classList.contains('th-xp') && Store.get('theme') === 'xp' && Store.get('wallpaper') === 'hills' && document.activeElement.getAttribute('data-theme') === 'xp'), 'picking a theme applies it with its background and keeps the focus on it');
         await page.evaluate(() => Win.close());
@@ -4164,11 +4174,11 @@ async function main() {
         await page.waitForFunction(() => document.getElementById('wallpaper').className === 'wp wp-img', null, { timeout: 8000 });
         check(await page.evaluate(() => /dunes\.png/.test(document.getElementById('wallpaper').style.backgroundImage) && JSON.parse(localStorage.getItem('arc_dev_global')).wallpapers.length === 2),
             'My PC copies settings/mypc at start: a new profile gets the background chosen for new profiles (only https pictures are kept)');
-        check(await page.evaluate(() => Desktop.wallpapers().map((w) => w.title).join() === 'Bloom,Aurora,Sunset,Night sky,Glass,Green hills,Dunes,Material,Lagoon,Golden dunes,Broken'),
+        check(await page.evaluate(() => Desktop.wallpapers().map((w) => w.title).join() === 'Bloom,Aurora,Sunset,Night sky,Glass,Green hills,Dunes,Material,Lagoon,Live weather,Earth now,Holidays and events,Golden dunes,Broken'),
             'the pictures come after the built-in backgrounds, a missing title taken from the address');
         await page.evaluate(() => Win.open('settings', 'personal'));
         await page.waitForSelector('.set-wp[data-wp="u:https://pics.example/broken.jpg"]');
-        check(await page.evaluate(() => { const b = document.querySelector('.set-wp[data-wp].on'); return b && b.getAttribute('data-wp') === 'u:https://pics.example/dunes.png' && /dunes-small/.test(b.style.backgroundImage) && document.querySelectorAll('.set-wp[data-wp]').length === 11; }),
+        check(await page.evaluate(() => { const b = document.querySelector('.set-wp[data-wp].on'); return b && b.getAttribute('data-wp') === 'u:https://pics.example/dunes.png' && /dunes-small/.test(b.style.backgroundImage) && document.querySelectorAll('.set-wp[data-wp]').length === 14; }),
             'Settings > Personalization shows the pictures (their small version), the one in use marked');
         await page.evaluate(() => document.querySelector('.set-wp[data-wp="u:https://pics.example/broken.jpg"]').click());
         await page.waitForTimeout(300);
@@ -4675,6 +4685,8 @@ async function main() {
         await page.context().close();
     }
 
+    await wallTests(browser, base);
+
     await browser.close();
     srv.close();
     console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed');
@@ -5073,3 +5085,201 @@ async function cycle(page, id, warm) {
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
+
+// 44. Live backgrounds (js/launcher/dynwall.js) and the events (js/core/events.js). MYPC_ONLY=wall runs only these;
+// MYPC_SHOTS=<folder> saves a screenshot of each background.
+async function wallTests(browser, base) {
+    console.log('44. Live backgrounds: weather, Earth now, holidays and events; drawn once, stopped under apps; Google holidays, built-in Eid dates, ESPN football');
+    const shots = process.env.MYPC_SHOTS;
+    const match = (when, home, away, abbr) => ({ date: when, season: { slug: 'league-phase' }, competitions: [{ competitors: [
+        { homeAway: 'home', team: { displayName: home, shortDisplayName: home, abbreviation: abbr || home.slice(0, 3).toUpperCase() } },
+        { homeAway: 'away', team: { displayName: away, shortDisplayName: away, abbreviation: away.slice(0, 3).toUpperCase() } }] }] });
+    const GOOGLE = [['2026-11-06', 'Green March'], ['2026-11-18', 'Independence Day'], ['2026-05-27', 'Eid al-Adha'], ['2026-05-28', 'Eid al-Adha Holiday'],
+                    ['2026-07-30', 'Feast of the Throne'], ['2027-01-14', 'Amazigh New Year'], ['2026-12-31', "New Year's Eve"]]
+        .map(([d, n]) => ({ summary: n, start: { date: d }, end: { date: d.slice(0, 8) + String(+d.slice(8) + 1).padStart(2, '0') }, description: /Eve/.test(n) ? 'Observance' : 'Public holiday' }));
+    // one page per moment (the date is fixed in the page, the timers run)
+    async function at(when, db, prep) {
+        const page = await newPage(browser, base, db, { tz: 'Africa/Casablanca' });
+        await page.clock.setFixedTime(new Date(when));
+        await routeHosted(page, { offline: true });
+        if (prep) await page.addInitScript(prep);
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon');
+        return page;
+    }
+    const painted = (page, k) => page.waitForFunction((k) => DynWall._key().indexOf(k) === 0, k, { timeout: 15000 }).then(() => true, () => false);
+    // the canvas really has a picture (many different colours), not a flat fill
+    const varied = (page) => page.evaluate(() => {
+        const c = document.querySelector('#wallpaper .dw-cv'); if (!c || !c.width) return 0;
+        const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data, seen = new Set();
+        for (let i = 0; i < d.length; i += 4 * 997) seen.add((d[i] >> 4) + ',' + (d[i + 1] >> 4) + ',' + (d[i + 2] >> 4));
+        return seen.size;
+    });
+    const shot = async (page, name) => { if (shots) { await page.evaluate(() => Notify.clear()); await page.waitForTimeout(200); await page.screenshot({ path: path.join(shots, name + '.png') }); } };
+    const cap = (page) => page.evaluate(() => { const c = document.querySelector('#wallpaper .dw-cap'); return c && !c.hidden ? c.textContent : ''; });
+
+    // events.js alone: Google's names map to our ids, the built-in Moroccan dates, the .ics and ESPN readers
+    {
+        const page = await at('2026-11-05T12:00:00+01:00', {});
+        const r = await page.evaluate(() => {
+            const b = Events._builtin(2026), on = (id) => b.filter((e) => e.id === id).map((e) => e.d).join(' ');
+            const ics = Events._fromIcs('BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:20270314\r\nDTEND;VALUE=DATE:20270315\r\nSUMMARY:Eid al-Fitr\r\nDESCRIPTION:Public holiday\r\nEND:VEVENT\r\nEND:VCALENDAR');
+            const espn = Events._fromEspn(JSON.stringify({ events: [{ date: '2026-11-07T19:00Z', competitions: [{ competitors: [{ homeAway: 'home', team: { displayName: 'Morocco', abbreviation: 'MAR' } }, { homeAway: 'away', team: { displayName: 'Senegal' } }] }] },
+                                                                    { date: '2026-11-07T19:00Z', competitions: [{ competitors: [{ homeAway: 'home', team: { displayName: 'Japan' } }, { homeAway: 'away', team: { displayName: 'Peru' } }] }] }] }), ['fifa.friendly', '']);
+            return { fitr: on('eidfitr'), adha: on('eidadha'), mawlid: on('mawlid'), ramadan: on('ramadan'), green: on('greenmarch'), unity: on('unity'), yen: on('yennayer'),
+                     names: ['Green March', 'Feast of the Throne', 'Eid al-Adha Holiday', 'Hijra New Year', "The Prophet Muhammad's Birthday", 'Amazigh New Year', 'Anniversary of the Revolution of the King and the People'].map(Events._idOf).join(','),
+                     ics: ics && ics[0] && ics[0].id + '@' + ics[0].d, espn: espn.map((e) => e.id + ':' + e.teams.join('-')).join(',') };
+        });
+        check(r.fitr === '2026-03-20 2026-03-21' && r.adha === '2026-05-27 2026-05-28' && r.mawlid === '2026-08-25' && r.ramadan === '2026-02-18',
+              'built-in Islamic days (Umm al-Qura, Intl): Eid al-Fitr 20-21 March 2026, Eid al-Adha 27-28 May 2026, Mawlid 25 August 2026 ' + JSON.stringify(r));
+        check(r.green === '2026-11-06' && r.unity === '2026-10-31' && r.yen === '2026-01-14', 'built-in fixed Moroccan holidays (Green March, Unity Day, Amazigh New Year)');
+        check(r.names === 'greenmarch,throne,eidadha,hijri,mawlid,yennayer,revolution', 'Google\'s English holiday names map to the backgrounds: ' + r.names);
+        check(r.ics === 'eidfitr@2027-03-14' && r.espn === 'morocco:Morocco-Senegal', 'the .ics reader and ESPN reader (a friendly counts only when Morocco plays): ' + r.ics + ' ' + r.espn);
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    // Live weather: drawn from the shared forecast (no second request), stopped under an app, moving rain only when asked
+    {
+        const db = {};
+        const page = await at('2026-11-05T11:00:00+01:00', db);
+        await page.evaluate(() => Desktop.setWallpaper('dyn_weather'));
+        check(await painted(page, 'w,partly,day'), 'Live weather draws the forecast\'s sky (partly cloudy, day): ' + await page.evaluate(() => DynWall._key()));
+        check(await varied(page) > 40, 'the canvas holds a real picture (' + await varied(page) + ' colours)');
+        check(db.weather.filter((u) => /api\.open-meteo/.test(u)).length === 1, 'one forecast request for the widget and the background together');
+        await shot(page, 'weather-partly-day');
+        // under an app: no timer; back on the desktop: it runs again
+        await page.evaluate(() => Win.open('calculator'));
+        await page.waitForTimeout(100);
+        check(await page.evaluate(() => DynWall._timer() === 0), 'an app on screen: the background has no timer (nothing runs)');
+        await page.evaluate(() => Win.close());
+        await page.waitForTimeout(100);
+        check(await page.evaluate(() => DynWall._timer() !== 0), 'back on the desktop: it checks again');
+        // rain at night, with the moving layer
+        await page.context().route(/api\.open-meteo\.com/, (r) => { const b = forecastBody(9); Object.assign(b.current, { weather_code: 63, is_day: 0, cloud_cover: 95, time: '2026-11-05T22:00' }); b.daily.sunrise = b.daily.sunrise.map((x) => x.slice(0, 11) + '07:31'); return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(b) }); });
+        await page.clock.setFixedTime(new Date('2026-11-05T22:00:00+01:00'));
+        await page.evaluate(() => { localStorage.removeItem('arc_dev_wxfc'); DynWall.setPref('motion', true); });
+        check(await painted(page, 'w,rain,night'), 'rain at night: ' + await page.evaluate(() => DynWall._key()));
+        check(await page.evaluate(() => { const f = document.querySelector('#wallpaper .dw-fx'); return !!f && getComputedStyle(f).animationName === 'dw-fall'; }), 'Moving rain and snow on: one sliding layer (CSS transform)');
+        await shot(page, 'weather-rain-night');
+        await page.evaluate(() => Win.open('calculator'));
+        check(await page.evaluate(() => document.querySelector('#wallpaper .dw-fx').style.animationPlayState === 'paused'), 'the moving layer pauses under an app');
+        await page.evaluate(() => { Win.close(); DynWall.setPref('motion', false); });
+        await page.waitForTimeout(150);
+        check(await page.evaluate(() => !document.querySelector('#wallpaper .dw-fx')), 'off by default / turned off: no moving layer');
+        // snow, cold, winter at dusk
+        await page.context().route(/api\.open-meteo\.com/, (r) => { const b = forecastBody(-2); Object.assign(b.current, { weather_code: 73, is_day: 1, cloud_cover: 90, time: '2026-11-05T17:50' }); return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(b) }); });
+        await page.clock.setFixedTime(new Date('2026-11-05T17:50:00+01:00'));
+        await page.evaluate(() => { localStorage.removeItem('arc_dev_wxfc'); DynWall.refresh(); });
+        check(await painted(page, 'w,snow,dusk'), 'snow at dusk: ' + await page.evaluate(() => DynWall._key()));
+        await shot(page, 'weather-snow-dusk');
+        await page.context().route(/api\.open-meteo\.com/, (r) => { const b = forecastBody(31); Object.assign(b.current, { weather_code: 95, is_day: 1, cloud_cover: 100, time: '2026-11-05T15:00' }); return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(b) }); });
+        await page.clock.setFixedTime(new Date('2026-11-05T15:00:00+01:00'));
+        await page.evaluate(() => { localStorage.removeItem('arc_dev_wxfc'); DynWall.refresh(); });
+        check(await painted(page, 'w,storm,day'), 'thunderstorm: ' + await page.evaluate(() => DynWall._key()));
+        await shot(page, 'weather-storm');
+        await page.context().route(/api\.open-meteo\.com/, (r) => { const b = forecastBody(36); Object.assign(b.current, { weather_code: 0, is_day: 1, cloud_cover: 0, time: '2026-11-05T13:00' }); return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(b) }); });
+        await page.clock.setFixedTime(new Date('2026-07-05T13:00:00+01:00'));
+        await page.evaluate(() => { localStorage.removeItem('arc_dev_wxfc'); DynWall.refresh(); });
+        check(await painted(page, 'w,clear,day') && /summer/.test(await page.evaluate(() => DynWall._key())), 'clear, hot, summer: ' + await page.evaluate(() => DynWall._key()));
+        await shot(page, 'weather-clear-summer');
+        // another background: the canvas is freed
+        await page.evaluate(() => Desktop.setWallpaper('bloom'));
+        check(await page.evaluate(() => !document.querySelector('#wallpaper .dw-cv') && DynWall.current() === '' && DynWall._timer() === 0), 'another background: canvas removed, no timer');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    // Earth now: the globe with day and night, the Moon in its phase, redrawn every 10 minutes at most
+    {
+        const page = await at('2026-11-05T18:30:00+01:00', {});
+        await page.evaluate(() => Desktop.setWallpaper('dyn_astro'));
+        check(await painted(page, 'a,'), 'Earth now is drawn');
+        const r = await page.evaluate(() => {
+            const c = document.querySelector('#wallpaper .dw-cv'), g = c.getContext('2d'), W = c.width, H = c.height, R = Math.min(W, H) * 0.42;
+            // average brightness of a patch of the globe
+            const px = (x, y) => { const d = g.getImageData(Math.round(x) - 20, Math.round(y) - 20, 40, 40).data; let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i] + d[i + 1] + d[i + 2]; return Math.round(s / (d.length / 4)); };
+            // 18:30 in Morocco (17:30 UTC): the Sun is over the Americas, so the west (left) of the globe is day, the east (Africa, Europe) is night
+            // the light alone: a white day photo and a black night one, drawn the same way
+            const t = document.createElement('canvas'); t.width = 400; t.height = 400; const tg = t.getContext('2d');
+            const flat = (v) => ({ w: 1, h: 1, d: new Uint8ClampedArray([v, v, v, 255]) });
+            DynArt.earth(tg, 400, 400, flat(255), flat(0), null, { lat: 18, lon: -7.6, at: Date.now() });
+            const lp = (x, y) => { const d = tg.getImageData(x, y, 1, 1).data; return d[0] + d[1] + d[2]; };
+            return { west: lp(200 - 110, 200), east: lp(200 + 110, 200), photo: px(W / 2, H / 2), sun: DynArt.sun(Date.now()) };
+        });
+        check(r.west > 400 && r.east < 120 && r.photo > 20 && r.sun.lon < -70 && r.sun.lon > -100 && r.sun.lat < -14 && r.sun.lat > -17, 'the day side is lit and the night side is dark (west ' + r.west + ', east ' + r.east + ', Sun over ' + r.sun.lat.toFixed(1) + ', ' + r.sun.lon.toFixed(1) + ')');
+        check(/Moon: /.test(await cap(page)) && /Day and night/.test(await cap(page)), 'its caption names the Moon\'s phase: ' + await cap(page));
+        await shot(page, 'earth-now');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    // Holidays and events
+    const ucl = { 'uefa.champions': [match('2026-11-05T20:00:00Z', 'Real Madrid', 'Liverpool', 'RMA'), match('2026-11-05T20:00:00Z', 'Inter', 'Arsenal')] };
+    {
+        // the evening before Green March (Google's calendar, through the Calendar API), football off
+        const db = { cal: GOOGLE, espn: ucl };
+        const page = await at('2026-11-05T20:30:00+01:00', db, () => { localStorage.setItem('arc_p1_events', JSON.stringify({ country: 'ma', football: false })); });
+        await page.evaluate(() => Desktop.setWallpaper('dyn_events'));
+        check(await painted(page, 'e,greenmarch'), 'the evening before Green March shows it: ' + await page.evaluate(() => DynWall._key()));
+        check(/Tomorrow: Green March Day/.test(await cap(page)), 'caption: ' + await cap(page));
+        check(db.events.some((u) => /googleapis\.com\/calendar\/v3\/calendars\/en\.ma%23holiday%40group\.v\.calendar\.google\.com/.test(u)) && !db.events.some((u) => /espn/.test(u)),
+              'Google\'s Moroccan holiday calendar asked; football off: ESPN never asked');
+        check(await page.evaluate(() => Events.source().holidays === 'api'), 'holidays came from Google');
+        await shot(page, 'event-greenmarch-eve');
+        // football on: tonight's Champions League matches
+        await page.evaluate(() => { Events.setPrefs({ football: true }); DynWall.refresh(); });
+        check(await painted(page, 'e,ucl'), 'football on: a Champions League night: ' + await page.evaluate(() => DynWall._key()));
+        check(/Champions League night/.test(await cap(page)) && /Real Madrid – Liverpool/.test(await cap(page)) && /Inter – Arsenal/.test(await cap(page)), 'its matches in the caption: ' + await cap(page));
+        await shot(page, 'event-ucl-night');
+        const asked = db.events.length;
+        await page.evaluate(() => DynWall.refresh());
+        await page.waitForTimeout(400);
+        check(db.events.length === asked, 'kept on the TV: asking again within hours sends nothing');
+        // Arabic, right to left
+        await page.evaluate(() => { I18n.setLang('ar'); Desktop.render(); });
+        await page.waitForTimeout(300);
+        check(/أمسية دوري أبطال أوروبا/.test(await cap(page)), 'translated (Arabic): ' + await cap(page));
+        await page.evaluate(() => { I18n.setLang('en'); Desktop.render(); });
+        // Control Panel > Personalisation: the rows work with the remote
+        await page.evaluate(() => Win.open('settings', 'personal'));
+        await page.waitForTimeout(200);
+        const txt = await page.textContent('.set-main');
+        check(/Holidays and events/.test(txt) && /Moving rain and snow/.test(txt) && /Holidays of/.test(txt) && /Morocco/.test(txt) && /Football nights/.test(txt), 'Control Panel > Personalization lists the live backgrounds and their settings');
+        await page.evaluate(() => Win.close());
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+    {
+        // Google unreachable (on the web: no CORS for the .ics): the built-in dates; Eid al-Adha
+        const db = {};
+        const page = await at('2026-05-27T10:00:00+01:00', db);
+        await page.evaluate(() => Desktop.setWallpaper('dyn_events'));
+        check(await painted(page, 'e,eidadha'), 'Eid al-Adha from the built-in dates when Google cannot be reached: ' + await page.evaluate(() => DynWall._key()));
+        check(/Eid al-Adha/.test(await cap(page)) && /Eid Mubarak/.test(await cap(page)), 'caption: ' + await cap(page));
+        check(db.events.some((u) => /calendar\.google\.com\/calendar\/ical\//.test(u)), 'after the API, the public .ics was tried');
+        await shot(page, 'event-eid-adha');
+        for (const [when, id, name] of [['2026-07-30T12:00:00+01:00', 'throne', 'event-throne'], ['2026-01-14T12:00:00+01:00', 'yennayer', 'event-yennayer'],
+                                         ['2026-03-01T21:00:00+01:00', 'ramadan', 'event-ramadan'], ['2026-08-25T12:00:00+01:00', 'mawlid', 'event-mawlid'],
+                                         ['2026-12-31T22:00:00+01:00', 'nye', 'event-new-year-eve'], ['2026-08-02T12:00:00+01:00', 'season', 'event-summer'],
+                                         ['2026-11-18T12:00:00+01:00', 'independence', 'event-independence'], ['2026-10-12T12:00:00+01:00', 'season', 'event-autumn']]) {
+            await page.clock.setFixedTime(new Date(when));
+            await page.evaluate(() => DynWall.refresh());
+            check(await painted(page, 'e,' + id), when.slice(0, 10) + ': ' + await page.evaluate(() => DynWall._key()) + ' ' + await cap(page));
+            await shot(page, name);
+        }
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+    {
+        // Morocco plays today (a friendly) beats a Champions League night
+        const db = { cal: GOOGLE, espn: Object.assign({ 'fifa.friendly': [match('2026-11-12T20:00:00Z', 'Morocco', 'Senegal', 'MAR')] }, { 'uefa.champions': [match('2026-11-12T20:00:00Z', 'Barcelona', 'Bayern')] }) };
+        const page = await at('2026-11-12T15:00:00+01:00', db);
+        await page.evaluate(() => Desktop.setWallpaper('dyn_events'));
+        check(await painted(page, 'e,morocco'), 'Morocco\'s match: ' + await page.evaluate(() => DynWall._key()));
+        check(/Morocco plays today/.test(await cap(page)) && /Morocco – Senegal\s+(21:00|9:00 PM)/.test(await cap(page)), 'caption with the kick-off in local time: ' + await cap(page));
+        await shot(page, 'event-morocco-match');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+}

@@ -143,6 +143,10 @@ e-mail is), so it needs **Email/Password** enabled (step 2, already on for the A
 ## 5. API key restrictions (Google Cloud console → APIs & Services → Credentials)
 - Restrict the key to the APIs it needs: **Cloud Firestore API**, **Identity Toolkit API** and
   **Token Service API** (the App Store Manager's sign-in uses all three).
+- **Holidays (optional, recommended):** turn on **Google Calendar API** (APIs & Services → Library) and, if the key is
+  restricted, add it to the list. The Holidays and events background (`js/core/events.js`) then reads Google's public holiday
+  calendar of the country with this key on every device. Without it, the TV still reads the calendar's public .ics file (no
+  CORS on the TV); a browser or the phone app falls back to the built-in Moroccan dates (Eid days from the Umm al-Qura calendar).
 - Do **not** add an HTTP-referrer restriction. The packaged TV app has no web origin, and its
   requests would be refused.
 - The key is public by design. Security comes from the rules above, so never relax them to

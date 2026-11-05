@@ -109,6 +109,17 @@
   `tsize` / `isize`); warnings (`Weather.alerts`): rain / snow within the chosen hours (`warn`: off / 1 / 2 / 4 / 6 / 8 / 24, default 6) and a
   thunderstorm within 24 h (danger, red), on the widget, beside the app's temperature, and once each as a notification (profile key `wx_told`).
   Animated sky pictures (`Weather.art`, CSS `.wa-*` in css/weather.css: transform / opacity only, stop with the hidden desktop; widget setting `anim`).
+- **Live backgrounds** (owner request 2026-11-05, `js/launcher/dynwall.js` + art `js/launcher/dynwall-art.js` + strings `js/core/i18n-dynwall.js`):
+  Background ids `dyn_weather` (sky from `Weather` data, shared cache, day / dawn / dusk / night, season, temperature), `dyn_astro` (Earth
+  globe over your place with the real day / night line, city lights, Moon phase; NASA public-domain photos in `wallpapers/*.jpg`, read only
+  while drawing) and `dyn_events` (holidays and football, else the season; summer = beach). Drawn ONCE on a canvas (stage size x 1 / 0.75 / 0.5
+  by Perf tier) when what it shows changes (checked every 10 min, events 30 min); no timer while an app / game is open (Desktop.hide),
+  on the game page or in the background. Optional moving rain / snow = one tile slid by CSS transform (profile `dynwall.motion`, off by
+  default); `dynwall.caption` shows the event's name. **Events** (`js/core/events.js`, also meant for the Calendar): Google's public holiday
+  calendar `en.<cc>#holiday@group.v.calendar.google.com` (Calendar API with `Cloud.key` if the owner turned it on, else its .ics, else
+  built-in Moroccan days + Islamic days via Intl `islamic-umalqura`), football from ESPN's public scoreboard (UCL, World Cup, AFCON,
+  Morocco's other matches); cache `arc_dev_events` (holidays 2 days, football 6 h); per profile `events` { country, football }.
+  Tests: `MYPC_ONLY=wall node tests/run-tests.mjs` (`MYPC_SHOTS=<folder>` for screenshots). Keep `evPrivacy` true.
 - **Music app** (owner request 2026-11-05, Win app `music`): `js/core/music-src.js` (sources: `usb` = Tizen filesystem drives under
   `/opt/media`, needs package **1.6.0** privileges filesystem.read / write + externalstorage; `gd` = Google Drive through the **MyDrive** store
   app: client in Firestore `apps/mydrive.config.google`, the profile's linked accounts in `game_app-mydrive_data`, scope drive.file so only

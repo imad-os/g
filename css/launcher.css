@@ -57,6 +57,32 @@ svg { display: block; width: 100%; height: 100%; }
                       radial-gradient(50% 35% at 75% 85%, rgba(40, 70, 160, 0.55) 0%, rgba(3, 4, 12, 0) 100%),
                       linear-gradient(180deg, #02030a 0%, #0b1236 70%, #16204a 100%); }
 
+/* live backgrounds (js/launcher/dynwall.js): a canvas drawn now and then, never per frame; the optional rain / snow layer only
+   slides by transform (composited). The .wp-dyn_* gradients show until the first drawing and in the Background picker. */
+.wp-dyn { overflow: hidden; }
+.dw-cv { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.dw-fx { position: absolute; left: 0; top: -256px; width: 100%; height: calc(100% + 256px); background-size: 256px 256px;
+         will-change: transform; -webkit-animation: dw-fall 0.5s linear infinite; animation: dw-fall 0.5s linear infinite; pointer-events: none; }
+.dw-fx-snow { -webkit-animation-duration: 7s; animation-duration: 7s; }
+@-webkit-keyframes dw-fall { from { -webkit-transform: translate3d(0, 0, 0); } to { -webkit-transform: translate3d(0, 256px, 0); } }
+@keyframes dw-fall { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(0, 256px, 0); } }
+.dw-cap { position: absolute; left: 50%; top: 72px; -webkit-transform: translateX(-50%); transform: translateX(-50%); width: 64%; text-align: center;
+          color: #fff; text-shadow: 0 2px 14px rgba(0, 0, 0, 0.7), 0 0 2px rgba(0, 0, 0, 0.5); pointer-events: none; }
+.dw-cap-t { font-size: 48px; font-weight: 300; line-height: 1.2; }
+.dw-cap-s { font-size: 26px; line-height: 1.3; opacity: 0.9; margin-top: 8px; }
+.wp-dyn_weather { background-color: #3b7fd0;
+    background-image: radial-gradient(9% 16% at 72% 26%, #fff8dc 0%, rgba(255, 240, 190, 0.7) 40%, rgba(255, 240, 190, 0) 100%),
+                      radial-gradient(18% 10% at 34% 30%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.7) 55%, rgba(255, 255, 255, 0) 100%),
+                      radial-gradient(70% 22% at 50% 100%, #5e9a52 0%, #4c8644 60%, rgba(76, 134, 68, 0) 100%),
+                      linear-gradient(180deg, #2a6fd0 0%, #8cc6ff 70%, #d6ebff 100%); }
+.wp-dyn_astro { background-color: #03040c;
+    background-image: radial-gradient(circle at 50% 50%, #3d7fd6 0%, #1d4a8c 30%, #081a38 41%, rgba(80, 150, 255, 0.35) 42%, rgba(3, 4, 12, 0) 47%),
+                      linear-gradient(135deg, #02030a 0%, #070a1c 100%); }
+.wp-dyn_events { background-color: #1a1050;
+    background-image: radial-gradient(12% 20% at 70% 30%, #f4cc70 0%, rgba(244, 204, 112, 0.35) 45%, rgba(244, 204, 112, 0) 100%),
+                      radial-gradient(60% 20% at 30% 100%, #b8212b 0%, rgba(184, 33, 43, 0) 100%),
+                      linear-gradient(180deg, #18124a 0%, #56307c 100%); }
+
 /* ---------- desktop ---------- */
 .desktop { position: absolute; left: 0; top: 0; width: var(--sw); height: var(--sh); overflow: hidden; }
 /* many shortcuts (small screens): the columns scroll sideways (swipe, or the focus moving there) instead of running off the screen */
@@ -943,3 +969,4 @@ svg { display: block; width: 100%; height: 100%; }
 .tall.compact .desk-widgets { height: 420px; bottom: 216px; }
 .tall.compact .has-wdg .desk-icons { height: calc(var(--sh) - 680px); }
 
+.tall .dw-cap { width: 92%; top: 110px; }

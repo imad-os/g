@@ -68,6 +68,12 @@
         } else if (id === 'personal') {
             out.push({ kind: 'themes', label: t('theme'), desc: t('themeDesc') });
             out.push({ kind: 'wallpapers', label: t('background') });
+            // live backgrounds (js/launcher/dynwall.js, js/core/events.js): per profile
+            out.push({ kind: 'toggle', label: t('dwMotion'), desc: t('dwMotionDesc'), get: function () { return DynWall.prefs().motion; }, set: function (v) { DynWall.setPref('motion', v); } });
+            out.push({ kind: 'toggle', label: t('dwCaption'), get: function () { return DynWall.prefs().caption; }, set: function (v) { DynWall.setPref('caption', v); } });
+            out.push({ kind: 'select', label: t('dwCountry'), value: function () { return t('cc_' + Events.prefs().country); },
+                       adjust: function (d) { var l = Events.COUNTRIES, i2 = (l.indexOf(Events.prefs().country) + d + l.length) % l.length; Events.setPrefs({ country: l[i2] }); DynWall.refresh(); } });
+            out.push({ kind: 'toggle', label: t('dwFootball'), desc: t('dwFootballDesc'), get: function () { return Events.prefs().football; }, set: function (v) { Events.setPrefs({ football: v }); DynWall.refresh(); } });
         } else if (id === 'apps') {
             var inst = Desktop.installed();
             out.push({ kind: 'text', value: t('installHint') });

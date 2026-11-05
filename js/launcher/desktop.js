@@ -413,6 +413,8 @@ var Desktop = (function () {
     function wallpapers() {
         var out = [], i;
         for (i = 0; i < WALLPAPERS.length; i++) out.push({ id: WALLPAPERS[i], title: I18n.t('wp_' + WALLPAPERS[i]) });
+        // live backgrounds (js/launcher/dynwall.js): weather, the Earth now, holidays and events
+        if (window.DynWall) for (i = 0; i < DynWall.IDS.length; i++) out.push({ id: DynWall.IDS[i], title: I18n.t('wp_' + DynWall.IDS[i]), dyn: true });
         var pics = typeof GlobalSettings !== 'undefined' ? GlobalSettings.wallpapers() : [];
         for (i = 0; i < pics.length; i++) out.push(pics[i]);
         return out;
@@ -429,8 +431,11 @@ var Desktop = (function () {
     var wpShown = '';
     function paintWallpaper() {
         var box = $('wallpaper'), w = findWallpaper(wallpaper());
-        if (!box || !w || wpShown === w.id) return;
+        if (!box || !w) return;
+        if (w.dyn) { if (wpShown !== w.id) { box.className = 'wp wp-dyn wp-' + w.id; box.style.backgroundImage = ''; } wpShown = w.id; DynWall.start(w.id, box); return; }
+        if (wpShown === w.id) return;
         wpShown = w.id;
+        if (window.DynWall) DynWall.stop();
         if (!w.url) { box.className = 'wp wp-' + w.id; box.style.backgroundImage = ''; return; }
         if (box.className.indexOf('wp-img') < 0) { box.className = 'wp wp-bloom'; box.style.backgroundImage = ''; }
         var im = new Image(), id = w.id;
@@ -488,6 +493,7 @@ var Desktop = (function () {
         updateTray();
         tick();
         if (window.Widgets) Widgets.resume();
+        if (window.DynWall) DynWall.resume();
         Focus.reset();
         Focus.set($('desktop'), remembered() || focusEl || tileFor(lastPlayed) || firstIcon());
     }
@@ -501,6 +507,7 @@ var Desktop = (function () {
         $('desktop').hidden = true;
         stopClock();
         if (window.Widgets) Widgets.pause();      // only the widgets that run in the background keep refreshing
+        if (window.DynWall) DynWall.pause();      // a live background stops (its picture stays)
     }
 
     // Frees decoded cover images while a game or app runs (RAM on low-end TVs).

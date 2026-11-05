@@ -1,5 +1,5 @@
 {
-  "build": 114,
+  "build": 115,
   "version": "2.27.0",
   "shell": 1,
   "css": [
@@ -35,6 +35,7 @@
     "js/core/music-src.js",
     "js/core/music.js",
     "js/core/weather.js",
+    "js/core/events.js",
     "js/core/playtime.js",
     "js/core/virtual-pad.js",
     "js/core/pad-spec.js",
@@ -46,6 +47,7 @@
     "js/core/i18n-widgets.js",
     "js/core/i18n-playtime.js",
     "js/core/i18n-weather.js",
+    "js/core/i18n-dynwall.js",
     "js/core/i18n-music.js",
     "js/core/i18n-shortcuts.js",
     "js/core/a11y.js",
@@ -61,6 +63,8 @@
     "js/launcher/textin.js",
     "js/launcher/themes.js",
     "js/launcher/widgets.js",
+    "js/launcher/dynwall-art.js",
+    "js/launcher/dynwall.js",
     "js/launcher/shortcuts.js",
     "js/launcher/desktop.js",
     "js/launcher/window.js",
