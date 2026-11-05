@@ -3,9 +3,13 @@
     'use strict';
     var S = {
         en: {
+            dwCaptionAstro: 'Show the title and the Moon’s phase',
+            dwAbout_dyn_weather: 'the sky of your place right now (sun, clouds, rain, snow, fog or storm), dawn, day, dusk and night, the season and the temperature. It uses the place and units of the Weather widget and checks again every 10 minutes while the desktop is on screen.',
+            dwAbout_dyn_astro: 'the Earth seen from space over your place, with the real line between day and night, city lights on the night side and the Moon in its phase. Drawn again every 10 minutes while the desktop is on screen.',
+            dwAbout_dyn_events: 'changes with the day: Moroccan holidays (Eid al-Fitr, Eid al-Adha, Ramadan, Throne Day, Green March…), football nights, and the season on other days. The evening before a holiday it already shows it.',
             wp_dyn_weather: 'Live weather', wp_dyn_astro: 'Earth now', wp_dyn_events: 'Holidays and events',
-            dwMotion: 'Moving rain and snow', dwMotionDesc: 'On the Live weather background. Uses a little more power.',
-            dwCountry: 'Holidays of', dwFootball: 'Football nights', dwFootballDesc: 'Champions League, World Cup, AFCON and Morocco’s matches on the Holidays and events background.',
+            dwMotion: 'Moving rain and snow', dwMotionDesc: 'Rain and snow fall on the picture. Uses a little more power.',
+            dwCountry: 'Holidays of', dwFootball: 'Football nights', dwFootballDesc: 'Champions League, World Cup, AFCON and Morocco’s matches',
             dwCaption: 'Show the event’s name', dwTomorrow: 'Tomorrow: %s', dwDay: 'Day %n', dwEarth: 'Day and night on Earth now', dwMoon: 'Moon: %s',
             dwLiveBg: 'Live backgrounds',
             mp: 'New moon,Waxing crescent,First quarter,Waxing gibbous,Full moon,Waning gibbous,Last quarter,Waning crescent',
@@ -21,9 +25,13 @@
             evPrivacy: 'Holidays and events background: the public holidays come from Google Calendar (google.com) and the football matches from ESPN (espn.com); nothing about you is sent. Live weather uses the weather service below. Choose another background to stop it.'
         },
         fr: {
+            dwCaptionAstro: 'Afficher le titre et la phase de la Lune',
+            dwAbout_dyn_weather: 'le ciel de votre lieu en ce moment (soleil, nuages, pluie, neige, brouillard ou orage), l’aube, le jour, le crépuscule et la nuit, la saison et la température. Utilise le lieu et les unités du widget Météo et se met à jour toutes les 10 minutes quand le bureau est affiché.',
+            dwAbout_dyn_astro: 'la Terre vue de l’espace au-dessus de votre lieu, avec la vraie limite entre le jour et la nuit, les lumières des villes côté nuit et la Lune dans sa phase. Redessinée toutes les 10 minutes quand le bureau est affiché.',
+            dwAbout_dyn_events: 'change avec le jour : fêtes marocaines (Aïd al-Fitr, Aïd al-Adha, Ramadan, Fête du Trône, Marche verte…), soirées de football et la saison les autres jours. La veille d’une fête, elle l’affiche déjà.',
             wp_dyn_weather: 'Météo en direct', wp_dyn_astro: 'La Terre en direct', wp_dyn_events: 'Fêtes et événements',
-            dwMotion: 'Pluie et neige animées', dwMotionDesc: 'Sur l’arrière-plan Météo en direct. Consomme un peu plus.',
-            dwCountry: 'Jours fériés de', dwFootball: 'Soirées de football', dwFootballDesc: 'Ligue des champions, Coupe du monde, CAN et matchs du Maroc sur l’arrière-plan Fêtes et événements.',
+            dwMotion: 'Pluie et neige animées', dwMotionDesc: 'La pluie et la neige tombent sur l’image. Consomme un peu plus.',
+            dwCountry: 'Jours fériés de', dwFootball: 'Soirées de football', dwFootballDesc: 'Ligue des champions, Coupe du monde, CAN et matchs du Maroc',
             dwCaption: 'Afficher le nom de l’événement', dwTomorrow: 'Demain : %s', dwDay: 'Jour %n', dwEarth: 'Le jour et la nuit sur la Terre maintenant', dwMoon: 'Lune : %s',
             dwLiveBg: 'Arrière-plans en direct',
             mp: 'Nouvelle lune,Premier croissant,Premier quartier,Gibbeuse croissante,Pleine lune,Gibbeuse décroissante,Dernier quartier,Dernier croissant',
@@ -39,9 +47,13 @@
             evPrivacy: 'Arrière-plan Fêtes et événements : les jours fériés viennent de Google Agenda (google.com) et les matchs de football d’ESPN (espn.com) ; rien sur vous n’est envoyé. Météo en direct utilise le service météo ci-dessous. Choisissez un autre arrière-plan pour l’arrêter.'
         },
         es: {
+            dwCaptionAstro: 'Mostrar el título y la fase de la Luna',
+            dwAbout_dyn_weather: 'el cielo de tu lugar ahora mismo (sol, nubes, lluvia, nieve, niebla o tormenta), el amanecer, el día, el atardecer y la noche, la estación y la temperatura. Usa el lugar y las unidades del widget del Tiempo y se actualiza cada 10 minutos mientras se ve el escritorio.',
+            dwAbout_dyn_astro: 'la Tierra vista desde el espacio sobre tu lugar, con la línea real entre el día y la noche, las luces de las ciudades en el lado de noche y la Luna en su fase. Se vuelve a dibujar cada 10 minutos mientras se ve el escritorio.',
+            dwAbout_dyn_events: 'cambia con el día: fiestas marroquíes (Eid al-Fitr, Eid al-Adha, Ramadán, Fiesta del Trono, Marcha Verde…), noches de fútbol y la estación los demás días. La víspera de una fiesta ya la muestra.',
             wp_dyn_weather: 'Tiempo en directo', wp_dyn_astro: 'La Tierra ahora', wp_dyn_events: 'Fiestas y eventos',
-            dwMotion: 'Lluvia y nieve en movimiento', dwMotionDesc: 'En el fondo Tiempo en directo. Gasta un poco más.',
-            dwCountry: 'Festivos de', dwFootball: 'Noches de fútbol', dwFootballDesc: 'Liga de Campeones, Mundial, Copa de África y partidos de Marruecos en el fondo Fiestas y eventos.',
+            dwMotion: 'Lluvia y nieve en movimiento', dwMotionDesc: 'La lluvia y la nieve caen sobre la imagen. Gasta un poco más.',
+            dwCountry: 'Festivos de', dwFootball: 'Noches de fútbol', dwFootballDesc: 'Liga de Campeones, Mundial, Copa de África y partidos de Marruecos',
             dwCaption: 'Mostrar el nombre del evento', dwTomorrow: 'Mañana: %s', dwDay: 'Día %n', dwEarth: 'El día y la noche en la Tierra ahora', dwMoon: 'Luna: %s',
             dwLiveBg: 'Fondos en directo',
             mp: 'Luna nueva,Luna creciente,Cuarto creciente,Gibosa creciente,Luna llena,Gibosa menguante,Cuarto menguante,Luna menguante',
@@ -57,9 +69,13 @@
             evPrivacy: 'Fondo Fiestas y eventos: los festivos vienen de Google Calendar (google.com) y los partidos de fútbol de ESPN (espn.com); no se envía nada sobre ti. Tiempo en directo usa el servicio del tiempo de abajo. Elige otro fondo para detenerlo.'
         },
         ar: {
+            dwCaptionAstro: 'إظهار العنوان وطور القمر',
+            dwAbout_dyn_weather: 'سماء مكانك الآن (شمس، غيوم، مطر، ثلج، ضباب أو عاصفة)، والفجر والنهار والغروب والليل، والفصل ودرجة الحرارة. تستخدم مكان ووحدات أداة الطقس وتتحدث كل 10 دقائق ما دام سطح المكتب ظاهراً.',
+            dwAbout_dyn_astro: 'الأرض من الفضاء فوق مكانك، مع الخط الحقيقي بين الليل والنهار وأضواء المدن في جانب الليل والقمر في طوره. تُرسم من جديد كل 10 دقائق ما دام سطح المكتب ظاهراً.',
+            dwAbout_dyn_events: 'تتغير مع اليوم: الأعياد المغربية (عيد الفطر، عيد الأضحى، رمضان، عيد العرش، المسيرة الخضراء…)، وأمسيات كرة القدم، والفصل في باقي الأيام. في مساء ما قبل العيد تظهره مسبقاً.',
             wp_dyn_weather: 'الطقس المباشر', wp_dyn_astro: 'الأرض الآن', wp_dyn_events: 'الأعياد والمناسبات',
-            dwMotion: 'مطر وثلج متحركان', dwMotionDesc: 'على خلفية الطقس المباشر. تستهلك قليلاً أكثر.',
-            dwCountry: 'عطل', dwFootball: 'أمسيات كرة القدم', dwFootballDesc: 'دوري أبطال أوروبا وكأس العالم وكأس أمم أفريقيا ومباريات المغرب على خلفية الأعياد والمناسبات.',
+            dwMotion: 'مطر وثلج متحركان', dwMotionDesc: 'يتساقط المطر والثلج على الصورة. تستهلك قليلاً أكثر.',
+            dwCountry: 'عطل', dwFootball: 'أمسيات كرة القدم', dwFootballDesc: 'دوري أبطال أوروبا وكأس العالم وكأس أمم أفريقيا ومباريات المغرب',
             dwCaption: 'إظهار اسم المناسبة', dwTomorrow: 'غداً: %s', dwDay: 'اليوم %n', dwEarth: 'الليل والنهار على الأرض الآن', dwMoon: 'القمر: %s',
             dwLiveBg: 'خلفيات مباشرة',
             mp: 'محاق,هلال متزايد,تربيع أول,أحدب متزايد,بدر,أحدب متناقص,تربيع ثانٍ,هلال متناقص',

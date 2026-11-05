@@ -69,13 +69,24 @@
             displayRows(out);
         } else if (id === 'personal') {
             out.push({ kind: 'themes', label: t('theme'), desc: t('themeDesc') });
-            out.push({ kind: 'wallpapers', label: t('background') });
-            // live backgrounds (js/launcher/dynwall.js, js/core/events.js): per profile
-            out.push({ kind: 'toggle', label: t('dwMotion'), desc: t('dwMotionDesc'), get: function () { return DynWall.prefs().motion; }, set: function (v) { DynWall.setPref('motion', v); } });
-            out.push({ kind: 'toggle', label: t('dwCaption'), get: function () { return DynWall.prefs().caption; }, set: function (v) { DynWall.setPref('caption', v); } });
-            out.push({ kind: 'select', label: t('dwCountry'), value: function () { return t('cc_' + Events.prefs().country); },
-                       adjust: function (d) { var l = Events.COUNTRIES, i2 = (l.indexOf(Events.prefs().country) + d + l.length) % l.length; Events.setPrefs({ country: l[i2] }); DynWall.refresh(); } });
-            out.push({ kind: 'toggle', label: t('dwFootball'), desc: t('dwFootballDesc'), get: function () { return Events.prefs().football; }, set: function (v) { Events.setPrefs({ football: v }); DynWall.refresh(); } });
+            out.push({ kind: 'wallpapers', label: t('background'), live: false });
+            // live backgrounds (js/launcher/dynwall.js, js/core/events.js), owner request 2026-11-05: their own section; the one in use
+            // shows what it does and only its own options (per profile)
+            out.push({ kind: 'wallpapers', label: t('dwLiveBg'), live: true });
+            var cw = Desktop.wallpaper();
+            if (window.DynWall && DynWall.is(cw)) {
+                out.push({ kind: 'text', value: t('wp_' + cw) + ': ' + t('dwAbout_' + cw) });
+                if (cw === 'dyn_weather') {
+                    out.push({ kind: 'toggle', label: t('dwMotion'), desc: t('dwMotionDesc'), get: function () { return DynWall.prefs().motion; }, set: function (v) { DynWall.setPref('motion', v); } });
+                } else if (cw === 'dyn_astro') {
+                    out.push({ kind: 'toggle', label: t('dwCaptionAstro'), get: function () { return DynWall.prefs().caption; }, set: function (v) { DynWall.setPref('caption', v); } });
+                } else {
+                    out.push({ kind: 'select', label: t('dwCountry'), value: function () { return t('cc_' + Events.prefs().country); },
+                               adjust: function (d) { var l = Events.COUNTRIES, i2 = (l.indexOf(Events.prefs().country) + d + l.length) % l.length; Events.setPrefs({ country: l[i2] }); DynWall.refresh(); } });
+                    out.push({ kind: 'toggle', label: t('dwFootball'), desc: t('dwFootballDesc'), get: function () { return Events.prefs().football; }, set: function (v) { Events.setPrefs({ football: v }); DynWall.refresh(); } });
+                    out.push({ kind: 'toggle', label: t('dwCaption'), get: function () { return DynWall.prefs().caption; }, set: function (v) { DynWall.setPref('caption', v); } });
+                }
+            }
         } else if (id === 'apps') {
             var inst = Desktop.installed();
             out.push({ kind: 'text', value: t('installHint') });
@@ -840,7 +851,7 @@
         var target = null;
         for (i = 0; i < rows.length; i++) {
             var r = rows[i], b;
-            if (r.kind === 'wallpapers') { b = wallpaperRow(r); main.appendChild(b); if (i === focusIdx) target = b.querySelector('.on') || b.querySelector('button'); continue; }
+            if (r.kind === 'wallpapers') { b = wallpaperRow(r, i); main.appendChild(b); if (i === focusIdx) target = b.querySelector('.on') || b.querySelector('button'); continue; }
             if (r.kind === 'themes') { b = themeRow(r, i); main.appendChild(b); if (i === focusIdx) target = b.querySelector('.on') || b.querySelector('button'); continue; }
             if (r.kind === 'profile') { main.appendChild(profileCard()); continue; }
             if (r.kind === 'status') { main.appendChild(statusCard(r)); continue; }
@@ -913,10 +924,11 @@
         return c;
     }
 
-    function wallpaperRow(r) {
-        var box = el('div', 'set-wps');
+    function wallpaperRow(r, idx) {
+        var box = el('div', 'set-wps' + (r.live ? ' set-wps-live' : ''));
         box.appendChild(el('div', 'set-row-name', r.label));
-        var list = el('div', 'set-wp-list'), cur = Desktop.wallpaper(), all = Desktop.wallpapers();
+        var list = el('div', 'set-wp-list'), live = window.DynWall ? DynWall.is : function () { return false; };
+        var all = Desktop.wallpapers().filter(function (w) { return !!w.dyn === !!r.live; });
         function mark() {
             var bs = list.querySelectorAll('.set-wp'), now = Desktop.wallpaper();
             for (var k = 0; k < bs.length; k++) {
@@ -933,7 +945,15 @@
             // a picture added in the App Store Manager: its small version when there is one (cheaper to decode)
             if (w.url) b.style.backgroundImage = 'url("' + (w.thumb || w.url) + '")';
             b.appendChild(el('span', 'set-wp-name', w.title));
-            b.onclick = (function (id, title) { return function () { Desktop.setWallpaper(id); mark(); A11y.announce(title); }; })(w.id, w.title);
+            b.onclick = (function (id, title) {
+                return function () {
+                    var was = Desktop.wallpaper();
+                    Desktop.setWallpaper(id);
+                    A11y.announce(title);
+                    // a live one in or out: the page shows the chosen one's details and options below (focus stays on this card)
+                    if (live(was) || live(id)) { var f = renderMain(idx); if (f) Focus.focus(f); } else mark();
+                };
+            })(w.id, w.title);
             list.appendChild(b);
         }
         mark();

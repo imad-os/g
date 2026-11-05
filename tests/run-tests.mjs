@@ -5509,8 +5509,29 @@ async function wallTests(browser, base) {
         await page.evaluate(() => Win.open('settings', 'personal'));
         await page.waitForTimeout(200);
         const txt = await page.textContent('.set-main');
-        check(/Holidays and events/.test(txt) && /Moving rain and snow/.test(txt) && /Holidays of/.test(txt) && /Morocco/.test(txt) && /Football nights/.test(txt), 'Control Panel > Personalization lists the live backgrounds and their settings');
-        await page.evaluate(() => Win.close());
+        const lists = await page.evaluate(() => [...document.querySelectorAll('.set-wps:not(.set-wps-live) .set-wp:not(.set-th)')].map((b) => b.getAttribute('data-wp')).join() + '|' +
+                                                [...document.querySelectorAll('.set-wps-live .set-wp')].map((b) => b.getAttribute('data-wp')).join());
+        check(/Live backgrounds/.test(txt) && lists === Object.values({ a: 'bloom,aurora,sunset,night,aero,hills,dunes,material,lagoon' }).join() + '|dyn_weather,dyn_astro,dyn_events',
+              'Personalization: the live backgrounds have their own section ' + lists);
+        check(/Holidays and events: changes with the day/.test(txt) && /Holidays of/.test(txt) && /Morocco/.test(txt) && /Football nights/.test(txt) && !/Moving rain and snow/.test(txt),
+              'the live one in use: what it does and only its own options (no switch to turn it on)');
+        await page.evaluate(() => { const m = document.querySelector('.set-main'); m.scrollTop = m.scrollHeight; });
+        await shot(page, 'personalize-events');
+        // choosing Live weather: its details and its option replace the others, the focus stays on its card
+        await page.focus('.set-wps-live .set-wp[data-wp="dyn_weather"]');
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(200);
+        const txt2 = await page.textContent('.set-main');
+        check(await page.evaluate(() => Desktop.wallpaper() === 'dyn_weather' && document.activeElement.getAttribute('data-wp') === 'dyn_weather') &&
+              /Live weather: the sky of your place/.test(txt2) && /Moving rain and snow/.test(txt2) && !/Holidays of/.test(txt2), 'OK on Live weather: it is used at once, its details and option show, focus stays on it');
+        await page.evaluate(() => { const m = document.querySelector('.set-main'); m.scrollTop = m.scrollHeight; });
+        await shot(page, 'personalize-weather');
+        await page.focus('.set-wps:not(.set-wps-live) .set-wp[data-wp="aurora"]');
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(200);
+        check(await page.evaluate(() => Desktop.wallpaper() === 'aurora' && !/Moving rain|Holidays of/.test(document.querySelector('.set-main').textContent) && document.activeElement.getAttribute('data-wp') === 'aurora'),
+              'a still background: no live options shown');
+        await page.evaluate(() => { Desktop.setWallpaper('dyn_events'); Win.close(); });
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }
