@@ -116,6 +116,14 @@
   strings `js/core/i18n-music.js`, look `css/music.css` (per theme). Remote media keys = Input actions `mediaNext` / `mediaPrev` / `mediaFf` /
   `mediaRew` / `mediaStop` (+ `pause`), handled in `main.js mediaKey`, never sent to games. Keyboard mode `title` keeps capitals and spaces.
   Tests: `MYPC_ONLY=music node tests/run-tests.mjs` (fixtures `tests/music-fixtures.mjs`), `MYPC_SHOTS=<folder>` saves screenshots.
+- **Remote shortcuts** (owner request 2026-11-05, `js/launcher/shortcuts.js` + `js/core/i18n-shortcuts.js`): per profile (`shortcuts` key,
+  `[{ key, act, arg, name }]`, one per button) a remote button runs an action: music play/pause / next / previous, switch user
+  (`ProfilesUI.open`), open an app or game, open a Control Panel page, Start, desktop, My PC's menu. **Defaults are only Play / Pause = music
+  and Guide = switch user.** `Input.setKeyHook` runs it before the key map (the button loses its built-in use for that profile; F6 stays the
+  keyboard's Guide); only the buttons in use are registered on the TV. Memo / Music keep their own Play / Pause and Record. In a game: music
+  and My PC's menu at once; "open" actions ask, then quit the game and the desktop runs it (`sc_next`). Control Panel > **Shortcuts**: list, Add,
+  then Button (every remote button) / Action / App or page lists, Save, Remove, Back to defaults. The game menu (`game-host.js renderPause`)
+  has **Play music / Pause music** (`Music.toggle`, stays open).
 - `apps/store.js`: the App Store app (Home / Games / Apps / Library / Search, Install / Open / Uninstall).
 - **Settings of every My PC** (owner decision): App Store Manager > Settings writes Firestore `settings/mypc` (admins only, read by
   every TV): backgrounds (`wallpapers: [{ url, title, thumb }]`, an empty title is taken from the address) and the background of new

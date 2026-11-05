@@ -435,6 +435,8 @@ var GameHost = (function () {
             pauseItems.push({ id: '_padshow', label: I18n.t(TouchPad.hidden() ? 'padShow' : 'padHide') });
         }
         if (window.Rotation && Rotation.phone() && Rotation.mode() === 'manual') pauseItems.push({ id: '_rotate', label: I18n.t('rotNow') });
+        // the music that plays on under the game (js/core/music.js): play or pause it from here
+        if (typeof Music !== 'undefined') pauseItems.push({ id: '_music', label: I18n.t(musicOn() ? 'gmMusicPause' : 'gmMusicPlay') });
         pauseItems.push({ id: '_quit', label: I18n.t('quitToMenu') });
         var target = null;
         for (var i = 0; i < pauseItems.length; i++) {
@@ -448,6 +450,8 @@ var GameHost = (function () {
         }
         return target || box.firstChild;
     }
+
+    function musicOn() { try { return !!Music.state().playing; } catch (e) { return false; } }
 
     // on a phone held upright (html.tall) an app gets the whole tall screen; the built-in games and apps with
     // "orientation": "landscape" in their config are made for 16:9: they keep 1920x1080, shown across the screen's width
@@ -524,6 +528,11 @@ var GameHost = (function () {
         if (id === '_touchpad') return TouchPad.settings();           // the pause menu stays; the pad's own panel opens over it
         var r;
         if (id === '_padshow') { TouchPad.setHidden(!TouchPad.hidden()); r = 'stay'; }
+        else if (id === '_music') {
+            if (typeof Music.has === 'function' && !Music.has()) App.toast(I18n.t('scNoMusic'), { id: 'shortcut' });
+            else Music.toggle();
+            r = 'stay';
+        }
         else if (id === '_rotate') { if (!Rotation.turn()) App.toast(I18n.t('rotUpdate')); r = 'stay'; }   // Manual screen rotation
         else try { r = api.onMenu(id); } catch (e) {}
         if (r === 'stay') {
@@ -655,6 +664,7 @@ var GameHost = (function () {
         // a notification for the app that is open: its deep link goes to it (MyPC.launch + onLaunch); true when delivered
         deepLink: function (gameId, launch) { if (!game || game.id !== gameId || !api || !api.launch) return false; api.launch(launch); return true; },
         state: function () { return state; },
+        id: function () { return game ? game.id : null; },
         frame: function () { return iframe; }
     };
 })();

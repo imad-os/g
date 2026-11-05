@@ -58,7 +58,7 @@ var Input = (function () {
     var startBtn = {};              // 'padN' -> { at: first pressed, both: both held since, combo: both were held, fired: hold sent, sup: released by releaseAll }
     var backTv = false;             // the last Back came from the TV remote (keyCode 10009), not from a keyboard
 
-    var handler = null;
+    var handler = null, keyHook = null;
     var keyHeld = {};               // keyCode -> true
     var count = {};                 // device -> { action -> number of keys/buttons holding it }
     var padNow = {};                // 'padN' -> { action -> bool }
@@ -119,6 +119,8 @@ var Input = (function () {
     function onKey(e, down) {
         var code = e.keyCode, acts = KEYMAP[code], i, dev = KEYS2[code] ? 'keys2' : 'keys';
         if (typing(e, down)) return;
+        // the profile's remote shortcuts (js/launcher/shortcuts.js) go first: a mapped button does only its shortcut
+        if (keyHook && keyHook(code, down, e)) { if (code >= 400 || code === 19) setDevice('remote'); if (e.preventDefault) e.preventDefault(); return; }
         if (down && isKeyboardKey(code)) { used('keyboard'); setDevice('keyboard'); }
         if (!acts) return;
         if (code === 9 && e.shiftKey) acts = ['tabBack'];
@@ -455,6 +457,8 @@ var Input = (function () {
         touch: touch,                        // the touch pad's actions (left right up down ok run cancel menu pause)
         systemBack: systemBack,              // the phone's Back button in the Android app: like the TV remote's Back
         setHandler: function (fn) { handler = fn; },
+        setKeyHook: function (fn) { keyHook = fn || null; },     // fn(keyCode, down, event) -> true when it used the key
+        TV_KEYS: TV_KEYS,
         isDown: isDown,
         isDownDev: isDownDev,
         lastDevice: function () { return lastDev; },

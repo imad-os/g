@@ -18,6 +18,7 @@
         { id: 'accounts', icon: 'accounts', label: 'sysAccounts' },
         { id: 'sound', icon: 'sound', label: 'sysSound' },
         { id: 'devices', icon: 'gamepad', label: 'sysDevices' },
+        { id: 'shortcuts', icon: 'remote', label: 'sysShortcuts' },
         { id: 'time', icon: 'clock', label: 'sysTime' },
         { id: 'gaming', icon: 'controller', label: 'sysGaming' },
         { id: 'ai', icon: 'globe', label: 'sysAi' },
@@ -28,6 +29,7 @@
     ];
 
     if (!window.Rotation || !Rotation.phone()) PAGES = PAGES.filter(function (p) { return p.id !== 'display'; });
+    Shortcuts.setPages(PAGES);
 
     var body, nav, main, home, page = null, rows = [], userId = null;
 
@@ -46,6 +48,7 @@
         if (id === 'ai') { aiRows(out); return out; }
         if (id === 'widgets') { if (sub === 'widget') widgetRows(out); else widgetsRows(out); return out; }
         if (id === 'notifications') { notifRows(out); return out; }
+        if (id === 'shortcuts') { scRows(out); return out; }
         if (sub === 'users' && id === 'accounts') { usersRows(out); return out; }
         if (sub === 'user' && id === 'accounts') { userRows(out); return out; }
         if (sub === 'padtest' && id === 'devices') {
@@ -516,7 +519,93 @@
         } });
     }
 
+    /* ---------- Shortcuts (js/launcher/shortcuts.js): this profile's remote buttons -> actions ----------
+     * the list, then one shortcut (Button, Action, App or page, Save, Remove); each choice is a list of its own */
+    var scIdx = -1, scDraft = null;
+    function scGo(to, idx) { sub = to; var f = renderMain(idx === undefined ? 1 : idx); if (f) Focus.focus(f); }
+    function scRows(out) {
+        if (sub === 'sckey') return scKeyRows(out);
+        if (sub === 'scact') return scActRows(out);
+        if (sub === 'scarg') return scArgRows(out);
+        if (sub === 'shortcut') return scEditRows(out);
+        var l = Shortcuts.list();
+        out.push({ kind: 'text', value: t('scHelp') });
+        l.forEach(function (s, i) {
+            out.push({ kind: 'action', label: Shortcuts.buttonName(s.key), desc: Shortcuts.describe(s), run: function () {
+                scIdx = i; scDraft = { key: s.key, act: s.act, arg: s.arg, name: s.name }; scGo('shortcut');
+            } });
+        });
+        if (!l.length) out.push({ kind: 'info', label: t('sysShortcuts'), value: t('scNone') });
+        out.push({ kind: 'action', label: t('scAdd'), primary: true, run: function () {
+            var used = {}, k, free = null;
+            l.forEach(function (s) { used[s.key] = 1; });
+            for (k = 0; k < Shortcuts.BUTTONS.length && !free; k++) if (!used[Shortcuts.BUTTONS[k].id]) free = Shortcuts.BUTTONS[k].id;
+            scIdx = -1; scDraft = { key: free || 'red', act: 'app', arg: null };
+            scGo('shortcut');
+        } });
+        out.push({ kind: 'action', label: t('scReset'), desc: t('scResetDesc'), run: function () {
+            App.confirm(t('scReset') + '?', t('scResetDesc'), function () { Shortcuts.reset(); App.toast(t('scResetDone')); scGo(null, 1); });
+        } });
+    }
+    function scEditRows(out) {
+        var d = scDraft, a = Shortcuts.action(d.act), cur = Shortcuts.forKey(d.key);
+        out.push({ kind: 'action', label: t('back'), run: function () { leaveSub(); } });
+        out.push({ kind: 'action', label: t('scButton'), desc: Shortcuts.buttonName(d.key), run: function () { scGo('sckey', 0); } });
+        out.push({ kind: 'action', label: t('scAction'), desc: a ? t(a.label) : '\u2014', run: function () { scGo('scact', 0); } });
+        if (a && a.arg) out.push({ kind: 'action', label: t(a.arg === 'app' ? 'scWhichApp' : 'scWhichPage'),
+            desc: d.arg ? Shortcuts.describe(d) : t('scPick'), run: function () { scGo('scarg', 0); } });
+        // another shortcut already on this button is replaced when this one is saved
+        var l = Shortcuts.list();
+        if (cur && !(scIdx >= 0 && l[scIdx] && l[scIdx].key === d.key)) out.push({ kind: 'text', value: t('scReplaces').replace('%s', Shortcuts.describe(cur)) });
+        var b = Shortcuts.button(d.key);
+        if (b && b.use) out.push({ kind: 'text', value: t('scUse').replace('%s', t(b.use)) });
+        out.push({ kind: 'action', label: t('scSave'), primary: true, run: function () {
+            if (a && a.arg && !d.arg) { App.toast(t('scPick')); return scGo('scarg', 0); }
+            Shortcuts.put(scIdx, { key: d.key, act: d.act, arg: d.arg, name: d.name });
+            App.toast(t('scSaved').replace('%s', Shortcuts.buttonName(d.key)));
+            scDraft = null; scGo(null, 1);
+        } });
+        if (scIdx >= 0) out.push({ kind: 'action', label: t('scRemove'), danger: true, run: function () {
+            Shortcuts.remove(scIdx);
+            App.toast(t('scRemoved').replace('%s', Shortcuts.buttonName(d.key)));
+            scDraft = null; scGo(null, 1);
+        } });
+    }
+    // every button of the remote, with what it does now
+    function scKeyRows(out) {
+        out.push({ kind: 'action', label: t('back'), run: function () { leaveSub(); } });
+        Shortcuts.BUTTONS.forEach(function (b) {
+            var s = Shortcuts.forKey(b.id);
+            out.push({ kind: 'action', label: Shortcuts.buttonName(b.id) + (b.id === scDraft.key ? '  \u2713' : ''),
+                desc: s ? Shortcuts.describe(s) : b.use ? t(b.use) : t('scFree'),
+                run: function () { scDraft.key = b.id; scGo('shortcut', 1); } });
+        });
+    }
+    function scActRows(out) {
+        out.push({ kind: 'action', label: t('back'), run: function () { leaveSub(); } });
+        Shortcuts.ACTIONS.forEach(function (a) {
+            out.push({ kind: 'action', label: t(a.label) + (a.id === scDraft.act ? '  \u2713' : ''), desc: t(a.label + 'Desc'), run: function () {
+                if (scDraft.act !== a.id) { scDraft.arg = null; scDraft.name = null; }
+                scDraft.act = a.id;
+                if (a.arg && !scDraft.arg) scGo('scarg', 0); else scGo('shortcut', 2);
+            } });
+        });
+    }
+    function scArgRows(out) {
+        var a = Shortcuts.action(scDraft.act);
+        out.push({ kind: 'action', label: t('back'), run: function () { leaveSub(); } });
+        var l = a.arg === 'page' ? Shortcuts.pages().filter(function (p) { return p.id !== 'shortcuts'; }).map(function (p) { return { id: p.id, name: t(p.label) }; })
+                                 : Shortcuts.targets();
+        l.forEach(function (x) {
+            out.push({ kind: 'action', label: x.name + (x.id === scDraft.arg ? '  \u2713' : ''), desc: x.game ? t('scGame') : '', run: function () {
+                scDraft.arg = x.id; scDraft.name = x.name; scGo('shortcut', 3);
+            } });
+        });
+    }
+
     function leaveSub() {
+        if (sub === 'sckey' || sub === 'scact' || sub === 'scarg') { var i0 = { sckey: 1, scact: 2, scarg: 3 }[sub]; scGo('shortcut', i0); return; }
+        if (sub === 'shortcut') { var i1 = scIdx >= 0 ? scIdx + 1 : Shortcuts.list().length + 1; scDraft = null; scGo(null, i1); return; }
         if (sub === 'widget') {
             var at = 0, l = Widgets.list();
             for (var w = 0; w < l.length; w++) if (l[w].id === widgetId) at = w;

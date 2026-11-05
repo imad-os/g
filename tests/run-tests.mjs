@@ -1082,8 +1082,8 @@ async function main() {
         check(await page.evaluate(() => Win.current() === null && !Mic.active()), 'Memo closes with the microphone off');
         // the Control Panel (was Settings) opens on a grid of categories
         await page.evaluate(() => Win.open('settings'));
-        check(await page.evaluate(() => document.querySelectorAll('.cp-tile').length === 14 && document.getElementById('win-title').textContent === 'Control Panel' &&
-            document.activeElement.getAttribute('data-page') === 'system' && document.querySelector('.set-nav').hidden), 'the Control Panel opens on a grid of 14 categories, focus on the first');
+        check(await page.evaluate(() => document.querySelectorAll('.cp-tile').length === 15 && document.getElementById('win-title').textContent === 'Control Panel' &&
+            document.activeElement.getAttribute('data-page') === 'system' && document.querySelector('.set-nav').hidden), 'the Control Panel opens on a grid of 15 categories, focus on the first');
         await key('ArrowRight', 'Enter');
         check(await page.evaluate(() => !document.querySelector('.cp-home') .offsetParent && document.querySelector('.set-title').textContent === 'Personalization' &&
             document.activeElement.getAttribute('data-theme') === 'win11'), 'OK on a card opens its page, focus on its first row (the theme)');
@@ -1798,8 +1798,10 @@ async function main() {
         check(await where() === 'toolbar', 'F6 (the Guide key) moves to the browser buttons from deep inside a page');
         await key('F6');
         check(await where() === 'view', 'Guide again goes back to the page');
+        // the remote's Guide key is a shortcut by default (switch user); without one it does what F6 does
+        await page.evaluate(() => { while (Shortcuts.list().length) Shortcuts.remove(0); });
         await remoteKey(458);
-        check(await where() === 'toolbar', 'the TV remote Guide key (458) does the same');
+        check(await where() === 'toolbar', 'the TV remote Guide key (458) does the same when this profile has no Guide shortcut');
         await key('ArrowRight');
         check(await where() === 'toolbar', 'the arrows move along the buttons');
         await page.evaluate(() => Win.close());
@@ -4513,6 +4515,100 @@ async function main() {
         await page.context().close();
     }
     await musicTests(browser, base);
+
+    console.log('42d. remote shortcuts (per profile): Play / Pause = music, Guide = users; Control Panel > Shortcuts; the game menu\'s music button');
+    {
+        const page = await newPage(browser, base);
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon');
+        const remote = (c) => page.evaluate((k) => { for (const d of [true, false]) Input.onKey({ keyCode: k, repeat: false, preventDefault() {} }, d); }, c);
+        check(await page.evaluate(() => JSON.stringify(Shortcuts.list()) === JSON.stringify([{ key: 'playpause', act: 'music' }, { key: 'guide', act: 'users' }])),
+            'the defaults are only Play / Pause = music and Guide = switch user');
+        await page.evaluate(() => { if (Music.has && !Music.has()) window.__noMusic = true; });
+        const noMusic = await page.evaluate(() => !!window.__noMusic);
+        const was = await page.evaluate(() => Music.state().playing);
+        await remote(10252);
+        await page.waitForTimeout(100);
+        if (noMusic) check(/No music/.test(await page.textContent('#toast')), 'Play / Pause with nothing to play says so');
+        else check(await page.evaluate((w) => Music.state().playing === !w, was), 'the Play / Pause key plays or pauses the music');
+        await remote(458);
+        await page.waitForTimeout(150);
+        check(await page.evaluate(() => ProfilesUI.screenOpen() && !Desktop.startOpen()), 'the Guide key opens the users screen (switch user), not Start');
+        await page.evaluate(() => ProfilesUI.close());
+        // Control Panel > Shortcuts: add Blue = open Calculator, with the remote alone
+        await page.evaluate(() => Win.open('settings', 'shortcuts'));
+        await page.waitForTimeout(150);
+        const cp = await page.textContent('.set-main');
+        check(/Play \/ Pause/.test(cp) && /Play \/ pause music/.test(cp) && /Guide/.test(cp) && /Switch user/.test(cp) && /Add a shortcut/.test(cp), 'Control Panel > Shortcuts lists this user\'s shortcuts');
+        const row = (re) => page.evaluate((s) => { const b = [...document.querySelectorAll('.set-main .set-row')].find((x) => new RegExp(s).test(x.textContent)); if (b) { b.focus(); b.click(); } return !!b; }, re);
+        await row('Add a shortcut');
+        await row('^Button');
+        const keys = await page.evaluate(() => document.querySelectorAll('.set-main .set-row').length);
+        check(keys >= 30 && /Blue button/.test(await page.textContent('.set-main')) && /Number 5/.test(await page.textContent('.set-main')), 'Button lists every remote button (' + (keys - 1) + ')');
+        await row('^Blue button');
+        await row('^Action');
+        check(/Open an app or game/.test(await page.textContent('.set-main')) && /Open a Control Panel page/.test(await page.textContent('.set-main')), 'Action lists every action');
+        await row('^Open an app or game');
+        check(/Calculator/.test(await page.textContent('.set-main')) && /Block Drop/.test(await page.textContent('.set-main')), 'then every app and game');
+        await row('^Calculator');
+        await row('^Save');
+        check(await page.evaluate(() => Shortcuts.forKey('blue') && Shortcuts.forKey('blue').arg === 'calculator') && /Open Calculator/.test(await page.textContent('.set-main')), 'saved: Blue = Open Calculator');
+        await page.evaluate(() => Win.close());
+        await remote(406);
+        await page.waitForTimeout(200);
+        check(await page.evaluate(() => Win.current() === 'calculator'), 'the Blue key opens Calculator');
+        // a Control Panel page
+        await page.evaluate(() => Shortcuts.put(-1, { key: 'n1', act: 'page', arg: 'sound' }));
+        await remote(49);
+        await page.waitForTimeout(200);
+        check(await page.evaluate(() => Win.current() === 'settings' && /Sound/.test(document.querySelector('.set-main .set-title').textContent)), 'Number 1 opens Control Panel > Sound');
+        // edit then remove with the Control Panel
+        await page.evaluate(() => { Win.close(); Win.open('settings', 'shortcuts'); });
+        await row('^Number 1');
+        await row('^Remove this shortcut');
+        check(await page.evaluate(() => !Shortcuts.forKey('n1')), 'Remove deletes it');
+        // per profile: another user has only the defaults
+        const other = await page.evaluate(() => { const p2 = Profiles.create('Sara'); Store.setProfile(p2.id); const l = Shortcuts.list().map((s) => s.key).join(); Store.setProfile('p1'); return l; });
+        check(other === 'playpause,guide', 'another user has their own (the defaults): ' + other);
+        // one shortcut per button: Guide set to Start replaces Switch user
+        await page.evaluate(() => Shortcuts.put(-1, { key: 'guide', act: 'start' }));
+        check(await page.evaluate(() => Shortcuts.list().filter((s) => s.key === 'guide').length === 1 && Shortcuts.forKey('guide').act === 'start'), 'one shortcut per button (the new one replaces the old)');
+        await page.evaluate(() => { Win.close(); Shortcuts.reset(); Shortcuts.put(-1, { key: 'blue', act: 'app', arg: 'calculator' }); });
+        // in a game: the menu has Play / Pause music; Guide asks before leaving for the users screen; Blue (Calculator) too
+        await page.focus('[data-game="blocks"]');
+        await Promise.all([page.waitForURL(/play=blocks/), page.keyboard.press('Enter')]);
+        await page.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 15000 });
+        await tvBack(page);
+        await page.waitForTimeout(100);
+        const items = await page.evaluate(() => [...document.querySelectorAll('#pause-items button')].map((b) => b.textContent));
+        check(items.some((x) => /^(Play|Pause) music$/.test(x)), 'the game menu has a Play / Pause music button: ' + items.join(', '));
+        await page.evaluate(() => [...document.querySelectorAll('#pause-items button')].find((b) => /music$/.test(b.textContent)).click());
+        await page.waitForTimeout(100);
+        check(await page.evaluate(() => GameHost.state() === 'paused' && /music$/.test(document.activeElement.textContent)), 'it keeps the menu open, on the same button');
+        await page.evaluate(() => [...document.querySelectorAll('#pause-items button')][0].click());   // Resume
+        await remote(458);
+        await page.waitForTimeout(150);
+        check(await page.evaluate(() => App.dialogOpen() && GameHost.state() === 'paused' && /Leave the game/.test(document.getElementById('dialog-title').textContent)), 'Guide in a game asks first (the game waits)');
+        await page.evaluate(() => document.getElementById('dialog-no').click());
+        await page.waitForTimeout(100);
+        check(await page.evaluate(() => !App.dialogOpen() && GameHost.state() === 'running'), 'Cancel: back to the game');
+        await remote(406);
+        await page.waitForTimeout(150);
+        await Promise.all([page.waitForURL((u) => !/play=/.test(u)), page.evaluate(() => document.getElementById('dialog-yes').click())]);
+        await page.waitForFunction(() => window.Win && Win.current() === 'calculator', null, { timeout: 15000 }).catch(() => {});
+        check(await page.evaluate(() => Win.current() === 'calculator' && !Store.get('sc_next', null)), 'Leave and open: the game closes and Calculator opens on the desktop');
+        // the Memo app keeps its own Play / Pause
+        await page.evaluate(() => { Win.close(); Win.open('memo'); window.__t = Music.state().playing; });
+        await remote(10252);
+        await page.waitForTimeout(100);
+        check(await page.evaluate(() => Music.state().playing === window.__t), 'in Memo, Play / Pause stays Memo\'s');
+        await page.evaluate(() => { Win.close(); I18n.setLang('fr'); Win.open('settings', 'shortcuts'); });
+        check(/Raccourcis/.test(await page.textContent('.set-main')) && /Changer d’utilisateur/.test(await page.textContent('.set-main')), 'translated (French)');
+        await page.evaluate(() => { Win.close(); I18n.setLang('en'); });
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
 
     await browser.close();
     srv.close();

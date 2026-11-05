@@ -289,6 +289,7 @@ var App = (function () {
         if (Perf.profile().tier !== 'low') document.documentElement.className += ' hi';
         Input.init();
         Input.setHandler(route);
+        Shortcuts.init();                       // this profile's remote shortcuts (Control Panel > Shortcuts)
         Input.onDevice(updateIndicator);
         updateIndicator();
         showVersion();
@@ -376,6 +377,7 @@ var App = (function () {
             } else if (param('ctrl') === '1') {                   // the Android controller app (android-controller/) opens on it
                 setTimeout(function () { Win.open('gamepad'); }, 300);
             }
+            if (!ProfilesUI.screenOpen()) Shortcuts.resume();         // a shortcut pressed in a game that asked to open something here
             Backup.start();
             Accounts.start();
             Push.start();                                        // push notifications of a signed-in player account (js/launcher/push.js)
