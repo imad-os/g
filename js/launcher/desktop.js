@@ -17,6 +17,7 @@ var Desktop = (function () {
         { id: 'browser', icon: 'browser', label: 'browser' },
         { id: 'calculator', icon: 'calculator', label: 'calculator' },
         { id: 'calendar', icon: 'calendar', label: 'calendar' },
+        { id: 'weather', icon: 'weather', label: 'weather' },
         { id: 'memo', icon: 'memo', label: 'memo' },
         { id: 'music', icon: 'music', label: 'music' },
         { id: 'playtime', icon: 'hourglass', label: 'playtime' },

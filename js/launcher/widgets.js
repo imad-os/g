@@ -20,67 +20,25 @@ var Widgets = (function () {
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
     function now() { return Date.now(); }
 
-    // a small GET of JSON (weather), with a timeout; cb(err, json)
-    function getJson(url, ms, cb) {
-        var x = new XMLHttpRequest(), done = false;
-        function end(e, j) { if (!done) { done = true; cb(e, j); } }
-        try {
-            x.open('GET', url, true);
-            x.timeout = ms;
-            x.onload = function () { var j = null; try { j = JSON.parse(x.responseText); } catch (e) {} end(x.status >= 200 && x.status < 300 && j ? null : 'http ' + x.status, j); };
-            x.onerror = x.ontimeout = function () { end('network'); };
-            x.send();
-        } catch (e) { end('network'); }
-    }
-
     /* ---------------- the built-in widgets ----------------
      * def: { id, icon, title(), size, every (s), choices [s], bg, settings() (WidgetLib schema), refresh(ctx, done(view)),
      *        press(button id), open(), idle() (nothing changes: no timer) } */
 
-    // Weather: Open-Meteo (free, no key). The place: the city typed in its settings, else found from the internet address
-    // (GeoJS) once a day. Profile key weather_loc keeps where it is.
-    var WMO = [[0, 'clear', 'sun'], [2, 'partly', 'partly'], [3, 'cloudy', 'cloud'], [48, 'fog', 'fog'], [57, 'drizzle', 'rain'],
-               [67, 'rain', 'rain'], [77, 'snow', 'snow'], [82, 'showers', 'rain'], [86, 'snow', 'snow'], [99, 'storm', 'storm']];
-    function sky(code, day) {
-        for (var i = 0; i < WMO.length; i++) if (code <= WMO[i][0]) return { k: WMO[i][1], ic: WMO[i][2] === 'sun' && !day ? 'moon' : WMO[i][2] };
-        return { k: 'cloudy', ic: 'cloud' };
-    }
-    function place(s, cb) {
-        var q = (s.place || '').trim(), loc = Store.get('weather_loc', null);
-        if (loc && loc.q === q && loc.lat !== undefined && (q || now() - (loc.at || 0) < 86400000)) return cb(null, loc);
-        function keep(l) { l.q = q; l.at = now(); Store.set('weather_loc', l); cb(null, l); }
-        if (q) {
-            return getJson('https://geocoding-api.open-meteo.com/v1/search?count=1&language=' + I18n.lang() + '&name=' + encodeURIComponent(q), 8000, function (e, j) {
-                var r = j && j.results && j.results[0];
-                if (e || !r) return cb(e ? 'offline' : 'notfound', loc && loc.q === q ? loc : null);
-                keep({ lat: r.latitude, lon: r.longitude, name: r.name });
-            });
-        }
-        getJson('https://get.geojs.io/v1/ip/geo.json', 8000, function (e, j) {
-            if (e || !j || !j.latitude) return cb('offline', loc);
-            keep({ lat: +j.latitude, lon: +j.longitude, name: j.city || j.region || j.country || '' });
-        });
-    }
+    // Weather: the data comes from js/core/weather.js (shared with the Weather app: one request serves both, kept 10 min)
     function weather(ctx, done) {
         var s = ctx.settings, f = s.units === 'f';
-        place(s, function (err, loc) {
-            if (!loc) return done(err === 'notfound' ? { icon: 'i:cloud', big: '--', text: t('wgNoPlace').replace('%s', s.place) } : stale(ctx.id, t('wgOffline')));
-            var u = 'https://api.open-meteo.com/v1/forecast?latitude=' + loc.lat + '&longitude=' + loc.lon +
-                    '&current=temperature_2m,weather_code,is_day,relative_humidity_2m,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min' +
-                    '&forecast_days=1&timezone=auto' + (f ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : '');
-            getJson(u, 8000, function (e, j) {
-                var c = j && j.current, d = j && j.daily;
-                if (e || !c) return done(stale(ctx.id, t('wgOffline')));
-                var k = sky(c.weather_code, c.is_day !== 0), v = { icon: 'i:' + k.ic, big: Math.round(c.temperature_2m) + '°', sub: loc.name, text: t('wx_' + k.k) };
-                var hi = d && d.temperature_2m_max ? Math.round(d.temperature_2m_max[0]) : null, lo = d && d.temperature_2m_min ? Math.round(d.temperature_2m_min[0]) : null;
-                v.rows = [];
-                if (hi !== null) v.rows.push({ label: t('wgHiLo'), value: hi + '° / ' + lo + '°' });
-                if (ctx.size === 'large') {
-                    v.rows.push({ label: t('wgHumidity'), value: Math.round(c.relative_humidity_2m) + ' %' });
-                    v.rows.push({ label: t('wgWind'), value: Math.round(c.wind_speed_10m) + (f ? ' mph' : ' km/h') });
-                }
-                done(v);
-            });
+        Weather.get(s, 600000, function (err, data, loc) {
+            if (err === 'notfound') return done({ icon: 'i:cloud', big: '--', text: t('wgNoPlace').replace('%s', s.place) });
+            if (!data || !data.now || data.now.temp === null) return done(stale(ctx.id, t('wgOffline')));
+            var c = data.now, d = data.days[0] || {}, k = Weather.sky(c.code, c.day);
+            var v = { icon: 'i:' + k.ic, big: Math.round(c.temp) + '°', sub: loc.name, text: t('wx_' + k.k), rows: [] };
+            if (d.hi !== null && d.hi !== undefined) v.rows.push({ label: t('wgHiLo'), value: Math.round(d.hi) + '° / ' + Math.round(d.lo) + '°' });
+            if (ctx.size === 'large') {
+                if (c.hum !== null) v.rows.push({ label: t('wgHumidity'), value: Math.round(c.hum) + ' %' });
+                if (c.wind !== null) v.rows.push({ label: t('wgWind'), value: Math.round(c.wind) + (f ? ' mph' : ' km/h') });
+            }
+            if (err) v.sub = t('wgOffline');
+            done(v);
         });
     }
     // the last view, marked as old (offline), or a first "loading" view
@@ -154,7 +112,7 @@ var Widgets = (function () {
           settings: function () {
               return [{ id: 'place', type: 'text', label: t('wgPlace'), 'default': '' },
                       { id: 'units', type: 'select', label: t('wgUnits'), 'default': 'c', options: [{ value: 'c', label: t('wgCelsius') }, { value: 'f', label: t('wgFahrenheit') }] }];
-          }, refresh: weather, keep: true },
+          }, refresh: weather, keep: true, open: function () { Win.open('weather'); } },
         { id: 'playtime', icon: 'hourglass', title: function () { return t('wg_playtime'); }, size: 'small', every: 300, choices: [60, 300, 900, 1800], bg: false, refresh: playtime,
           open: function () { Win.open('playtime'); } },
         { id: 'sysmon', icon: 'chip', title: function () { return t('wg_sysmon'); }, size: 'medium', every: 5, choices: [2, 5, 10, 30, 60], bg: false, refresh: sysmon },

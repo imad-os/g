@@ -101,6 +101,10 @@
   with background on (Music by default).** App widgets: `"widgets"` in `mypc-app.json` (`js/core/widget-lib.js`, max 3), approved in App
   Store Manager > Widgets (`installer/widgets.js`; code copied to Firestore `widgets/<app>__<widget>`, SHA-256 in `apps/<id>.widgets[i].sha`);
   the TV runs only that copy in a `data:` Worker, one at a time, 10 s max, and draws the returned VIEW itself (no app HTML). Docs: GUIDE.md section 18.
+- **Weather app** (owner request 2026-11-05, `apps/weather.js` + `css/weather.css` + `js/core/i18n-weather.js`): now, next 24 h (every 3 h),
+  7 days (wind + gusts + direction, precipitation + chance, humidity, pressure, UV, sunrise / sunset). Data in `js/core/weather.js`, shared with
+  the Weather widget: ONE Open-Meteo request for both, kept 10 min in `arc_dev_wxfc`; same place / units setting (`Widgets.setSetting('weather', ...)`).
+  The widget's OK opens the app. Light: DOM built once, one 15 min timer while open, no animation; looks follow the theme (cards in css/weather.css).
 - `apps/store.js`: the App Store app (Home / Games / Apps / Library / Search, Install / Open / Uninstall).
 - **Settings of every My PC** (owner decision): App Store Manager > Settings writes Firestore `settings/mypc` (admins only, read by
   every TV): backgrounds (`wallpapers: [{ url, title, thumb }]`, an empty title is taken from the address) and the background of new

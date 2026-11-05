@@ -269,6 +269,21 @@ async function fakeFirestore(ctx, db) {
     });
 }
 
+// An Open-Meteo forecast answer (js/core/weather.js asks now + hours + 7 days in one request): the hours start 2 hours before now
+function forecastBody(temp) {
+    const day = (i) => `2026-11-${String(5 + i).padStart(2, '0')}`, hours = [];
+    for (let i = 0; i < 27; i++) hours.push(new Date(Date.UTC(2026, 10, 5, 7 + i)).toISOString().slice(0, 16));
+    return {
+        current: { time: '2026-11-05T09:45', temperature_2m: temp, apparent_temperature: temp - 2, relative_humidity_2m: 60, precipitation: 0.4, weather_code: 2, is_day: 1,
+                   cloud_cover: 40, pressure_msl: 1016.2, wind_speed_10m: 14, wind_direction_10m: 270, wind_gusts_10m: 31 },
+        hourly: { time: hours, temperature_2m: hours.map((_, i) => temp + i % 5), precipitation_probability: hours.map((_, i) => i * 3), weather_code: hours.map((_, i) => (i % 3 ? 2 : 61)), is_day: hours.map((_, i) => (i < 9 ? 1 : 0)) },
+        daily: { time: [0, 1, 2, 3, 4, 5, 6].map(day), weather_code: [2, 61, 3, 0, 95, 71, 45], temperature_2m_max: [24, 22, 19, 25, 21, 8, 17], temperature_2m_min: [15, 14, 12, 16, 13, 1, 10],
+                 precipitation_sum: [0.4, 6.2, 0, 0, 12.5, 3, 0], precipitation_probability_max: [20, 80, 5, 0, 95, 60, 10], wind_speed_10m_max: [18, 25, 12, 9, 40, 22, 11],
+                 wind_gusts_10m_max: [35, 48, 20, 15, 70, 40, 18], wind_direction_10m_dominant: [270, 225, 180, 90, 315, 0, 45],
+                 sunrise: [0, 1, 2, 3, 4, 5, 6].map((i) => day(i) + 'T07:31'), sunset: [0, 1, 2, 3, 4, 5, 6].map((i) => day(i) + 'T18:12'), uv_index_max: [4.2, 2, 3.1, 5, 1, 0.5, 2.5] }
+    };
+}
+
 // opts.phone: a touch phone (no Tizen mock); opts.viewport; opts.touch: touch screen without the phone flags (a desktop with a touch screen)
 async function newPage(browser, base, db, opts) {
     opts = opts || {};
@@ -280,7 +295,7 @@ async function newPage(browser, base, db, opts) {
     await ctx.route(/^https:\/\/(get\.geojs\.io|geocoding-api\.open-meteo\.com|api\.open-meteo\.com)\//, (r) => {
         const u = r.request().url(), body = /geojs/.test(u) ? { latitude: '33.59', longitude: '-7.61', city: 'Casablanca' }
             : /geocoding/.test(u) ? (/name=Nowhere/.test(u) ? {} : { results: [{ latitude: 48.85, longitude: 2.35, name: 'Paris' }] })
-            : { current: { temperature_2m: /latitude=48/.test(u) ? 12.4 : 21.4, weather_code: 2, is_day: 1, relative_humidity_2m: 60, wind_speed_10m: 14 }, daily: { temperature_2m_max: [24], temperature_2m_min: [15] } };
+            : forecastBody(/latitude=48/.test(u) ? 12.4 : 21.4);
         (db.weather = db.weather || []).push(u);
         return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(body) });
     });
@@ -949,7 +964,7 @@ async function main() {
         check(/\d{1,2}:\d{2}/.test(await page.textContent('#tray-time')) && (await page.textContent('#tray-date')).length > 5, 'taskbar clock shows time and date (' + await page.textContent('#tray-time') + ')');
         check(await page.evaluate(() => document.querySelectorAll('#desk-icons [data-game]').length === 7 && !!document.querySelector('#desk-icons [data-app="explorer"]')), 'desktop icons: 7 games plus apps');
         await page.focus('#tb-start'); await key('Enter');
-        check(await page.evaluate(() => Desktop.startOpen() && document.querySelectorAll('#start-pinned [data-focus]').length === 17), 'Start menu lists 10 apps (with the App Store, Memo, Music and Playtime) and 7 games');
+        check(await page.evaluate(() => Desktop.startOpen() && document.querySelectorAll('#start-pinned [data-focus]').length === 18), 'Start menu lists 11 apps (with the App Store, Memo, Music, Playtime and Weather) and 7 games');
         await key('Escape');
         check(await page.evaluate(() => !Desktop.startOpen() && document.activeElement.id === 'tb-start'), 'Back closes Start');
         // shortcut menu: hold OK on a shortcut (a short press still opens it), a long press with the mouse or a finger, a right click
@@ -2778,7 +2793,7 @@ async function main() {
         for (const t of [{ buttons: [{ label: 'ABCD', action: 'ok' }] }, { buttons: [{ label: 'A', action: 'jump' }] }, { catalog: Array.from({ length: 9 }, (_, i) => ({ label: 'b', action: 'ok' })) }, { scale: { stick: 5 } }, 'yes']) { try { lib.toApp(mf(t), base0, 0); bad.push('accepted ' + JSON.stringify(t)); } catch (e) { /* refused: good */ } }
         check(bad.length === 0, 'the App Store Manager refuses a bad "touch" (label > 3 chars, unknown action, > 8 entries, bad scale)' + bad.join('; '));
         check(lib.toApp(mf(false), base0, 0).touch === false && lib.toApp(mf({ buttons: [{ label: 'A', action: 'ok' }] }), base0, 0).touch.buttons.length === 1 && !('touch' in lib.toApp(mf(undefined), base0, 0)), '"touch": false and { buttons } are stored in the app document; nothing is stored by default');
-        check(/'touch'(, 'services')?\]\)/.test(fs.readFileSync(path.join(ROOT, 'firebase/firestore.rules'), 'utf8')) && /d\.touch is map/.test(fs.readFileSync(path.join(ROOT, 'firebase/firestore.rules'), 'utf8')), 'the Firestore rules accept the "touch" field');
+        check(/'touch'(, '\w+')*\]\)/.test(fs.readFileSync(path.join(ROOT, 'firebase/firestore.rules'), 'utf8')) && /d\.touch is map/.test(fs.readFileSync(path.join(ROOT, 'firebase/firestore.rules'), 'utf8')), 'the Firestore rules accept the "touch" field');
         const norm = (t) => t.replace('window.VirtualPad = (function', 'var VirtualPad = (function').split('\n').map((l) => l.trim()).join('\n').trim();
         const canon = norm(fs.readFileSync(path.join(ROOT, 'sdk/pad/virtual-pad.js'), 'utf8'));
         const shellCopy = fs.readFileSync(path.join(ROOT, 'js/core/virtual-pad.js'), 'utf8');
@@ -4350,6 +4365,73 @@ async function main() {
         const t0 = await page.evaluate(() => Music.state().index);
         await page.click('#wdg-music .wdg-btn[data-b="next"]');
         check(await page.evaluate((t) => Music.state().index === (t + 1) % 5, t0), 'the Music Player card\'s Next button changes the track');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('43. Weather app: now, 24 hours, 7 days; shares its place, units and data with the widget; follows the theme; remote only');
+    {
+        const db = {};
+        const page = await newPage(browser, base, db);
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon');
+        await page.waitForFunction(() => /21°/.test((document.getElementById('wdg-weather') || {}).textContent || ''), null, { timeout: 8000 }).catch(() => {});
+        const asked = db.weather.filter((u) => /api\.open-meteo/.test(u)).length;
+        check(asked === 1 && await page.evaluate(() => !!document.querySelector('#desk-icons [data-app="weather"], #desk-icons [data-id="weather"]') || !!Desktop.appById('weather')), 'Weather is a desktop app; the widget asked the forecast once: ' + asked);
+        // OK on the widget card opens the app, drawn at once from the widget's data (no second request)
+        await page.evaluate(() => document.getElementById('wdg-weather').click());
+        await page.waitForSelector('.wx');
+        const v = await page.evaluate(() => ({
+            app: Win.current(), temp: document.querySelector('.wx-temp').textContent, cond: document.querySelector('.wx-cond').textContent, feels: document.querySelector('.wx-feels').textContent,
+            place: document.querySelector('.wx-place').textContent, days: [...document.querySelectorAll('.wx-day')].filter((d) => !d.hidden).length,
+            hours: [...document.querySelectorAll('.wx-hour')].filter((d) => !d.hidden).length, firstHour: document.querySelector('.wx-hour-t').textContent,
+            stats: [...document.querySelectorAll('.wx-stat-v')].map((e) => e.textContent), sky: document.querySelector('.wx').className,
+            focus: document.activeElement && document.activeElement.className, title: document.getElementById('win-title').textContent }));
+        check(v.app === 'weather' && v.title === 'Weather' && v.temp === '21°' && v.cond === 'Partly cloudy' && /Feels like 19°/.test(v.feels) && /H 24°/.test(v.feels) && /Casablanca/.test(v.place),
+            'the app shows now: temperature, condition, feels like, high / low, the place ' + JSON.stringify(v));
+        check(v.days === 7 && v.hours === 8 && v.firstHour === 'Now' && /wx-partly/.test(v.sky) && /wx-day/.test(v.focus), '7 days, 8 hours (every 3 h from now), a sky for the weather, focus on today');
+        check(v.stats[0] === '14 km/h W' && v.stats[1] === '31 km/h' && /0.4 mm · 20 %/.test(v.stats[2]) && v.stats[3] === '60 %' && v.stats[4] === '1016 hPa' && /4 · Moderate/.test(v.stats[5]) && /7:31|07:31/.test(v.stats[6]),
+            'details now: wind + direction, gusts, precipitation + chance, humidity, pressure, UV, sunrise ' + JSON.stringify(v.stats));
+        check(db.weather.filter((u) => /api\.open-meteo/.test(u)).length === asked, 'opening the app right after the widget asks nothing again (shared data)');
+        // the remote: Down goes through the days; the details follow the focused day
+        await page.keyboard.press('ArrowDown');
+        await page.keyboard.press('ArrowDown');
+        await page.keyboard.press('ArrowDown');
+        await page.keyboard.press('ArrowDown');
+        const d4 = await page.evaluate(() => ({ t: document.querySelector('.wx-det .wx-h').textContent, s: [...document.querySelectorAll('.wx-stat-v')].map((e) => e.textContent), a: document.activeElement.getAttribute('aria-label'), on: document.querySelector('.wx-day.on') === document.activeElement }));
+        check(d4.on && /40 km\/h NW/.test(d4.s[0]) && /12.5 mm · 95 %/.test(d4.s[2]) && /Thunderstorm/.test(d4.a) && /high 21°|H 21°/.test(d4.a) && !/Today/.test(d4.t), 'Down x4 = the 5th day: its wind, rain and an aria label for Voice Guide ' + JSON.stringify(d4));
+        // units: °F for the app and the widget, one request
+        await page.evaluate(() => document.querySelector('.wx-units').click());
+        await page.waitForFunction(() => document.querySelector('.wx-units').textContent === '°F' && !/Refreshing/.test(document.querySelector('.wx-when').textContent), null, { timeout: 5000 }).catch(() => {});
+        check(db.weather.some((u) => /api\.open-meteo.*temperature_unit=fahrenheit.*precipitation_unit=inch/.test(u)) && await page.evaluate(() => Widgets.conf('weather').s.units === 'f' && / mph/.test(document.querySelector('.wx-stat-v').textContent)),
+            'the °C / °F button switches the app and the widget (mph, inches)');
+        // place: typed with the on-screen keyboard
+        await page.evaluate(() => document.querySelector('.wx-place').click());
+        await page.waitForFunction(() => Keyboard.isOpen());
+        await page.evaluate(() => { Keyboard.setText('Paris'); Keyboard.submit(); });
+        await page.waitForFunction(() => /Paris/.test(document.querySelector('.wx-place').textContent) && /12°|54°/.test(document.querySelector('.wx-temp').textContent), null, { timeout: 5000 }).catch(() => {});
+        check(await page.evaluate(() => /Paris/.test(document.querySelector('.wx-place').textContent) && Widgets.conf('weather').s.place === 'Paris' && document.activeElement === document.querySelector('.wx-place')), 'a typed city is the place of the app and the widget');
+        await page.evaluate(() => document.querySelector('.wx-place').click());
+        await page.waitForFunction(() => Keyboard.isOpen());
+        await page.evaluate(() => { Keyboard.setText('Nowhere'); Keyboard.submit(); });
+        await page.waitForFunction(() => /Place not found: Nowhere/.test(document.querySelector('.wx-msg').textContent), null, { timeout: 5000 }).catch(() => {});
+        check(await page.evaluate(() => /Place not found: Nowhere/.test(document.querySelector('.wx-msg').textContent) && document.querySelector('.wx-temp').textContent === '--'), 'an unknown place says so');
+        // one timer while open, none after
+        check(await page.evaluate(() => { Win.close(); return !document.querySelector('.wx'); }), 'Back / close frees the app');
+        // the theme: the accent and card shape change with it, in French it is translated
+        await page.evaluate(() => { Widgets.setSetting('weather', 'place', ''); Themes.set('ios'); Win.open('weather'); });
+        await page.waitForSelector('.wx-card');
+        const th = await page.evaluate(() => ({ r: getComputedStyle(document.querySelector('.wx-card')).borderTopLeftRadius, acc: getComputedStyle(document.querySelector('.wx-day.on, .wx-units')).color }));
+        await page.evaluate(() => { Win.close(); Themes.set('win11'); Win.open('weather'); });
+        await page.waitForSelector('.wx-card');
+        const th2 = await page.evaluate(() => getComputedStyle(document.querySelector('.wx-card')).borderTopLeftRadius);
+        check(th.r === '26px' && th2 === '22px', 'the cards follow the theme (iOS 26 px, Windows 11 22 px) ' + JSON.stringify([th, th2]));
+        await page.evaluate(() => { Win.close(); I18n.setLang('fr'); Win.open('weather'); });
+        await page.waitForSelector('.wx');
+        await page.waitForFunction(() => /Maintenant/.test(document.querySelector('.wx-hours').textContent), null, { timeout: 5000 }).catch(() => {});
+        check(await page.evaluate(() => document.getElementById('win-title').textContent === 'Météo' && /Prévisions sur 7 jours/.test(document.querySelector('.wx-side').textContent) && /Maintenant/.test(document.querySelector('.wx-hours').textContent)), 'translated (French)');
+        await page.evaluate(() => { Win.close(); I18n.setLang('en'); });
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }

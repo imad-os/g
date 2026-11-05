@@ -1,0 +1,134 @@
+/* Weather data for the Weather app (js/launcher/apps/weather.js) and the desktop Weather widget (js/launcher/widgets.js).
+ * Open-Meteo (free, no key). The place: the city typed in the widget's / app's settings (one setting for both, saved by
+ * Widgets.setSetting('weather', ...)), else found from the internet address (GeoJS) once a day; profile key weather_loc.
+ * Cheap on purpose: ONE request gives now + the next 24 hours + 7 days; the answer is kept on the TV (arc_dev_wxfc, not in the
+ * backup: public data) and shared, so the widget and the app never ask twice within a few minutes; two callers at the same
+ * time share one request. No timer here: callers decide when to ask. Keep the wgPrivacy text (i18n-widgets.js) true. */
+var Weather = (function () {
+    'use strict';
+
+    var FC = 'arc_dev_wxfc', waiting = {};
+
+    function now() { return Date.now(); }
+
+    // a small GET of JSON, with a timeout; cb(err, json)
+    function getJson(url, ms, cb) {
+        var x = new XMLHttpRequest(), done = false;
+        function end(e, j) { if (!done) { done = true; cb(e, j); } }
+        try {
+            x.open('GET', url, true);
+            x.timeout = ms;
+            x.onload = function () { var j = null; try { j = JSON.parse(x.responseText); } catch (e) {} end(x.status >= 200 && x.status < 300 && j ? null : 'http ' + x.status, j); };
+            x.onerror = x.ontimeout = function () { end('network'); };
+            x.send();
+        } catch (e) { end('network'); }
+    }
+
+    // WMO weather code -> condition key (strings wx_<k>) and icon (Icons)
+    var WMO = [[0, 'clear', 'sun'], [2, 'partly', 'partly'], [3, 'cloudy', 'cloud'], [48, 'fog', 'fog'], [57, 'drizzle', 'rain'],
+               [67, 'rain', 'rain'], [77, 'snow', 'snow'], [82, 'showers', 'rain'], [86, 'snow', 'snow'], [99, 'storm', 'storm']];
+    function sky(code, day) {
+        if (typeof code === 'number') for (var i = 0; i < WMO.length; i++) if (code <= WMO[i][0]) return { k: WMO[i][1], ic: WMO[i][2] === 'sun' && day === false ? 'moon' : WMO[i][2] };
+        return { k: 'cloudy', ic: 'cloud' };
+    }
+
+    function settings() {
+        var c = typeof Widgets !== 'undefined' && Widgets.conf ? Widgets.conf('weather') : null;
+        return c && c.s ? c.s : { place: '', units: 'c' };
+    }
+
+    function place(s, cb) {
+        var q = String(s.place || '').trim(), loc = Store.get('weather_loc', null);
+        if (loc && loc.q === q && loc.lat !== undefined && (q || now() - (loc.at || 0) < 86400000)) return cb(null, loc);
+        function keep(l) { l.q = q; l.at = now(); Store.set('weather_loc', l); cb(null, l); }
+        if (q) {
+            return getJson('https://geocoding-api.open-meteo.com/v1/search?count=1&language=' + I18n.lang() + '&name=' + encodeURIComponent(q), 8000, function (e, j) {
+                var r = j && j.results && j.results[0];
+                if (e || !r) return cb(e ? 'offline' : 'notfound', loc && loc.q === q ? loc : null);
+                keep({ lat: r.latitude, lon: r.longitude, name: r.name, country: r.country || '' });
+            });
+        }
+        getJson('https://get.geojs.io/v1/ip/geo.json', 8000, function (e, j) {
+            if (e || !j || !j.latitude) return cb('offline', loc && !loc.q ? loc : null);
+            keep({ lat: +j.latitude, lon: +j.longitude, name: j.city || j.region || j.country || '', country: j.country || '' });
+        });
+    }
+
+    function num(a, i) { var v = a && a[i]; return typeof v === 'number' ? v : null; }
+    function hm(s) { return typeof s === 'string' && s.length >= 16 ? s.slice(11, 16) : ''; }
+
+    // Open-Meteo's answer -> { now, hours [24], days [7] } (every field may be null: drawn as "--")
+    function parse(j) {
+        var c = j.current || {}, h = j.hourly || {}, d = j.daily || {}, out = { now: null, hours: [], days: [] }, i;
+        out.now = {
+            time: c.time || '', temp: num([c.temperature_2m], 0), feels: num([c.apparent_temperature], 0), hum: num([c.relative_humidity_2m], 0),
+            precip: num([c.precipitation], 0), code: num([c.weather_code], 0), day: c.is_day !== 0, clouds: num([c.cloud_cover], 0),
+            pressure: num([c.pressure_msl], 0), wind: num([c.wind_speed_10m], 0), dir: num([c.wind_direction_10m], 0), gust: num([c.wind_gusts_10m], 0)
+        };
+        // the hours from the current one (the answer may start earlier)
+        var times = h.time || [], hour = String(c.time || '').slice(0, 13), start = 0;
+        if (hour) for (i = 0; i < times.length; i++) if (String(times[i]).slice(0, 13) >= hour) { start = i; break; }
+        for (i = start; i < times.length && out.hours.length < 24; i++) {
+            out.hours.push({ time: times[i], temp: num(h.temperature_2m, i), pop: num(h.precipitation_probability, i), code: num(h.weather_code, i),
+                             day: h.is_day ? h.is_day[i] !== 0 : true });
+        }
+        var dates = d.time || [];
+        for (i = 0; i < dates.length && i < 7; i++) {
+            out.days.push({ date: dates[i], code: num(d.weather_code, i), hi: num(d.temperature_2m_max, i), lo: num(d.temperature_2m_min, i),
+                            rain: num(d.precipitation_sum, i), pop: num(d.precipitation_probability_max, i), wind: num(d.wind_speed_10m_max, i),
+                            gust: num(d.wind_gusts_10m_max, i), dir: num(d.wind_direction_10m_dominant, i), uv: num(d.uv_index_max, i),
+                            rise: hm(d.sunrise && d.sunrise[i]), set: hm(d.sunset && d.sunset[i]) });
+        }
+        // an answer with only today's high / low (older shape): still one day
+        if (!out.days.length && d.temperature_2m_max) out.days.push({ date: String(c.time || '').slice(0, 10), code: out.now.code, hi: num(d.temperature_2m_max, 0), lo: num(d.temperature_2m_min, 0) });
+        return out;
+    }
+
+    function url(loc, f) {
+        return 'https://api.open-meteo.com/v1/forecast?latitude=' + loc.lat + '&longitude=' + loc.lon +
+            '&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m' +
+            '&hourly=temperature_2m,precipitation_probability,weather_code,is_day&forecast_hours=25' +
+            '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,sunrise,sunset,uv_index_max' +
+            '&forecast_days=7&timezone=auto' + (f ? '&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch' : '');
+    }
+    function keyOf(loc, f) { return (+loc.lat).toFixed(2) + ',' + (+loc.lon).toFixed(2) + ',' + (f ? 'f' : 'c'); }
+    function cache() { var c = Store.rawGet(FC); return c && typeof c === 'object' && c.d ? c : null; }
+
+    /* get(settings, maxAge ms, cb(err, data, loc, at)): data younger than maxAge comes from the TV, else one request.
+     * err: 'notfound' (the typed place), 'offline' (data is then the last one kept for that place, or null). */
+    function get(s, maxAge, cb) {
+        s = s || settings();
+        var f = s.units === 'f';
+        place(s, function (err, loc) {
+            if (!loc) return cb(err || 'offline', null, null, 0);
+            var k = keyOf(loc, f), c = cache(), have = c && c.k === k ? c : null;
+            if (have && now() - have.at < maxAge) return cb(null, have.d, loc, have.at);
+            if (waiting[k]) { waiting[k].push(cb); return; }
+            waiting[k] = [cb];
+            getJson(url(loc, f), 10000, function (e, j) {
+                var list = waiting[k], data = null, at = 0;
+                delete waiting[k];
+                if (!e && j && j.current) {
+                    data = parse(j); at = now();
+                    Store.rawSet(FC, { k: k, at: at, d: data });
+                }
+                for (var i = 0; i < list.length; i++) {
+                    try { if (data) list[i](null, data, loc, at); else list[i]('offline', have ? have.d : null, loc, have ? have.at : 0); } catch (x) {}
+                }
+            });
+        });
+    }
+
+    // what is kept for the place and units now in use (instant first paint), or null
+    function peek(s) {
+        s = s || settings();
+        var loc = Store.get('weather_loc', null), c = cache();
+        if (!loc || loc.lat === undefined || loc.q !== String(s.place || '').trim() || !c || c.k !== keyOf(loc, s.units === 'f')) return null;
+        return { data: c.d, loc: loc, at: c.at };
+    }
+
+    // compass point of a wind direction (degrees it blows from), 0..7 = N NE E SE S SW W NW
+    function point(deg) { return typeof deg === 'number' ? Math.round(((deg % 360) + 360) % 360 / 45) % 8 : -1; }
+
+    return { sky: sky, settings: settings, place: place, get: get, peek: peek, parse: parse, point: point, getJson: getJson };
+})();

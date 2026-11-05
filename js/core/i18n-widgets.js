@@ -25,7 +25,7 @@
             wgH: 'h', wgMin: 'min', wgToday: 'Played today', wgWeek: 'This week', wgTop: 'Most played', wgLast: 'Last played', wgNoPlay: 'Play a game and your time shows here.',
             wgCpu: 'Processor', wgMemory: 'Memory', wgHeap: 'My PC memory', wgCores: 'Processor cores',
             wgPrev: 'Previous', wgNext: 'Next', wgPlay: 'Play', wgPause: 'Pause',
-            wgPrivacy: 'Weather widget: to find your place, your internet address is looked up by GeoJS (get.geojs.io), unless you type a city; the place, without your name, is then sent to Open-Meteo (open-meteo.com) for the forecast. Hide the widget in Control Panel > Widgets to stop it.'
+            wgPrivacy: 'Weather widget and Weather app: to find your place, your internet address is looked up by GeoJS (get.geojs.io), unless you type a city; the place, without your name, is then sent to Open-Meteo (open-meteo.com) for the forecast. This happens only while the widget is shown or the Weather app is open: hide the widget in Control Panel > Widgets and do not open the app to stop it.'
         },
         fr: {
             sysWidgets: 'Widgets', cpd_widgets: 'Météo, temps de jeu, moniteur système, musique sur le bureau',
@@ -50,7 +50,7 @@
             wgH: 'h', wgMin: 'min', wgToday: 'Joué aujourd’hui', wgWeek: 'Cette semaine', wgTop: 'Le plus joué', wgLast: 'Dernier joué', wgNoPlay: 'Jouez à un jeu et votre temps s’affiche ici.',
             wgCpu: 'Processeur', wgMemory: 'Mémoire', wgHeap: 'Mémoire de My PC', wgCores: 'Cœurs du processeur',
             wgPrev: 'Précédent', wgNext: 'Suivant', wgPlay: 'Lecture', wgPause: 'Pause',
-            wgPrivacy: 'Widget Météo : pour trouver votre lieu, votre adresse internet est consultée par GeoJS (get.geojs.io), sauf si vous tapez une ville ; le lieu, sans votre nom, est ensuite envoyé à Open-Meteo (open-meteo.com) pour les prévisions. Masquez le widget dans Panneau de configuration > Widgets pour l’arrêter.'
+            wgPrivacy: 'Widget Météo et app Météo : pour trouver votre lieu, votre adresse internet est consultée par GeoJS (get.geojs.io), sauf si vous tapez une ville ; le lieu, sans votre nom, est ensuite envoyé à Open-Meteo (open-meteo.com) pour les prévisions. Cela n’a lieu que si le widget est affiché ou l’app Météo ouverte : masquez le widget dans Panneau de configuration > Widgets et n’ouvrez pas l’app pour l’arrêter.'
         },
         es: {
             sysWidgets: 'Widgets', cpd_widgets: 'Tiempo, tiempo de juego, monitor del sistema, música en el escritorio',
@@ -75,7 +75,7 @@
             wgH: 'h', wgMin: 'min', wgToday: 'Jugado hoy', wgWeek: 'Esta semana', wgTop: 'Más jugado', wgLast: 'Último jugado', wgNoPlay: 'Juega a un juego y tu tiempo aparecerá aquí.',
             wgCpu: 'Procesador', wgMemory: 'Memoria', wgHeap: 'Memoria de My PC', wgCores: 'Núcleos del procesador',
             wgPrev: 'Anterior', wgNext: 'Siguiente', wgPlay: 'Reproducir', wgPause: 'Pausa',
-            wgPrivacy: 'Widget del tiempo: para encontrar tu lugar, GeoJS (get.geojs.io) consulta tu dirección de internet, salvo que escribas una ciudad; el lugar, sin tu nombre, se envía luego a Open-Meteo (open-meteo.com) para la previsión. Oculta el widget en Panel de control > Widgets para detenerlo.'
+            wgPrivacy: 'Widget y app del Tiempo: para encontrar tu lugar, GeoJS (get.geojs.io) consulta tu dirección de internet, salvo que escribas una ciudad; el lugar, sin tu nombre, se envía luego a Open-Meteo (open-meteo.com) para la previsión. Solo ocurre con el widget visible o la app Tiempo abierta: oculta el widget en Panel de control > Widgets y no abras la app para detenerlo.'
         },
         ar: {
             sysWidgets: 'الأدوات المصغّرة', cpd_widgets: 'الطقس، وقت اللعب، مراقب النظام، الموسيقى على سطح المكتب',
@@ -100,7 +100,7 @@
             wgH: 'س', wgMin: 'د', wgToday: 'لُعب اليوم', wgWeek: 'هذا الأسبوع', wgTop: 'الأكثر لعباً', wgLast: 'آخر لعبة', wgNoPlay: 'العب لعبة وسيظهر وقتك هنا.',
             wgCpu: 'المعالج', wgMemory: 'الذاكرة', wgHeap: 'ذاكرة My PC', wgCores: 'أنوية المعالج',
             wgPrev: 'السابق', wgNext: 'التالي', wgPlay: 'تشغيل', wgPause: 'إيقاف مؤقت',
-            wgPrivacy: 'أداة الطقس: لتحديد مكانك يُستعلم عن عنوانك على الإنترنت لدى GeoJS (get.geojs.io)، إلا إذا كتبت مدينة؛ ثم يُرسل المكان، دون اسمك، إلى Open-Meteo (open-meteo.com) لجلب التوقعات. أخفِ الأداة في لوحة التحكم > الأدوات المصغّرة لإيقافها.'
+            wgPrivacy: 'أداة الطقس وتطبيق الطقس: لتحديد مكانك يُستعلم عن عنوانك على الإنترنت لدى GeoJS (get.geojs.io)، إلا إذا كتبت مدينة؛ ثم يُرسل المكان، دون اسمك، إلى Open-Meteo (open-meteo.com) لجلب التوقعات. يحدث ذلك فقط عند ظهور الأداة أو فتح تطبيق الطقس: أخفِ الأداة في لوحة التحكم > الأدوات المصغّرة ولا تفتح التطبيق لإيقافه.'
         }
     };
     // Privacy & security: the weather widget's line comes first (keep it true when the widget changes)
