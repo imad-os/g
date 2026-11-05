@@ -568,5 +568,18 @@ console.log('Music: song details read from the files (js/core/music-tags.js)');
     const n1 = T.fromName('03 - Nass El Ghiwane - Mahmouma.mp3'), n2 = T.fromName('track_07.flac');
     check(n1.track === 3 && n1.artist === 'Nass El Ghiwane' && n1.title === 'Mahmouma' && n2.title === 'track 07', 'a title and an artist from the file name when the file has none');
 }
+console.log('8. sw.js: the Music app\'s Google Drive songs stream through the service worker with the token as a header');
+{
+    const handlers = {}, calls = [];
+    const self = { addEventListener: (t, f) => { handlers[t] = f; }, skipWaiting() {}, clients: { claim() {} } };
+    const fakeFetch = (u, o) => { calls.push({ u: String(u), o }); return Promise.resolve('song'); };
+    new Function('self', 'location', 'fetch', 'caches', fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8'))(self, { origin: 'https://imad-os.github.io' }, fakeFetch, {});
+    let answer = null;
+    const ev = (url, range) => ({ request: { method: 'GET', url, headers: { get: (k) => (k === 'range' ? range : null) } }, respondWith: (p) => { answer = p; } });
+    handlers.fetch(ev('https://imad-os.github.io/g/__music/gd/1AbC_d-9?t=ya29.TOKEN', 'bytes=1000-'));
+    const c = calls[0] || { o: { headers: {} } };
+    check(c.u === 'https://www.googleapis.com/drive/v3/files/1AbC_d-9?alt=media' && c.o.headers.Authorization === 'Bearer ya29.TOKEN' && c.o.headers.Range === 'bytes=1000-' && !/TOKEN/.test(c.u) && !!answer,
+        'a __music/gd/<id> request becomes the Drive file with the token as a header and the player\'s Range ' + JSON.stringify(c));
+}
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall unit checks passed');
 process.exit(failures ? 1 : 0);

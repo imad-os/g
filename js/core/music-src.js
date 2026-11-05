@@ -327,10 +327,15 @@ var MusicSrc = (function () {
     // Google refuses a token in the address, and the TV's player cannot send it as a header: the song is read in pieces
     // with the header into the web player (Music: Media Source, it starts at once) or, for a format it cannot take in pieces
     // (FLAC, M4A, Ogg, WAV), downloaded whole first, with progress
+    function swOk() { try { return !MusicSrc._noSw && /^https?:$/.test(location.protocol) && !!(navigator.serviceWorker && navigator.serviceWorker.controller); } catch (x) { return false; } }
     function gdUrl(e, cb) {
-        gdToken(function (x) {
+        gdToken(function (x, tok) {
             if (x) return cb(x);
             cb(null, {
+                // the web app / the phone app: My PC's service worker (sw.js) streams it with the header, every format, seeking
+                // included; the address never leaves the device (the worker answers it)
+                url: swOk() ? new URL('__music/gd/' + encodeURIComponent(e.p) + '?t=' + encodeURIComponent(tok), location.href).href : '',
+                webOnly: true,
                 type: typeof Music !== 'undefined' && Music._msType ? Music._msType(e) : '',
                 size: e.size || 0,
                 dur: e.d || 0,

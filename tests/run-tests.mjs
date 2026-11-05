@@ -4952,27 +4952,29 @@ async function musicTests(browser, base) {
     gt = await gdText();
     check(/link imad@example.com again/.test(gt), 'an account Google wants linked again: says so, with its address');
     const gcalls = [];
-    await page.context().route(/^https:\/\/(oauth2|www)\.googleapis\.com\//, (r) => {
+    await page.context().route(/^https:\/\/(oauth2|www)\.googleapis\.com\//, async (r) => {
         const u = r.request().url();
         gcalls.push(r.request().method() + ' ' + u + ' ' + (r.request().headers().authorization || '') + ' ' + (r.request().postData() || ''));
         const json = (o) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(o) });
         if (/oauth2/.test(u)) return json({ access_token: 'AT1', expires_in: 3600, scope: 'openid https://www.googleapis.com/auth/drive.file' });
-        if (/alt=media/.test(u)) {        // a song of 600 silent MP3 frames, sent by Range like Drive does
-            const all = Buffer.from(F.mp3({ title: 'Cloud Song', artist: 'Sky', silent: 600 })), m = /bytes=(\d+)-(\d+)/.exec(r.request().headers().range || '');
+        if (/alt=media/.test(u)) {        // a1: 600 silent MP3 frames; a2: a 60 s WAV sent slowly; by Range like Drive does
+            const wavSong = /files\/a2\?/.test(u);
+            if (wavSong) await new Promise((ok) => setTimeout(ok, 350));
+            const all = wavSong ? Buffer.from(F.wav({ title: 'Long Tone', seconds: 60 })) : Buffer.from(F.mp3({ title: 'Cloud Song', artist: 'Sky', silent: 600 })), m = /bytes=(\d+)-(\d+)/.exec(r.request().headers().range || '');
             const a = m ? +m[1] : 0, b = m ? Math.min(+m[2], all.length - 1) : all.length - 1;
             return r.fulfill({ status: m ? 206 : 200, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'Content-Range', 'Content-Range': 'bytes ' + a + '-' + b + '/' + all.length }, body: all.subarray(a, b + 1) });
         }
-        if (/files\?/.test(u)) return json({ files: [{ id: 'f1', name: 'Albums', mimeType: 'application/vnd.google-apps.folder' }, { id: 'a1', name: 'Cloud Song.mp3', mimeType: 'audio/mpeg', size: '5000' }, { id: 'n1', name: 'notes.txt', mimeType: 'text/plain' }] });
+        if (/files\?/.test(u)) return json({ files: [{ id: 'f1', name: 'Albums', mimeType: 'application/vnd.google-apps.folder' }, { id: 'a1', name: 'Cloud Song.mp3', mimeType: 'audio/mpeg', size: '5000' }, { id: 'a2', name: 'Long Tone.wav', mimeType: 'audio/wav', size: '1920088' }, { id: 'n1', name: 'notes.txt', mimeType: 'text/plain' }] });
         return r.fulfill({ status: 404, body: '' });
     });
     await page.evaluate(() => Store.set('game_app-mydrive_data', { accounts: [{ id: 'g1', email: 'imad@example.com', name: 'Imad', refreshToken: 'RT' }], active: 'g1' }));
     gt = await gdText();
     check(/My Drive/.test(gt) && /All my music files/.test(gt) && /imad@example.com/.test(gt), 'linked: My Drive and All my music files, as the MyDrive account: ' + gt);
     await page.evaluate(() => [...document.querySelectorAll('.mx-tile')].find((t) => /^My Drive/.test(t.textContent)).click());
-    await page.waitForFunction(() => document.querySelectorAll('.mx-row').length === 1, null, { timeout: 5000 }).catch(() => {});
+    await page.waitForFunction(() => document.querySelectorAll('.mx-row').length === 2, null, { timeout: 5000 }).catch(() => {});
     const gl = await page.evaluate(() => [...document.querySelectorAll('.mx-scroll .mx-tile, .mx-scroll .mx-row')].map((t) => t.querySelector('.mx-name, .mx-rt').textContent));
     await shot('9-gd-list');
-    check(gl.join() === 'Albums,Cloud Song', 'a Drive folder lists folders and songs only: ' + gl);
+    check(gl.join() === 'Albums,Cloud Song,Long Tone', 'a Drive folder lists folders and songs only: ' + gl);
     check(gcalls.some((c) => /oauth2.*refresh_token=RT/.test(c) && /client_id=cid/.test(c) && /client_secret=sec/.test(c)) && gcalls.some((c) => /drive\/v3\/files\?.*%27root%27%20in%20parents/.test(c) && /Bearer AT1/.test(c)),
         'the token comes from MyDrive\'s client and the profile\'s linked account, then Drive is asked with it ' + JSON.stringify(gcalls).slice(0, 600));
     await page.evaluate(() => [...document.querySelectorAll('.mx-row')][0].click());
@@ -4984,6 +4986,20 @@ async function musicTests(browser, base) {
     await page.waitForTimeout(600);
     const ld = await page.evaluate(() => ({ loaded: Music.state().loaded, mini: (document.querySelector('.mx-mini-bar .mx-load') || {}).style ? document.querySelector('.mx-mini-bar .mx-load').style.transform : '' }));
     check(ld.loaded === 1 && /scaleX\(1\)/.test(ld.mini), 'the light grey bar under the progress shows how much of the song has arrived (all of this short one) ' + JSON.stringify(ld));
+    // a format the stream cannot take (WAV here; FLAC, M4A, Ogg on the TV): it plays from the first pieces while the rest downloads
+    await page.evaluate(() => Music.stop());
+    const tClick = Date.now();
+    await page.evaluate(() => [...document.querySelectorAll('.mx-row')].find((r) => /Long Tone/.test(r.textContent)).click());
+    await page.waitForFunction(() => Music.engineName() === 'html' && Music._grow() === 'piece', null, { timeout: 8000 }).catch(() => {});
+    const g1 = await page.evaluate(() => ({ grow: Music._grow(), playing: Music.state().playing, loaded: Music.state().loaded, title: Music.state().title }));
+    const startedIn = Date.now() - tClick;
+    check(g1.grow === 'piece' && g1.playing && g1.loaded > 0 && g1.loaded < 1, 'a song in another format starts from its first pieces while the rest downloads (' + startedIn + ' ms) ' + JSON.stringify(g1));
+    await page.waitForFunction(() => Music._grow() === 'whole', null, { timeout: 15000 }).catch(() => {});
+    const p1 = await page.evaluate(() => Music.state().pos);
+    await page.waitForTimeout(900);
+    const g2 = await page.evaluate(() => ({ grow: Music._grow(), playing: Music.state().playing, loaded: Music.state().loaded, pos: Music.state().pos }));
+    check(g2.grow === 'whole' && g2.playing && g2.loaded === 1 && g2.pos > p1 && p1 > 0.5, 'once all of it is here the player moves to the whole song at the same place and plays on ' + JSON.stringify(g2) + ' from ' + p1);
+    await page.evaluate(() => Music.stop());
     await page.evaluate(() => Music.stop());
 
     // themes: Now playing follows the profile's theme

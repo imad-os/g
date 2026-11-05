@@ -25,7 +25,7 @@ var Music = (function () {
 
     var q = [], order = [], at = 0, shuffle = false, repeat = 'off', from = null;
     var playing = false, loading = false, want = false, lastPos = 0, lastDur = 0, error = '', fails = 0;
-    var engine = null, gen = 0, blobUrl = '', saveTimer = 0, inited = false, hiddenPause = false, leaving = false, lite = false, stream = null, loadedF = 0, loadedAt = 0;
+    var engine = null, gen = 0, blobUrl = '', saveTimer = 0, inited = false, hiddenPause = false, leaving = false, lite = false, stream = null, grow = null, loadedF = 0, loadedAt = 0;
     var listeners = [];
 
     function t(k) { return typeof I18n !== 'undefined' ? I18n.t(k) : k; }
@@ -93,7 +93,7 @@ var Music = (function () {
     })();
     // the web player: one <audio>, never in the page
     var HTML = (function () {
-        var el = null, onEnd = null, onErr = null;
+        var el = null, onEnd = null, onErr = null, swapAt = -1;
         function get() {
             if (el) return el;
             el = new Audio();
@@ -123,17 +123,25 @@ var Music = (function () {
             play: function () { var a = get(); try { var p = a.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {} },
             pause: function () { if (el) el.pause(); },
             seek: function (s) { if (el) { try { el.currentTime = Math.max(0, s); } catch (e) {} } },
-            time: function () { return el ? el.currentTime || 0 : 0; },
+            time: function () { return swapAt >= 0 ? swapAt : el ? el.currentTime || 0 : 0; },
             duration: function () { return el && isFinite(el.duration) ? el.duration : 0; },
             paused: function () { return !el || el.paused; },
             _src: function () { return el ? el.src : ''; },
+            // the same song, a bigger copy (a download that grew): same place, same play / pause
+            swap: function (url, at, play) {
+                var a = get();
+                swapAt = at;
+                var go = function () { a.removeEventListener('loadedmetadata', go); swapAt = -1; try { a.currentTime = at; } catch (x) {} if (play) { var p = a.play(); if (p && p.catch) p.catch(function () {}); } };
+                a.addEventListener('loadedmetadata', go);
+                a.src = url;
+            },
             loaded: function () {
                 if (!el || !isFinite(el.duration) || !el.duration) return 0;
                 var b = el.buffered, t = el.currentTime, i;
                 for (i = 0; i < b.length; i++) if (b.start(i) <= t + 1 && b.end(i) >= t) return Math.min(1, b.end(i) / el.duration);
                 return b.length ? Math.min(1, b.end(b.length - 1) / el.duration) : 0;
             },
-            stop: function () { if (!el) return; onEnd = onErr = null; el.pause(); el.removeAttribute('src'); try { el.load(); } catch (e) {} }
+            stop: function () { if (!el) return; onEnd = onErr = null; swapAt = -1; el.pause(); el.removeAttribute('src'); try { el.load(); } catch (e) {} }
         };
     })();
 
@@ -145,6 +153,29 @@ var Music = (function () {
         var tp = x === 'mp3' || m === 'audio/mpeg' || m === 'audio/mp3' ? 'audio/mpeg' : x === 'aac' || m === 'audio/aac' ? 'audio/aac' :
                  x === 'webm' || x === 'weba' || m === 'audio/webm' ? 'audio/webm; codecs="opus"' : '';
         try { return tp && window.MediaSource && MediaSource.isTypeSupported(tp) ? tp : ''; } catch (x2) { return ''; }
+    }
+    // reads a whole song in pieces: first(url of the first 512 KB) once, prog(0..1), done(err, url of the whole song)
+    function growDl(src, first, prog, done) {
+        var parts = [], at = 0, size = src.size || 0, stopped = false, sent = false, errs = 0, FIRST = 512 * 1024, CH = 1024 * 1024, MAXB = 80 * 1024 * 1024;
+        var type = src.mime || 'audio/mpeg';
+        function blob() { return URL.createObjectURL(new Blob(parts, { type: type })); }
+        (function next() {
+            src.read(at, at ? CH : FIRST, function (x, b) {
+                if (stopped) return;
+                if (x) { if (++errs <= 3) return setTimeout(next, 1000 * errs); stopped = true; return done(x); }
+                errs = 0;
+                if (!size && src.sizeOf) size = src.sizeOf() || 0;
+                var len = at ? CH : FIRST;
+                if (b && b.length) { parts.push(b); at += b.length; }
+                var end = !b || !b.length || b.length < len || (size && at >= size);
+                if (size) prog(Math.min(1, at / size));
+                if (end) { stopped = true; return done(null, blob()); }
+                if (!sent) { sent = true; first(blob()); }
+                if (at >= MAXB) { stopped = true; return done({ code: 'toobig' }); }
+                next();
+            });
+        })();
+        return function () { stopped = true; };
     }
     function msStream(src, now, fail) {
         var ms = new MediaSource(), url = URL.createObjectURL(ms), sb = null, at = 0, size = src.size || 0, pending = null, reading = false, stopped = false, errs = 0;
@@ -299,6 +330,7 @@ var Music = (function () {
         engine = null;
         if (blobUrl) { try { URL.revokeObjectURL(blobUrl); } catch (e2) {} blobUrl = ''; }
         if (stream) { stream.stop(); stream = null; }
+        if (grow) { grow.stop(); if (grow.part && grow.part !== blobUrl) { try { URL.revokeObjectURL(grow.part); } catch (e3) {} } grow = null; }
         loadedF = 0; mode = '';
         loading = false;
     }
@@ -330,9 +362,10 @@ var Music = (function () {
     function plans(src) {
         var out = [], p = prefs().engine;
         if (src.path && AV.ok() && p !== 'html') out.push({ e: AV, url: src.path });
-        if (src.url && AV.ok() && p !== 'html' && !src.revoke) out.push({ e: AV, url: src.url });
+        if (src.url && AV.ok() && p !== 'html' && !src.revoke && !src.webOnly) out.push({ e: AV, url: src.url });
         if (src.url && HTML.ok()) out.push({ e: HTML, url: src.url });
         if (src.read && src.type && HTML.ok()) out.push({ e: HTML, ms: src });
+        if (src.read && !src.type && HTML.ok()) out.push({ e: HTML, grow: src });
         if (src.blob && HTML.ok()) out.push({ e: HTML, blob: src.blob });
         return out;
     }
@@ -366,6 +399,7 @@ var Music = (function () {
                     stream = sm; mode = 'stream'; loadedF = 0;
                     return start2(pl.e, sm.url);
                 }
+                if (pl.grow) return growPlan(pl.grow);
                 if (pl.blob) {
                     var shown = -1;
                     error = t('muDownloading'); emit('loading');
@@ -383,6 +417,42 @@ var Music = (function () {
                 mode = pl.e === AV && pl.url === src.path ? 'full' : src.revoke ? 'full' : 'url';
                 start2(pl.e, pl.url);
             }
+            // a download that plays while it grows (the TV, a format the stream cannot take): the song starts once the first
+            // 512 KB are here, from a copy of what arrived; when the whole song is here the player moves to it at the same
+            // place. A copy that ends (or breaks) before that waits for the rest. A song the player cannot start from a piece
+            // (an M4A with its index at the end) simply starts when the download is done.
+            function growPlan(gsrc) {
+                var gr = { part: '', full: '', done: false, started: false, waiting: false, stop: function () {} };
+                grow = gr; mode = 'grow'; loadedF = 0;
+                error = t('muDownloading'); emit('loading');
+                gr.stop = growDl(gsrc, function (u) {
+                    if (my !== gen || grow !== gr) { URL.revokeObjectURL(u); return; }
+                    gr.part = u; blobUrl = u;
+                    HTML.open(u, lastPos, function () { if (my !== gen) return; if (!gr.done) { gr.waiting = true; error = t('muDownloading'); emit('loading'); } else ended(); },
+                        function () { if (my !== gen) return; if (!gr.done) { gr.waiting = true; if (!gr.started) error = t('muDownloading'); emit('loading'); } else if (loading) tryNext({ code: 'format' }); else failed({ code: 'format' }, my); },
+                        function (blocked) { if (my !== gen) return; gr.started = true; ready(HTML, blocked); });
+                }, function (f) { if (my === gen && grow === gr) setLoaded(f); }, function (x, u) {
+                    if (my !== gen || grow !== gr) { if (u) URL.revokeObjectURL(u); return; }
+                    if (x) { if (gr.started && !gr.waiting) return; return gr.started ? failed(x, my) : tryNext(x); }
+                    gr.done = true; gr.full = u; mode = 'full'; setLoaded(1);
+                    var old = gr.part;
+                    blobUrl = u;
+                    if (gr.started) {
+                        var at0 = HTML.time();
+                        HTML.swap(u, at0, want);
+                        if (gr.waiting) { gr.waiting = false; error = ''; playing = want; emit('play'); }
+                    } else start2(HTML, u);
+                    if (old && old !== u) setTimeout(function () { try { URL.revokeObjectURL(old); } catch (x2) {} }, 3000);
+                });
+            }
+            function ready(eng, blocked) {
+                engine = eng; loading = false; playing = true; error = ''; fails = 0;
+                if (blocked) { want = false; playing = false; }
+                else if (!want) { eng.pause(); playing = false; }
+                savePos(); tickSave(playing);
+                mediaSession(cur);
+                emit('play');
+            }
             function start2(eng, url) {
                 eng.open(url, lastPos, function () { if (my === gen) ended(); }, function (x) {
                     if (my !== gen) return;
@@ -390,12 +460,7 @@ var Music = (function () {
                     failed(x, my);                   // broke while playing
                 }, function (blocked) {
                     if (my !== gen) return;
-                    engine = eng; loading = false; playing = true; error = ''; fails = 0;
-                    if (blocked) { want = false; playing = false; }
-                    else if (!want) { eng.pause(); playing = false; }
-                    savePos(); tickSave(playing);
-                    mediaSession(cur);
-                    emit('play');
+                    ready(eng, blocked);
                 });
             }
             tryNext(null);
@@ -451,6 +516,7 @@ var Music = (function () {
 
     function play() {
         if (!q.length) return;
+        if (grow && grow.waiting) { want = true; playing = true; emit('play'); return; }
         if (engine && !loading) { engine.play(); want = true; playing = true; tickSave(true); savePos(); emit('play'); return; }
         if (loading) { want = true; return; }
         openCurrent(lastPos, true);
@@ -570,7 +636,7 @@ var Music = (function () {
         engineName: function () { return engine ? engine.name : ''; },
         onChange: function (fn) { if (listeners.indexOf(fn) < 0) listeners.push(fn); },
         offChange: function (fn) { var i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); },
-        _msType: msType, _streaming: function () { return !!stream; },
+        _msType: msType, _streaming: function () { return !!stream; }, _grow: function () { return grow ? (grow.done ? 'whole' : grow.waiting ? 'waiting' : grow.started ? 'piece' : 'loading') : ''; },
         _engines: { AV: AV, HTML: HTML }
     };
 })();

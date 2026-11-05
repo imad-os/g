@@ -10,6 +10,15 @@ self.addEventListener('activate', function (e) {
 self.addEventListener('fetch', function (e) {
     var r = e.request;
     if (r.method !== 'GET' || new URL(r.url).origin !== location.origin) return;
+    // the Music app's Google Drive songs (js/core/music-src.js): Google wants the token as a header, which <audio> cannot send.
+    // This answers __music/gd/<file id>?t=<token> with the song from Drive, the player's Range passed on: it plays at once and seeks.
+    var u = new URL(r.url), m = /\/__music\/gd\/([^/?]+)$/.exec(u.pathname);
+    if (m) {
+        var h = { Authorization: 'Bearer ' + (u.searchParams.get('t') || '') }, rg = r.headers.get('range');
+        if (rg) h.Range = rg;
+        e.respondWith(fetch('https://www.googleapis.com/drive/v3/files/' + m[1] + '?alt=media', { headers: h }));
+        return;
+    }
     e.respondWith(fetch(r).then(function (res) {
         if (res && res.ok) { var c = res.clone(); caches.open(CACHE).then(function (ch) { ch.put(r, c); }); }
         return res;
