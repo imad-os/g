@@ -157,8 +157,36 @@ var Weather = (function () {
         return I18n.t('wxAl' + k + 'In').replace('%n', a['in']).replace('%t', typeof Desktop !== 'undefined' && a.time ? Desktop.timeText(new Date(2000, 0, 1, +a.time.slice(0, 2), +a.time.slice(3, 5))) : a.time);
     }
 
+    /* Animated sky pictures (owner request 2026-11-05): the same drawings as the icons, with parts that move in CSS
+     * (css/weather.css .wa-*: transform / opacity only, so the TV's GPU does it; nothing runs while the desktop is hidden). */
+    var CLOUD_HI = 'M13 30a9 9 0 0 1 1-18 13 13 0 0 1 25 3 7.5 7.5 0 0 1 0 15z';
+    var RAYS = '<g class="wa-rays" stroke="#ffc83d" stroke-width="3.5" stroke-linecap="round"><path d="M24 4v6M24 38v6M4 24h6M38 24h6M9.9 9.9l4.2 4.2M33.9 33.9l4.2 4.2M9.9 38.1l4.2-4.2M33.9 14.1l4.2-4.2"/></g>';
+    function drops(cls, shape) {
+        var xs = [[15, 0], [24, 0.35], [33, 0.7], [20, 0.55], [29, 0.15]], o = '';
+        for (var i = 0; i < xs.length; i++) o += '<g class="' + cls + '" style="animation-delay:-' + xs[i][1] + 's">' + shape(xs[i][0]) + '</g>';
+        return o;
+    }
+    var ART = {
+        sun: '<g class="wa-spin">' + RAYS + '</g><circle class="wa-glow" cx="24" cy="24" r="9" fill="#ffc83d"/>',
+        moon: '<g class="wa-float"><path d="M30 6a17 17 0 1 0 12 26A14 14 0 0 1 30 6z" fill="#cfd8ff"/></g>' +
+              '<circle class="wa-star" cx="8" cy="9" r="1.6" fill="#fff"/><circle class="wa-star wa-d2" cx="41" cy="12" r="1.3" fill="#fff"/><circle class="wa-star wa-d3" cx="38" cy="42" r="1.4" fill="#fff"/>',
+        partly: '<g transform="translate(-6 -7) scale(1)"><g class="wa-spin">' + RAYS.replace('stroke-width="3.5"', 'stroke-width="3"') + '</g><circle class="wa-glow" cx="24" cy="24" r="8" fill="#ffc83d"/></g>' +
+                '<g class="wa-drift"><path d="M15 40a8 8 0 0 1 1-16 11 11 0 0 1 21 3 7 7 0 0 1 0 13z" fill="#e8f1ff"/></g>',
+        cloud: '<g class="wa-drift2"><path d="M20 26a6 6 0 0 1 1-12 9 9 0 0 1 17 2 5 5 0 0 1 0 10z" fill="#b9c6d8"/></g>' +
+               '<g class="wa-drift"><path d="M13 38a9 9 0 0 1 1-18 13 13 0 0 1 25 3 7.5 7.5 0 0 1 0 15z" fill="#dfe7f2"/></g>',
+        rain: drops('wa-drop', function (x) { return '<path d="M' + x + ' 33l-2 6" stroke="#4fa8ff" stroke-width="3" stroke-linecap="round"/>'; }) +
+              '<g class="wa-bob"><path d="' + CLOUD_HI + '" fill="#c9d4e4"/></g>',
+        snow: drops('wa-flake', function (x) { return '<circle cx="' + x + '" cy="35" r="2.2" fill="#fff"/>'; }) +
+              '<g class="wa-bob"><path d="' + CLOUD_HI + '" fill="#dfe7f2"/></g>',
+        storm: drops('wa-drop', function (x) { return '<path d="M' + x + ' 33l-2 6" stroke="#4fa8ff" stroke-width="3" stroke-linecap="round"/>'; }) +
+               '<g class="wa-bob"><path d="' + CLOUD_HI + '" fill="#9aa6b8"/></g><path class="wa-bolt" d="M26 28l-7 10h6l-3 8 9-11h-6l3-7z" fill="#ffd23d"/>',
+        fog: '<g stroke="#dfe7f2" stroke-width="4" stroke-linecap="round"><path class="wa-fog" d="M8 16h32"/><path class="wa-fog wa-d2" d="M5 24h38"/><path class="wa-fog" d="M10 32h30"/><path class="wa-fog wa-d2" d="M14 40h20"/></g>'
+    };
+    // an <svg> string of the animated picture for an icon name (sun, moon, partly, cloud, rain, snow, storm, fog), or ''
+    function art(name) { return ART[name] ? '<svg class="wa" viewBox="0 0 48 48" aria-hidden="true">' + ART[name] + '</svg>' : ''; }
+
     // compass point of a wind direction (degrees it blows from), 0..7 = N NE E SE S SW W NW
     function point(deg) { return typeof deg === 'number' ? Math.round(((deg % 360) + 360) % 360 / 45) % 8 : -1; }
 
-    return { alerts: alerts, alertText: alertText, kindOf: kindOf, sky: sky, settings: settings, place: place, get: get, peek: peek, parse: parse, point: point, getJson: getJson };
+    return { art: art, alerts: alerts, alertText: alertText, kindOf: kindOf, sky: sky, settings: settings, place: place, get: get, peek: peek, parse: parse, point: point, getJson: getJson };
 })();

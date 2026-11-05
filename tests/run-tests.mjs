@@ -4414,6 +4414,15 @@ async function main() {
             toast: document.getElementById('toast').textContent }; });
         check(wg.art && wg.big === '68px' && /Storm danger in about 10 h/.test(wg.danger) && /Rain in about 1 h/.test(wg.warn) && /Danger: storm/.test(wg.toast) && /Weather warning/.test(wg.toast),
             'Weather widget: big temperature + big sky picture, rain and storm warnings on the card and once as notifications ' + JSON.stringify(wg));
+        // the sky picture moves (CSS only), and nothing runs while an app hides the desktop
+        const an = await page.evaluate(() => { const a = document.querySelector('#wdg-weather .wdg-art .wa'); return a ? a.getAnimations({ subtree: true }).length : -1; });
+        check(an >= 2 && /wa-drop/.test(await page.evaluate(() => Weather.art('storm'))) && /wa-bolt/.test(await page.evaluate(() => Weather.art('storm'))) && /wa-spin/.test(await page.evaluate(() => Weather.art('sun'))), 'the widget\'s sky picture is animated (' + an + ' animations): sun turns, clouds drift, rain falls, lightning flashes');
+        await page.evaluate(() => Win.open('calculator'));
+        check(await page.evaluate(() => document.querySelector('#wdg-weather .wa').getAnimations({ subtree: true }).length) === 0, 'no animation runs while an app is open (desktop hidden)');
+        await page.evaluate(() => { Win.close(); Widgets.setSetting('weather', 'anim', false); });
+        await page.waitForFunction(() => !document.querySelector('#wdg-weather .wa') && document.querySelector('#wdg-weather .wdg-art svg'), null, { timeout: 5000 }).catch(() => {});
+        check(await page.evaluate(() => !document.querySelector('#wdg-weather .wa') && !!document.querySelector('#wdg-weather .wdg-art svg')), 'Animated picture off: a still picture');
+        await page.evaluate(() => Widgets.setSetting('weather', 'anim', true));
         await page.evaluate(() => { Widgets.setSetting('weather', 'tsize', 'xl'); Widgets.setSetting('weather', 'isize', 's'); Widgets.setSetting('weather', 'warn', '0'); });
         await page.waitForFunction(() => document.querySelector('#wdg-weather .wdg-big') && document.querySelector('#wdg-weather .wdg-big').style.fontSize === '84px', null, { timeout: 5000 }).catch(() => {});
         const wg2 = await page.evaluate(() => { const c = document.getElementById('wdg-weather'); return { big: c.querySelector('.wdg-big').style.fontSize, art: c.querySelector('.wdg-art').style.width, alerts: c.querySelectorAll('.wdg-alert').length, told: Store.get('wx_told').length }; });

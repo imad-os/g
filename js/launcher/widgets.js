@@ -34,7 +34,7 @@ var Widgets = (function () {
             if (err === 'notfound') return done({ icon: 'i:cloud', big: '--', text: t('wgNoPlace').replace('%s', s.place) });
             if (!data || !data.now || data.now.temp === null) return done(stale(ctx.id, t('wgOffline')));
             var c = data.now, d = data.days[0] || {}, k = Weather.sky(c.code, c.day);
-            var v = { icon: 'i:' + k.ic, art: k.ic, bigSize: WX_T[s.tsize] || WX_T.l, artSize: WX_I[s.isize] || WX_I.l,
+            var v = { icon: 'i:' + k.ic, art: k.ic, anim: s.anim !== false, bigSize: WX_T[s.tsize] || WX_T.l, artSize: WX_I[s.isize] || WX_I.l,
                       big: Math.round(c.temp) + '°', sub: loc.name, text: t('wx_' + k.k), rows: [] };
             var al = Weather.alerts(data, s.warn);
             if (al.length) { v.alerts = al.map(function (a) { return { level: a.level, text: Weather.alertText(a) }; }); tell(al); }
@@ -140,7 +140,7 @@ var Widgets = (function () {
               return [{ id: 'place', type: 'text', label: t('wgPlace'), 'default': '' },
                       { id: 'units', type: 'select', label: t('wgUnits'), 'default': 'c', options: [{ value: 'c', label: t('wgCelsius') }, { value: 'f', label: t('wgFahrenheit') }] },
                       { id: 'warn', type: 'select', label: t('wxWarn'), 'default': '6', options: [{ value: '0', label: t('wxWarnOff') }].concat(['1', '2', '4', '6', '8', '24'].map(function (h) { return { value: h, label: t('wxWarnH').replace('%n', h) }; })) },
-                      sz('tsize', 'wxTSize'), sz('isize', 'wxISize')];
+                      sz('tsize', 'wxTSize'), sz('isize', 'wxISize'), { id: 'anim', type: 'toggle', label: t('wxAnim'), 'default': true }];
           }, refresh: weather, keep: true, open: function () { Win.open('weather'); } },
         { id: 'playtime', icon: 'hourglass', title: function () { return t('wg_playtime'); }, size: 'small', every: 300, choices: [60, 300, 900, 1800], bg: false, refresh: playtime,
           open: function () { Win.open('playtime'); } },
@@ -385,7 +385,8 @@ var Widgets = (function () {
             if (v.text) col.appendChild(el('div', 'wdg-text', v.text));
             var art = el('div', 'wdg-art');
             if (v.artSize) { art.style.width = v.artSize + 'px'; art.style.height = v.artSize + 'px'; }
-            Icons.put(art, v.art);
+            var moving = v.anim && typeof Weather !== 'undefined' ? Weather.art(v.art) : '';
+            if (moving) art.innerHTML = moving; else Icons.put(art, v.art);
             hero.appendChild(col); hero.appendChild(art);
             c.appendChild(hero);
         } else {

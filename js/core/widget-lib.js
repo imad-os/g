@@ -145,6 +145,7 @@
         // built-in widgets only: a big picture beside the big value (Weather), sizes in px, warnings
         if (builtIn) {
             if (/^[a-zA-Z0-9]{1,20}$/.test(str(v.art))) out.art = str(v.art);
+            if (v.anim === true) out.anim = true;
             if (+v.bigSize >= 24 && +v.bigSize <= 120) out.bigSize = Math.round(+v.bigSize);
             if (+v.artSize >= 40 && +v.artSize <= 200) out.artSize = Math.round(+v.artSize);
             if (Array.isArray(v.alerts)) out.alerts = v.alerts.filter(isObject).slice(0, 2).map(function (a) { return { level: a.level === 'danger' ? 'danger' : 'warn', text: cut(a.text, 80) }; }).filter(function (a) { return a.text; });

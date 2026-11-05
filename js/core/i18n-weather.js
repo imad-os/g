@@ -5,7 +5,7 @@
     I18n.add({
         en: {
             wxWarn: 'Rain and storm warnings', wxWarnOff: 'Off', wxWarnH: 'Rain within %n h', wxWarnChip: 'Warnings: %s',
-            wxTSize: 'Temperature size', wxISize: 'Picture size', wxSz_s: 'Small', wxSz_m: 'Medium', wxSz_l: 'Large', wxSz_xl: 'Extra large',
+            wxAnim: 'Animated picture', wxTSize: 'Temperature size', wxISize: 'Picture size', wxSz_s: 'Small', wxSz_m: 'Medium', wxSz_l: 'Large', wxSz_xl: 'Extra large',
             wxWarning: 'Weather warning', wxDanger: 'Danger: storm',
             wxAlRainNow: 'Rain now', wxAlRainIn: 'Rain in about %n h (%t)', wxAlSnowNow: 'Snow now', wxAlSnowIn: 'Snow in about %n h (%t)',
             wxAlStormNow: 'Storm now: stay inside', wxAlStormIn: 'Storm danger in about %n h (%t)', wxNoAlert: 'No rain expected',
@@ -19,7 +19,7 @@
         },
         fr: {
             wxWarn: 'Alertes pluie et orage', wxWarnOff: 'Désactivées', wxWarnH: 'Pluie dans les %n h', wxWarnChip: 'Alertes : %s',
-            wxTSize: 'Taille de la température', wxISize: 'Taille de l’image', wxSz_s: 'Petite', wxSz_m: 'Moyenne', wxSz_l: 'Grande', wxSz_xl: 'Très grande',
+            wxAnim: 'Image animée', wxTSize: 'Taille de la température', wxISize: 'Taille de l’image', wxSz_s: 'Petite', wxSz_m: 'Moyenne', wxSz_l: 'Grande', wxSz_xl: 'Très grande',
             wxWarning: 'Alerte météo', wxDanger: 'Danger : orage',
             wxAlRainNow: 'Il pleut', wxAlRainIn: 'Pluie dans environ %n h (%t)', wxAlSnowNow: 'Il neige', wxAlSnowIn: 'Neige dans environ %n h (%t)',
             wxAlStormNow: 'Orage en cours : restez à l’abri', wxAlStormIn: 'Danger d’orage dans environ %n h (%t)', wxNoAlert: 'Pas de pluie prévue',
@@ -33,7 +33,7 @@
         },
         es: {
             wxWarn: 'Avisos de lluvia y tormenta', wxWarnOff: 'Desactivados', wxWarnH: 'Lluvia en %n h', wxWarnChip: 'Avisos: %s',
-            wxTSize: 'Tamaño de la temperatura', wxISize: 'Tamaño de la imagen', wxSz_s: 'Pequeño', wxSz_m: 'Mediano', wxSz_l: 'Grande', wxSz_xl: 'Muy grande',
+            wxAnim: 'Imagen animada', wxTSize: 'Tamaño de la temperatura', wxISize: 'Tamaño de la imagen', wxSz_s: 'Pequeño', wxSz_m: 'Mediano', wxSz_l: 'Grande', wxSz_xl: 'Muy grande',
             wxWarning: 'Aviso meteorológico', wxDanger: 'Peligro: tormenta',
             wxAlRainNow: 'Está lloviendo', wxAlRainIn: 'Lluvia en unas %n h (%t)', wxAlSnowNow: 'Está nevando', wxAlSnowIn: 'Nieve en unas %n h (%t)',
             wxAlStormNow: 'Tormenta ahora: quédate dentro', wxAlStormIn: 'Peligro de tormenta en unas %n h (%t)', wxNoAlert: 'No se espera lluvia',
@@ -47,7 +47,7 @@
         },
         ar: {
             wxWarn: 'تنبيهات المطر والعواصف', wxWarnOff: 'متوقفة', wxWarnH: 'المطر خلال %n س', wxWarnChip: 'التنبيهات: %s',
-            wxTSize: 'حجم درجة الحرارة', wxISize: 'حجم الصورة', wxSz_s: 'صغير', wxSz_m: 'متوسط', wxSz_l: 'كبير', wxSz_xl: 'كبير جداً',
+            wxAnim: 'صورة متحركة', wxTSize: 'حجم درجة الحرارة', wxISize: 'حجم الصورة', wxSz_s: 'صغير', wxSz_m: 'متوسط', wxSz_l: 'كبير', wxSz_xl: 'كبير جداً',
             wxWarning: 'تنبيه الطقس', wxDanger: 'خطر: عاصفة',
             wxAlRainNow: 'تمطر الآن', wxAlRainIn: 'مطر بعد نحو %n س (%t)', wxAlSnowNow: 'تثلج الآن', wxAlSnowIn: 'ثلج بعد نحو %n س (%t)',
             wxAlStormNow: 'عاصفة الآن: ابقَ في الداخل', wxAlStormIn: 'خطر عاصفة بعد نحو %n س (%t)', wxNoAlert: 'لا مطر متوقع',

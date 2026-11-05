@@ -185,7 +185,12 @@
 
         var c = data && data.now, k = c ? Weather.sky(c.code, c.day) : null;
         root.className = 'wx' + (k ? ' wx-' + k.k + (c.day ? '' : ' wx-night') : '');
-        if (k) Icons.put(ui.icon, k.ic); else ui.icon.innerHTML = '';
+        // the big picture moves (Weather.art) unless the widget's Animation setting is off; redrawn only when the sky changes
+        var pic = k ? k.ic + (s.anim !== false ? '+' : '') : '';
+        if (ui.icon.getAttribute('data-k') !== pic) {
+            ui.icon.setAttribute('data-k', pic);
+            if (!k) ui.icon.innerHTML = ''; else if (s.anim !== false && Weather.art(k.ic)) ui.icon.innerHTML = Weather.art(k.ic); else Icons.put(ui.icon, k.ic);
+        }
         ui.temp.textContent = c ? deg(c.temp) : '--';
         ui.cond.textContent = k ? t('wx_' + k.k) : '';
         var d0 = data && data.days[0];
