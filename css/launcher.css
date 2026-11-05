@@ -915,6 +915,16 @@ svg { display: block; width: 100%; height: 100%; }
 /* the song: the empty bar half as visible, the loaded part in the usual bar grey */
 #wdg-music .wdg-bar { background: rgba(255, 255, 255, 0.07); } #wdg-music .wdg-load { background: rgba(255, 255, 255, 0.14); }
 #wdg-weather .wdg-ic, #wdg-sysmon .wdg-ic { width: 34px; }
+/* Weather: the temperature on the left, a big sky picture beside it (sizes from its settings), warnings under them */
+#wdg-weather { height: auto; min-height: 230px; }
+.wdg-hero { display: flex; align-items: center; gap: 16px; margin-top: 2px; }
+.wdg-col { flex: 1; min-width: 0; }
+.wdg-art { flex: none; width: 120px; height: 120px; }
+.wdg-alert { margin-top: 10px; padding: 7px 12px; border-radius: 10px; border-inline-start: 5px solid; font-size: 19px; font-weight: 600; line-height: 1.3; }
+.wdg-warn { background: rgba(255, 176, 46, 0.16); border-color: #ffb02e; color: #ffd68a; }
+.wdg-danger { background: rgba(255, 64, 64, 0.22); border-color: #ff4040; color: #ffc2c2; }
+.compact .wdg-alert { font-size: 27px; }
+.tall #wdg-weather { height: 100%; min-height: 0; }
 .wdg-medium .wdg-btns, .wdg-large .wdg-btns { bottom: 18px; }
 .compact .desk-widgets { width: 560px; height: calc(var(--sh) - 240px); }
 .compact .has-wdg .desk-icons { right: 608px; }

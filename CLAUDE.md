@@ -105,6 +105,9 @@
   7 days (wind + gusts + direction, precipitation + chance, humidity, pressure, UV, sunrise / sunset). Data in `js/core/weather.js`, shared with
   the Weather widget: ONE Open-Meteo request for both, kept 10 min in `arc_dev_wxfc`; same place / units setting (`Widgets.setSetting('weather', ...)`).
   The widget's OK opens the app. Light: DOM built once, one 15 min timer while open, no animation; looks follow the theme (cards in css/weather.css).
+  Owner request 2026-11-05 (2): the widget shows the temperature big on the left and a big sky picture beside it (sizes in its settings
+  `tsize` / `isize`); warnings (`Weather.alerts`): rain / snow within the chosen hours (`warn`: off / 1 / 2 / 4 / 6 / 8 / 24, default 6) and a
+  thunderstorm within 24 h (danger, red), on the widget, beside the app's temperature, and once each as a notification (profile key `wx_told`).
 - **Music app** (owner request 2026-11-05, Win app `music`): `js/core/music-src.js` (sources: `usb` = Tizen filesystem drives under
   `/opt/media`, needs package **1.6.0** privileges filesystem.read / write + externalstorage; `gd` = Google Drive through the **MyDrive** store
   app: client in Firestore `apps/mydrive.config.google`, the profile's linked accounts in `game_app-mydrive_data`, scope drive.file so only

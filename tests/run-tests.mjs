@@ -276,7 +276,7 @@ function forecastBody(temp) {
     return {
         current: { time: '2026-11-05T09:45', temperature_2m: temp, apparent_temperature: temp - 2, relative_humidity_2m: 60, precipitation: 0.4, weather_code: 2, is_day: 1,
                    cloud_cover: 40, pressure_msl: 1016.2, wind_speed_10m: 14, wind_direction_10m: 270, wind_gusts_10m: 31 },
-        hourly: { time: hours, temperature_2m: hours.map((_, i) => temp + i % 5), precipitation_probability: hours.map((_, i) => i * 3), weather_code: hours.map((_, i) => (i % 3 ? 2 : 61)), is_day: hours.map((_, i) => (i < 9 ? 1 : 0)) },
+        hourly: { time: hours, temperature_2m: hours.map((_, i) => temp + i % 5), precipitation_probability: hours.map((_, i) => i * 3), weather_code: hours.map((_, i) => (i === 12 ? 95 : i % 3 ? 2 : 61)), is_day: hours.map((_, i) => (i < 9 ? 1 : 0)) },
         daily: { time: [0, 1, 2, 3, 4, 5, 6].map(day), weather_code: [2, 61, 3, 0, 95, 71, 45], temperature_2m_max: [24, 22, 19, 25, 21, 8, 17], temperature_2m_min: [15, 14, 12, 16, 13, 1, 10],
                  precipitation_sum: [0.4, 6.2, 0, 0, 12.5, 3, 0], precipitation_probability_max: [20, 80, 5, 0, 95, 60, 10], wind_speed_10m_max: [18, 25, 12, 9, 40, 22, 11],
                  wind_gusts_10m_max: [35, 48, 20, 15, 70, 40, 18], wind_direction_10m_dominant: [270, 225, 180, 90, 315, 0, 45],
@@ -661,7 +661,7 @@ async function main() {
         page.on('response', (r) => { if (/favicon\.ico|icon-32\.png|icon\.png/.test(r.url())) icons.push(r.status()); });
         await page.goto(base + 'index.html');
         await page.waitForSelector('.dicon');
-        check(await page.evaluate(() => document.getElementById('toast').hidden), 'no network notice while online');
+        check(await page.evaluate(() => !/No network connection|Network connected/.test(document.getElementById('toast').textContent)), 'no network notice while online');   // (the fake forecast's weather warnings may show)
         await page.focus('[data-game="snake"]'); await page.keyboard.press('Enter');
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running');
         await page.context().setOffline(true);
@@ -4408,6 +4408,17 @@ async function main() {
         await page.waitForFunction(() => /21°/.test((document.getElementById('wdg-weather') || {}).textContent || ''), null, { timeout: 8000 }).catch(() => {});
         const asked = db.weather.filter((u) => /api\.open-meteo/.test(u)).length;
         check(asked === 1 && await page.evaluate(() => !!document.querySelector('#desk-icons [data-app="weather"], #desk-icons [data-id="weather"]') || !!Desktop.appById('weather')), 'Weather is a desktop app; the widget asked the forecast once: ' + asked);
+        // the widget: temperature on the left, a big sky picture beside it, warnings (rain within 6 h by default, a storm within 24 h = danger)
+        const wg = await page.evaluate(() => { const c = document.getElementById('wdg-weather'); return { art: !!c.querySelector('.wdg-hero .wdg-art svg'), big: getComputedStyle(c.querySelector('.wdg-big')).fontSize,
+            artW: c.querySelector('.wdg-art').getBoundingClientRect().width, danger: (c.querySelector('.wdg-danger') || {}).textContent, warn: (c.querySelector('.wdg-warn') || {}).textContent,
+            toast: document.getElementById('toast').textContent }; });
+        check(wg.art && wg.big === '68px' && /Storm danger in about 10 h/.test(wg.danger) && /Rain in about 1 h/.test(wg.warn) && /Danger: storm/.test(wg.toast) && /Weather warning/.test(wg.toast),
+            'Weather widget: big temperature + big sky picture, rain and storm warnings on the card and once as notifications ' + JSON.stringify(wg));
+        await page.evaluate(() => { Widgets.setSetting('weather', 'tsize', 'xl'); Widgets.setSetting('weather', 'isize', 's'); Widgets.setSetting('weather', 'warn', '0'); });
+        await page.waitForFunction(() => document.querySelector('#wdg-weather .wdg-big') && document.querySelector('#wdg-weather .wdg-big').style.fontSize === '84px', null, { timeout: 5000 }).catch(() => {});
+        const wg2 = await page.evaluate(() => { const c = document.getElementById('wdg-weather'); return { big: c.querySelector('.wdg-big').style.fontSize, art: c.querySelector('.wdg-art').style.width, alerts: c.querySelectorAll('.wdg-alert').length, told: Store.get('wx_told').length }; });
+        check(wg2.big === '84px' && wg2.art === '72px' && wg2.alerts === 0 && wg2.told === 2, 'its settings: temperature size, picture size, warnings off; each warning is told only once ' + JSON.stringify(wg2));
+        await page.evaluate(() => { Widgets.setSetting('weather', 'tsize', 'l'); Widgets.setSetting('weather', 'isize', 'l'); Widgets.setSetting('weather', 'warn', '6'); });
         // OK on the widget card opens the app, drawn at once from the widget's data (no second request)
         await page.evaluate(() => document.getElementById('wdg-weather').click());
         await page.waitForSelector('.wx');
@@ -4423,6 +4434,12 @@ async function main() {
         check(v.stats[0] === '14 km/h W' && v.stats[1] === '31 km/h' && /0.4 mm · 20 %/.test(v.stats[2]) && v.stats[3] === '60 %' && v.stats[4] === '1016 hPa' && /4 · Moderate/.test(v.stats[5]) && /7:31|07:31/.test(v.stats[6]),
             'details now: wind + direction, gusts, precipitation + chance, humidity, pressure, UV, sunrise ' + JSON.stringify(v.stats));
         check(db.weather.filter((u) => /api\.open-meteo/.test(u)).length === asked, 'opening the app right after the widget asks nothing again (shared data)');
+        const al = await page.evaluate(() => ({ d: (document.querySelector('.wx-alert.wx-danger') || {}).textContent, w: (document.querySelector('.wx-alert.wx-warn') || {}).textContent,
+            hot: (document.querySelector('.wx-hour.wx-hot') || {}).textContent, chip: document.querySelector('.wx-wchip').textContent }));
+        check(/Danger: storm.*Storm danger in about 10 h/.test(al.d) && /Weather warning.*Rain in about 1 h/.test(al.w) && /7:00 PM/.test(al.hot) && al.chip === '6 h', 'the app shows the storm (danger) and rain warnings beside the temperature; the storm hour is red in the 24 hours ' + JSON.stringify(al));
+        await page.evaluate(() => document.querySelector('.wx-wchip').click());
+        check(await page.evaluate(() => document.querySelector('.wx-wchip').textContent === '8 h' && Widgets.conf('weather').s.warn === '8'), 'the warnings button goes to the next time (6 h -> 8 h), same setting as the widget');
+        await page.evaluate(() => { Widgets.setSetting('weather', 'warn', '6'); Focus.focus(document.querySelector('.wx-day')); });
         // the remote: Down goes through the days; the details follow the focused day
         await page.keyboard.press('ArrowDown');
         await page.keyboard.press('ArrowDown');

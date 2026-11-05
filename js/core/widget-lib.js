@@ -142,6 +142,15 @@
             }).filter(function (b) { return b.id && (b.label || b.icon); });
             if (!out.buttons.length) delete out.buttons;
         }
+        // built-in widgets only: a big picture beside the big value (Weather), sizes in px, warnings
+        if (builtIn) {
+            if (/^[a-zA-Z0-9]{1,20}$/.test(str(v.art))) out.art = str(v.art);
+            if (+v.bigSize >= 24 && +v.bigSize <= 120) out.bigSize = Math.round(+v.bigSize);
+            if (+v.artSize >= 40 && +v.artSize <= 200) out.artSize = Math.round(+v.artSize);
+            if (Array.isArray(v.alerts)) out.alerts = v.alerts.filter(isObject).slice(0, 2).map(function (a) { return { level: a.level === 'danger' ? 'danger' : 'warn', text: cut(a.text, 80) }; }).filter(function (a) { return a.text; });
+            if (out.alerts && !out.alerts.length) delete out.alerts;
+            if (+v.loaded >= 0 && +v.loaded <= 1) out.loaded = +v.loaded;
+        }
         if (/^#[0-9a-fA-F]{6}$/.test(str(v.accent))) out.accent = str(v.accent);
         var l = str(v.link);
         if (l && l.length <= LIMITS.link && !/[\s"'<>]/.test(l)) out.link = l;

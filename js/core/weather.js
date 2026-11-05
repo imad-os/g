@@ -127,8 +127,38 @@ var Weather = (function () {
         return { data: c.d, loc: loc, at: c.at };
     }
 
+    /* Warnings (owner request 2026-11-05): rain / snow coming within `ahead` hours (1, 2, 4, 6, 8 or 24; 0 = off) and a thunderstorm
+     * within 24 hours (danger). From the hourly forecast: [{ kind: 'storm' | 'rain' | 'snow', level: 'danger' | 'warn', in (hours from
+     * now, 0 = this hour), time ('HH:MM'), pop, key (to tell once) }], the storm first. */
+    function kindOf(code) {
+        if (typeof code !== 'number') return '';
+        if (code >= 95) return 'storm';
+        if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'snow';
+        if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 'rain';
+        return '';
+    }
+    function alerts(data, ahead) {
+        var out = [], hs = data && data.hours ? data.hours : [], seen = {};
+        ahead = +ahead || 0;
+        if (!ahead) return out;
+        for (var i = 0; i < hs.length && i <= 24; i++) {
+            var k = kindOf(hs[i].code);
+            if (!k || seen[k] || (k !== 'storm' && i > ahead)) continue;
+            seen[k] = 1;
+            out.push({ kind: k, level: k === 'storm' ? 'danger' : 'warn', 'in': i, time: hm(hs[i].time), pop: hs[i].pop, key: k + '@' + String(hs[i].time).slice(0, 13) });
+        }
+        out.sort(function (a, b) { return (a.level === 'danger' ? -100 : 0) + a['in'] - ((b.level === 'danger' ? -100 : 0) + b['in']); });
+        return out.slice(0, 2);
+    }
+    // the sentence for a warning (strings wxAl<kind>Now / wxAl<kind>In)
+    function alertText(a) {
+        var k = a.kind.charAt(0).toUpperCase() + a.kind.slice(1);
+        if (a['in'] === 0) return I18n.t('wxAl' + k + 'Now');
+        return I18n.t('wxAl' + k + 'In').replace('%n', a['in']).replace('%t', typeof Desktop !== 'undefined' && a.time ? Desktop.timeText(new Date(2000, 0, 1, +a.time.slice(0, 2), +a.time.slice(3, 5))) : a.time);
+    }
+
     // compass point of a wind direction (degrees it blows from), 0..7 = N NE E SE S SW W NW
     function point(deg) { return typeof deg === 'number' ? Math.round(((deg % 360) + 360) % 360 / 45) % 8 : -1; }
 
-    return { sky: sky, settings: settings, place: place, get: get, peek: peek, parse: parse, point: point, getJson: getJson };
+    return { alerts: alerts, alertText: alertText, kindOf: kindOf, sky: sky, settings: settings, place: place, get: get, peek: peek, parse: parse, point: point, getJson: getJson };
 })();

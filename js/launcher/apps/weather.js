@@ -50,6 +50,8 @@
         cloud: '<path d="M14 36a8 8 0 0 1 1-16 12 12 0 0 1 23 3 6.5 6.5 0 0 1 0 13z" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/>',
         therm: '<path d="M20 28V10a4 4 0 0 1 8 0v18a8 8 0 1 1-8 0z" fill="none" stroke="currentColor" stroke-width="3.5"/><circle cx="24" cy="35" r="4" fill="currentColor"/>',
         day: '<circle cx="24" cy="26" r="7" fill="none" stroke="currentColor" stroke-width="3.5"/><path d="M6 40h36M24 8v6M10 14l4 4M38 14l-4 4M6 26h5M37 26h5" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>',
+        alert: '<path d="M24 6L44 40H4z" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/><path d="M24 18v10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="24" cy="34" r="2.5" fill="currentColor"/>',
+        bolt: '<path d="M27 4L10 27h12l-3 17 19-25H26z" fill="currentColor"/>',
         arrow: '<path d="M24 6l9 30-9-6-9 6z" fill="currentColor"/>'
     };
     function glyph(name, cls) {
@@ -83,11 +85,16 @@
         ui.place.onclick = changePlace;
         ui.units = button('wx-chip wx-units');
         ui.units.onclick = toggleUnits;
+        ui.warn = button('wx-chip wx-wchip');
+        ui.warn.appendChild(glyph('alert'));
+        ui.warnT = el('span', 'wx-chip-t');
+        ui.warn.appendChild(ui.warnT);
+        ui.warn.onclick = nextWarn;
         ui.reload = button('wx-chip wx-reload', t('wxRefresh'));
         ui.reload.appendChild(glyph('reload'));
         ui.reload.onclick = function () { load(true); };
         ui.when = el('span', 'wx-when');
-        bar.appendChild(ui.place); bar.appendChild(ui.units); bar.appendChild(ui.reload); bar.appendChild(ui.when);
+        bar.appendChild(ui.place); bar.appendChild(ui.units); bar.appendChild(ui.warn); bar.appendChild(ui.reload); bar.appendChild(ui.when);
         main.appendChild(bar);
 
         // now
@@ -98,7 +105,9 @@
         ui.cond = el('div', 'wx-cond');
         ui.feels = el('div', 'wx-feels');
         ht.appendChild(ui.temp); ht.appendChild(ui.cond); ht.appendChild(ui.feels);
-        hero.appendChild(ui.icon); hero.appendChild(ht);
+        ui.alerts = el('div', 'wx-alerts');
+        ui.alerts.setAttribute('role', 'alert');
+        hero.appendChild(ui.icon); hero.appendChild(ht); hero.appendChild(ui.alerts);
         ui.msg = el('div', 'wx-msg');
         ui.msg.setAttribute('role', 'status');
         hero.appendChild(ui.msg);
@@ -184,15 +193,45 @@
         ui.msg.textContent = err === 'notfound' ? t('wxNoPlace').replace('%s', s.place) : !data ? (loading ? t('wgLoading') : t('wxLoadFail')) : '';
         ui.msg.hidden = !ui.msg.textContent;
 
+        drawAlerts();
         drawHours();
         drawDays();
         drawDetails();
+    }
+
+    // rain / snow within the chosen hours, a storm within 24 h (danger): js/core/weather.js alerts()
+    var WARN = ['0', '1', '2', '4', '6', '8', '24'];
+    function warnLabel(w) { return w === '0' ? t('wxWarnOff') : w + ' h'; }
+    function drawAlerts() {
+        var w = String(Weather.settings().warn || '0'), al = data ? Weather.alerts(data, w) : [];
+        ui.warnT.textContent = warnLabel(w);
+        ui.warn.setAttribute('aria-label', t('wxWarn') + ': ' + (w === '0' ? t('wxWarnOff') : t('wxWarnH').replace('%n', w)));
+        ui.warn.className = 'wx-chip wx-wchip' + (w === '0' ? ' off' : '');
+        ui.alerts.innerHTML = '';
+        al.forEach(function (a) {
+            var b = el('div', 'wx-alert wx-' + a.level);
+            b.appendChild(glyph(a.kind === 'storm' ? 'bolt' : 'alert'));
+            var tx = el('div', 'wx-alert-t');
+            tx.appendChild(el('b', '', t(a.level === 'danger' ? 'wxDanger' : 'wxWarning')));
+            tx.appendChild(el('span', '', Weather.alertText(a) + (a.pop ? ' · ' + Math.round(a.pop) + ' %' : '')));
+            b.appendChild(tx);
+            ui.alerts.appendChild(b);
+        });
+        if (!al.length && data && w !== '0') ui.alerts.appendChild(el('div', 'wx-alert wx-calm', t('wxNoAlert') + ' (' + t('wxWarnH').replace('%n', w).toLowerCase() + ')'));
+    }
+    function nextWarn() {
+        var w = String(Weather.settings().warn || '0'), i = WARN.indexOf(w);
+        Widgets.setSetting('weather', 'warn', WARN[(i + 1) % WARN.length]);
+        drawAlerts();
+        A11y.announce(ui.warn.getAttribute('aria-label') + '. ' + ui.alerts.textContent);
     }
 
     function drawHours() {
         var hs = data ? data.hours : [];
         for (var i = 0; i < 8; i++) {
             var o = ui.hours[i], h = hs[i * 3];
+            // a storm inside these 3 hours shows on this one (red), so it is never skipped
+            for (var j = i * 3; j < i * 3 + 3 && j < hs.length; j++) if (Weather.kindOf(hs[j].code) === 'storm') { h = hs[j]; break; }
             o.b.hidden = !h;
             if (!h) continue;
             var k = Weather.sky(h.code, h.day), when = i === 0 ? t('wxNow') : Desktop.timeText(dateOf(h.time));
@@ -200,6 +239,7 @@
             Icons.put(o.ic, k.ic);
             o.v.textContent = deg(h.temp);
             o.p.textContent = h.pop ? Math.round(h.pop) + '%' : '';
+            o.b.className = 'wx-hour' + (Weather.kindOf(h.code) === 'storm' ? ' wx-hot' : '');
             o.b.setAttribute('aria-label', when + ', ' + deg(h.temp) + ', ' + t('wx_' + k.k) + (h.pop !== null ? ', ' + t('wxPop') + ' ' + pct(h.pop) : ''));
         }
     }

@@ -24,14 +24,20 @@ var Widgets = (function () {
      * def: { id, icon, title(), size, every (s), choices [s], bg, settings() (WidgetLib schema), refresh(ctx, done(view)),
      *        press(button id), open(), idle() (nothing changes: no timer) } */
 
-    // Weather: the data comes from js/core/weather.js (shared with the Weather app: one request serves both, kept 10 min)
+    // Weather: the data comes from js/core/weather.js (shared with the Weather app: one request serves both, kept 10 min).
+    // Owner request 2026-11-05: the temperature big on the left, a big sky picture beside it (both sizes in its settings), and
+    // warnings: rain / snow within the chosen hours, a thunderstorm within 24 h (danger), also told once as a notification.
+    var WX_T = { s: 44, m: 56, l: 68, xl: 84 }, WX_I = { s: 72, m: 96, l: 120, xl: 150 };
     function weather(ctx, done) {
         var s = ctx.settings, f = s.units === 'f';
         Weather.get(s, 600000, function (err, data, loc) {
             if (err === 'notfound') return done({ icon: 'i:cloud', big: '--', text: t('wgNoPlace').replace('%s', s.place) });
             if (!data || !data.now || data.now.temp === null) return done(stale(ctx.id, t('wgOffline')));
             var c = data.now, d = data.days[0] || {}, k = Weather.sky(c.code, c.day);
-            var v = { icon: 'i:' + k.ic, big: Math.round(c.temp) + '°', sub: loc.name, text: t('wx_' + k.k), rows: [] };
+            var v = { icon: 'i:' + k.ic, art: k.ic, bigSize: WX_T[s.tsize] || WX_T.l, artSize: WX_I[s.isize] || WX_I.l,
+                      big: Math.round(c.temp) + '°', sub: loc.name, text: t('wx_' + k.k), rows: [] };
+            var al = Weather.alerts(data, s.warn);
+            if (al.length) { v.alerts = al.map(function (a) { return { level: a.level, text: Weather.alertText(a) }; }); tell(al); }
             if (d.hi !== null && d.hi !== undefined) v.rows.push({ label: t('wgHiLo'), value: Math.round(d.hi) + '° / ' + Math.round(d.lo) + '°' });
             if (ctx.size === 'large') {
                 if (c.hum !== null) v.rows.push({ label: t('wgHumidity'), value: Math.round(c.hum) + ' %' });
@@ -40,6 +46,19 @@ var Widgets = (function () {
             if (err) v.sub = t('wgOffline');
             done(v);
         });
+    }
+    // a new warning is told once as a notification (red for a storm), while the desktop is on screen
+    function tell(al) {
+        if (!onDesk || typeof Notify === 'undefined') return;
+        var told = Store.get('wx_told', []);
+        told = Array.isArray(told) ? told : [];
+        al.forEach(function (a) {
+            if (told.indexOf(a.key) >= 0) return;
+            told.push(a.key);
+            Notify.show({ id: 'wx-' + a.kind, kind: a.level === 'danger' ? 'err' : 'warn', timeout: a.level === 'danger' ? 15000 : 8000, title: t(a.level === 'danger' ? 'wxDanger' : 'wxWarning'), text: Weather.alertText(a),
+                          onClick: function () { Win.open('weather'); } });
+        });
+        Store.set('wx_told', told.slice(-20));
     }
     // the last view, marked as old (offline), or a first "loading" view
     function stale(id, why) {
@@ -117,8 +136,11 @@ var Widgets = (function () {
     var BUILT = [
         { id: 'weather', icon: 'weather', title: function () { return t('wg_weather'); }, size: 'medium', every: 1800, choices: [900, 1800, 3600, 10800], bg: false,
           settings: function () {
+              var sz = function (id, label) { return { id: id, type: 'select', label: t(label), 'default': 'l', options: ['s', 'm', 'l', 'xl'].map(function (x) { return { value: x, label: t('wxSz_' + x) }; }) }; };
               return [{ id: 'place', type: 'text', label: t('wgPlace'), 'default': '' },
-                      { id: 'units', type: 'select', label: t('wgUnits'), 'default': 'c', options: [{ value: 'c', label: t('wgCelsius') }, { value: 'f', label: t('wgFahrenheit') }] }];
+                      { id: 'units', type: 'select', label: t('wgUnits'), 'default': 'c', options: [{ value: 'c', label: t('wgCelsius') }, { value: 'f', label: t('wgFahrenheit') }] },
+                      { id: 'warn', type: 'select', label: t('wxWarn'), 'default': '6', options: [{ value: '0', label: t('wxWarnOff') }].concat(['1', '2', '4', '6', '8', '24'].map(function (h) { return { value: h, label: t('wxWarnH').replace('%n', h) }; })) },
+                      sz('tsize', 'wxTSize'), sz('isize', 'wxISize')];
           }, refresh: weather, keep: true, open: function () { Win.open('weather'); } },
         { id: 'playtime', icon: 'hourglass', title: function () { return t('wg_playtime'); }, size: 'small', every: 300, choices: [60, 300, 900, 1800], bg: false, refresh: playtime,
           open: function () { Win.open('playtime'); } },
@@ -334,6 +356,7 @@ var Widgets = (function () {
     function label(d, v) {
         var p = [d.title()];
         ['big', 'sub', 'text'].forEach(function (k) { if (v[k]) p.push(v[k]); });
+        (v.alerts || []).forEach(function (a) { p.push(a.text); });
         (v.rows || []).forEach(function (r) { p.push(r.label + ' ' + r.value); });
         return p.join('. ');
     }
@@ -353,11 +376,26 @@ var Widgets = (function () {
         head.appendChild(el('span', 'wdg-title', v.title || d.title()));
         c.appendChild(head);
         if (v.image && d.size !== 'small') { var im = el('img', 'wdg-img'); im.alt = ''; im.src = v.image; im.onerror = function () { this.remove(); }; c.appendChild(im); }
-        if (v.big) c.appendChild(el('div', 'wdg-big', v.big));
-        // no big value: the text leads (a song title, then its artist)
-        if (v.sub && v.big) c.appendChild(el('div', 'wdg-sub', v.sub));
-        if (v.text) c.appendChild(el('div', 'wdg-text', v.text));
-        if (v.sub && !v.big) c.appendChild(el('div', 'wdg-sub', v.sub));
+        if (v.art) {
+            // big value + its text on the left, a big picture on the right (Weather)
+            var hero = el('div', 'wdg-hero'), col = el('div', 'wdg-col'), big = el('div', 'wdg-big', v.big || '');
+            if (v.bigSize) big.style.fontSize = v.bigSize + 'px';
+            col.appendChild(big);
+            if (v.sub) col.appendChild(el('div', 'wdg-sub', v.sub));
+            if (v.text) col.appendChild(el('div', 'wdg-text', v.text));
+            var art = el('div', 'wdg-art');
+            if (v.artSize) { art.style.width = v.artSize + 'px'; art.style.height = v.artSize + 'px'; }
+            Icons.put(art, v.art);
+            hero.appendChild(col); hero.appendChild(art);
+            c.appendChild(hero);
+        } else {
+            if (v.big) c.appendChild(el('div', 'wdg-big', v.big));
+            // no big value: the text leads (a song title, then its artist)
+            if (v.sub && v.big) c.appendChild(el('div', 'wdg-sub', v.sub));
+            if (v.text) c.appendChild(el('div', 'wdg-text', v.text));
+            if (v.sub && !v.big) c.appendChild(el('div', 'wdg-sub', v.sub));
+        }
+        if (v.alerts) v.alerts.forEach(function (a) { c.appendChild(el('div', 'wdg-alert wdg-' + a.level, a.text)); });
         if (v.progress !== undefined) {
             var bar = el('div', 'wdg-bar'), fill = el('i');
             fill.style.width = Math.round(v.progress * 100) + '%';
