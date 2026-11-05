@@ -275,10 +275,11 @@ var Input = (function () {
             if (!p || !p.connected) continue;
             var dev = 'pad' + p.index, now = {}, any = false;
             var prev = padNow[dev] || (padNow[dev] = {}), rep = padRepeatAt[dev] || (padRepeatAt[dev] = {});
-            if (rawFn) rawPad(dev, p);
+            var taken = padHook ? padEdges(dev, p) : null;
+            if (rawFn) rawPad(dev, p, taken);
             for (j = 0; j < PAD_BUTTONS.length; j++) {
                 b = p.buttons[PAD_BUTTONS[j][0]];
-                if (b && (b.pressed || b.value > 0.5)) {
+                if (b && (b.pressed || b.value > 0.5) && !(taken && taken[PAD_BUTTONS[j][0]])) {
                     acts = PAD_BUTTONS[j][1];
                     for (var k = 0; k < acts.length; k++) now[acts[k]] = true;
                     any = true;
@@ -286,7 +287,7 @@ var Input = (function () {
             }
             // Start / Select: one of them = the game's menu (sent when let go); both held HOLD_MS = My PC's menu
             var sb = p.buttons[9], sl = p.buttons[8], st = startBtn[dev] || (startBtn[dev] = { at: 0, both: 0, combo: false, fired: false, sup: false });
-            var sDown = !!(sb && (sb.pressed || sb.value > 0.5)), lDown = !!(sl && (sl.pressed || sl.value > 0.5));
+            var sDown = !!(sb && (sb.pressed || sb.value > 0.5)) && !(taken && taken[9]), lDown = !!(sl && (sl.pressed || sl.value > 0.5)) && !(taken && taken[8]);
             if (sDown || lDown) {
                 any = true;
                 if (!st.at) { st.at = t; st.both = 0; st.combo = false; st.fired = false; st.sup = false; }
@@ -318,16 +319,34 @@ var Input = (function () {
         }
     }
 
+    // The profile's shortcuts on controller buttons (js/launcher/shortcuts.js): padHook(index, down, dev) is told of every
+    // button press / release; a button it takes (true on press) gives no action and no raw report until it is let go.
+    var padHook = null, padPrev = {}, padTaken = {};       // 'padN' -> Uint8Array
+    function padEdges(dev, p) {
+        var nb = p.buttons.length, pv = padPrev[dev], tk = padTaken[dev], j, b, on;
+        if (!pv || pv.length < nb) { pv = padPrev[dev] = new Uint8Array(Math.max(nb, 18)); tk = padTaken[dev] = new Uint8Array(Math.max(nb, 18)); }
+        for (j = 0; j < nb; j++) {
+            b = p.buttons[j];
+            on = b && (b.pressed || b.value > 0.5) ? 1 : 0;
+            if (on === pv[j]) continue;
+            pv[j] = on;
+            if (on) { if (padHook(j, true, dev)) tk[j] = 1; }
+            else if (tk[j]) { tk[j] = 0; padHook(j, false, dev); }
+        }
+        return tk;
+    }
+
     // Every button and axis of every pad, unmapped, for installed apps (MyPC.gamepad): only changes are reported.
     // rawFn('b', dev, index, pressed, value) | rawFn('a', dev, axes) | rawFn('lost', dev). No allocation once a pad is known.
     var rawFn = null, rawPrev = {};         // 'padN' -> { v: Float32Array (button values), p: Uint8Array (pressed), a: Float32Array (axes) }
-    function rawPad(dev, p) {
+    function rawPad(dev, p, taken) {
         var nb = p.buttons.length, na = p.axes.length, r = rawPrev[dev], j, b, v, pr, moved = false;
         if (!r || r.v.length < nb || r.a.length < na) r = rawPrev[dev] = { v: new Float32Array(Math.max(nb, 17)), p: new Uint8Array(Math.max(nb, 17)), a: new Float32Array(Math.max(na, 4)) };
         for (j = 0; j < nb; j++) {
             b = p.buttons[j];
             if (!b) continue;
             v = b.value || (b.pressed ? 1 : 0); pr = b.pressed || v > 0.5 ? 1 : 0;
+            if (taken && taken[j]) { v = 0; pr = 0; }       // a shortcut's button: the app does not see it
             if (pr !== r.p[j] || Math.abs(v - r.v[j]) >= 0.05 || (v === 0 && r.v[j] !== 0)) { r.p[j] = pr; r.v[j] = v; rawFn('b', dev, j, !!pr, v); }
         }
         for (j = 0; j < na; j++) {
@@ -458,6 +477,7 @@ var Input = (function () {
         systemBack: systemBack,              // the phone's Back button in the Android app: like the TV remote's Back
         setHandler: function (fn) { handler = fn; },
         setKeyHook: function (fn) { keyHook = fn || null; },     // fn(keyCode, down, event) -> true when it used the key
+        setPadHook: function (fn) { padHook = fn || null; },     // fn(buttonIndex, down, dev) -> true when it takes the button
         TV_KEYS: TV_KEYS,
         isDown: isDown,
         isDownDev: isDownDev,

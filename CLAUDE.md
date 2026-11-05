@@ -122,7 +122,7 @@
   and Guide = switch user.** `Input.setKeyHook` runs it before the key map (the button loses its built-in use for that profile; F6 stays the
   keyboard's Guide); only the buttons in use are registered on the TV. Memo / Music keep their own Play / Pause and Record. In a game: music
   and My PC's menu at once; "open" actions ask, then quit the game and the desktop runs it (`sc_next`). Control Panel > **Shortcuts**: list, Add,
-  then Button (owner request: OK listens 5 s for the next remote button, `Shortcuts.listen` registers every key meanwhile, Back cancels; "Choose the button from a list" stays for keyboards) / Action / App or page lists, Save, Remove, Back to defaults. The game menu (`game-host.js renderPause`)
+  then Button (owner request: OK listens 5 s for the next button of ANY device: remote / keyboard key = `k<code>` (every TV key registered meanwhile), controller button = `p<index>` via `Input.setPadHook` (taken buttons give no action / raw report); only arrows / D-pad, OK / Enter / Space / B, Back / Esc / Backspace / A, Tab and modifiers are kept; Back cancels; "Choose the button from a list" stays for keyboards) / Action / App or page lists, Save, Remove, Back to defaults. The game menu (`game-host.js renderPause`)
   has **Play music / Pause music** (`Music.toggle`, stays open).
 - `apps/store.js`: the App Store app (Home / Games / Apps / Library / Search, Install / Open / Uninstall).
 - **Settings of every My PC** (owner decision): App Store Manager > Settings writes Firestore `settings/mypc` (admins only, read by

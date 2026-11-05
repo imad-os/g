@@ -4550,8 +4550,8 @@ async function main() {
         const row = (re) => page.evaluate((s) => { const b = [...document.querySelectorAll('.set-main .set-row')].find((x) => new RegExp(s).test(x.textContent)); if (b) { b.focus(); b.click(); } return !!b; }, re);
         await row('Add a shortcut');
         await row('^Button');
-        check(await page.evaluate(() => Shortcuts.listening()) && /Press the button on your remote/.test(await page.textContent('.set-main')) && /5 s left/.test(await page.textContent('.set-main')),
-            'Button listens for the next remote button (5 s countdown)');
+        check(await page.evaluate(() => Shortcuts.listening()) && /Press a button: remote, keyboard or controller/.test(await page.textContent('.set-main')) && /5 s left/.test(await page.textContent('.set-main')),
+            'Button listens for the next button of any device (5 s countdown)');
         await remote(37);                                   // an arrow: not a shortcut button, still listening
         check(await page.evaluate(() => Shortcuts.listening()), 'an arrow is not taken (still listening)');
         await remote(10009);                                // Back cancels, and stays on the shortcut
@@ -4560,6 +4560,20 @@ async function main() {
         await remote(406);
         await page.waitForTimeout(100);
         check(await page.evaluate(() => !Shortcuts.listening() && /Blue button/.test(document.activeElement.textContent)), 'pressing Blue picks the Blue button');
+        // any key of any device: a keyboard letter, a controller button (a phone in Buttons mode is a standard pad)
+        await row('^Button');
+        await remote(75);
+        await page.waitForTimeout(100);
+        check(await page.evaluate(() => /Key K/.test(document.activeElement.textContent)), 'a keyboard key (K) is picked');
+        await row('^Button');
+        await page.evaluate(() => { Input.virtualPad(1, 1 << 12, 0, 0, 'Test'); Input.virtualPad(1, 0, 0, 0, 'Test'); });   // D-pad up: kept
+        check(await page.evaluate(() => Shortcuts.listening()), 'the controller D-pad is not taken');
+        await page.evaluate(() => { Input.virtualPad(1, 1 << 3, 0, 0, 'Test'); Input.virtualPad(1, 0, 0, 0, 'Test'); });     // X (top)
+        await page.waitForTimeout(100);
+        check(await page.evaluate(() => /Controller X/.test(document.activeElement.textContent)), 'a controller button (X) is picked');
+        await row('^Button');
+        await remote(406);
+        await page.waitForTimeout(100);
         await row('^Choose the button from a list');
         const keys = await page.evaluate(() => document.querySelectorAll('.set-main .set-row').length);
         check(keys >= 30 && /Blue button/.test(await page.textContent('.set-main')) && /Number 5/.test(await page.textContent('.set-main')), 'the list (for a keyboard) has every remote button (' + (keys - 1) + ')');
@@ -4575,6 +4589,14 @@ async function main() {
         await remote(406);
         await page.waitForTimeout(200);
         check(await page.evaluate(() => Win.current() === 'calculator'), 'the Blue key opens Calculator');
+        // a controller button runs its shortcut (and gives no action of its own)
+        await page.evaluate(() => { Win.close(); Shortcuts.put(-1, { key: 'p3', act: 'app', arg: 'weather' }); Input.virtualPad(1, 1 << 3, 0, 0, 'Test'); Input.virtualPad(1, 0, 0, 0, 'Test'); });
+        await page.waitForTimeout(200);
+        check(await page.evaluate(() => Win.current() === 'weather'), 'controller X opens Weather');
+        await page.evaluate(() => { Win.close(); Shortcuts.put(-1, { key: 'k75', act: 'app', arg: 'calculator' }); Input.virtualPad(1, null); });
+        await remote(75);
+        await page.waitForTimeout(200);
+        check(await page.evaluate(() => Win.current() === 'calculator'), 'keyboard K opens Calculator');
         // a Control Panel page
         await page.evaluate(() => Shortcuts.put(-1, { key: 'n1', act: 'page', arg: 'sound' }));
         await remote(49);

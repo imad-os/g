@@ -57,14 +57,31 @@ var Shortcuts = (function () {
     var OWN_MEDIA = { memo: 1, music: 1 };      // these apps keep their media keys (Play / Pause, Record...)
     var MEDIA_USE = { scu_pause: 1, scu_record: 1 };
 
-    var codeMap = {};               // keyCode -> button id (for this profile's shortcuts)
+    var codeMap = {}, padMap = {};    // padMap: controller button index -> button id               // keyCode -> button id (for this profile's shortcuts)
     var held = {};                  // keyCode -> true while a shortcut key is held (no repeat, its keyup is swallowed)
     var registered = {};            // Tizen key names registered by us
     var pages = [];                 // Control Panel pages ([{ id, label }]), given by apps/settings.js
     var listeners = [];
 
     function t(k) { return I18n.t(k); }
-    function button(id) { for (var i = 0; i < BUTTONS.length; i++) if (BUTTONS[i].id === id) return BUTTONS[i]; return null; }
+    // any other key (remote, keyboard): 'k<keyCode>'; a controller button: 'p<index>' (standard layout, any controller)
+    // Kept for moving and confirming everywhere: arrows, OK / Enter / Space, Back / Esc / Backspace, Tab, modifier keys;
+    // on a controller the D-pad, B (bottom, OK) and A (right, Back).
+    var RESERVED = { 8: 1, 9: 1, 13: 1, 16: 1, 17: 1, 18: 1, 20: 1, 27: 1, 32: 1, 37: 1, 38: 1, 39: 1, 40: 1, 91: 1, 92: 1, 93: 1, 229: 1, 10009: 1 };
+    var PAD_RESERVED = { 0: 1, 1: 1, 12: 1, 13: 1, 14: 1, 15: 1 };
+    // standard layout -> the Nintendo names (B bottom, A right, Y left, X top)
+    var PAD_NAMES = ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '\u2212', '+', 'L3', 'R3', '\u25B2', '\u25BC', '\u25C0', '\u25B6', 'Home', 'Capture'];
+    var generic = {};
+    function button(id) {
+        for (var i = 0; i < BUTTONS.length; i++) if (BUTTONS[i].id === id) return BUTTONS[i];
+        if (generic[id]) return generic[id];
+        var m = /^([kp])(\d{1,5})$/.exec(String(id || '')), n;
+        if (!m) return null;
+        n = +m[2];
+        if (m[1] === 'p') return n < 32 && !PAD_RESERVED[n] ? (generic[id] = { id: id, pad: n, codes: [] }) : null;
+        if (RESERVED[n]) return null;
+        return (generic[id] = { id: id, key: n, codes: [n], tv: tvName(n) });
+    }
     function actionDef(id) { for (var i = 0; i < ACTIONS.length; i++) if (ACTIONS[i].id === id) return ACTIONS[i]; return null; }
     function valid(s) { return !!(s && button(s.key) && actionDef(s.act) && (!actionDef(s.act).arg || s.arg)); }
 
@@ -96,21 +113,23 @@ var Shortcuts = (function () {
     function forKey(key) { var l = list(); for (var i = 0; i < l.length; i++) if (l[i].key === key) return l[i]; return null; }
 
     // the TV's real keyCode for a key name (Samsung gives it in getSupportedKeys)
-    var tvCodes = null;
-    function tvCode(name) {
-        if (tvCodes === null) {
-            tvCodes = {};
-            try { var sup = tizen.tvinputdevice.getSupportedKeys() || []; for (var i = 0; i < sup.length; i++) tvCodes[sup[i].name] = sup[i].code; } catch (e) {}
-        }
-        return tvCodes[name];
+    var tvCodes = null, tvNames = {}, tvAll = [];
+    function loadTv() {
+        if (tvCodes !== null) return;
+        tvCodes = {};
+        try { var sup = tizen.tvinputdevice.getSupportedKeys() || []; for (var i = 0; i < sup.length; i++) { tvCodes[sup[i].name] = sup[i].code; tvNames[sup[i].code] = sup[i].name; tvAll.push(sup[i].name); } } catch (e) {}
     }
+    function tvCode(name) { loadTv(); return tvCodes[name]; }
+    function tvName(code) { loadTv(); return tvNames[code] || null; }
 
     // this profile's keys: the code map, and on the TV only these keys registered (others keep their TV use)
     function apply() {
-        codeMap = {};
+        codeMap = {}; padMap = {};
         var l = list(), want = {}, i, j, b;
         for (i = 0; i < l.length; i++) {
             b = button(l[i].key);
+            if (b.pad !== undefined) { padMap[b.pad] = b.id; continue; }
+            if (!b.tv) { codeMap[b.key] = b.id; continue; }
             var c = tvCode(b.tv);
             if (c) codeMap[c] = b.id;
             for (j = 0; j < b.codes.length; j++) codeMap[b.codes[j]] = b.id;
@@ -131,12 +150,16 @@ var Shortcuts = (function () {
             var b = BUTTONS[i];
             if (b.codes.indexOf(code) >= 0 || (tvCode(b.tv) === code && code)) return b;
         }
-        return null;
+        return button('k' + code);                           // any other key (null when kept: arrows, OK, Back...)
     }
     function listen(cb, ms) {
         stopListen();
         var tvi = window.tizen && tizen.tvinputdevice;
-        if (tvi) for (var i = 0; i < BUTTONS.length; i++) { var k = BUTTONS[i].tv; if (!registered[k]) { try { tvi.registerKey(k); registered[k] = true; } catch (e) {} } }
+        if (tvi) {                                           // every key the TV lets apps have, so any of them can be pressed
+            loadTv();
+            var names = tvAll.length ? tvAll : BUTTONS.map(function (b) { return b.tv; });
+            for (var i = 0; i < names.length; i++) { var k = names[i]; if (!registered[k]) { try { tvi.registerKey(k); registered[k] = true; } catch (e) {} } }
+        }
         capture = { cb: cb, timer: setTimeout(function () { finish(null, 'timeout'); }, ms || 5000), down: {} };
     }
     function finish(id, why) {
@@ -155,6 +178,25 @@ var Shortcuts = (function () {
         var b = codeButton(code);
         if (b) finish(b.id);
         else if (window.App) App.toast(t('scCantUse'), { id: 'shortcut', kind: 'warn', timeout: 2000 });
+        return true;
+    }
+
+    // Input's controller hook: a button with a shortcut (any controller) runs it; the listener takes any but the D-pad, B, A
+    var padHeld = {};
+    function onPad(idx, down) {
+        if (!down) { if (padHeld[idx]) { padHeld[idx] = false; return true; } return false; }
+        if (capture) {
+            if (idx === 1) { finish(null, 'cancel'); padHeld[idx] = true; return true; }       // A (right) = Back
+            if (PAD_RESERVED[idx]) return true;
+            padHeld[idx] = true;
+            finish('p' + idx);
+            return true;
+        }
+        var id = padMap[idx];
+        if (!id || !mayRun(id)) return false;
+        padHeld[idx] = true;
+        var s = forKey(id);
+        if (s) setTimeout(function () { run(s); }, 0);
         return true;
     }
 
@@ -202,7 +244,22 @@ var Shortcuts = (function () {
         if (s.act === 'page') return t('sca_pageX').replace('%s', pageName(s.arg) || s.name || s.arg);
         return t(a.label);
     }
-    function buttonName(id) { var b = button(id); return !b ? id : b.num !== undefined ? t('scb_num').replace('%s', b.num) : t(b.label); }
+    function keyLabel(n) {
+        if ((n >= 48 && n <= 57) || (n >= 65 && n <= 90)) return String.fromCharCode(n);
+        if (n >= 112 && n <= 135) return 'F' + (n - 111);
+        if (n >= 96 && n <= 105) return 'Num ' + (n - 96);
+        var x = { 33: 'Page Up', 34: 'Page Down', 35: 'End', 36: 'Home', 45: 'Insert', 46: 'Delete', 106: 'Num *', 107: 'Num +', 109: 'Num \u2212', 110: 'Num .', 111: 'Num /',
+                  186: ';', 187: '=', 188: ',', 189: '\u2212', 190: '.', 191: '/', 192: '`', 219: '[', 220: '\\', 221: ']', 222: "'" }[n];
+        return x || String(n);
+    }
+    function buttonName(id) {
+        var b = button(id);
+        if (!b) return id;
+        if (b.num !== undefined) return t('scb_num').replace('%s', b.num);
+        if (b.pad !== undefined) return t('scb_pad').replace('%s', PAD_NAMES[b.pad] || String(b.pad));
+        if (b.key !== undefined) return b.tv ? t('scb_remote').replace('%s', b.tv.replace(/^(Media|Color)F?\d?/, '').replace(/([a-z])([A-Z])/g, '$1 $2') || b.tv) : t('scb_key').replace('%s', keyLabel(b.key));
+        return t(b.label);
+    }
     function pageName(id) { for (var i = 0; i < pages.length; i++) if (pages[i].id === id) return t(pages[i].label); return ''; }
 
     // apps and games that a shortcut can open: the built-in apps, then the games and installed apps
@@ -280,6 +337,7 @@ var Shortcuts = (function () {
     function init() {
         apply();
         Input.setKeyHook(onKey);
+        Input.setPadHook(onPad);
     }
 
     return {

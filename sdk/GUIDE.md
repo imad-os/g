@@ -403,10 +403,11 @@ Actions: `left right up down` (directions), `jump` and `confirm` (OK / Enter / S
   the TV's Back still leave. A phone in the Game controller's **Text mode** types into it (section 17).
 - The TV remote's Back always belongs to My PC (pause menu); you never receive it. A keyboard's Esc and
   Backspace reach you as `cancel` (use it as your own "back": close a sub-menu, leave a screen).
-- **Remote shortcuts belong to the player.** Each My PC user maps remote buttons to actions (Control Panel >
-  Shortcuts; by default Play / Pause = play or pause My PC's music, Guide = switch user). A mapped button runs its
-  shortcut, also during your app, and never reaches you; don't build anything that needs the remote's media,
-  colour, number or Guide buttons (use arrows + OK, and the controller buttons through `MyPC.gamepad`).
+- **Shortcuts belong to the player.** Each My PC user maps buttons to actions (Control Panel > Shortcuts): any remote or
+  keyboard key and any controller button except the arrows / D-pad, OK / B, Back / A (by default only Play / Pause = My
+  PC's music and Guide = switch user). A mapped button runs its shortcut, also during your app, and never reaches you
+  (no action, no `MyPC.gamepad` report while it is held). Don't build anything that needs the remote's media, colour,
+  number or Guide buttons; the controller's buttons are yours unless the player gave one a shortcut.
 - `menu`: gamepad Start or Select pressed alone (sent when let go). Sent only to apps that init with
   `ownMenu: true` (open your own menu on it, and close it on `menu` or `cancel`); on a gamepad other
   apps get nothing (the touch pad's + and the phone controller's + open My PC's pause menu for them).
