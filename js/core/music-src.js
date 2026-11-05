@@ -324,18 +324,33 @@ var MusicSrc = (function () {
             cb(null, new Uint8Array(r.body || new ArrayBuffer(0)));
         });
     }
+    // Google refuses a token in the address, and the TV's player cannot send it as a header: the song is read in pieces
+    // with the header into the web player (Music: Media Source, it starts at once) or, for a format it cannot take in pieces
+    // (FLAC, M4A, Ogg, WAV), downloaded whole first, with progress
     function gdUrl(e, cb) {
-        gdToken(function (x, tok) {
+        gdToken(function (x) {
             if (x) return cb(x);
             cb(null, {
-                url: DRIVE_API + '/' + encodeURIComponent(e.p) + '?alt=media&access_token=' + encodeURIComponent(tok),
-                // when the player cannot stream it: the whole song downloaded into memory (one at a time)
+                type: typeof Music !== 'undefined' && Music._msType ? Music._msType(e) : '',
+                size: e.size || 0,
+                dur: e.d || 0,
+                read: function (at, len, done) { gdRead(e, at, len, done); },
+                sizeOf: function () { return e.size || 0; },
                 blob: function (progress, done) {
-                    gd({ url: DRIVE_API + '/' + encodeURIComponent(e.p) + '?alt=media', responseType: 'arraybuffer', timeout: 180000, maxBytes: 80 * 1024 * 1024 }, function (x2, r) {
-                        if (x2) return done(x2);
-                        var b = new Blob([r.body], { type: (r.headers && r.headers['content-type']) || e.mime || 'audio/mpeg' });
-                        done(null, URL.createObjectURL(b));
-                    });
+                    var parts = [], at = 0, CH = 2 * 1024 * 1024, MAXB = 80 * 1024 * 1024, errs = 0;
+                    (function next() {
+                        gdRead(e, at, CH, function (x2, b) {
+                            if (x2) { if (++errs <= 3) return setTimeout(next, 1000 * errs); return done(x2); }
+                            errs = 0;
+                            if (b.length) { parts.push(b); at += b.length; }
+                            if (progress && e.size) progress(Math.min(1, at / e.size));
+                            if (!b.length || b.length < CH || (e.size && at >= e.size)) {
+                                return done(null, URL.createObjectURL(new Blob(parts, { type: e.mime || 'audio/mpeg' })));
+                            }
+                            if (at >= MAXB) return done(err('toobig'));
+                            next();
+                        });
+                    })();
                 }
             });
         });

@@ -23,7 +23,7 @@ export function png(w = 16, h = 16, rgb = [220, 40, 60]) {
 }
 
 // ID3v2.3 (or 2.4: synchsafe frame sizes, UTF-8 text) + some fake MP3 bytes; pad: extra bytes inside the tag (a big tag)
-export function mp3({ title, artist, album, track, pic, v4 = false, pad = 0, utf16 = false } = {}) {
+export function mp3({ title, artist, album, track, pic, v4 = false, pad = 0, utf16 = false, silent = 0 } = {}) {
     const frames = [];
     const text = (id, s) => {
         let body;
@@ -42,7 +42,9 @@ export function mp3({ title, artist, album, track, pic, v4 = false, pad = 0, utf
     }
     const all = cat(...frames, new Uint8Array(pad));
     const head = cat(ascii('ID3'), new Uint8Array([v4 ? 4 : 3, 0, 0]), safe(all.length));
-    const audio = new Uint8Array(4096); for (let i = 0; i < audio.length; i += 418) { audio[i] = 0xff; audio[i + 1] = 0xfb; audio[i + 2] = 0x90; }
+    // silent: that many silent 128 kbit/s 44.1 kHz MPEG-1 Layer III frames (417 bytes each, playable); else 4 KB of frame heads
+    const audio = silent ? new Uint8Array(silent * 417) : new Uint8Array(4096);
+    for (let i = 0; i + 3 < audio.length; i += silent ? 417 : 418) { audio[i] = 0xff; audio[i + 1] = 0xfb; audio[i + 2] = 0x90; audio[i + 3] = silent ? 0x64 : 0; }
     return cat(head, all, audio);
 }
 

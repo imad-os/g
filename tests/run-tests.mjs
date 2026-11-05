@@ -4939,7 +4939,11 @@ async function musicTests(browser, base) {
         gcalls.push(r.request().method() + ' ' + u + ' ' + (r.request().headers().authorization || '') + ' ' + (r.request().postData() || ''));
         const json = (o) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(o) });
         if (/oauth2/.test(u)) return json({ access_token: 'AT1', expires_in: 3600, scope: 'openid https://www.googleapis.com/auth/drive.file' });
-        if (/alt=media/.test(u)) return r.fulfill({ status: 206, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'Content-Range', 'Content-Range': 'bytes 0-100/5000' }, body: Buffer.from(F.mp3({ title: 'Cloud Song', artist: 'Sky' })) });
+        if (/alt=media/.test(u)) {        // a song of 600 silent MP3 frames, sent by Range like Drive does
+            const all = Buffer.from(F.mp3({ title: 'Cloud Song', artist: 'Sky', silent: 600 })), m = /bytes=(\d+)-(\d+)/.exec(r.request().headers().range || '');
+            const a = m ? +m[1] : 0, b = m ? Math.min(+m[2], all.length - 1) : all.length - 1;
+            return r.fulfill({ status: m ? 206 : 200, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'Content-Range', 'Content-Range': 'bytes ' + a + '-' + b + '/' + all.length }, body: all.subarray(a, b + 1) });
+        }
         if (/files\?/.test(u)) return json({ files: [{ id: 'f1', name: 'Albums', mimeType: 'application/vnd.google-apps.folder' }, { id: 'a1', name: 'Cloud Song.mp3', mimeType: 'audio/mpeg', size: '5000' }, { id: 'n1', name: 'notes.txt', mimeType: 'text/plain' }] });
         return r.fulfill({ status: 404, body: '' });
     });
@@ -4954,8 +4958,11 @@ async function musicTests(browser, base) {
     check(gcalls.some((c) => /oauth2.*refresh_token=RT/.test(c) && /client_id=cid/.test(c) && /client_secret=sec/.test(c)) && gcalls.some((c) => /drive\/v3\/files\?.*%27root%27%20in%20parents/.test(c) && /Bearer AT1/.test(c)),
         'the token comes from MyDrive\'s client and the profile\'s linked account, then Drive is asked with it ' + JSON.stringify(gcalls).slice(0, 600));
     await page.evaluate(() => [...document.querySelectorAll('.mx-row')][0].click());
-    await page.waitForFunction(() => Music.state().playing, null, { timeout: 5000 }).catch(() => {});
-    check(await page.evaluate(() => Music.state().playing && /googleapis\.com\/drive\/v3\/files\/a1\?alt=media&access_token=AT1/.test(__av.url)), 'a Drive song plays in the TV\'s player, streamed with the token');
+    await page.waitForFunction(() => Music.engineName() || Music.state().error, null, { timeout: 8000 }).catch(() => {});
+    const gp = await page.evaluate(() => ({ playing: Music.state().playing, engine: Music.engineName(), error: Music.state().error, stream: Music._streaming(), ms: Music._engines.HTML._src ? Music._engines.HTML._src() : '' }));
+    const media = gcalls.filter((c) => /alt=media/.test(c));
+    check(gp.playing && gp.engine === 'html' && gp.stream && /^blob:/.test(gp.ms) && !gcalls.some((c) => /access_token=/.test(c)) && media.length && media.every((c) => /Bearer AT1/.test(c)),
+        'a Drive song plays at once: read in pieces with the token as a header (Google refuses it in the address) ' + JSON.stringify(gp) + ' ' + media.length + ' piece(s)');
     await page.evaluate(() => Music.stop());
 
     // themes: Now playing follows the profile's theme

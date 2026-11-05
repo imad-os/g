@@ -25,7 +25,7 @@ var Music = (function () {
 
     var q = [], order = [], at = 0, shuffle = false, repeat = 'off', from = null;
     var playing = false, loading = false, want = false, lastPos = 0, lastDur = 0, error = '', fails = 0;
-    var engine = null, gen = 0, blobUrl = '', saveTimer = 0, inited = false, hiddenPause = false, leaving = false, lite = false;
+    var engine = null, gen = 0, blobUrl = '', saveTimer = 0, inited = false, hiddenPause = false, leaving = false, lite = false, stream = null;
     var listeners = [];
 
     function t(k) { return typeof I18n !== 'undefined' ? I18n.t(k) : k; }
@@ -126,9 +126,65 @@ var Music = (function () {
             time: function () { return el ? el.currentTime || 0 : 0; },
             duration: function () { return el && isFinite(el.duration) ? el.duration : 0; },
             paused: function () { return !el || el.paused; },
+            _src: function () { return el ? el.src : ''; },
             stop: function () { if (!el) return; onEnd = onErr = null; el.pause(); el.removeAttribute('src'); try { el.load(); } catch (e) {} }
         };
     })();
+
+    /* A song read piece by piece into the web player (Media Source): it starts after the first 256 KB instead of after the
+     * whole download. For a source that needs a header the players cannot send (Google Drive: no token in the address).
+     * src: { type, read(at, len, cb), size, dur, sizeOf() }. Played pieces fall out of memory when the browser's limit is reached. */
+    function msType(e) {
+        var x = ((/\.([a-z0-9]+)$/i.exec(e.n || '') || [])[1] || '').toLowerCase(), m = (e.mime || '').toLowerCase();
+        var tp = x === 'mp3' || m === 'audio/mpeg' || m === 'audio/mp3' ? 'audio/mpeg' : x === 'aac' || m === 'audio/aac' ? 'audio/aac' :
+                 x === 'webm' || x === 'weba' || m === 'audio/webm' ? 'audio/webm; codecs="opus"' : '';
+        try { return tp && window.MediaSource && MediaSource.isTypeSupported(tp) ? tp : ''; } catch (x2) { return ''; }
+    }
+    function msStream(src, now, fail) {
+        var ms = new MediaSource(), url = URL.createObjectURL(ms), sb = null, at = 0, size = src.size || 0, pending = null, reading = false, stopped = false, errs = 0;
+        var FIRST = 256 * 1024, NEXT = 1024 * 1024;
+        function bad(x) { if (stopped) return; stopped = true; fail(x || { code: 'format' }); }
+        ms.addEventListener('sourceopen', function () {
+            if (stopped || sb) return;
+            try { sb = ms.addSourceBuffer(src.type); } catch (x) { return bad(x); }
+            if (src.dur > 0) { try { ms.duration = src.dur; } catch (x3) {} }
+            sb.addEventListener('updateend', pump);
+            sb.addEventListener('error', function () { bad({ code: 'format' }); });
+            pump();
+        });
+        function pump() {
+            if (stopped || !sb || sb.updating || ms.readyState !== 'open') return;
+            if (pending) {
+                try { sb.appendBuffer(pending); pending = null; }
+                catch (x) {
+                    if (x && x.name === 'QuotaExceededError') {
+                        // full: drop what was played (keep 15 s behind), else wait for the song to move on
+                        var t0 = now();
+                        if (t0 > 30) { try { sb.remove(0, t0 - 15); return; } catch (x2) {} }
+                        setTimeout(pump, 1000);
+                    } else bad(x);
+                }
+                return;
+            }
+            if (reading) return;
+            if (size && at >= size) { try { ms.endOfStream(); } catch (x4) {} return; }
+            var len = at ? NEXT : FIRST;
+            reading = true;
+            src.read(at, len, function (x, b) {
+                reading = false;
+                if (stopped) return;
+                if (x) { if (++errs <= 3) return setTimeout(pump, 1000 * errs); return bad(x); }
+                errs = 0;
+                if (!size && src.sizeOf) size = src.sizeOf() || 0;
+                if (!b || !b.length) { size = at; return pump(); }
+                at += b.length;
+                if (b.length < len && !size) size = at;
+                pending = b;
+                pump();
+            });
+        }
+        return { url: url, stop: function () { stopped = true; try { URL.revokeObjectURL(url); } catch (x) {} } };
+    }
 
     /* ---------------- saving ---------------- */
     function slim(e) {
@@ -234,11 +290,13 @@ var Music = (function () {
         if (engine) { try { engine.stop(); } catch (e) {} }
         engine = null;
         if (blobUrl) { try { URL.revokeObjectURL(blobUrl); } catch (e2) {} blobUrl = ''; }
+        if (stream) { stream.stop(); stream = null; }
         loading = false;
     }
     function position() { return engine && !loading ? engine.time() : lastPos; }
     function duration() {
         var d = engine && !loading ? engine.duration() : 0, c = current();
+        if (stream && c && c.d > d) d = c.d;                // streaming: the player knows only what arrived
         if (d > 0) lastDur = d;
         return d > 0 ? d : (lastDur || (c && c.d) || 0);
     }
@@ -247,8 +305,9 @@ var Music = (function () {
     function plans(src) {
         var out = [], p = prefs().engine;
         if (src.path && AV.ok() && p !== 'html') out.push({ e: AV, url: src.path });
-        if (AV.ok() && p !== 'html' && !src.revoke) out.push({ e: AV, url: src.url });
-        if (HTML.ok()) out.push({ e: HTML, url: src.url });
+        if (src.url && AV.ok() && p !== 'html' && !src.revoke) out.push({ e: AV, url: src.url });
+        if (src.url && HTML.ok()) out.push({ e: HTML, url: src.url });
+        if (src.read && src.type && HTML.ok()) out.push({ e: HTML, ms: src });
         if (src.blob && HTML.ok()) out.push({ e: HTML, blob: src.blob });
         return out;
     }
@@ -272,9 +331,24 @@ var Music = (function () {
                 if (my !== gen) return;
                 var pl = list[k++];
                 if (!pl) return failed(lastErr || { code: 'format' }, my);
+                if (pl.ms) {
+                    var sm = msStream(pl.ms, function () { return HTML.time(); }, function (x) {
+                        if (my !== gen || stream !== sm) return;
+                        stream = null;
+                        if (loading) { HTML.stop(); return tryNext(x); }
+                        failed(x, my);
+                    });
+                    stream = sm;
+                    return start2(pl.e, sm.url);
+                }
                 if (pl.blob) {
+                    var shown = -1;
                     error = t('muDownloading'); emit('loading');
-                    return pl.blob(null, function (x, u) {
+                    return pl.blob(function (f) {
+                        var pc = Math.floor(f * 100);
+                        if (my !== gen || pc === shown || pc % 5) return;
+                        shown = pc; error = t('muDownloading') + ' ' + pc + '%'; emit('loading');
+                    }, function (x, u) {
                         if (my !== gen) { if (u) URL.revokeObjectURL(u); return; }
                         if (x) return tryNext(x);
                         blobUrl = u;
@@ -286,7 +360,7 @@ var Music = (function () {
             function start2(eng, url) {
                 eng.open(url, lastPos, function () { if (my === gen) ended(); }, function (x) {
                     if (my !== gen) return;
-                    if (loading) return tryNext(x);
+                    if (loading) { if (stream) { stream.stop(); stream = null; } return tryNext(x); }
                     failed(x, my);                   // broke while playing
                 }, function (blocked) {
                     if (my !== gen) return;
@@ -470,6 +544,7 @@ var Music = (function () {
         engineName: function () { return engine ? engine.name : ''; },
         onChange: function (fn) { if (listeners.indexOf(fn) < 0) listeners.push(fn); },
         offChange: function (fn) { var i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); },
+        _msType: msType, _streaming: function () { return !!stream; },
         _engines: { AV: AV, HTML: HTML }
     };
 })();

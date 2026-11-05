@@ -108,7 +108,7 @@
 - **Music app** (owner request 2026-11-05, Win app `music`): `js/core/music-src.js` (sources: `usb` = Tizen filesystem drives under
   `/opt/media`, needs package **1.6.0** privileges filesystem.read / write + externalstorage; `gd` = Google Drive through the **MyDrive** store
   app: client in Firestore `apps/mydrive.config.google`, the profile's linked accounts in `game_app-mydrive_data`, scope drive.file so only
-  files MyDrive may open; `gdStatus` codes noapp / noconfig / nouser / reauth each have their own message; `loc` = PC folders via
+  files MyDrive may open; Google refuses a token in the address, so a Drive song is read in Range pieces with the header into a Media Source (MP3 / AAC / WebM start at once, `msStream` in music.js), other formats are downloaded whole with progress; `gdStatus` codes noapp / noconfig / nouser / reauth each have their own message; `loc` = PC folders via
   showDirectoryPicker), `js/core/music-tags.js` (ID3 / FLAC / Ogg / MP4 / WAV tags + covers), `js/core/music.js` (queue, engines: Samsung
   **AVPlay** first, then HTML audio, then a blob download; per profile `music`, `music_lists`, `music_recent`, `music_prefs`; position in
   `arc_dev_music_pos`, not backed up; with `prefs.resume` it plays on across page changes: the game page runs `Music.init({ resume, lite })`, player only, so music goes on under a game and its menu can pause it), UI `js/launcher/apps/music.js` (hold OK / + = item menu
