@@ -25,7 +25,7 @@ var Music = (function () {
 
     var q = [], order = [], at = 0, shuffle = false, repeat = 'off', from = null;
     var playing = false, loading = false, want = false, lastPos = 0, lastDur = 0, error = '', fails = 0;
-    var engine = null, gen = 0, blobUrl = '', saveTimer = 0, inited = false, hiddenPause = false, leaving = false, lite = false, stream = null;
+    var engine = null, gen = 0, blobUrl = '', saveTimer = 0, inited = false, hiddenPause = false, leaving = false, lite = false, stream = null, loadedF = 0, loadedAt = 0;
     var listeners = [];
 
     function t(k) { return typeof I18n !== 'undefined' ? I18n.t(k) : k; }
@@ -127,6 +127,12 @@ var Music = (function () {
             duration: function () { return el && isFinite(el.duration) ? el.duration : 0; },
             paused: function () { return !el || el.paused; },
             _src: function () { return el ? el.src : ''; },
+            loaded: function () {
+                if (!el || !isFinite(el.duration) || !el.duration) return 0;
+                var b = el.buffered, t = el.currentTime, i;
+                for (i = 0; i < b.length; i++) if (b.start(i) <= t + 1 && b.end(i) >= t) return Math.min(1, b.end(i) / el.duration);
+                return b.length ? Math.min(1, b.end(b.length - 1) / el.duration) : 0;
+            },
             stop: function () { if (!el) return; onEnd = onErr = null; el.pause(); el.removeAttribute('src'); try { el.load(); } catch (e) {} }
         };
     })();
@@ -144,6 +150,7 @@ var Music = (function () {
         var ms = new MediaSource(), url = URL.createObjectURL(ms), sb = null, at = 0, size = src.size || 0, pending = null, reading = false, stopped = false, errs = 0;
         var FIRST = 256 * 1024, NEXT = 1024 * 1024;
         function bad(x) { if (stopped) return; stopped = true; fail(x || { code: 'format' }); }
+        function got() { if (size) setLoaded(at / size); }
         ms.addEventListener('sourceopen', function () {
             if (stopped || sb) return;
             try { sb = ms.addSourceBuffer(src.type); } catch (x) { return bad(x); }
@@ -179,6 +186,7 @@ var Music = (function () {
                 if (!b || !b.length) { size = at; return pump(); }
                 at += b.length;
                 if (b.length < len && !size) size = at;
+                got();
                 pending = b;
                 pump();
             });
@@ -291,7 +299,24 @@ var Music = (function () {
         engine = null;
         if (blobUrl) { try { URL.revokeObjectURL(blobUrl); } catch (e2) {} blobUrl = ''; }
         if (stream) { stream.stop(); stream = null; }
+        loadedF = 0; mode = '';
         loading = false;
+    }
+    // how much of the song is here (0..1, the light grey bar under the progress, like a video site): a song on a drive or a
+    // whole download = all of it; the Drive stream and the blob download report as they go; a web address = what the browser buffered
+    var mode = '';
+    function setLoaded(f) {
+        f = Math.max(0, Math.min(1, f || 0));
+        if (f === loadedF) return;
+        loadedF = f;
+        var n = Date.now();
+        if (f === 1 || n - loadedAt > 500) { loadedAt = n; emit('loaded'); }
+    }
+    function loaded() {
+        if (mode === 'full') return 1;
+        if (mode === 'url' && engine === HTML) return HTML.loaded();
+        if (mode === 'url') return 1;
+        return loadedF;
     }
     function position() { return engine && !loading ? engine.time() : lastPos; }
     function duration() {
@@ -338,7 +363,7 @@ var Music = (function () {
                         if (loading) { HTML.stop(); return tryNext(x); }
                         failed(x, my);
                     });
-                    stream = sm;
+                    stream = sm; mode = 'stream'; loadedF = 0;
                     return start2(pl.e, sm.url);
                 }
                 if (pl.blob) {
@@ -347,14 +372,15 @@ var Music = (function () {
                     return pl.blob(function (f) {
                         var pc = Math.floor(f * 100);
                         if (my !== gen || pc === shown || pc % 5) return;
-                        shown = pc; error = t('muDownloading') + ' ' + pc + '%'; emit('loading');
+                        shown = pc; mode = 'blob'; setLoaded(f); error = t('muDownloading') + ' ' + pc + '%'; emit('loading');
                     }, function (x, u) {
                         if (my !== gen) { if (u) URL.revokeObjectURL(u); return; }
                         if (x) return tryNext(x);
-                        blobUrl = u;
+                        blobUrl = u; mode = 'full';
                         start2(pl.e, u);
                     });
                 }
+                mode = pl.e === AV && pl.url === src.path ? 'full' : src.revoke ? 'full' : 'url';
                 start2(pl.e, pl.url);
             }
             function start2(eng, url) {
@@ -491,7 +517,7 @@ var Music = (function () {
         return {
             has: !!c, track: c, index: c ? order[at] : -1, at: at, count: q.length,
             title: c ? c.t || MusicTagsName(c.n) : t('muNothing'), artist: c ? c.a || '' : '', album: c ? c.b || '' : '',
-            pos: Math.min(position(), d || 1e9), dur: d, playing: playing || (loading && want), loading: loading, error: error,
+            pos: Math.min(position(), d || 1e9), dur: d, loaded: c ? loaded() : 0, playing: playing || (loading && want), loading: loading, error: error,
             shuffle: shuffle, repeat: repeat, from: from
         };
     }

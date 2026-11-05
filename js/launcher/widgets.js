@@ -109,7 +109,7 @@ var Widgets = (function () {
         var k = s.track.s + ':' + s.track.p;
         if (!art && typeof MusicSrc !== 'undefined' && musicArt !== k) { musicArt = k; MusicSrc.art(s.track, function (v) { if (v) refresh('music'); }); }
         done({ icon: 'i:music', image: art ? art.url : '', text: s.title, sub: (s.loading ? t('wgLoading') : s.artist ? s.artist + ' · ' : '') + (s.loading ? '' : Music.clock(s.pos) + (s.dur ? ' / ' + Music.clock(s.dur) : '')),
-               progress: s.dur ? Math.min(1, s.pos / s.dur) : 0,
+               progress: s.dur ? Math.min(1, s.pos / s.dur) : 0, loaded: s.loaded,
                buttons: [{ id: 'prev', icon: 'prev', label: t('wgPrev') }, { id: 'toggle', icon: s.playing ? 'pause' : 'play', label: t(s.playing ? 'wgPause' : 'wgPlay') },
                          { id: 'next', icon: 'next', label: t('wgNext') }] });
     }
@@ -361,6 +361,8 @@ var Widgets = (function () {
         if (v.progress !== undefined) {
             var bar = el('div', 'wdg-bar'), fill = el('i');
             fill.style.width = Math.round(v.progress * 100) + '%';
+            // a song: how much of it is loaded, light grey under the progress
+            if (v.loaded > v.progress) { var ld = el('b', 'wdg-load'); ld.style.width = Math.round(Math.min(1, v.loaded) * 100) + '%'; bar.appendChild(ld); }
             if (v.accent) fill.style.background = v.accent;
             bar.appendChild(fill);
             c.appendChild(bar);
@@ -432,7 +434,7 @@ var Widgets = (function () {
             if (document.hidden) stopAll(true);
             else if (onDesk) resume();
         });
-        if (typeof Music !== 'undefined') Music.onChange(function () { if (allowed('music')) { refresh('music'); } else plan('music'); });
+        if (typeof Music !== 'undefined') Music.onChange(function (what) { if (what === 'loaded') return; if (allowed('music')) { refresh('music'); } else plan('music'); });
     }
     init();
 

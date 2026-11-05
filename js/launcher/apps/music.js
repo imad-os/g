@@ -742,7 +742,7 @@
             c.appendChild(ui.miniPlay);
             c.appendChild(ctlBtn('next', t('wgNext'), Music.next));
             ui.mini.appendChild(c);
-            var bar = el('div', 'mx-mini-bar'); ui.miniFill = el('i'); bar.appendChild(ui.miniFill);
+            var bar = el('div', 'mx-mini-bar'); ui.miniLoad = el('b', 'mx-load'); ui.miniFill = el('i'); bar.appendChild(ui.miniLoad); bar.appendChild(ui.miniFill);
             ui.mini.appendChild(bar);
             ui.miniBox = open;
         }
@@ -770,7 +770,9 @@
     }
     function progress() {
         var s = Music.state(), f = s.dur ? Math.min(1, s.pos / s.dur) : 0;
-        if (ui.miniFill) ui.miniFill.style.transform = 'scaleX(' + f + ')';
+        var l = Math.max(f, s.loaded || 0);
+        if (ui.miniFill) { ui.miniFill.style.transform = 'scaleX(' + f + ')'; ui.miniLoad.style.transform = 'scaleX(' + l + ')'; }
+        if (npOpen && ui.npLoad) ui.npLoad.style.transform = 'scaleX(' + l + ')';
         if (npOpen && ui.npFill) {
             ui.npFill.style.transform = 'scaleX(' + f + ')';
             ui.npKnob.style.left = (f * 100) + '%';
@@ -828,8 +830,8 @@
         ui.npSeek = btn('mx-np-seek', '', function () { Music.toggle(); });
         ui.npSeek.setAttribute('role', 'slider');
         ui.npSeek.setAttribute('aria-label', t('muPosition'));
-        var track = el('span', 'mx-np-track'); ui.npFill = el('i', 'mx-np-fill'); ui.npKnob = el('b', 'mx-np-knob');
-        track.appendChild(ui.npFill); track.appendChild(ui.npKnob); ui.npSeek.appendChild(track);
+        var track = el('span', 'mx-np-track'); ui.npLoad = el('i', 'mx-np-load'); ui.npFill = el('i', 'mx-np-fill'); ui.npKnob = el('b', 'mx-np-knob');
+        track.appendChild(ui.npLoad); track.appendChild(ui.npFill); track.appendChild(ui.npKnob); ui.npSeek.appendChild(track);
         ui.npSeek.addEventListener('click', function (e) {
             if (!e.clientX) return;                 // a key, not a pointer
             e.stopImmediatePropagation();
@@ -925,6 +927,7 @@
     function changed(what) {
         if (!body) return;
         if (what === 'time') return;
+        if (what === 'loaded') return progress();
         drawMini();
         if (npOpen) drawNp();
         if (view && view.v === 'queue' && (what === 'track' || what === 'queue') && !menu && !npOpen) render();

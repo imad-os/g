@@ -897,7 +897,9 @@ svg { display: block; width: 100%; height: 100%; }
 .wdg-img { position: absolute; right: 18px; top: 52px; width: 96px; height: 96px; border-radius: 12px; object-fit: cover; }
 [dir="rtl"] .wdg-img { right: auto; left: 18px; }
 .wdg-bar { height: 8px; margin: 10px 0 4px; border-radius: 4px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
-.wdg-bar i { display: block; height: 100%; border-radius: 4px; background: #4fc3ff; }
+.wdg-bar i { position: relative; display: block; height: 100%; border-radius: 4px; background: #4fc3ff; }
+.wdg-bar { position: relative; } .wdg-load { position: absolute; left: 0; top: 0; height: 100%; border-radius: 4px; background: rgba(255, 255, 255, 0.3); }
+[dir="rtl"] .wdg-load { left: auto; right: 0; }
 .wdg-rows { margin-top: 6px; font-size: 19px; }
 .wdg-row { display: flex; gap: 12px; height: 27px; line-height: 27px; }
 .wdg-row span { flex: none; color: #b8b8c2; }

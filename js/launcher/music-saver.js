@@ -177,7 +177,7 @@ var MusicSaver = (function () {
     function init() {
         if (inited) return;
         inited = true;
-        Music.onChange(function () { arm(); });
+        Music.onChange(function (what) { if (what !== 'loaded' && what !== 'dur') arm(); });
         ['pointermove', 'pointerdown', 'wheel', 'touchstart'].forEach(function (ev) {
             document.addEventListener(ev, activity, { passive: true, capture: true });
         });

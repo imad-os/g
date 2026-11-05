@@ -4963,6 +4963,9 @@ async function musicTests(browser, base) {
     const media = gcalls.filter((c) => /alt=media/.test(c));
     check(gp.playing && gp.engine === 'html' && gp.stream && /^blob:/.test(gp.ms) && !gcalls.some((c) => /access_token=/.test(c)) && media.length && media.every((c) => /Bearer AT1/.test(c)),
         'a Drive song plays at once: read in pieces with the token as a header (Google refuses it in the address) ' + JSON.stringify(gp) + ' ' + media.length + ' piece(s)');
+    await page.waitForTimeout(600);
+    const ld = await page.evaluate(() => ({ loaded: Music.state().loaded, mini: (document.querySelector('.mx-mini-bar .mx-load') || {}).style ? document.querySelector('.mx-mini-bar .mx-load').style.transform : '' }));
+    check(ld.loaded === 1 && /scaleX\(1\)/.test(ld.mini), 'the light grey bar under the progress shows how much of the song has arrived (all of this short one) ' + JSON.stringify(ld));
     await page.evaluate(() => Music.stop());
 
     // themes: Now playing follows the profile's theme

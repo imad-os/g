@@ -128,6 +128,13 @@
 .mx-np-track { position: relative; display: block; height: 10px; border-radius: 5px; background: rgba(255, 255, 255, 0.25); direction: ltr; }
 [dir="rtl"] .mx-np-track { direction: rtl; }
 .mx-np-fill { position: absolute; left: 0; top: 0; width: 100%; border-radius: 5px; background: #fff; }
+/* how much of the song is loaded (light grey, under the progress, like a video site) */
+.mx-np-load { position: absolute; left: 0; top: 0; display: block; width: 100%; height: 100%; border-radius: inherit; background: rgba(255, 255, 255, 0.45);
+              transform: scaleX(0); transform-origin: left center; transition: transform 0.4s linear; }
+.mx-mini-bar .mx-load { position: absolute; left: 0; top: 0; display: block; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.28);
+                        transform: scaleX(0); transform-origin: left center; }
+.mx-mini-bar i { position: relative; }
+[dir="rtl"] .mx-np-load, [dir="rtl"] .mx-mini-bar .mx-load { transform-origin: right center; }
 .mx-np-knob { position: absolute; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: #fff; opacity: 0; }
 [dir="rtl"] .mx-np-knob { margin: -13px -13px 0 0; }
 .mx-np-seek:focus { box-shadow: none; }
