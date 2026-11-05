@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="referrer" content="no-referrer">
+<title>My PC · Add files from Google Drive</title>
+<!-- Phone page opened from the QR code of Control Panel > Google Drive > "Add files from your phone" (js/launcher/drive-ui.js).
+     Google Picker grants My PC's Google client (scope drive.file) the files and folders chosen here; the grants belong to the
+     Cloud project (setAppId = project number), so the TV's sign-in sees them too. Nothing is stored: the sign-in is used once.
+     The address carries #c=<web client id>&k=<Picker API key>&p=<project number> (App Store Manager > Google Drive). -->
+<style>
+  html { background: #18191c; color: #e8eaed; font: 17px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { margin: 0; }
+  main { max-width: 34rem; margin: 0 auto; padding: 2.5rem 1.4rem; }
+  h1 { font-size: 1.7rem; margin: 0 0 .6rem; }
+  .sub { color: #bdc1c6; margin: 0 0 1.6rem; }
+  button { width: 100%; min-height: 3.2rem; border: 0; border-radius: 10px; font: 600 1.05rem system-ui, sans-serif; background: #8ab4f8; color: #0b1a33; }
+  button:disabled { opacity: .6; }
+  #msg { margin: 1.2rem 0; font-size: 1.1rem; }
+  #msg.error { color: #f28b82; }
+  .note { color: #9aa0a6; font-size: .95rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Add files to My PC</h1>
+  <p class="sub">Choose the Google Drive files and folders My PC and its apps may open on your TV. My PC sees nothing else in your Drive.</p>
+  <button id="go" type="button" disabled>Loading…</button>
+  <p id="msg" aria-live="polite"></p>
+  <p class="note">Use the same Google account you signed in with on the TV. This page keeps nothing.</p>
+</main>
+<script>
+(function () {
+    'use strict';
+    var SCOPE = 'https://www.googleapis.com/auth/drive.file';
+    var h = new URLSearchParams(location.hash.slice(1));
+    var cfg = { clientId: h.get('c') || '', apiKey: h.get('k') || '', appId: h.get('p') || '' };
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    var go = document.getElementById('go'), msg = document.getElementById('msg');
+    function say(t, bad) { msg.textContent = t; msg.className = bad ? 'error' : ''; }
+    function script(src) {
+        return new Promise(function (res, rej) {
+            var s = document.createElement('script');
+            s.src = src; s.async = true; s.onload = res; s.onerror = function () { rej(new Error('Could not load ' + src)); };
+            document.head.appendChild(s);
+        });
+    }
+    if (!cfg.clientId || !cfg.apiKey || !cfg.appId) { say('This link is incomplete. Open it again from My PC on the TV (Control Panel > Google Drive).', true); go.textContent = 'Not available'; return; }
+    var token = '';
+    Promise.all([script('https://apis.google.com/js/api.js'), script('https://accounts.google.com/gsi/client')])
+        .then(function () { return new Promise(function (res) { window.gapi.load('picker', res); }); })
+        .then(function () {
+            var client = window.google.accounts.oauth2.initTokenClient({
+                client_id: cfg.clientId, scope: SCOPE,
+                callback: function (r) {
+                    if (r.error) return say('Google sign-in did not finish (' + r.error + ').', true);
+                    token = r.access_token;
+                    open();
+                }
+            });
+            go.disabled = false;
+            go.textContent = 'Choose files';
+            go.onclick = function () { if (token) open(); else client.requestAccessToken({ prompt: '' }); };
+        }, function (e) { say(e.message, true); });
+    function open() {
+        var gp = window.google.picker;
+        var mine = new gp.DocsView(gp.ViewId.DOCS).setIncludeFolders(true).setSelectFolderEnabled(true).setOwnedByMe(true);
+        var shared = new gp.DocsView(gp.ViewId.DOCS).setIncludeFolders(true).setSelectFolderEnabled(true).setOwnedByMe(false);
+        new gp.PickerBuilder().addView(mine).addView(shared).enableFeature(gp.Feature.MULTISELECT_ENABLED)
+            .setOAuthToken(token).setDeveloperKey(cfg.apiKey).setAppId(cfg.appId).setTitle('Choose files for My PC')
+            .setCallback(function (d) {
+                if (d.action === gp.Action.PICKED) {
+                    var n = (d.docs || []).length;
+                    say(n + ' item' + (n === 1 ? '' : 's') + ' added. On the TV they now show in Music and in the apps that use Google Drive. You can add more or close this page.');
+                    go.textContent = 'Choose more files';
+                } else if (d.action === gp.Action.CANCEL) say('Nothing was added.');
+            }).build().setVisible(true);
+    }
+})();
+</script>
+</body>
+</html>

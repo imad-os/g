@@ -152,7 +152,7 @@ still slow down a hidden page by itself. Standalone, outside My PC, the SDK does
 itself. Your app only sees `info.profile` and keeps progress with `MyPC.save` / `MyPC.load`, which are already per
 profile and backed up. **Never** build your own login, accounts, cloud saves, name entry for scores, Firebase or backend.
 
-Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text) and hide the feature
+Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text, 14 drive) and hide the feature
 when it is missing.
 
 ### App config: `MyPC.app_config`
@@ -579,6 +579,7 @@ the World records.
 - [ ] texts in `en` (and `fr`, `es`, `ar` if possible), using `info.lang`
 - [ ] works standalone: open `index.html` in Chrome, play with the arrows + Enter, Esc pauses
 - [ ] requests to other sites through `MyPC.net`, AI through `MyPC.ai`, the microphone through `MyPC.mic` (section 14): no own proxy, AI SDK or `getUserMedia`; each error code handled (`denied`, `no-provider`...)
+- [ ] Google Drive only through `MyPC.drive` (section 19): no Google client, OAuth, token, Drive API call or Picker of your own; `signed-out` / `denied` / `noconfig` handled
 - [ ] the SDK `<script>` is the **first** script of the page (so errors of your own scripts are reported, section 15); errors you catch that matter go to `MyPC.report`
 - [ ] text the player types: a real `<input>` / `<textarea>` (or `MyPC.text.open` for a field drawn on a canvas), so a phone in Text mode can type into it (section 17); never required to play
 - [ ] served over https with CORS (GitHub Pages)
@@ -1188,3 +1189,90 @@ Protocol (for reference): My PC → Worker `{ src, app, widget, settings, state,
 Worker → My PC `{ ok: true, out }` or `{ ok: false, error }`. Firestore: `apps/<id>.widgets[i].sha` (the approved SHA-256),
 `widgets/<app>__<widget>` `{ code, sha }` (read by TVs, written by the owner). My PC side: `js/launcher/widgets.js`,
 `js/core/widget-lib.js`; Manager: `installer/widgets.js`. A complete small widget: `sdk/example/widgets/stars.js`.
+
+## 19. Google Drive: `MyPC.drive` (API level 14)
+
+The user signs in to Google Drive **once, in My PC** (Control Panel > Google Drive, one Google account per My PC profile,
+on every TV and phone that profile uses). Music and every app then use that sign-in. **MUST**: an app or game that reads
+or writes Google Drive does it only through `MyPC.drive`. Never ship a Google client ID or secret, an OAuth / device-code
+flow, a token, a Google Picker, `MyPC.net` calls to `googleapis.com`, or Drive code of your own: My PC sends every Drive
+request for the app, so the app never has a token. Check `MyPC.apiLevel >= 14` (and `MyPC.info().bridges.drive`) and hide
+Drive features when it is missing.
+
+What My PC may see (Google scope `drive.file`): the files My PC and its apps made, and the files the user chose with
+**Add files from your phone** (`MyPC.drive.addFiles()`, also in Control Panel > Google Drive). Nothing else of the Drive.
+The first time an app uses Drive, My PC asks the user once: "*&lt;app&gt;* wants to use your Google Drive" (per profile;
+Control Panel > Google Drive lists the apps allowed and can take it back). `signIn()` started from the app counts as yes.
+
+```js
+if (MyPC.apiLevel >= 14) {
+  const st = await MyPC.drive.status();       // { configured, signedIn, needsSignIn, allowed, account, picker }
+  if (!st.configured) showText('Google Drive is not set up for My PC yet.');
+  else if (!st.signedIn) button('Sign in to Google Drive', () => MyPC.drive.signIn().then(load, onError));
+  else load();
+}
+async function load() {
+  const { files, next } = await MyPC.drive.list({ place: 'audio', pageSize: 100 });   // Drive v3 file objects
+  ...
+}
+```
+
+Every call returns a Promise (with `.abort()`); files are Google Drive API v3 file objects (`id`, `name`, `mimeType`,
+`size` (a string), `modifiedTime`, `parents`, `starred`, `trashed`, `thumbnailLink`, `iconLink`, `capabilities`,
+`imageMediaMetadata`, `videoMediaMetadata`, `appProperties`...). A folder's `mimeType` is `MyPC.drive.FOLDER`.
+
+| Call | Result |
+|---|---|
+| `status()` | `{ configured, signedIn, needsSignIn, allowed, account: { email, name, picture } \| null, picker }`. Never asks anything. `account` only once the app is allowed. |
+| `signIn()` | My PC's sign-in screen over the app (a QR code + Google's code, the app is paused meanwhile) -> `account`. Already signed in: only the permission question, if not answered yet. |
+| `addFiles()` | My PC's "Add files from your phone" screen (a QR code for the Google Picker on the phone). Resolves when closed; then list again. `status().picker` false: not set up. |
+| `list({ folder, place, search, q, orderBy, pageSize, pageToken })` | `{ files, next }`. `folder`: a folder id (`'root'` = My Drive). `place`: `all` `starred` `recent` `images` `videos` `audio` `documents` `folders` `trash`. `search`: name contains. `q`: a Drive query, added with *and*. Nothing given = My Drive's top. `pageSize` 1-1000 (100). `next` -> `pageToken`. |
+| `listAll(opts, max)` | every page, up to `max` files (1000) |
+| `get(id)` | the file |
+| `createFolder(name, parentId)` | the new folder (`parentId` default `'root'`) |
+| `rename(id, name)` `move(id, folderId)` `copy(id, folderId, name)` | the changed / new file |
+| `star(id, on)` `trash(id)` `restore(id)` | the file |
+| `remove(id)` | `true`: deleted **for ever** (ask the user first; prefer `trash`) |
+| `setInfo(id, { description, appProperties })` | the file (`appProperties`: your own small key / value pairs, searchable with `q: "appProperties has { key='k' and value='v' }"`) |
+| `read(id, start, end)` | `{ buf: ArrayBuffer, total, type }`: bytes `start`..`end` (included); `total` = the file's size. Past the end: an empty `buf`. |
+| `download(id, { onProgress, max })` | `{ buf, type, size }`, the whole file (read in 4 MB pieces; `max` bytes, 200 MB at most) |
+| `readText(id)` / `readJson(id)` | the file as text / parsed JSON |
+| `upload({ name, data, type, parent, id, description, appProperties }, { onProgress })` | the new file. `data`: a `Blob` / `File` (from an `<input type=file>`), an `ArrayBuffer`, a typed array or a string. `id`: replace that file's content (and name if given). Sent in 4 MB pieces (resumable), `onProgress(0..1)`. |
+| `exportFile(id, mime)` | a Google Doc / Sheet / Slides as `mime` (`application/pdf`...) -> `{ buf, type }` |
+| `thumbnail(link, size)` | `{ buf, type }` of a `thumbnailLink` at `size` px. (An `<img src="thumbnailLink">` usually works without it.) |
+| `about()` | `{ user, storageQuota }` |
+| `appFolder()` | your app's own folder, "My PC/*your app's name*" (made the first time, found again by `appProperties`) |
+| `saveJson(name, value)` / `loadJson(name, def)` | a small JSON file in `appFolder()`: cloud saves, settings, exports. `loadJson` gives `def` when it is missing. |
+| `stream(fileOrId, { worker, onProgress, max })` | `{ url, mode, close() }` to give an `<audio>` / `<video>` (below). Call `close()` when the player is done. |
+
+**Playing media.** `<audio>` and `<video>` cannot send Google's sign-in header, and your app has no token anyway. Add a
+file `sw.js` next to your `index.html` containing only
+
+```js
+importScripts('https://imad-os.github.io/g/sdk/drive-sw.js');
+```
+
+(your own worker code may follow) and call `MyPC.drive.stream(file, { worker: 'sw.js' })`: `mode` is `'worker'` and
+`url` is an address of your own site that the worker answers piece by piece (2 MB Range pieces read through My PC), so
+playback starts at once and seeking works. Pass the file object (not only its id) so its size and type are known. Without
+the worker (or where service workers are not available) `mode` is `'blob'`: the whole file is downloaded first
+(`onProgress`), then played from a `blob:` address. Images: `download()` then `URL.createObjectURL(new Blob([buf]))`.
+
+**Errors** (`err.code`): `noconfig` (no Google client set up for My PC: tell the user an App Store manager must add it),
+`signed-out` / `reauth` (call `signIn()`), `denied` (the user said no: stop asking during this run), `not-found`,
+`permission` (Drive refused this file), `quota` (Google busy, try later), `too-big`, `bad-request` (a bad name or
+argument), `network`, `timeout`, `cancelled` (aborted, or the user closed the sign-in), `busy` (more than 8 calls at once),
+`not-running` (`signIn` / `addFiles` while paused), `unsupported` (an older My PC).
+
+**Standalone** (the page opened in a browser): the same calls work. The SDK loads My PC's `js/core/gdrive.js` next to it,
+uses the Google client of every My PC (or `app_config.google.tvClientId` / `tvClientSecret` if your test config has them),
+shows a plain sign-in box, and keeps the account in this browser's `localStorage` (`mypc_drive`); use a test account.
+
+**Controls in your Drive screens**: A B X Y and **+** as everywhere (B = OK / open, A = back, X / Y = your own actions such as
+Rename or Delete, + = your menu); everything also reachable with the remote's arrows + OK.
+
+Protocol (for reference): app -> My PC `drive { rid, op, args }` (`op`: status signIn addFiles list get mkdir rename move
+copy star trash untrash remove setInfo read download upload export thumb about appFolder abort); My PC -> app
+`drive { rid, result | error }` and `{ rid, ev: 'progress', p }`. My PC side: `js/core/gdrive.js` (Google client from
+Firestore `settings/google`, App Store Manager > Google Drive; accounts per profile, key `gdrive`), `js/launcher/bridges.js`,
+`js/launcher/drive-ui.js`; the phone's picker page `drive-picker.html`.

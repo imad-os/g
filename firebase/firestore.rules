@@ -100,9 +100,22 @@ service cloud.firestore {
           && (!('updatedAt' in d) || d.updatedAt is timestamp)
           && (!('updatedBy' in d) || (d.updatedBy is string && d.updatedBy.size() <= 120));
     }
+    // The Google client of every My PC for Google Drive (App Store Manager > Google Drive, js/core/gdrive.js). Read by every
+    // TV at start. A "TVs and Limited Input devices" client secret is not confidential for Google; the Picker key is
+    // limited to the referrer https://imad-os.github.io/g/*.
+    function validGoogle(d) {
+      return d.keys().hasOnly(['tvClientId', 'tvClientSecret', 'pickerClientId', 'pickerApiKey', 'projectNumber', 'updatedAt', 'updatedBy'])
+          && d.tvClientId is string && d.tvClientId.size() <= 200 && d.tvClientSecret is string && d.tvClientSecret.size() <= 200
+          && (!('pickerClientId' in d) || (d.pickerClientId is string && d.pickerClientId.size() <= 200))
+          && (!('pickerApiKey' in d) || (d.pickerApiKey is string && d.pickerApiKey.size() <= 200))
+          && (!('projectNumber' in d) || (d.projectNumber is string && d.projectNumber.size() <= 40))
+          && (!('updatedAt' in d) || d.updatedAt is timestamp)
+          && (!('updatedBy' in d) || (d.updatedBy is string && d.updatedBy.size() <= 120));
+    }
     match /settings/{name} {
-      allow get: if name == 'ai' || name == 'mypc';
-      allow create, update: if isAdmin() && ((name == 'ai' && validAi(request.resource.data)) || (name == 'mypc' && validMyPc(request.resource.data)));
+      allow get: if name == 'ai' || name == 'mypc' || name == 'google';
+      allow create, update: if isAdmin() && ((name == 'ai' && validAi(request.resource.data)) || (name == 'mypc' && validMyPc(request.resource.data))
+                                          || (name == 'google' && validGoogle(request.resource.data)));
       allow delete: if isAdmin();
     }
 

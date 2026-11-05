@@ -1,6 +1,6 @@
 {
-  "build": 115,
-  "version": "2.27.0",
+  "build": 116,
+  "version": "2.28.0",
   "shell": 1,
   "css": [
     "css/launcher.css",
@@ -28,6 +28,7 @@
     "js/core/web-proxy.js",
     "js/core/ai.js",
     "js/core/mic.js",
+    "js/core/gdrive.js",
     "js/core/qr.js",
     "js/core/memo-store.js",
     "js/core/widget-lib.js",
@@ -50,6 +51,7 @@
     "js/core/i18n-dynwall.js",
     "js/core/i18n-music.js",
     "js/core/i18n-shortcuts.js",
+    "js/core/i18n-drive.js",
     "js/core/a11y.js",
     "js/core/scores.js",
     "js/core/audio.js",
@@ -85,6 +87,7 @@
     "js/launcher/avatars.js",
     "js/launcher/profiles-ui.js",
     "js/launcher/multiplayer.js",
+    "js/launcher/drive-ui.js",
     "js/launcher/pointer.js",
     "js/launcher/controllers.js",
     "js/launcher/touchpad.js",

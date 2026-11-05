@@ -2,7 +2,7 @@
  *
  * One queue per profile, played by the TV's own media player when there is one (Samsung AVPlay: hardware decoding, more
  * formats, almost no CPU), else (or when AVPlay cannot open a song) one <audio> element. Songs come from
- * js/core/music-src.js (USB drives, Google Drive through MyDrive, a folder of a PC).
+ * js/core/music-src.js (USB drives, Google Drive (My PC's own sign-in), a folder of a PC).
  *
  *   Music.init({ resume })        on the desktop page only (main.js): loads the profile's queue; resume = back from a game:
  *                                 plays on where it was when "Keep playing after a game" is on
@@ -555,7 +555,7 @@ var Music = (function () {
         if (my !== gen) return;
         loading = false; playing = false;
         var code = e && e.code;
-        error = code === 'gone' ? t('muErrGone') : code === 'perm' ? t('muErrPerm') : code === 'reauth' || code === 'nouser' || code === 'noapp' || code === 'noconfig' ? t('muGd_' + code) :
+        error = code === 'gone' ? t('muErrGone') : code === 'perm' ? t('muErrPerm') : code === 'reauth' || code === 'nouser' || code === 'noconfig' ? t('muGd_' + code) :
                 code === 'network' ? t('muErrNet') : t('muErrPlay');
         emit('error');
         if (typeof App !== 'undefined' && App.toast) App.toast(error + (current() ? ' ' + current().n : ''), { id: 'music', kind: 'err', timeout: 4000 });

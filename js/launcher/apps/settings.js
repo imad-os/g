@@ -16,6 +16,7 @@
         { id: 'widgets', icon: 'widgets', label: 'sysWidgets' },
         { id: 'apps', icon: 'folder', label: 'sysApps' },
         { id: 'accounts', icon: 'accounts', label: 'sysAccounts' },
+        { id: 'drive', icon: 'drive', label: 'sysDrive' },
         { id: 'sound', icon: 'sound', label: 'sysSound' },
         { id: 'devices', icon: 'gamepad', label: 'sysDevices' },
         { id: 'shortcuts', icon: 'remote', label: 'sysShortcuts' },
@@ -48,6 +49,7 @@
         if (id === 'ai') { aiRows(out); return out; }
         if (id === 'widgets') { if (sub === 'widget') widgetRows(out); else widgetsRows(out); return out; }
         if (id === 'notifications') { notifRows(out); return out; }
+        if (id === 'drive') { driveRows(out); return out; }
         if (id === 'shortcuts') { scRows(out); return out; }
         if (sub === 'users' && id === 'accounts') { usersRows(out); return out; }
         if (sub === 'user' && id === 'accounts') { userRows(out); return out; }
@@ -388,6 +390,47 @@
             title: t('usePhone'), help: t('usePhoneHelp'), codeLabel: t('username') });
     }
 
+    /* ---------- Google Drive (js/core/gdrive.js): ONE sign-in per profile, used by Music and by every app (MyPC.drive) ---------- */
+    function driveAgain(idx) { setTimeout(function () { if (Win.current() === 'settings' && page === 'drive' && main) { var f = renderMain(idx === undefined ? 1 : idx); if (f && idx !== -1) Focus.focus(f); } }, 0); }
+    function driveRows(out) {
+        if (!GDrive.config()) {
+            out.push({ kind: 'text', value: t('gdNoConfig') });
+            out.push({ kind: 'action', label: t('aiCheck'), run: function () { App.toast(t('aiChecking')); GDrive.syncConfig(function () { driveAgain(0); }); } });
+            return;
+        }
+        var list = GDrive.accounts(), act = GDrive.active(), i;
+        out.push({ kind: 'status', title: act && !act.needsReauth ? t('gdAs').replace('%s', act.email) : act ? t('gdReauth').replace('%s', act.email) : t('gdNone'),
+                   detail: act && !act.needsReauth ? t('gdAsDesc') : t('gdNoneDesc') });
+        if (!act || act.needsReauth) out.push({ kind: 'action', primary: true, label: t('gdSignIn'), desc: t('gdSignInDesc'), run: function () { DriveUI.signIn(function () { driveAgain(); }); } });
+        if (list.length > 1 || (act && act.needsReauth)) {
+            for (i = 0; i < list.length; i++) {
+                (function (a) {
+                    out.push({ kind: 'action', label: a.email + (act && a.id === act.id ? '  \u2713' : ''), desc: a.needsReauth ? t('gdNeedsSignIn') : (act && a.id === act.id ? t('gdInUse') : t('gdUseThis')),
+                               run: function () { if (a.needsReauth) return DriveUI.signIn(function () { driveAgain(); }); GDrive.use(a.id); App.toast(t('gdAs').replace('%s', a.email), { id: 'gdrive', kind: 'ok' }); driveAgain(); } });
+                })(list[i]);
+            }
+        }
+        if (act && !act.needsReauth) {
+            if (GDrive.pickerUrl()) out.push({ kind: 'action', primary: true, label: t('gdAddTitle'), desc: t('gdAddDesc'), run: function () { DriveUI.addFiles(); } });
+            out.push({ kind: 'action', label: t('gdAnother'), desc: t('gdAnotherDesc'), run: function () { DriveUI.signIn(function () { driveAgain(); }); } });
+        }
+        // the apps this profile allowed (MyPC.drive asks once per app)
+        var ok = Store.get('drive_apps', null) || {}, ids = Object.keys(ok), apps = Cloud.apps();
+        if (ids.length) out.push({ kind: 'text', value: t('gdApps') });
+        ids.forEach(function (id) {
+            var name = id;
+            for (var j = 0; j < apps.length; j++) if (apps[j].id === id) name = apps[j].name || id;
+            out.push({ kind: 'toggle', label: name, get: function () { return Bridges.allowed(id, 'drive'); }, set: function (v) { if (!v) Bridges.forget(id, 'drive'); } });
+        });
+        if (act) out.push({ kind: 'action', label: t('gdSignOut').replace('%s', act.email), danger: true, run: function () {
+            App.confirm(t('gdSignOut').replace('%s', act.email) + '?', t('gdSignOutText'), function () {
+                GDrive.signOut(act.id, function () { App.toast(t('gdSignedOut'), { id: 'gdrive', kind: 'info' }); driveAgain(0); });
+            });
+        } });
+        var lines = t('gdPrivacy');
+        for (i = 0; i < lines.length; i++) out.push({ kind: 'text', value: lines[i] });
+    }
+
     /* ---------- AI (js/core/ai.js): the services apps can use, set for every My PC in the App Store Manager ---------- */
     function keyHint(p) { return p.key ? t('aiKeySet').replace('%s', p.key.slice(-4)) : (p.preset === 'ollama' ? '' : t('aiNoKey')); }
     function aiRows(out) {
@@ -722,6 +765,7 @@
             Desktop.paintWallpaper();
             if (changed && Win.current() === 'settings' && page === 'personal' && !(Focus.current() && inMain(Focus.current()))) renderMain();
         });
+        if (id === 'drive' && !GDrive.config()) GDrive.syncConfig(function () { if (Win.current() === 'settings' && page === 'drive' && !(Focus.current() && inMain(Focus.current()))) renderMain(); });
         if (id === 'ai') Bridges.syncAi(function () { if (Win.current() === 'settings' && page === 'ai' && !(Focus.current() && inMain(Focus.current()))) renderMain(); });
         var btns = nav.querySelectorAll('.set-nav-btn');
         for (var i = 0; i < btns.length; i++) btns[i].className = 'set-nav-btn' + (btns[i].getAttribute('data-page') === id ? ' on' : '');

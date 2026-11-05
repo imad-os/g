@@ -1,5 +1,5 @@
 /* Music app (owner request 2026-11-05): plays the songs of USB drives / hard disks plugged into the TV, of Google Drive
- * (through the MyDrive app's Google account) and, in a browser, of a folder of the computer.
+ * (through My PC's Google Drive sign-in, Control Panel > Google Drive) and, in a browser, of a folder of the computer.
  *
  * Screens: Home (continue, drives, playlists, recently played), a folder (sub-folders as tiles with their cover, songs as
  * rows with their own cover and details), Playlists, Google Drive, the queue, Settings, and Now playing (full screen,
@@ -91,7 +91,7 @@
         if (c === 'network' || c === 'timeout') return t('muErrNet');
         if (c === 'unsupported') return t('muErrUnsupported');
         if (c === 'badname') return t('muBadName');
-        if (c === 'noapp' || c === 'noconfig' || c === 'nouser' || c === 'reauth') return t('muGd_' + c);
+        if (c === 'noconfig' || c === 'nouser' || c === 'reauth') return t('muGd_' + c);
         return t('muErrRead') + (e && e.message ? ' (' + e.message + ')' : '');
     }
 
@@ -457,10 +457,8 @@
                 box.appendChild(icon('cloud', 'mx-msg-ic'));
                 var name = Profiles.name ? Profiles.name(null, t('player')) : '';
                 box.appendChild(el('p', 'mx-msg-t', t('muGd_' + st.code).replace('%s', st.code === 'reauth' ? st.email || name : name)));
-                var go2 = null;
-                if (st.code === 'noapp') go2 = btn('btn btn-primary', t('muOpenStore'), function () { Win.open('store', 'apps'); });
-                else if (st.code !== 'noconfig') go2 = btn('btn btn-primary', t('muOpenMyDrive'), openMyDrive);
-                if (go2) box.appendChild(go2);
+                // one sign-in for all of My PC (Control Panel > Google Drive): right here, over Music
+                if (st.code !== 'noconfig') box.appendChild(btn('btn btn-primary', t('gdSignIn'), function () { DriveUI.signIn(function (e) { if (!e && g === gen) render(); }); }));
                 box.appendChild(btn('btn', t('muTryAgain'), function () { render(); }));
                 ui.scroll.appendChild(box);
                 A11y.announce(box.textContent);
@@ -474,18 +472,17 @@
                 if (r.p === '*audio') b.removeAttribute('data-hold');
                 grid.appendChild(b);
             });
+            if (GDrive.pickerUrl()) {
+                var add = tile(null, t('gdAddTitle'), '', 'plus', function () { DriveUI.addFiles(function () { if (g === gen) render(); }); }, 'none');
+                add.removeAttribute('data-hold');
+                grid.appendChild(add);
+            }
             ui.scroll.appendChild(grid);
             ui.scroll.appendChild(el('p', 'mx-note', t('muGdNote')));
             if (!npOpen && !menu) Focus.focus(grid.firstChild);
         });
         return null;
     }
-    function openMyDrive() {
-        var l = Desktop.games(), g = null;
-        for (var i = 0; i < l.length; i++) if (l[i].id === 'app-' + MusicSrc.gdApp) g = l[i];
-        if (g) Desktop.play(g); else Win.open('store', 'apps');
-    }
-
     /* ---------------- queue ---------------- */
     function queue(focusKey) {
         ui.title.textContent = t('muQueue');

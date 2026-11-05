@@ -137,6 +137,9 @@ var App = (function () {
             return;
         }
 
+        // Google Drive sign-in / "add files" (js/launcher/drive-ui.js), over an app or the desktop
+        if (DriveUI.screenOpen()) { DriveUI.action(action, pressed, repeat); return; }
+
         // multiplayer screens (host / join / waiting / "wants to join") sit over the running game
         if (Multiplayer.screenOpen()) { Multiplayer.action(action, pressed, repeat); return; }
 
@@ -383,6 +386,7 @@ var App = (function () {
             Push.start();                                        // push notifications of a signed-in player account (js/launcher/push.js)
             World.flush();
             Bridges.syncAi();                                    // the AI services set in the App Store Manager
+            GDrive.syncSoon();                                   // the Google client of every My PC (settings/google), twice a day at most
             GlobalSettings.sync(function (e, changed) { if (changed) Desktop.paintWallpaper(); });   // its Settings (backgrounds)
             // One-time device benchmark while the menu is idle.
             setTimeout(function () {

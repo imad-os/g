@@ -347,6 +347,7 @@ async function main() {
     const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--autoplay-policy=no-user-gesture-required', '--disable-features=WebRtcHideLocalIpsWithMdns', '--js-flags=--expose-gc', '--enable-precise-memory-info', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
     // MYPC_ONLY=music node tests/run-tests.mjs: only the Music app's checks (quick while working on it)
     if (process.env.MYPC_ONLY === 'wall') { await wallTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'drive') { await driveTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'music') { await musicTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
 
     console.log('1. hosted newer build runs');
@@ -1092,15 +1093,15 @@ async function main() {
         check(await page.evaluate(() => Win.current() === null && !Mic.active()), 'Memo closes with the microphone off');
         // the Control Panel (was Settings) opens on a grid of categories
         await page.evaluate(() => Win.open('settings'));
-        check(await page.evaluate(() => document.querySelectorAll('.cp-tile').length === 15 && document.getElementById('win-title').textContent === 'Control Panel' &&
-            document.activeElement.getAttribute('data-page') === 'system' && document.querySelector('.set-nav').hidden), 'the Control Panel opens on a grid of 15 categories, focus on the first');
+        check(await page.evaluate(() => document.querySelectorAll('.cp-tile').length === 16 && document.getElementById('win-title').textContent === 'Control Panel' &&
+            document.activeElement.getAttribute('data-page') === 'system' && document.querySelector('.set-nav').hidden), 'the Control Panel opens on a grid of 16 categories, focus on the first');
         await key('ArrowRight', 'Enter');
         check(await page.evaluate(() => !document.querySelector('.cp-home') .offsetParent && document.querySelector('.set-title').textContent === 'Personalization' &&
             document.activeElement.getAttribute('data-theme') === 'win11'), 'OK on a card opens its page, focus on its first row (the theme)');
         // settings with the remote: background (the row under the themes)
         await key('ArrowDown', 'ArrowRight', 'Enter');
         check(await page.evaluate(() => Store.get('wallpaper') === 'aurora' && document.getElementById('wallpaper').className.indexOf('wp-aurora') >= 0), 'Settings > Personalization changes the background');
-        await key('Escape', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowRight', 'ArrowLeft');   // Personalization > Widgets > Apps > Accounts > Sound
+        await key('Escape', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowRight', 'ArrowLeft');   // Personalization > Widgets > Apps > Accounts > Google Drive > Sound
         check(await page.evaluate(() => AudioPrefs.music()) === 6, 'Settings > Sound: left lowers the music volume');
         await key('Escape', 'Escape');
         check(await page.evaluate(() => Win.current() === 'settings' && !!document.querySelector('.cp-grid') && !document.querySelector('.cp-home').hidden &&
@@ -1433,9 +1434,9 @@ async function main() {
         check(rows.some((t) => /Star Catcher.*Not in store/.test(t)) && rows.some((t) => /Old Game.*In store/.test(t)) && rows.some((t) => /g_broken.*not a My PC app/.test(t)),
             'each app shows its status: not in the store, in the store, or not a My PC app');
         check(/App Store Manager/.test(await page.title()) && /App Store Manager/.test(await page.textContent('.brand')), 'the installer is now the App Store Manager');
-        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,AI services,Services,Widgets,Settings,Devices,World records,Errors'
+        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,AI services,Google Drive,Services,Widgets,Settings,Devices,World records,Errors'
             && document.querySelector('.nav a.on').dataset.page === 'add' && !document.querySelector('[data-view="add"]').hidden && document.querySelector('[data-view="overview"]').hidden),
-            'a menu with one page each: Overview, Apps, Add apps, AI services, Services, Widgets, Settings, Devices, World records, Errors');
+            'a menu with one page each: Overview, Apps, Add apps, AI services, Google Drive, Services, Widgets, Settings, Devices, World records, Errors');
         check(await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].find((r) => /Old Game/.test(r.textContent)).querySelector('input').disabled), 'installed apps cannot be selected again');
         await page.check('#sel-all');
         await page.click('#btn-install-sel');
@@ -4054,7 +4055,7 @@ async function main() {
         const loop = by('error', /loop error/);
         check(loop && loop.n === 5 && reps.filter((r) => /loop error/.test(r.msg)).length === 1, 'the same error 5 times is one report with n = 5 (' + (loop && loop.n) + ')');
         const one = by('error', /boom/) || {};
-        check(one.appv === '2.0.1' && one.sdk === 13 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
+        check(one.appv === '2.0.1' && one.sdk === 14 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
             'each report has the app version, SDK level, TV id and model, My PC version and build, language, place, address, time and a 30-day expiry (' + JSON.stringify(one) + ')');
         const keys = new Set(reps.flatMap((r) => Object.keys(r)));
         const allowed = ['app', 'kind', 'msg', 'stack', 'src', 'stage', 'appv', 'sdk', 'n', 'at', 'exp', 'tv', 'model', 'ver', 'build', 'lang', 'user', 'where', 'ua', 'url'];
@@ -4557,6 +4558,7 @@ async function main() {
         await page.context().close();
     }
     await musicTests(browser, base);
+    await driveTests(browser, base);
 
     console.log('42d. remote shortcuts (per profile): Play / Pause = music, Guide = users; Control Panel > Shortcuts; the game menu\'s music button');
     {
@@ -4694,6 +4696,256 @@ async function main() {
 }
 
 // 43. The Music app with a simulated USB drive (Tizen filesystem), the TV's player (AVPlay) and Google Drive through MyDrive.
+// A fake Google (sign-in + Drive API v3) for the Drive tests: files in memory, Range reads, resumable uploads.
+async function fakeGoogle(ctx, g) {
+    g.files = g.files || {}; g.calls = []; g.n = 0; g.uploads = {};
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': '*', 'Access-Control-Expose-Headers': 'Location, Range, Content-Range' };
+    const jwt = (o) => 'h.' + Buffer.from(JSON.stringify(o)).toString('base64url') + '.s';
+    const meta = (f) => { const o = Object.assign({}, f); delete o.data; if (f.data) o.size = String(f.data.length); return o; };
+    await ctx.route(/^https:\/\/(oauth2|www)\.googleapis\.com\//, async (r) => {
+        const q = r.request(), u = new URL(q.url()), m = q.method(), body = q.postData() || '';
+        if (m === 'OPTIONS') return r.fulfill({ status: 204, headers: cors });
+        g.calls.push(m + ' ' + u.pathname + u.search + ' ' + (q.headers().authorization || '') + ' ' + (q.headers().range || q.headers()['content-range'] || ''));
+        const json = (o, st, h) => r.fulfill({ status: st || 200, contentType: 'application/json', headers: Object.assign({}, cors, h || {}), body: JSON.stringify(o) });
+        if (/device\/code/.test(u.pathname)) return json({ device_code: 'DEV1', user_code: 'WXYZ-1234', verification_url: 'https://www.google.com/device', expires_in: 1800, interval: 5 });
+        if (u.hostname === 'oauth2.googleapis.com' && /token/.test(u.pathname)) {
+            if (/device_code/.test(body)) return json({ access_token: 'AT-secret', refresh_token: 'RT-secret', expires_in: 3600, scope: 'openid email profile https://www.googleapis.com/auth/drive.file', id_token: jwt({ sub: 'g7', email: 'sara@example.com', name: 'Sara' }) });
+            return json({ access_token: 'AT-secret', expires_in: 3600, scope: 'https://www.googleapis.com/auth/drive.file' });
+        }
+        if (u.hostname === 'oauth2.googleapis.com') return json({});
+        if (!/Bearer AT-secret/.test(q.headers().authorization || '')) return json({ error: { code: 401, message: 'no token' } }, 401);
+        const path = decodeURIComponent(u.pathname);
+        // resumable uploads
+        if (/^\/upload\/drive\/v3\/files/.test(path) && u.searchParams.get('upload_id')) {
+            const up = g.uploads[u.searchParams.get('upload_id')], cr = /bytes (\d+)-(\d+)\/(\d+)/.exec(q.headers()['content-range'] || '');
+            const chunk = q.postDataBuffer() || Buffer.alloc(0);
+            up.parts.push(chunk);
+            if (cr && +cr[2] < +cr[3] - 1) return r.fulfill({ status: 308, headers: Object.assign({ Range: 'bytes=0-' + cr[2] }, cors), body: '' });
+            const f = up.id ? g.files[up.id] : (g.files['u' + (++g.n)] = { id: 'u' + g.n, mimeType: up.type });
+            Object.assign(f, up.meta); f.data = Buffer.concat(up.parts); f.mimeType = up.meta.mimeType || f.mimeType || up.type;
+            return json(meta(f), 200);
+        }
+        if (/^\/upload\/drive\/v3\/files/.test(path)) {
+            const id = path.split('/')[5] || '', key = 'S' + (++g.n);
+            g.uploads[key] = { id, meta: JSON.parse(body || '{}'), parts: [], type: q.headers()['x-upload-content-type'] };
+            return r.fulfill({ status: 200, headers: Object.assign({ Location: 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=' + key }, cors), body: '' });
+        }
+        const seg = path.replace('/drive/v3/', '').split('/');
+        if (seg[0] === 'about') return json({ user: { displayName: 'Sara', emailAddress: 'sara@example.com' }, storageQuota: { limit: '100', usage: '10' } });
+        if (seg[0] === 'files' && seg.length === 1 && m === 'GET') {
+            const qs = u.searchParams.get('q') || '';
+            let l = Object.values(g.files).filter((f) => !!f.trashed === /trashed = true/.test(qs));
+            const par = /'([^']+)' in parents/.exec(qs); if (par) l = l.filter((f) => (f.parents || ['root']).includes(par[1]));
+            const ap = /key='([^']+)' and value='([^']+)'/.exec(qs); if (ap) l = l.filter((f) => f.appProperties && f.appProperties[ap[1]] === ap[2]);
+            const nm = /name = '([^']+)'/.exec(qs); if (nm) l = l.filter((f) => f.name === nm[1]);
+            if (/mimeType = 'application\/vnd.google-apps.folder'/.test(qs)) l = l.filter((f) => f.mimeType === 'application/vnd.google-apps.folder');
+            if (/mimeType contains 'audio\/'/.test(qs)) l = l.filter((f) => /^audio\//.test(f.mimeType));
+            return json({ files: l.slice(0, +u.searchParams.get('pageSize') || 100).map(meta) });
+        }
+        if (seg[0] === 'files' && seg.length === 1 && m === 'POST') {
+            const d = JSON.parse(body), id = 'd' + (++g.n);
+            g.files[id] = Object.assign({ id }, d);
+            return json(meta(g.files[id]));
+        }
+        const f = g.files[seg[1]];
+        if (!f) return json({ error: { code: 404, message: 'File not found' } }, 404);
+        if (seg[2] === 'copy') { const id = 'c' + (++g.n); g.files[id] = Object.assign({}, f, { id }, JSON.parse(body || '{}')); return json(meta(g.files[id])); }
+        if (m === 'DELETE') { delete g.files[seg[1]]; return r.fulfill({ status: 204, headers: cors, body: '' }); }
+        if (m === 'PATCH') {
+            Object.assign(f, JSON.parse(body || '{}'));
+            if (u.searchParams.get('addParents')) f.parents = [u.searchParams.get('addParents')];
+            return json(meta(f));
+        }
+        if (u.searchParams.get('alt') === 'media') {
+            const all = f.data || Buffer.alloc(0), rg = /bytes=(\d+)-(\d+)/.exec(q.headers().range || '');
+            const a = rg ? +rg[1] : 0, b = rg ? Math.min(+rg[2], all.length - 1) : all.length - 1;
+            if (rg && a >= all.length) return r.fulfill({ status: 416, headers: cors, body: '' });
+            return r.fulfill({ status: rg ? 206 : 200, contentType: f.mimeType, headers: Object.assign({ 'Content-Range': 'bytes ' + a + '-' + b + '/' + all.length }, cors), body: all.subarray(a, b + 1) });
+        }
+        return json(meta(f));
+    });
+}
+
+// 44. Google Drive in the SDK (MyPC.drive, API 14): one sign-in per profile in My PC, every request sent by My PC.
+// MYPC_ONLY=drive node tests/run-tests.mjs runs just these.
+async function driveTests(browser, base) {
+    console.log('44. Google Drive for apps (MyPC.drive): sign in once in My PC, permission per app, list / upload / read / rename / trash / delete, app folder, streaming; Control Panel > Google Drive');
+    // the app: its own https origin, the SDK from My PC, a service worker that imports sdk/drive-sw.js
+    const APP = 'https://driveapp.example.test/';
+    const APP_HTML = `<!doctype html><meta charset=utf-8><title>Drive Test</title><body style="background:#123;color:#fff;font:40px sans-serif"><p id=t>Drive test app</p>
+<script src="${HOSTED}sdk/mypc-sdk.js"></script><script>MyPC.init({ onInit() { MyPC.ready(); window.__ok = 1; } });</script>`;
+    const db = { apps: {}, settings: { google: { tvClientId: 'cid.apps.googleusercontent.com', tvClientSecret: 'sec', pickerClientId: 'web.apps.googleusercontent.com', pickerApiKey: 'PKEY', projectNumber: '123' } } };
+    db.apps.drivetest = { id: 'drivetest', name: 'Drive Test', url: APP, entry: APP + 'index.html', icon: '', type: 'app', version: '1.0.0', enabled: true, order: 1, config: {} };
+    const page = await newPage(browser, base, db);
+    const g = { files: { s1: { id: 's1', name: 'Song.mp3', mimeType: 'audio/mpeg', parents: ['root'], data: Buffer.from('ID3' + 'x'.repeat(5000)) } } };
+    await fakeGoogle(page.context(), g);
+    await page.addInitScript((a) => { if (!localStorage.getItem('arc_dev_installed')) { localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'drivetest', at: 1 }])); localStorage.setItem('arc_dev_catalog', JSON.stringify([a])); } }, db.apps.drivetest);
+    await routeHosted(page, { offline: true });
+    const sdkFile = (f) => (r) => r.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(ROOT, 'sdk', f)) });
+    await page.route(HOSTED + 'sdk/mypc-sdk.js', sdkFile('mypc-sdk.js'));
+    await page.context().route(HOSTED + 'sdk/drive-sw.js', sdkFile('drive-sw.js'));          // imported by the app's worker
+    await page.context().route(APP + '**', (r) => {
+        if (/sw\.js/.test(r.request().url())) return r.fulfill({ status: 200, contentType: 'application/javascript', body: `importScripts('${HOSTED}sdk/drive-sw.js');` });
+        r.fulfill({ status: 200, contentType: 'text/html', body: APP_HTML });
+    });
+    const shot = async (name) => { if (process.env.MYPC_SHOTS) { await page.waitForTimeout(150); await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, name + '.png') }); } };
+    await page.goto(base + 'index.html');
+    await page.waitForSelector('#desk-icons .dicon');
+    await page.waitForFunction(() => Desktop.games().some((x) => x.id === 'app-drivetest'), null, { timeout: 10000 });
+    async function openApp() {
+        await Promise.all([page.waitForURL(/play=app-drivetest/), page.evaluate(() => Desktop.play(Desktop.games().find((x) => x.id === 'app-drivetest')))]);
+        await page.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 10000 });
+        const f = page.frames().find((x) => x.url().indexOf(APP) === 0);
+        await f.waitForFunction(() => window.__ok === 1 && MyPC.info() && MyPC.info().bridges);
+        return f;
+    }
+    let app = await openApp();
+    const st0 = await app.evaluate(() => MyPC.drive.status().then((s) => ({ s, api: MyPC.apiLevel, b: MyPC.info().bridges.drive })));
+    check(st0.api >= 14 && st0.b === 1 && st0.s.configured && !st0.s.signedIn && st0.s.needsSignIn && !st0.s.allowed && st0.s.account === null && st0.s.picker,
+        'MyPC.drive (API 14): the app learns Drive is set up for My PC but this profile is not signed in yet ' + JSON.stringify(st0));
+    const e0 = await app.evaluate(() => MyPC.drive.list().then(() => 'ok', (e) => e.code));
+    check(e0 === 'signed-out', 'a Drive call before any sign-in fails with signed-out (the app should call MyPC.drive.signIn()) ' + e0);
+    // MyPC.drive.signIn(): My PC's own sign-in screen over the app; the app is paused meanwhile
+    const pSign = app.evaluate(() => MyPC.drive.signIn().then((a) => a, (e) => 'err ' + e.code));
+    await page.waitForFunction(() => document.querySelector('.gdui-code') && document.querySelector('.gdui-code').textContent === 'WXYZ-1234', null, { timeout: 5000 }).catch(() => {});
+    const over = await page.evaluate(() => ({ open: DriveUI.screenOpen(), state: GameHost.state() }));
+    await shot('drive-1-signin-over-app');
+    check(over.open && over.state === 'paused', 'My PC shows its sign-in screen over the app and pauses it ' + JSON.stringify(over));
+    const signed = await pSign;
+    const after = await page.evaluate(() => ({ state: GameHost.state(), allowed: Bridges.allowed('drivetest', 'drive') }));
+    check(signed && signed.email === 'sara@example.com' && after.state === 'running' && after.allowed, 'once allowed on the phone the app gets the account (no token) and runs again; signing in from the app allowed it ' + JSON.stringify(signed) + JSON.stringify(after));
+    // every operation, with the token only in My PC's requests
+    const res = await app.evaluate(async () => {
+        const D = MyPC.drive, out = {}, prog = [];
+        out.list = (await D.list({ folder: 'root' })).files.map((f) => f.name);
+        const folder = await D.createFolder('Saves');
+        out.folder = folder.mimeType === D.FOLDER;
+        const up = await D.upload({ name: 'notes.txt', data: 'hello drive', type: 'text/plain', parent: folder.id }, { onProgress: (p) => prog.push(p) });
+        out.up = up.name + ' ' + up.size; out.prog = prog;
+        const big = new Uint8Array(9 * 1024 * 1024); for (let i = 0; i < big.length; i++) big[i] = i & 255;
+        const upBig = await D.upload({ name: 'big.bin', data: big.buffer }, { onProgress: (p) => prog.push(p) });
+        out.big = upBig.size;
+        const r = await D.read(upBig.id, 1000, 1009);
+        out.read = Array.from(new Uint8Array(r.buf)).join(',') + ' / ' + r.total;
+        out.text = await D.readText(up.id);
+        out.rename = (await D.rename(up.id, 'renamed.txt')).name;
+        out.moved = (await D.move(up.id, 'root')).parents.join();
+        out.copy = (await D.copy(up.id, folder.id, 'copy.txt')).name;
+        out.trash = (await D.trash(up.id)).trashed;
+        out.restore = (await D.restore(up.id)).trashed;
+        out.star = (await D.star(up.id)).starred;
+        out.removed = await D.remove(upBig.id);
+        out.gone = await D.get(upBig.id).then(() => 'still there', (e) => e.code);
+        const af = await D.appFolder(), af2 = await D.appFolder();
+        out.appFolder = af.name + ' ' + (af.id === af2.id);
+        await D.saveJson('save.json', { level: 3 });
+        await D.saveJson('save.json', { level: 4 });
+        out.json = JSON.stringify(await D.loadJson('save.json')) + ' ' + JSON.stringify(await D.loadJson('none.json', { level: 0 }));
+        out.about = (await D.about()).user.emailAddress;
+        const s = await D.stream('s1');
+        out.blob = s.mode + ' ' + /^blob:/.test(s.url) + ' ' + (await (await fetch(s.url)).text()).slice(0, 3); s.close();
+        out.badName = await D.rename(up.id, '   ').then(() => 'ok', (e) => e.code);
+        out.missing = await D.get('nope').then(() => 'ok', (e) => e.code);
+        const ab = D.download('s1'); ab.abort(); out.abort = await ab.then(() => 'ok', (e) => e.code);
+        out.seen = JSON.stringify(out);
+        return out;
+    });
+    const tokenInApp = /AT-secret|RT-secret|GOCSPX|sec\b/.test(res.seen);
+    check(res.list.join() === 'Song.mp3' && res.folder && res.up === 'notes.txt 11' && res.prog.includes(1) && res.big === String(9 * 1024 * 1024), 'list, createFolder and upload (a 9 MB file in 4 MB pieces, with progress) ' + JSON.stringify({ l: res.list, up: res.up, big: res.big, p: res.prog.length }));
+    const ups = g.calls.filter((c) => /upload_id/.test(c));
+    check(ups.length === 6 && ups.filter((c) => / 9437184$/.test(c) || /\/9437184/.test(c)).length === 3 && ups.every((c) => /Bearer AT-secret/.test(c)), 'uploads are resumable, in 4 MB pieces (3 for 9 MB), each with the token from My PC (' + ups.length + ' PUTs) ' + JSON.stringify(ups.map((c) => c.slice(-30))));
+    check(res.read === '232,233,234,235,236,237,238,239,240,241 / 9437184' && res.text === 'hello drive', 'read(id, start, end) gives those bytes and the size; readText the whole file ' + res.read);
+    check(res.rename === 'renamed.txt' && res.moved === 'root' && res.copy === 'copy.txt' && res.trash === true && res.restore === false && res.star === true && res.removed === true && res.gone === 'not-found',
+        'rename, move, copy, trash, restore, star and remove (for ever) ' + JSON.stringify([res.rename, res.moved, res.copy, res.trash, res.restore, res.star, res.removed, res.gone]));
+    check(res.appFolder === 'Drive Test true' && res.json === '{"level":4} {"level":0}' && Object.values(g.files).filter((f) => f.name === 'save.json').length === 1 && Object.values(g.files).some((f) => f.name === 'My PC' && f.appProperties && f.appProperties.mypc === 'root'),
+        'appFolder() is "My PC/Drive Test", made once; saveJson replaces the same file, loadJson reads it (or the default) ' + res.appFolder + ' ' + res.json);
+    check(res.about === 'sara@example.com' && /^blob true ID3/.test(res.blob) && res.badName === 'bad-request' && res.missing === 'not-found' && res.abort === 'cancelled',
+        'about(), stream() without a worker gives a playable blob: address, errors have codes, a call can be aborted ' + JSON.stringify([res.about, res.blob, res.badName, res.missing, res.abort]));
+    check(!tokenInApp && !(await app.evaluate(() => JSON.stringify(localStorage) + document.cookie)).includes('secret'), 'the app never sees a token, a refresh token or the client secret');
+    // the user must allow each app: another app's permission was not given, and a refusal is final for that run
+    await page.evaluate(() => Bridges.forget('drivetest', 'drive'));
+    const pAsk = app.evaluate(() => MyPC.drive.list().then(() => 'ok', (e) => e.code));
+    await page.waitForFunction(() => App.dialogOpen(), null, { timeout: 4000 }).catch(() => {});
+    const q = await page.evaluate(() => document.getElementById('dialog-title').textContent + ' | ' + document.getElementById('dialog-text').textContent);
+    await shot('drive-2-permission');
+    await page.evaluate(() => document.getElementById('dialog-no').click());
+    const denied = await pAsk;
+    check(/Drive Test wants to use your Google Drive/.test(q) && /sara@example.com/.test(q) && denied === 'denied', 'without permission My PC asks once ("Drive Test wants to use your Google Drive"); Don\'t allow gives denied ' + q);
+    await tvBack(page);
+    await Promise.all([page.waitForURL(/from=app-drivetest/), page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); })]);
+    await page.waitForSelector('#desk-icons .dicon');
+    // Control Panel > Google Drive: the account, Add files, the apps allowed, Sign out
+    await page.evaluate(() => { Store.set('drive_apps', { drivetest: 1 }); Win.open('settings', 'drive'); });
+    await page.waitForFunction(() => /Signed in as sara@example.com/.test((document.querySelector('.set-main') || document.body).textContent), null, { timeout: 4000 }).catch(() => {});
+    const cp = await page.evaluate(() => document.querySelector('.set-main') ? document.querySelector('.set-main').textContent : document.body.textContent);
+    await shot('drive-3-control-panel');
+    check(/Signed in as sara@example.com/.test(cp) && /Add files from your phone/.test(cp) && /Drive Test/.test(cp) && /Sign out of sara@example.com/.test(cp), 'Control Panel > Google Drive shows the account, Add files from your phone, the apps allowed and Sign out');
+    await page.evaluate(() => [...document.querySelectorAll('.set-main .set-row')].find((b) => /Add files from your phone/.test(b.textContent)).click());
+    const pk = await page.evaluate(() => ({ open: DriveUI.screenOpen(), qr: !!document.querySelector('.gdui-qr svg'), text: document.querySelector('.gdui').textContent }));
+    await shot('drive-4-add-files');
+    const pkUrl = await page.evaluate(() => GDrive.pickerUrl());
+    check(pk.open && pk.qr && /sara@example.com/.test(pk.text) && pkUrl === 'https://imad-os.github.io/g/drive-picker.html#c=web.apps.googleusercontent.com&k=PKEY&p=123', 'Add files from your phone: a QR code for My PC\'s picker page with the Picker settings ' + pkUrl);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+    check(!(await page.evaluate(() => DriveUI.screenOpen())), 'Back closes it');
+    await page.evaluate(() => [...document.querySelectorAll('.set-main .set-row')].find((b) => /Sign out of/.test(b.textContent)).click());
+    await page.evaluate(() => document.getElementById('dialog-yes').click());
+    await page.waitForFunction(() => !GDrive.active(), null, { timeout: 3000 }).catch(() => {});
+    check(await page.evaluate(() => !GDrive.active() && !(Store.get('gdrive', {}).accounts || []).length) && g.calls.some((c) => /revoke/.test(c)), 'Sign out forgets the account on this profile and gives Google\'s access back (revoke)');
+    // another profile has its own Google account (none here)
+    check(await page.evaluate(() => { const p2 = Profiles.create('Nadia'); Store.setProfile(p2.id); const a = GDrive.active(); Store.setProfile('p1'); return a === null; }), 'Google accounts are per profile');
+    check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+    await page.context().close();
+
+    // Standalone (the app opened in a browser, outside My PC): the SDK runs My PC's Drive module in the page with the Google
+    // client of every My PC; MyPC.drive.stream() through the app's own service worker (sdk/drive-sw.js) plays a song.
+    const F = await import('./music-fixtures.mjs');
+    const song = Buffer.from(F.mp3({ title: 'Worker Song', silent: 900 }));
+    const solo = http.createServer((req, res) => {
+        if (req.url.startsWith('/sw.js')) { res.writeHead(200, { 'Content-Type': 'application/javascript' }); return res.end(`importScripts('${base}sdk/drive-sw.js');`); }
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(`<!doctype html><meta charset=utf-8><title>Solo</title><body><audio id=a></audio><script src="${base}sdk/mypc-sdk.js"></script><script>MyPC.init({ onInit() { window.__ok = 1; } });</script>`);
+    });
+    await new Promise((ok) => solo.listen(0, '127.0.0.1', ok));
+    const SOLO = 'http://127.0.0.1:' + solo.address().port + '/';
+    const ctx2 = await browser.newContext();
+    const g2 = { files: { w1: { id: 'w1', name: 'Worker Song.mp3', mimeType: 'audio/mpeg', parents: ['root'], data: song } } };
+    await fakeGoogle(ctx2, g2);
+    await ctx2.route('https://firestore.googleapis.com/**', (r) => {
+        const u = r.request().url();
+        if (/documents\/settings\/google/.test(u)) return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ fields: fsFields(db.settings.google) }) });
+        r.fulfill({ status: 404, headers: { 'Access-Control-Allow-Origin': '*' }, body: '{}' });
+    });
+    const sp = await ctx2.newPage();
+    sp.errors = []; sp.on('pageerror', (e) => sp.errors.push(e.message));
+    await sp.addInitScript(() => localStorage.setItem('mypc_drive', JSON.stringify({ accounts: [{ id: 'g7', email: 'sara@example.com', name: 'Sara', refreshToken: 'RT-secret' }], active: 'g7' })));
+    await sp.goto(SOLO);
+    await sp.waitForFunction(() => window.__ok === 1);
+    const solo1 = await sp.evaluate(async () => {
+        const st = await MyPC.drive.status(), l = await MyPC.drive.list({ place: 'audio' });
+        const s = await MyPC.drive.stream(l.files[0], { worker: 'sw.js' });
+        const r = await fetch(s.url, { headers: { Range: 'bytes=0-2' } });
+        const out = { st: st.signedIn + ' ' + (st.account && st.account.email), names: l.files.map((f) => f.name).join(), mode: s.mode, status: r.status, range: r.headers.get('content-range'), body: await r.text() };
+        const a = document.getElementById('a');
+        a.src = s.url; a.muted = true;
+        await a.play().catch((e) => { out.playErr = String(e); });
+        await new Promise((ok) => setTimeout(ok, 1500));
+        out.t = a.currentTime; out.dur = a.duration;
+        a.pause(); a.removeAttribute('src'); a.load(); s.close();
+        out.after = (await fetch(s.url, { headers: { Range: 'bytes=0-2' } })).status;
+        return out;
+    });
+    const pieces = g2.calls.filter((c) => /alt=media/.test(c));
+    check(solo1.st === 'true sara@example.com' && solo1.names === 'Worker Song.mp3', 'standalone: MyPC.drive uses My PC\'s Google client (settings/google) and the account saved in this browser ' + JSON.stringify(solo1).slice(0, 200));
+    check(solo1.mode === 'worker' && solo1.status === 206 && solo1.range === 'bytes 0-2/' + song.length && solo1.body === 'ID3' && solo1.after === 404,
+        'stream() through the app\'s service worker (sdk/drive-sw.js): Range requests get 206 pieces; close() ends the address ' + JSON.stringify(solo1));
+    check(solo1.t > 0.5 && !solo1.playErr && pieces.length >= 2 && pieces.every((c) => /Bearer AT-secret/.test(c) && /bytes=\d+-\d+/.test(c)),
+        'an <audio> plays the Drive song from that address (' + solo1.t.toFixed(2) + ' s played), read by Range with the token as a header (' + pieces.length + ' pieces)');
+    check(sp.errors.length === 0, 'standalone: no page errors ' + sp.errors.join('; '));
+    await ctx2.close();
+    solo.close();
+}
+
 // Its own function so that MYPC_ONLY=music runs just these checks.
 async function musicTests(browser, base) {
     console.log('43. Music: USB drive, song details and covers, hold-OK menu, playlists, the TV player, queue, resume, screensaver, Google Drive');
@@ -4972,28 +5224,30 @@ async function musicTests(browser, base) {
     check(await page.evaluate(() => ![...document.querySelectorAll('.mx-nav')].some((t) => /USB A1/.test(t.textContent)) && /No USB drive/.test(document.querySelector('.mx-scroll').textContent)), 'a removed drive leaves the side bar and Home');
     await page.evaluate(() => Music.stop());
 
-    // Google Drive through MyDrive: every missing piece has its own message
+    // Google Drive: My PC's own sign-in (js/core/gdrive.js, Control Panel > Google Drive); every missing piece has its own message
     const gdText = () => page.evaluate(async () => { document.querySelector('.mx-nav[data-nav="gd"]').click(); for (let i = 0; i < 40; i++) { await new Promise((r) => setTimeout(r, 50)); const m = document.querySelector('.mx-msg, .mx-scroll .mx-grid'); if (m) return document.querySelector('.mx-main').textContent; } return document.querySelector('.mx-main').textContent; });
     let gt = await gdText();
-    await shot('8-gd-noapp');
-    check(/needs the MyDrive app/.test(gt) && /Open the App Store/.test(gt), 'MyDrive not installed: says to install it');
-    const mydrive = (config) => ({ id: 'mydrive', name: 'MyDrive', url: 'https://mydrive.example/', entry: 'https://mydrive.example/index.html', icon: '', type: 'app', version: '1.0.4', enabled: true, order: 1, config });
-    db.apps.mydrive = mydrive({ pageSize: 100 });
-    await page.evaluate((a) => { localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'mydrive', at: 1 }])); localStorage.setItem('arc_dev_catalog', JSON.stringify([a])); }, db.apps.mydrive);
-    gt = await gdText();
-    check(/Google settings are missing/.test(gt), 'MyDrive without its Google client in the config: says an App Store manager must add it');
-    db.apps.mydrive = mydrive({ google: { tvClientId: 'cid.apps.googleusercontent.com', tvClientSecret: 'sec' } });
-    await page.evaluate((a) => localStorage.setItem('arc_dev_catalog', JSON.stringify([a])), db.apps.mydrive);
-    gt = await gdText();
-    check(/No Google account is linked for/.test(gt) && /Open MyDrive/.test(gt), 'no account linked in MyDrive for this profile: says to link one there');
+    await shot('8-gd-noconfig');
+    check(/not set up for My PC yet/.test(gt) && /App Store Manager > Google Drive/.test(gt) && !/Sign in with Google/.test(gt), 'no Google client anywhere: says an App Store manager adds it in the App Store Manager > Google Drive');
+    // the client of every My PC: Firestore settings/google (App Store Manager > Google Drive)
+    db.settings = { google: { tvClientId: 'cid.apps.googleusercontent.com', tvClientSecret: 'sec', pickerClientId: 'web.apps.googleusercontent.com', pickerApiKey: 'PKEY', projectNumber: '123' } };
+    await page.evaluate(() => { localStorage.removeItem('arc_dev_google_at'); GDrive._reset(); });
+    // a profile that linked its account in MyDrive before: taken over once (same Google client), here one Google wants signed in again
     await page.evaluate(() => Store.set('game_app-mydrive_data', { accounts: [{ id: 'g1', email: 'imad@example.com', name: 'Imad', refreshToken: 'RT', needsReauth: true }], active: 'g1' }));
     gt = await gdText();
-    check(/link imad@example.com again/.test(gt), 'an account Google wants linked again: says so, with its address');
+    const moved = await page.evaluate(() => (Store.get('gdrive', {}).accounts || []).map((a) => a.email + ':' + a.refreshToken).join());
+    check(/sign in to imad@example.com again/.test(gt) && /Sign in with Google/.test(gt) && moved === 'imad@example.com:RT', 'the account linked in MyDrive is taken over; Google wants it signed in again: says so, with its address ' + moved);
+    await page.evaluate(() => { Store.remove('gdrive'); Store.remove('game_app-mydrive_data'); });
+    gt = await gdText();
+    check(/Sign in to Google Drive once for/.test(gt) && /Sign in with Google/.test(gt), 'nobody signed in on this profile: one button signs in right here');
     const gcalls = [];
+    const jwt = (o) => 'h.' + Buffer.from(JSON.stringify(o)).toString('base64url') + '.s';
     await page.context().route(/^https:\/\/(oauth2|www)\.googleapis\.com\//, async (r) => {
-        const u = r.request().url();
-        gcalls.push(r.request().method() + ' ' + u + ' ' + (r.request().headers().authorization || '') + ' ' + (r.request().postData() || ''));
-        const json = (o) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(o) });
+        const u = r.request().url(), body = r.request().postData() || '';
+        gcalls.push(r.request().method() + ' ' + u + ' ' + (r.request().headers().authorization || '') + ' ' + body);
+        const json = (o, st) => r.fulfill({ status: st || 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(o) });
+        if (/device\/code/.test(u)) return json({ device_code: 'DEV1', user_code: 'ABCD-EFGH', verification_url: 'https://www.google.com/device', expires_in: 1800, interval: 5 });
+        if (/oauth2.*token/.test(u) && /device_code/.test(body)) return json({ access_token: 'AT1', refresh_token: 'RT', expires_in: 3600, scope: 'openid email profile https://www.googleapis.com/auth/drive.file', id_token: jwt({ sub: 'g1', email: 'imad@example.com', name: 'Imad' }) });
         if (/oauth2/.test(u)) return json({ access_token: 'AT1', expires_in: 3600, scope: 'openid https://www.googleapis.com/auth/drive.file' });
         if (/alt=media/.test(u)) {        // a1: 600 silent MP3 frames; a2: a 60 s WAV sent slowly; by Range like Drive does
             const wavSong = /files\/a2\?/.test(u);
@@ -5005,16 +5259,26 @@ async function musicTests(browser, base) {
         if (/files\?/.test(u)) return json({ files: [{ id: 'f1', name: 'Albums', mimeType: 'application/vnd.google-apps.folder' }, { id: 'a1', name: 'Cloud Song.mp3', mimeType: 'audio/mpeg', size: '5000' }, { id: 'a2', name: 'Long Tone.wav', mimeType: 'audio/wav', size: '1920088' }, { id: 'n1', name: 'notes.txt', mimeType: 'text/plain' }] });
         return r.fulfill({ status: 404, body: '' });
     });
-    await page.evaluate(() => Store.set('game_app-mydrive_data', { accounts: [{ id: 'g1', email: 'imad@example.com', name: 'Imad', refreshToken: 'RT' }], active: 'g1' }));
-    gt = await gdText();
-    check(/My Drive/.test(gt) && /All my music files/.test(gt) && /imad@example.com/.test(gt), 'linked: My Drive and All my music files, as the MyDrive account: ' + gt);
+    // Sign in with Google: My PC's sign-in screen over Music (a QR code for google.com/device and the code)
+    await page.evaluate(() => [...document.querySelectorAll('.mx-msg button')].find((b) => /Sign in with Google/.test(b.textContent)).click());
+    await page.waitForFunction(() => document.querySelector('.gdui-code') && document.querySelector('.gdui-code').textContent === 'ABCD-EFGH', null, { timeout: 5000 }).catch(() => {});
+    const sui = await page.evaluate(() => ({ code: (document.querySelector('.gdui-code') || {}).textContent, qr: !!document.querySelector('.gdui-qr svg'), text: (document.querySelector('.gdui') || {}).textContent || '', focus: document.activeElement && document.activeElement.textContent }));
+    await shot('8b-gd-signin');
+    check(sui.code === 'ABCD-EFGH' && sui.qr && /google\.com\/device/.test(sui.text) && sui.focus === 'Cancel', 'the sign-in screen shows Google\'s code, a QR code for google.com/device, and Cancel has the focus ' + JSON.stringify(sui));
+    await page.waitForFunction(() => !DriveUI.screenOpen(), null, { timeout: 12000 }).catch(() => {});
+    await page.waitForFunction(() => document.querySelector('.mx-scroll .mx-grid'), null, { timeout: 5000 }).catch(() => {});
+    gt = await page.evaluate(() => document.querySelector('.mx-main').textContent);
+    const acc = await page.evaluate(() => ({ a: GDrive.active(), saved: Store.get('gdrive', {}), toast: document.getElementById('toast').textContent }));
+    check(acc.a && acc.a.email === 'imad@example.com' && acc.saved.accounts[0].refreshToken === 'RT' && acc.saved.accounts[0].cid === 'cid.apps.googleusercontent.com' && /signed in as imad@example.com/.test(acc.toast),
+        'once allowed on the phone the profile is signed in (its refresh token saved with the profile, never sent to apps) ' + JSON.stringify(acc.a));
+    check(/My Drive/.test(gt) && /All my music files/.test(gt) && /Add files from your phone/.test(gt) && /imad@example.com/.test(gt), 'signed in: My Drive, All my music files and Add files from your phone, as that account: ' + gt);
     await page.evaluate(() => [...document.querySelectorAll('.mx-tile')].find((t) => /^My Drive/.test(t.textContent)).click());
     await page.waitForFunction(() => document.querySelectorAll('.mx-row').length === 2, null, { timeout: 5000 }).catch(() => {});
     const gl = await page.evaluate(() => [...document.querySelectorAll('.mx-scroll .mx-tile, .mx-scroll .mx-row')].map((t) => t.querySelector('.mx-name, .mx-rt').textContent));
     await shot('9-gd-list');
     check(gl.join() === 'Albums,Cloud Song,Long Tone', 'a Drive folder lists folders and songs only: ' + gl);
-    check(gcalls.some((c) => /oauth2.*refresh_token=RT/.test(c) && /client_id=cid/.test(c) && /client_secret=sec/.test(c)) && gcalls.some((c) => /drive\/v3\/files\?.*%27root%27%20in%20parents/.test(c) && /Bearer AT1/.test(c)),
-        'the token comes from MyDrive\'s client and the profile\'s linked account, then Drive is asked with it ' + JSON.stringify(gcalls).slice(0, 600));
+    check(gcalls.some((c) => /device\/code/.test(c) && /client_id=cid/.test(c) && /drive\.file/.test(c)) && gcalls.some((c) => /device_code=DEV1/.test(c) && /client_secret=sec/.test(c)) && gcalls.some((c) => /drive\/v3\/files\?.*%27root%27%20in%20parents/.test(c) && /Bearer AT1/.test(c)),
+        'the sign-in uses the Google client of every My PC (settings/google), then Drive is asked with the token ' + JSON.stringify(gcalls).slice(0, 600));
     await page.evaluate(() => [...document.querySelectorAll('.mx-row')][0].click());
     await page.waitForFunction(() => Music.engineName() || Music.state().error, null, { timeout: 8000 }).catch(() => {});
     const gp = await page.evaluate(() => ({ playing: Music.state().playing, engine: Music.engineName(), error: Music.state().error, stream: Music._streaming(), ms: Music._engines.HTML._src ? Music._engines.HTML._src() : '' }));

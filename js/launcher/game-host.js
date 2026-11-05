@@ -218,7 +218,7 @@ var GameHost = (function () {
                         data: Store.get('game_' + id + '_data', {}), app: { id: id },
                         config: game.remote.config || {},
                         mp: typeof Multiplayer !== 'undefined' && typeof Rooms !== 'undefined' && NetLink.supported() ? 1 : 0,   // MyPC.multiplayer is supported
-                        bridges: { net: 1, ai: 1, mic: Mic.supported() || Mic.phone() ? 1 : 0 },     // MyPC.net / ai / mic go through My PC (API 10)
+                        bridges: { net: 1, ai: 1, mic: Mic.supported() || Mic.phone() ? 1 : 0, drive: 1 },     // MyPC.net / ai / mic (API 10), MyPC.drive (API 14) go through My PC
                         notify: 1, launch: Push.takeLaunch(id)        // MyPC.notify, MyPC.launch: push notifications (API 12, js/launcher/push.js)
                     });
                     padsSent = ''; padsChanged();

@@ -6,10 +6,9 @@
  *   usb   USB drives and hard disks plugged into the TV: Tizen filesystem API (privileges filesystem.read / write and
  *         externalstorage, package 1.6.0). Real paths like /opt/media/USBDriveA1/Music; drives come and go
  *         (onDrives). Files are read in pieces with FileHandle.readDataNonBlocking (song details, covers).
- *   gd    Google Drive through the MyDrive app (store app "mydrive", owner request 2026-11-05): its Google client from the
- *         app's config (config.google.tvClientId / tvClientSecret in Firestore apps/mydrive) and the Google account the
- *         profile linked in MyDrive (its saved data: accounts[] + active, kept per profile like every app's data). Only what
- *         MyDrive may see (scope drive.file: the files added through MyDrive). gdStatus() says exactly what is missing.
+ *   gd    Google Drive of the profile, through My PC's own sign-in (js/core/gdrive.js: Control Panel > Google Drive, the
+ *         Google client of every My PC from the App Store Manager). Only what My PC may see (scope drive.file: the files
+ *         My PC and its apps made, and the ones added with "Add files from your phone"). gdStatus() says what is missing.
  *   loc   a folder of this computer, in a browser that can open one (showDirectoryPicker): PCs only, kept per profile.
  *
  *   MusicSrc.drives(cb)               the USB drives now: [entry]
@@ -21,8 +20,8 @@
  *   MusicSrc.info(entry, cb)          song details (MusicTags) from the file, cached: { title, artist, album, dur, track }
  *   MusicSrc.art(entry, cb)           a small cover (256 px JPEG blob URL) + its main colour: cb({ url, color }) or cb(null)
  *   MusicSrc.folderArt(dir, cb)       a folder's cover: cover.jpg / folder.jpg..., else any picture, else its first song's
- * Errors are { code, message }: code 'perm' (no privilege: an older TV package), 'gone' (drive removed), 'noapp' /
- * 'noconfig' / 'nouser' / 'reauth' (Google Drive), 'network', 'unsupported'. */
+ * Errors are { code, message }: code 'perm' (no privilege: an older TV package), 'gone' (drive removed), 'noconfig' /
+ * 'nouser' / 'reauth' (Google Drive), 'network', 'unsupported'. */
 var MusicSrc = (function () {
     'use strict';
 
@@ -217,86 +216,28 @@ var MusicSrc = (function () {
         } catch (e) {}
     }
 
-    /* ================= Google Drive, through MyDrive ================= */
-    var GD_APP = 'mydrive', GD_DATA = 'game_app-mydrive_data';
-    var token = null, tokenFor = '', tokenAt = 0, tokenWait = null;
-    function gdApp() {
-        var list = typeof Cloud !== 'undefined' ? Cloud.apps() : [];
-        for (var i = 0; i < list.length; i++) if (list[i].id === GD_APP) return list[i];
-        return null;
+    /* ================= Google Drive: My PC's own sign-in (js/core/gdrive.js, Control Panel > Google Drive) ================= */
+    function gdErr(e) {
+        var c = e && e.code;
+        if (c === 'noconfig') return err('noconfig');
+        if (c === 'signed-out') return err('nouser');
+        if (c === 'reauth') return err('reauth', e.message);
+        if (c === 'not-found') return err('gone');
+        if (c === 'network' || c === 'timeout') return err('network', e.message);
+        if (c === 'cancelled') return err('cancelled');
+        return err(c || 'http', 'Google Drive: ' + ((e && e.message) || c));
     }
-    function gdAccount() {
-        var d = Store.get(GD_DATA, {}) || {}, l = Array.isArray(d.accounts) ? d.accounts : [], a = null;
-        for (var i = 0; i < l.length; i++) if (l[i] && l[i].id === d.active) a = l[i];
-        return a || l[0] || null;
-    }
-    function gdCfg(app) { var g = app && app.config && app.config.google; return g && g.tvClientId && g.tvClientSecret ? g : null; }
     // what stands between this profile and its Google Drive: cb({ ok, code, email, name })
     function gdStatus(cb) {
-        var installed = typeof Cloud !== 'undefined' && Cloud.isInstalled(GD_APP), app = gdApp();
-        if (!installed || !app) return cb({ code: 'noapp' });
-        function rest(a) {
-            if (!gdCfg(a)) return cb({ code: 'noconfig' });
-            var acc = gdAccount();
-            if (!acc) return cb({ code: 'nouser' });
-            if (!acc.refreshToken || acc.needsReauth) return cb({ code: 'reauth', email: acc.email || '', name: acc.name || '' });
-            cb({ ok: true, email: acc.email || '', name: acc.name || acc.email || '' });
-        }
-        if (gdCfg(app)) return rest(app);
-        // the saved catalog may be older than the Manager's last change: ask once
-        Cloud.fetchApp(GD_APP, function (e, fresh) { rest(!e && fresh ? fresh : app); });
-    }
-    function proxy(req, cb) {
-        if (typeof WebProxy === 'undefined') return cb(err('unsupported'));
-        return WebProxy.request(req, {}, null, function (e, r) {
-            if (e) return cb(err(e.code === 'timeout' || e.code === 'network' ? 'network' : e.code, e.message));
-            cb(null, r);
+        if (typeof GDrive === 'undefined') return cb({ code: 'noconfig' });
+        GDrive.status(function (st) {
+            var a = st.account || {};
+            cb(st.ok ? { ok: true, email: a.email || '', name: a.name || a.email || '' } : { code: st.code, email: a.email || '', name: a.name || '' });
         });
     }
-    function gdToken(cb, fresh) {
-        var acc = gdAccount(), app = gdApp(), g = gdCfg(app);
-        if (!acc || !g) return cb(err(!app ? 'noapp' : !g ? 'noconfig' : 'nouser'));
-        if (!acc.refreshToken || acc.needsReauth) return cb(err('reauth'));
-        if (!fresh && token && tokenFor === acc.id && Date.now() < tokenAt) return cb(null, token);
-        if (tokenWait) return tokenWait.push(cb);
-        tokenWait = [cb];
-        var body = 'client_id=' + encodeURIComponent(g.tvClientId) + '&client_secret=' + encodeURIComponent(g.tvClientSecret) +
-                   '&refresh_token=' + encodeURIComponent(acc.refreshToken) + '&grant_type=refresh_token';
-        proxy({ url: 'https://oauth2.googleapis.com/token', method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body, responseType: 'json', timeout: 15000 }, function (e, r) {
-            var x = null;
-            if (e) x = e;
-            else if (!r.ok || !r.body || !r.body.access_token) {
-                var code = r.body && r.body.error || '';
-                x = /invalid_grant|unauthorized_client|invalid_client/.test(code) ? err('reauth', code) : err('http', 'Google: ' + (code || r.status));
-            } else if (r.body.scope && String(r.body.scope).indexOf('/auth/drive') < 0) x = err('reauth', 'no Drive access');
-            else { token = r.body.access_token; tokenFor = acc.id; tokenAt = Date.now() + ((+r.body.expires_in || 3600) - 120) * 1000; }
-            var w = tokenWait; tokenWait = null;
-            for (var i = 0; i < w.length; i++) w[i](x, x ? null : token);
-        });
-    }
-    // an authorized Drive request; a 401 gets a new token once
-    function gd(req, cb, retried, hd) {
-        hd = hd || { off: false, req: null, abort: function () { this.off = true; if (this.req) { try { this.req.abort(); } catch (x) {} } } };
-        gdToken(function (e, tok) {
-            if (hd.off) return;
-            if (e) return cb(e);
-            var h = {}, k;
-            for (k in req.headers || {}) h[k] = req.headers[k];
-            h.Authorization = 'Bearer ' + tok;
-            var r2 = {}; for (k in req) r2[k] = req[k];
-            r2.headers = h;
-            hd.req = proxy(r2, function (e2, r) {
-                if (hd.off) return;
-                if (e2) return cb(e2);
-                if (r.status === 401 && !retried) { token = null; return gd(req, cb, true, hd); }
-                if (r.status === 401 || (r.status === 403 && /insufficient|scope/i.test(JSON.stringify(r.body || '')))) return cb(err('reauth'));
-                if (r.status === 404) return cb(err('gone'));
-                if (r.status < 200 || r.status >= 300) return cb(err('http', 'Google Drive: HTTP ' + r.status));
-                cb(null, r);
-            });
-        }, retried);
-        return hd;
-    }
+    function gdToken(cb) { GDrive.token(function (e, tok) { cb(e ? gdErr(e) : null, tok); }); }
+    // an authorized Drive request (GDrive gets a new token on a 401 and tries a rate limit again)
+    function gd(req, cb) { return GDrive.request(req, function (e, r) { if (e) return e.code === 'cancelled' ? null : cb(gdErr(e)); cb(null, r); }); }
     function gdEntry(f) {
         return { s: 'gd', p: f.id, n: f.name || '', dir: f.mimeType === FOLDER, size: +f.size || 0, mime: f.mimeType || '', thumb: f.thumbnailLink || '', root: 'Google Drive' };
     }
@@ -321,11 +262,11 @@ var MusicSrc = (function () {
         page('');
     }
     function gdRead(e, at, len, cb) {
-        return gd({ url: DRIVE_API + '/' + encodeURIComponent(e.p) + '?alt=media', headers: { Range: 'bytes=' + (at || 0) + '-' + ((at || 0) + len - 1) }, responseType: 'arraybuffer', timeout: 30000 }, function (x, r) {
-            if (x) return cb(x);
-            var m = /\/(\d+)\s*$/.exec((r.headers && r.headers['content-range']) || '');
-            if (m) e.size = +m[1];
-            cb(null, new Uint8Array(r.body || new ArrayBuffer(0)));
+        at = at || 0;
+        return GDrive.read(e.p, at, at + len - 1, function (x, r) {
+            if (x) return x.code === 'cancelled' ? null : cb(gdErr(x));
+            if (r.total) e.size = r.total;
+            cb(null, new Uint8Array(r.buf || new ArrayBuffer(0)));
         });
     }
     // Google refuses a token in the address, and the TV's player cannot send it as a header: the song is read in pieces
@@ -644,8 +585,8 @@ var MusicSrc = (function () {
         drives: usbDrives, onDrives: onDrives, list: list, walk: walk, read: read, url: url, rename: rename,
         info: getInfo, art: songArt, trackArt: trackArt, folderArt: folderArt, imageArt: imageArt, peekArt: peekArt, peekInfo: peekInfo,
         cancel: cancelJobs, forget: forget,
-        gdStatus: gdStatus, gdRoots: gdRoots, gdApp: GD_APP,
+        gdStatus: gdStatus, gdRoots: gdRoots,
         locOk: locOk, locRoots: locEntries, locAdd: locAdd, locForget: locForget,
-        _reset: function () { info = {}; infoKeys = []; for (var k in art) dropArt(art[k]); art = {}; artKeys = []; token = null; locRoots = null; locHandles = {}; }
+        _reset: function () { info = {}; infoKeys = []; for (var k in art) dropArt(art[k]); art = {}; artKeys = []; locRoots = null; locHandles = {}; }
     };
 })();

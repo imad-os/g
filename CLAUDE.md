@@ -121,9 +121,8 @@
   Morocco's other matches); cache `arc_dev_events` (holidays 2 days, football 6 h); per profile `events` { country, football }.
   Tests: `MYPC_ONLY=wall node tests/run-tests.mjs` (`MYPC_SHOTS=<folder>` for screenshots). Keep `evPrivacy` true.
 - **Music app** (owner request 2026-11-05, Win app `music`): `js/core/music-src.js` (sources: `usb` = Tizen filesystem drives under
-  `/opt/media`, needs package **1.6.0** privileges filesystem.read / write + externalstorage; `gd` = Google Drive through the **MyDrive** store
-  app: client in Firestore `apps/mydrive.config.google`, the profile's linked accounts in `game_app-mydrive_data`, scope drive.file so only
-  files MyDrive may open; Google refuses a token in the address, so a Drive song plays: on the web / phone app through `sw.js` (`__music/gd/<id>?t=`, adds the header, passes Range: every format, seeking); else MP3 / AAC / WebM read in Range pieces into a Media Source (`msStream`); else a download that plays from its first 512 KB and moves to the whole file at the same place when done (`growDl`, `HTML.swap`; an M4A with its index at the end gets it read first and put at the front, `faststart`). Proof in a real browser with real songs on a slow line + screenshots: `tests/drive-stream-proof.mjs` (needs ffmpeg-made songs and a local cert, see its header); `gdStatus` codes noapp / noconfig / nouser / reauth each have their own message; `loc` = PC folders via
+  `/opt/media`, needs package **1.6.0** privileges filesystem.read / write + externalstorage; `gd` = Google Drive through My PC's own sign-in
+  (`GDrive`, see "Google Drive" below; scope drive.file); Google refuses a token in the address, so a Drive song plays: on the web / phone app through `sw.js` (`__music/gd/<id>?t=`, adds the header, passes Range: every format, seeking); else MP3 / AAC / WebM read in Range pieces into a Media Source (`msStream`); else a download that plays from its first 512 KB and moves to the whole file at the same place when done (`growDl`, `HTML.swap`; an M4A with its index at the end gets it read first and put at the front, `faststart`). Proof in a real browser with real songs on a slow line + screenshots: `tests/drive-stream-proof.mjs` (needs ffmpeg-made songs and a local cert, see its header); `gdStatus` codes noconfig / nouser / reauth each have their own message (nouser / reauth: a Sign in with Google button right in Music); `loc` = PC folders via
   showDirectoryPicker), `js/core/music-tags.js` (ID3 / FLAC / Ogg / MP4 / WAV tags + covers), `js/core/music.js` (queue, engines: Samsung
   **AVPlay** first, then HTML audio, then a blob download; per profile `music`, `music_lists`, `music_recent`, `music_prefs`; position in
   `arc_dev_music_pos`, not backed up; with `prefs.resume` it plays on across page changes: the game page runs `Music.init({ resume, lite })`, player only, so music goes on under a game and its menu can pause it), UI `js/launcher/apps/music.js` (hold OK / + = item menu
@@ -216,6 +215,18 @@
   `MyPC.mic` (getUserMedia in the shell, privilege `mediacapture`, package 1.5.0). Shell side `js/core/web-proxy.js`, `ai.js`,
   `mic.js`, glue + permission prompts (`arc_dev_perm`, AI and mic once per app) in `js/launcher/bridges.js`. Standalone the SDK
   loads the same three core files from the hosted site. Docs: `sdk/GUIDE.md` section 14.
+- **Google Drive (API 14, owner request 2026-11-05)**: ONE sign-in per profile in Control Panel > Google Drive, used by Music and by
+  every app through `MyPC.drive` (apps and games MUST NOT ship Drive / OAuth code of their own; they never get a token). `js/core/gdrive.js`
+  (`GDrive`: device flow, tokens in memory, accounts per profile in key `gdrive` = backed up + synced with the player account like every
+  profile key; accounts linked in MyDrive (`game_app-mydrive_data`) are taken over once; Drive v3 list / get / mkdir / rename / move / copy /
+  star / trash / remove / read (Range) / download / resumable upload (4 MB) / export / thumb / about / appFolder "My PC/<app>"), Google
+  client = Firestore `settings/google` (App Store Manager > **Google Drive**, rules `validGoogle`; copied into `arc_dev_google`, re-read
+  at most every 12 h or when none is known) else MyDrive's `apps/mydrive.config.google`. Screens `js/launcher/drive-ui.js` (`DriveUI.signIn`
+  QR + code over anything, the app paused; `DriveUI.addFiles` QR for `drive-picker.html` = Google Picker on the phone, needs the Picker key
+  referrer `https://imad-os.github.io/g/*`); router hook in `main.js`. Bridge `drive` in `bridges.js` (asks "<app> wants to use your Google
+  Drive" once per app per profile, key `drive_apps`; `signIn()` from the app counts as yes). SDK `MyPC.drive` (+ `sdk/drive-sw.js`: the
+  app's own `sw.js` imports it so `<audio>/<video>` stream by Range; else a blob download); standalone the SDK runs `gdrive.js` in the
+  page. Strings `js/core/i18n-drive.js`. Docs: GUIDE.md section 19. Tests: `MYPC_ONLY=drive node tests/run-tests.mjs` (fake Google `fakeGoogle`).
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /
   start failures and timeouts from `game-host.js` (with why: no SDK answer, no `ready()`, given up), uncaught errors of built-in games, the
   SDK's reports (uncaught, rejections, failed files, handler throws, `MyPC.fail`, `MyPC.report`; sent even before `MyPC.init`), and My PC's

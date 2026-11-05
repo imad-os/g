@@ -280,6 +280,7 @@
       <a href="#apps" data-page="apps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8V7a6 6 0 0 1 12 0v1"/><path d="M3.5 8h17l-1.4 12a2 2 0 0 1-2 1.8H6.9a2 2 0 0 1-2-1.8z"/></svg>Apps<span class="count" id="nav-apps"></span></a>
       <a href="#add" data-page="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Add apps</a>
       <a href="#ai" data-page="ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>AI services</a>
+      <a href="#gdrive" data-page="gdrive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8.5 3h7l6 10.5-3.5 6h-12L2.5 13.5z"/><path d="M8.5 3 15 14.5M15.5 3 9 14.5M2.5 13.5h19"/></svg>Google Drive</a>
       <a href="#services" data-page="services"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>Services</a>
       <a href="#widgets" data-page="widgets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="10" rx="1.5"/><rect x="13" y="3" width="8" height="6" rx="1.5"/><rect x="13" y="11" width="8" height="10" rx="1.5"/><rect x="3" y="15" width="8" height="6" rx="1.5"/></svg>Widgets</a>
       <a href="#settings" data-page="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</a>
@@ -398,6 +399,34 @@
         Use API keys with a spending limit (or a free tier), and replace a key here if it leaks.</div>
       <div class="card flush"><div id="ai-list"></div></div>
       <div class="row"><select id="ai-preset" aria-label="Service to add"></select><button id="ai-add">Add service</button><span class="grow"></span><span id="ai-msg" class="small"></span></div>
+    </section>
+
+    <!-- Google Drive of every My PC (Firestore settings/google, js/core/gdrive.js) -->
+    <section data-view="gdrive" hidden>
+      <div class="head"><div class="grow"><h1>Google Drive</h1><p>The Google client every My PC uses for Google Drive: each profile signs in once
+        (Control Panel &gt; Google Drive) and Music and every app use it through <code>MyPC.drive</code>. Each TV, phone and computer gets it at its next start.</p></div>
+        <button id="gd-save" class="primary" disabled>Save</button></div>
+      <p id="gd-msg" class="small"></p>
+      <div class="card warn small">TVs read this without signing in, so anyone who has My PC's Firebase web key can read it. That is fine: Google treats the
+        secret of a "TVs and Limited Input devices" client as not confidential, and the Picker key must be limited to the referrer below.</div>
+      <div class="card">
+        <h2>Sign-in client (required)</h2>
+        <p class="muted small" style="margin:0 0 8px">Google Cloud console &gt; Credentials &gt; Create OAuth client ID &gt; <b>TVs and Limited Input devices</b>.
+          Scopes on the consent screen: openid, email, profile, .../auth/drive.file. Publish the app (Production) so sign-ins do not expire after 7 days.
+          The same client as MyDrive keeps every account already linked there working.</p>
+        <label class="small">Client ID<input id="gd-cid" spellcheck="false" autocomplete="off" placeholder="1234-abc.apps.googleusercontent.com"></label>
+        <label class="small">Client secret<input id="gd-sec" spellcheck="false" autocomplete="off" placeholder="GOCSPX-..."></label>
+      </div>
+      <div class="card">
+        <h2>Add files from a phone (Google Picker, optional)</h2>
+        <p class="muted small" style="margin:0 0 8px">A <b>Web application</b> OAuth client with the JavaScript origin <code>https://imad-os.github.io</code>, an API key limited to the
+          Google Picker API and to the referrer <code>https://imad-os.github.io/g/*</code>, and the project number (Project settings). The phone page is
+          <code>https://imad-os.github.io/g/drive-picker.html</code>.</p>
+        <label class="small">Web client ID<input id="gd-pcid" spellcheck="false" autocomplete="off"></label>
+        <label class="small">Picker API key<input id="gd-pkey" spellcheck="false" autocomplete="off"></label>
+        <label class="small">Project number<input id="gd-pnum" spellcheck="false" autocomplete="off" inputmode="numeric"></label>
+      </div>
+      <div class="row"><button id="gd-from">Copy from MyDrive's config</button><span class="grow"></span></div>
     </section>
 
     <!-- Error reports -->
@@ -641,6 +670,10 @@
       try { const a = await getDoc(doc(db, 'settings', 'ai')); ai = a.exists() ? { list: (a.data().list || []).map(AI.clean), def: a.data().def || '' } : { list: [], def: '' }; aiErr = ''; }
       catch (e) { aiErr = fbErr(e); }
     }
+    if (!gdDirty) {
+      try { const g = await getDoc(doc(db, 'settings', 'google')); gd = g.exists() ? g.data() : {}; gdErr = ''; }
+      catch (e) { gd = {}; gdErr = e.code === 'permission-denied' ? 'Publish the new firebase/firestore.rules to use this page (see firebase/SETUP.md).' : fbErr(e); }
+    }
     if (!gsDirty) {
       try { const g = await getDoc(doc(db, 'settings', 'mypc')); gs = GlobalSettings.clean(g.exists() ? g.data() : {}); gsErr = ''; }
       catch (e) { gsErr = fbErr(e); }
@@ -654,6 +687,7 @@
     renderRecords();
     renderAi();
     renderGs();
+    renderGd();
     services.refresh();
     widgets.refresh();
     route();
@@ -1345,7 +1379,39 @@
       toast('Settings saved');
     } catch (e) { $('gs-save').disabled = false; say('gs-msg', fbErr(e), 'err'); }
   };
-  window.addEventListener('beforeunload', (e) => { if (aiDirty || gsDirty) { e.preventDefault(); e.returnValue = ''; } });
+  /* ---------- Google Drive (Firestore settings/google, read by every My PC: js/core/gdrive.js) ---------- */
+  let gd = {}, gdDirty = false, gdErr = '';
+  const GD_FIELDS = { 'gd-cid': 'tvClientId', 'gd-sec': 'tvClientSecret', 'gd-pcid': 'pickerClientId', 'gd-pkey': 'pickerApiKey', 'gd-pnum': 'projectNumber' };
+  function renderGd() {
+    for (const id in GD_FIELDS) if (document.activeElement !== $(id)) $(id).value = gd[GD_FIELDS[id]] || '';
+    $('gd-save').disabled = !gdDirty;
+    if (gdErr) say('gd-msg', gdErr, 'err');
+    else if (!gd.tvClientId) say('gd-msg', 'Not set yet: every My PC uses the Google client in MyDrive\'s config until you save one here.', '');
+  }
+  for (const id in GD_FIELDS) $(id).addEventListener('input', () => { gd[GD_FIELDS[id]] = $(id).value.trim(); gdDirty = true; $('gd-save').disabled = false; });
+  $('gd-from').onclick = () => {
+    const m = apps.find((a) => a.id === 'mydrive'), g = m && m.config && m.config.google;
+    if (!g) return say('gd-msg', 'MyDrive has no Google settings in its config.', 'err');
+    for (const k of Object.values(GD_FIELDS)) if (g[k]) gd[k] = String(g[k]);
+    gdDirty = true; renderGd(); say('gd-msg', 'Copied. Press Save.', 'ok');
+  };
+  $('gd-save').onclick = async () => {
+    const c = {};
+    for (const k of Object.values(GD_FIELDS)) c[k] = String(gd[k] || '').trim().slice(0, 200);
+    c.projectNumber = c.projectNumber.replace(/[^0-9]/g, '');
+    if (!c.tvClientId !== !c.tvClientSecret) return say('gd-msg', 'The client ID and the client secret go together.', 'err');
+    if (c.tvClientId && !/\.apps\.googleusercontent\.com$/.test(c.tvClientId)) return say('gd-msg', 'The client ID ends with .apps.googleusercontent.com.', 'err');
+    $('gd-save').disabled = true;
+    try {
+      await setDoc(doc(db, 'settings', 'google'), Object.assign(c, { updatedAt: serverTimestamp(), updatedBy: (user && user.email) || '' }));
+      delete c.updatedAt; delete c.updatedBy;
+      gd = c; gdDirty = false; gdErr = '';
+      renderGd();
+      say('gd-msg', 'Saved. Each My PC uses it from its next start (or when Control Panel > Google Drive opens without a client).', 'ok');
+      toast('Google Drive saved');
+    } catch (e) { $('gd-save').disabled = false; say('gd-msg', e.code === 'permission-denied' ? 'Refused: publish the new firebase/firestore.rules first (see firebase/SETUP.md).' : fbErr(e), 'err'); }
+  };
+  window.addEventListener('beforeunload', (e) => { if (aiDirty || gsDirty || gdDirty) { e.preventDefault(); e.returnValue = ''; } });
 </script>
 </body>
 </html>

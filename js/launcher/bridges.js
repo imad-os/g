@@ -2,6 +2,8 @@
  *   'net'  MyPC.net    web requests without CORS limits (js/core/web-proxy.js)
  *   'ai'   MyPC.ai     AI services set up in the App Store Manager (copied at start, Bridges.syncAi), keys never sent to apps (js/core/ai.js)
  *   'mic'  MyPC.mic    the microphone (js/core/mic.js)
+ *   'drive' MyPC.drive Google Drive of the profile (js/core/gdrive.js): one sign-in in Control Panel > Google Drive,
+ *                      apps never see a token. Allowed once per app and per profile (profile key drive_apps).
  * The AI services of this TV and the microphone are used only after the user allowed it, once per app (arc_dev_perm,
  * Settings > Privacy & security forgets it). An app that brings its own AI key needs no permission. A red microphone
  * shows while an app listens.
@@ -11,13 +13,20 @@
 var Bridges = (function () {
     'use strict';
 
-    var PERM = 'arc_dev_perm', NET_MAX = 8, AI_MAX = 4;
+    var PERM = 'arc_dev_perm', DRIVE_PERM = 'drive_apps', NET_MAX = 8, AI_MAX = 4, DRIVE_MAX = 8;
     var queue = [], asking = false, micDot = null;
 
     function perms() { var p = Store.rawGet(PERM); return p && typeof p === 'object' ? p : {}; }
-    function allowed(app, kind) { var p = perms()[app]; return !!(p && p[kind]); }
-    function grant(app, kind) { var p = perms(); p[app] = p[app] || {}; p[app][kind] = 1; Store.rawSet(PERM, p); }
-    function reset() { try { localStorage.removeItem(PERM); } catch (e) {} }
+    // Drive is the profile's own data: allowed per profile; the microphone and AI are the TV's: allowed per TV
+    function drivePerms() { var d = Store.get(DRIVE_PERM, null); return d && typeof d === 'object' ? d : {}; }
+    function sid(app) { return String(app).replace(/^app-/, ''); }                 // the store id ('app-mydrive' -> 'mydrive')
+    function allowed(app, kind) { if (kind === 'drive') return !!drivePerms()[sid(app)]; var p = perms()[app]; return !!(p && p[kind]); }
+    function grant(app, kind) {
+        if (kind === 'drive') { var d = drivePerms(); d[sid(app)] = 1; Store.set(DRIVE_PERM, d); return; }
+        var p = perms(); p[app] = p[app] || {}; p[app][kind] = 1; Store.rawSet(PERM, p);
+    }
+    function forget(app, kind) { if (kind === 'drive') { var d = drivePerms(); delete d[sid(app)]; Store.set(DRIVE_PERM, d); } }
+    function reset() { try { localStorage.removeItem(PERM); } catch (e) {} try { Store.remove(DRIVE_PERM); } catch (e2) {} }
 
     // one question at a time (an app may ask for the microphone and AI together)
     function ask(ctx, kind, text, cb) {
@@ -41,7 +50,7 @@ var Bridges = (function () {
             q.cb(ok);
             next();
         }
-        App.confirm(I18n.t(q.kind === 'mic' ? 'permMicTitle' : 'permAiTitle').replace('%s', ctx.title), q.text, function () { done(true); },
+        App.confirm(I18n.t(q.kind === 'mic' ? 'permMicTitle' : q.kind === 'drive' ? 'permDriveTitle' : 'permAiTitle').replace('%s', ctx.title), q.text, function () { done(true); },
                     { yes: I18n.t('permAllow'), no: I18n.t('permDeny'), onNo: function () { done(false); } });
     }
 
@@ -166,11 +175,89 @@ var Bridges = (function () {
             });
         }
 
+
+        /* ----- MyPC.drive: the profile's Google Drive, every request sent by My PC (js/core/gdrive.js) ----- */
+        var drives = {}, nDrive = 0;
+        function dErr(e) { return { code: (e && e.code) || 'failed', message: String((e && e.message) || 'Failed.'), status: (e && e.status) || undefined }; }
+        function driveAsk(cb) {
+            var acc = GDrive.active();
+            ask(ctx, 'drive', I18n.t('permDriveText').replace('%s', acc ? acc.email : ''), cb);
+        }
+        function hold2(fn) { var paused = ctx.hold(); fn(function () { if (!ctx.dead) ctx.release(paused); }); }
+        function driveRun(d) {
+            var a = d.args && typeof d.args === 'object' ? d.args : {}, op = d.op;
+            if (op === 'abort') { if (drives[d.rid]) drives[d.rid].abort(); return; }
+            function reply(e, r) { delete drives[d.rid]; if (counted) nDrive--; counted = false; send('drive', e ? { rid: d.rid, error: dErr(e) } : { rid: d.rid, result: r === undefined ? null : r }); }
+            var counted = false;
+            if (op === 'status') {
+                return GDrive.status(function (st) {
+                    var ok = allowed(ctx.appId, 'drive'), acc = st.account;
+                    send('drive', { rid: d.rid, result: { configured: st.code !== 'noconfig', signedIn: !!st.ok, needsSignIn: !st.ok && st.code !== 'noconfig', allowed: ok,
+                        account: ok && acc ? { email: acc.email, name: acc.name, picture: acc.picture } : null, picker: !!GDrive.pickerUrl() } });
+                });
+            }
+            if (!alive()) return send('drive', { rid: d.rid, error: { code: 'not-running', message: 'The app is not running.' } });
+            if (op === 'signIn') {
+                if (o.state() !== 'running') return send('drive', { rid: d.rid, error: { code: 'not-running', message: 'The app is not running. Resume it first.' } });
+                return GDrive.status(function (st) {
+                    if (st.ok) return driveAsk(function (ok) { send('drive', ok ? { rid: d.rid, result: { email: st.account.email, name: st.account.name, picture: st.account.picture } } : { rid: d.rid, error: { code: 'denied', message: 'The user did not allow this app to use Google Drive.' } }); });
+                    hold2(function (release) {
+                        DriveUI.signIn(function (e, acc) {
+                            release();
+                            if (e) return send('drive', { rid: d.rid, error: dErr(e) });
+                            grant(ctx.appId, 'drive');            // signed in for this app, from this app: that is the user's yes
+                            send('drive', { rid: d.rid, result: { email: acc.email, name: acc.name, picture: acc.picture } });
+                        });
+                    });
+                });
+            }
+            if (op === 'addFiles') {
+                if (o.state() !== 'running') return send('drive', { rid: d.rid, error: { code: 'not-running', message: 'The app is not running. Resume it first.' } });
+                return hold2(function (release) { DriveUI.addFiles(function () { release(); send('drive', { rid: d.rid, result: true }); }); });
+            }
+            if (nDrive >= DRIVE_MAX) return send('drive', { rid: d.rid, error: { code: 'busy', message: 'Too many Drive requests at once (' + DRIVE_MAX + ').' } });
+            nDrive++; counted = true;
+            drives[d.rid] = { abort: function () { this.cancelled = true; } };
+            GDrive.status(function (st) {
+                if (ctx.dead || !drives[d.rid] || drives[d.rid].cancelled) return reply({ code: 'cancelled', message: 'Cancelled.' });
+                if (!st.ok) return reply(st.code === 'noconfig' ? { code: 'noconfig', message: 'Google Drive is not set up for My PC yet (App Store Manager > Google Drive).' }
+                    : st.code === 'reauth' ? { code: 'reauth', message: 'Google asks to sign in again. Call MyPC.drive.signIn().' } : { code: 'signed-out', message: 'No Google account on this profile. Call MyPC.drive.signIn().' });
+                driveAsk(function (ok) {
+                    if (!ok) return reply({ code: 'denied', message: 'The user did not allow this app to use Google Drive.' });
+                    if (ctx.dead || !drives[d.rid] || drives[d.rid].cancelled) return reply({ code: 'cancelled', message: 'Cancelled.' });
+                    function prog(p) { send('drive', { rid: d.rid, ev: 'progress', p: Math.round(p * 1000) / 1000 }); }
+                    var h, id = String(a.id || '');
+                    switch (op) {
+                        case 'list': h = GDrive.list(a, reply); break;
+                        case 'get': h = GDrive.get(id, reply); break;
+                        case 'mkdir': h = GDrive.mkdir(a.name, a.parent, reply); break;
+                        case 'rename': h = GDrive.rename(id, a.name, reply); break;
+                        case 'move': h = GDrive.move(id, a.to, reply); break;
+                        case 'copy': h = GDrive.copy(id, a.to, a.name, reply); break;
+                        case 'star': h = GDrive.star(id, a.on !== false, reply); break;
+                        case 'trash': h = GDrive.trash(id, reply); break;
+                        case 'untrash': h = GDrive.untrash(id, reply); break;
+                        case 'remove': h = GDrive.remove(id, reply); break;
+                        case 'setInfo': h = GDrive.setInfo(id, a, reply); break;
+                        case 'read': h = GDrive.read(id, a.start, a.end, reply); break;
+                        case 'download': h = GDrive.download(id, { max: a.max, onProgress: a.progress ? prog : null }, reply); break;
+                        case 'upload': h = GDrive.upload(a, a.progress ? prog : null, reply); break;
+                        case 'export': h = GDrive.exportFile(id, a.mime, reply); break;
+                        case 'thumb': h = GDrive.thumb(a.link, a.size, reply); break;
+                        case 'about': h = GDrive.about(reply); break;
+                        case 'appFolder': h = GDrive.appFolder(sid(ctx.appId), ctx.title, reply); break;
+                        default: return reply({ code: 'bad-request', message: 'Unknown Drive operation ' + op + '.' });
+                    }
+                    if (drives[d.rid]) drives[d.rid] = h;
+                });
+            });
+        }
+
         return {
             handle: function (type, d) {
-                if (type !== 'net' && type !== 'ai' && type !== 'mic') return false;
+                if (type !== 'net' && type !== 'ai' && type !== 'mic' && type !== 'drive') return false;
                 if (!d || typeof d !== 'object' || typeof d.rid !== 'number') return true;
-                if (type === 'net') net(d); else if (type === 'ai') aiRun(d); else micRun(d);
+                if (type === 'net') net(d); else if (type === 'ai') aiRun(d); else if (type === 'drive') driveRun(d); else micRun(d);
                 return true;
             },
             // My PC's menu or another screen covers the app: it stops listening (the app gets 'end' with reason 'paused')
@@ -179,12 +266,14 @@ var Bridges = (function () {
                 ctx.dead = true;
                 Object.keys(nets).forEach(function (k) { try { nets[k].abort(); } catch (e) {} });
                 Object.keys(ais).forEach(function (k) { try { ais[k].cancel(); } catch (e) {} });
-                nets = {}; ais = {};
+                Object.keys(drives).forEach(function (k) { try { drives[k].abort(); } catch (e) {} });
+                nets = {}; ais = {}; drives = {};
+                if (DriveUI.screenOpen()) DriveUI.close();
                 if (mic) { Mic.cancel(); micEnd(); }
                 queue = queue.filter(function (q) { return q.ctx !== ctx; });
             }
         };
     }
 
-    return { attach: attach, allowed: allowed, reset: reset, syncAi: syncAi };
+    return { attach: attach, allowed: allowed, forget: forget, reset: reset, syncAi: syncAi };
 })();

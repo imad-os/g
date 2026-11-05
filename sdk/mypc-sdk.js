@@ -24,6 +24,7 @@
  * Web requests without CORS limits, AI services and the microphone: MyPC.net, MyPC.ai, MyPC.mic (API 10).
  * Errors (uncaught, failed files, MyPC.fail, MyPC.report(error, data)) are saved by My PC for the App Store Manager (API 11).
  * Push notifications: MyPC.notify.request() / status(), MyPC.launch (the notification that opened the app) (API 12).
+ * Google Drive of the profile (one sign-in in My PC, no token in the app): MyPC.drive (API 14).
  *   'menu' = gamepad Start or Select pressed alone; only sent to apps that init with { ownMenu: true }.
  *   Only the TV remote's Back, or holding Start + Select together 1 s, opens My PC's menu; Esc / Backspace are 'cancel'.
  * Written in ES5 so it loads anywhere; My PC itself supports Samsung TVs from 2024 (Tizen 8+).
@@ -31,7 +32,7 @@
 var MyPC = (function () {
     'use strict';
 
-    var VERSION = 1, API = 13, HELLO_WAIT = 1200;
+    var VERSION = 1, API = 14, HELLO_WAIT = 1200;
     var handlers = {}, info = null, data = {}, started = false, destroyed = false, isReady = false;
     var hosted = false, hostWin = null, hostOrigin = '*', helloTimer = 0;
     var down = {};                       // action -> number of keys / buttons holding it
@@ -157,6 +158,7 @@ var MyPC = (function () {
             case 'notify': notify._message(d); break;
             case 'launch': if (plainObject(d)) { pub.launch = d; call('onLaunch', d); } break;
             case 'text': text._message(d); break;
+            case 'drive': drive._message(d); break;
         }
     }
 
@@ -1679,9 +1681,229 @@ var MyPC = (function () {
         };
     })();
 
+
+    /* MyPC.drive (API 14): the Google Drive of the My PC profile. The user signs in ONCE, in My PC (Control Panel > Google
+     * Drive, or MyPC.drive.signIn() which shows My PC's own sign-in screen over the app); My PC sends every Drive request
+     * for the app, so the app never has a token, a Google client or Drive code of its own. My PC asks the user once per app
+     * ("<app> wants to use your Google Drive"). Scope drive.file: the files My PC and its apps made, and the files the user
+     * picked with MyPC.drive.addFiles() (a QR code: the phone chooses files from Drive).
+     *   status()                      -> { configured, signedIn, needsSignIn, allowed, account: { email, name, picture } | null, picker }
+     *   signIn() -> account           addFiles()
+     *   list({ folder, place, search, q, orderBy, pageSize, pageToken }) -> { files, next }      listAll(opts, max)
+     *   get(id)  createFolder(name, parentId)  rename(id, name)  move(id, folderId)  copy(id, folderId, name)  star(id, on)
+     *   trash(id)  restore(id)  remove(id) (for ever)  setInfo(id, { description, appProperties })
+     *   read(id, start, end) -> { buf, total, type }       download(id, { onProgress, max }) -> { buf, type, size }
+     *   readText(id)  readJson(id)    upload({ name, data, type, parent, id, description, appProperties }, { onProgress }) -> file
+     *   exportFile(id, mime)  thumbnail(link, size) -> { buf, type }  about()  appFolder() -> folder of this app in "My PC"
+     *   saveJson(name, value) / loadJson(name, def): small files in appFolder() (saves, settings)
+     *   stream(fileOrId, { worker: 'sw.js', onProgress }) -> { url, mode: 'worker' | 'blob', close() }   media to play
+     * Every call returns a Promise with .abort(). Errors have .code: noconfig signed-out reauth denied not-found permission
+     * quota too-big bad-request network timeout cancelled busy not-running unsupported http.
+     * Standalone the SDK runs My PC's js/core/gdrive.js in the page with the same Google client, accounts in localStorage.
+     * Full reference: sdk/GUIDE.md, "Google Drive". */
+    var drive = (function () {
+        var ch = channel('drive'), localP = null, LKEY = 'mypc_drive';
+        var FS = 'https://firestore.googleapis.com/v1/projects/tvgames-f984d/databases/(default)/documents/', FKEY = 'AIzaSyBT0nk8uKUofgF5obP11R96lHtXbEVlKtc';
+        function fsGet(path) {
+            return fetch(FS + path + '?key=' + FKEY).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+                var f = d && d.fields, o = {};
+                if (path.indexOf('apps/') === 0) f = f && f.config && f.config.mapValue && f.config.mapValue.fields && f.config.mapValue.fields.google && f.config.mapValue.fields.google.mapValue && f.config.mapValue.fields.google.mapValue.fields;
+                for (var k in f || {}) if (f[k].stringValue !== undefined) o[k] = f[k].stringValue;
+                return o.tvClientId ? o : null;
+            }, function () { return null; });
+        }
+        // standalone (the page opened in a browser): My PC's own Drive module in this page
+        function local() {
+            if (localP) return localP;
+            localP = need(['js/core/web-proxy.js', 'js/core/gdrive.js']).then(function () {
+                GDrive.setStorage({
+                    load: function () { try { return JSON.parse(localStorage.getItem(LKEY) || 'null'); } catch (e) { return null; } },
+                    save: function (v) { try { localStorage.setItem(LKEY, JSON.stringify(v)); } catch (e) {} }
+                });
+                var own = pub.app_config && pub.app_config.google;
+                if (own && own.tvClientId) { GDrive.setConfig(own); return GDrive; }
+                return fsGet('settings/google').then(function (c) { return c || fsGet('apps/mydrive'); }).then(function (c) { GDrive.setConfig(c); return GDrive; });
+            });
+            localP.catch(function () { localP = null; });
+            return localP;
+        }
+        function ready() {
+            return bridgeReady().then(function () {
+                if (viaShell()) {
+                    if (!info.bridges.drive) throw bridgeError({ code: 'unsupported', message: 'This My PC is too old for Google Drive. Update My PC (Control Panel > Update).' });
+                    return null;
+                }
+                return local();
+            });
+        }
+        function localOp(G, op, a, prog, cb) {
+            var id = String(a.id || '');
+            switch (op) {
+                case 'status': var st = G.statusNow(); setTimeout(function () { cb(null, { configured: !!G.config(), signedIn: st.ok, needsSignIn: !st.ok && !!G.config(), allowed: true, account: st.account ? { email: st.account.email, name: st.account.name, picture: st.account.picture } : null, picker: !!G.pickerUrl() }); }, 0); return null;
+                case 'signIn': return localSignIn(G, cb);
+                case 'addFiles': var u = G.pickerUrl(); if (u) window.open(u, '_blank'); setTimeout(function () { cb(u ? null : { code: 'unsupported', message: 'No Google Picker is set up for My PC.' }, !!u); }, 0); return null;
+                case 'list': return G.list(a, cb);
+                case 'get': return G.get(id, cb);
+                case 'mkdir': return G.mkdir(a.name, a.parent, cb);
+                case 'rename': return G.rename(id, a.name, cb);
+                case 'move': return G.move(id, a.to, cb);
+                case 'copy': return G.copy(id, a.to, a.name, cb);
+                case 'star': return G.star(id, a.on !== false, cb);
+                case 'trash': return G.trash(id, cb);
+                case 'untrash': return G.untrash(id, cb);
+                case 'remove': return G.remove(id, cb);
+                case 'setInfo': return G.setInfo(id, a, cb);
+                case 'read': return G.read(id, a.start, a.end, cb);
+                case 'download': return G.download(id, { max: a.max, onProgress: prog }, cb);
+                case 'upload': return G.upload(a, prog, cb);
+                case 'export': return G.exportFile(id, a.mime, cb);
+                case 'thumb': return G.thumb(a.link, a.size, cb);
+                case 'about': return G.about(cb);
+                case 'appFolder': return G.appFolder((info && info.app && info.app.id) || location.hostname || 'app', document.title || 'App', cb);
+            }
+            setTimeout(function () { cb({ code: 'bad-request', message: 'Unknown Drive operation ' + op }); }, 0);
+            return null;
+        }
+        // standalone sign-in: a plain box with Google's code (inside My PC, My PC draws its own screen)
+        function localSignIn(G, cb) {
+            var box = document.createElement('div');
+            box.setAttribute('role', 'dialog');
+            box.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;font:20px/1.5 system-ui,sans-serif;color:#fff';
+            box.innerHTML = '<div style="background:#2b2b2b;border-radius:12px;padding:32px 40px;max-width:720px;text-align:center"><h2 style="margin:0 0 12px">Sign in to Google Drive</h2><p data-t>Asking Google…</p><div data-c style="font:700 40px monospace;letter-spacing:.15em;margin:12px 0"></div><button data-x style="font:inherit;padding:8px 24px">Cancel</button></div>';
+            document.body.appendChild(box);
+            var flow = null;
+            function end(e, r) { if (box.parentNode) box.parentNode.removeChild(box); cb(e, r); }
+            box.querySelector('[data-x]').onclick = function () { if (flow) flow.cancel(); else end({ code: 'cancelled', message: 'Cancelled.' }); };
+            if (!G.config()) { setTimeout(function () { end({ code: 'noconfig', message: 'No Google client is set up for My PC (App Store Manager > Google Drive), and the app config has no google.tvClientId.' }); }, 0); return null; }
+            flow = G.signIn(function (c) {
+                box.querySelector('[data-t]').textContent = 'On a phone or computer, open ' + c.url + ' and enter this code:';
+                box.querySelector('[data-c]').textContent = c.userCode;
+            }, function (e, acc) { end(e, acc ? { email: acc.email, name: acc.name, picture: acc.picture } : null); });
+            return { abort: function () { if (flow) flow.cancel(); } };
+        }
+        function call(op, args, onProgress) {
+            var rid = 0, job = null, gone = false;
+            args = args && typeof args === 'object' ? args : {};
+            var wire = {};
+            for (var k in args) if (args.hasOwnProperty(k) && typeof args[k] !== 'function') wire[k] = args[k];
+            if (onProgress) wire.progress = true;
+            function prog(p) { if (onProgress) { try { onProgress(p); } catch (e) {} } }
+            var p = ready().then(function (G) {
+                if (gone) throw bridgeError({ code: 'cancelled', message: 'Cancelled.' });
+                if (!G) { var q = ch.call(op, { args: wire }, function (d) { if (d.ev === 'progress') prog(d.p); }); rid = q.rid; return q; }
+                return new Promise(function (resolve, reject) { job = localOp(G, op, wire, onProgress ? prog : null, function (e, r) { if (e) reject(bridgeError(e)); else resolve(r); }); });
+            });
+            p.abort = function () { gone = true; if (job) job.abort(); else if (rid) post('drive', { rid: rid, op: 'abort' }); };
+            return p;
+        }
+        function chain(p, fn) { var q = p.then(fn); q.abort = p.abort; return q; }
+        function idOf(f) { return typeof f === 'string' ? f : f && f.id; }
+        function text(buf) { return new TextDecoder().decode(buf); }
+
+        /* ---- media: <audio> / <video> cannot send Google's header, so the app's own service worker answers the player's
+         * Range requests with pieces read through My PC (sdk/drive-sw.js). Without a worker: the whole file as a blob: URL. */
+        var streams = {}, workers = {}, listening = false;
+        function onSw(e) {
+            var d = e.data;
+            if (!d || d.mypcDrive !== 1 || !e.ports || !e.ports[0]) return;
+            var port = e.ports[0], s = streams[d.token];
+            if (!s) return port.postMessage({ error: 'gone', status: 404 });
+            if (s.size && d.start >= s.size) return port.postMessage({ error: 'range', status: 416 });
+            var end = s.size ? Math.min(d.end, s.size - 1) : d.end;
+            var q = call('read', { id: s.id, start: d.start, end: end });
+            s.jobs.push(q);
+            q.then(function (r) { s.size = s.size || r.total; port.postMessage({ buf: r.buf, total: r.total || s.size, type: s.type || r.type }, [r.buf]); },
+                   function (err) { s.lastError = err; port.postMessage({ error: err.code || 'error', status: err.status || 502 }); });
+        }
+        function worker(path) {
+            if (!path || !('serviceWorker' in navigator)) return Promise.resolve(false);
+            if (workers[path]) return workers[path];
+            if (!listening) { listening = true; navigator.serviceWorker.addEventListener('message', onSw); }
+            workers[path] = navigator.serviceWorker.register(path).then(function () { return navigator.serviceWorker.ready; }).then(function () {
+                if (navigator.serviceWorker.controller) return true;
+                return new Promise(function (res) {               // first visit: the worker takes the page a moment after it starts
+                    var t = setTimeout(function () { res(!!navigator.serviceWorker.controller); }, 3000);
+                    navigator.serviceWorker.addEventListener('controllerchange', function () { clearTimeout(t); res(true); }, { once: true });
+                });
+            }).catch(function () { return false; });
+            return workers[path];
+        }
+        function stream(file, opts) {
+            opts = opts || {};
+            var id = idOf(file), meta = typeof file === 'object' && file ? file : {};
+            if (!id) return Promise.reject(bridgeError({ code: 'bad-request', message: 'Give a file or its id.' }));
+            return worker(opts.worker).then(function (ok) {
+                if (ok) {
+                    var tok = '';
+                    for (var i = 0; i < 4; i++) tok += Math.floor(Math.random() * 2176782336).toString(36);
+                    var s = streams[tok] = { id: id, size: +meta.size || 0, type: meta.mimeType || '', jobs: [], lastError: null };
+                    return { url: new URL('__mypc_drive/' + tok, location.href).href, mode: 'worker', lastError: function () { return s.lastError; },
+                             close: function () { s.jobs.forEach(function (j) { try { j.abort(); } catch (e) {} }); delete streams[tok]; } };
+                }
+                return download(id, { onProgress: opts.onProgress, max: opts.max }).then(function (r) {
+                    var u = URL.createObjectURL(new Blob([r.buf], { type: meta.mimeType || r.type || '' }));
+                    return { url: u, mode: 'blob', lastError: function () { return null; }, close: function () { URL.revokeObjectURL(u); } };
+                });
+            });
+        }
+        function download(id, opt) { opt = opt || {}; return call('download', { id: idOf(id), max: opt.max }, opt.onProgress); }
+        function listAll(opts, max) {
+            max = Math.max(1, Math.min(10000, +max || 1000));
+            var out = [], o = {}, k;
+            for (k in opts || {}) o[k] = opts[k];
+            o.pageSize = o.pageSize || 1000;
+            function page(tok) { o.pageToken = tok || ''; return call('list', o).then(function (r) { out = out.concat(r.files); return r.next && out.length < max ? page(r.next) : out.slice(0, max); }); }
+            return page('');
+        }
+        function inApp(name) {
+            return call('appFolder').then(function (f) {
+                return call('list', { folder: f.id, q: "name = '" + String(name).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'", pageSize: 1 }).then(function (r) { return { folder: f, file: r.files[0] || null }; });
+            });
+        }
+        return {
+            FOLDER: 'application/vnd.google-apps.folder',
+            status: function () { return call('status'); },
+            signIn: function () { return call('signIn'); },
+            addFiles: function () { return call('addFiles'); },
+            list: function (opts) { return call('list', opts); },
+            listAll: listAll,
+            get: function (id) { return call('get', { id: idOf(id) }); },
+            createFolder: function (name, parent) { return call('mkdir', { name: name, parent: idOf(parent) || 'root' }); },
+            rename: function (id, name) { return call('rename', { id: idOf(id), name: name }); },
+            move: function (id, to) { return call('move', { id: idOf(id), to: idOf(to) || 'root' }); },
+            copy: function (id, to, name) { return call('copy', { id: idOf(id), to: idOf(to), name: name }); },
+            star: function (id, on) { return call('star', { id: idOf(id), on: on !== false }); },
+            trash: function (id) { return call('trash', { id: idOf(id) }); },
+            restore: function (id) { return call('untrash', { id: idOf(id) }); },
+            remove: function (id) { return call('remove', { id: idOf(id) }); },
+            setInfo: function (id, meta) { var a = { id: idOf(id) }; meta = meta || {}; if (meta.description !== undefined) a.description = meta.description; if (meta.appProperties) a.appProperties = meta.appProperties; return call('setInfo', a); },
+            read: function (id, start, end) { return call('read', { id: idOf(id), start: start, end: end }); },
+            download: download,
+            readText: function (id) { return chain(download(id), function (r) { return text(r.buf); }); },
+            readJson: function (id) { return chain(download(id), function (r) { return JSON.parse(text(r.buf)); }); },
+            upload: function (o, opt) { opt = opt || {}; return call('upload', o, opt.onProgress); },
+            exportFile: function (id, mime) { return call('export', { id: idOf(id), mime: mime }); },
+            thumbnail: function (link, size) { return call('thumb', { link: link, size: size }); },
+            about: function () { return call('about'); },
+            appFolder: function () { return call('appFolder'); },
+            saveJson: function (name, value) {
+                return inApp(name).then(function (x) {
+                    var o = { name: name, data: JSON.stringify(value), type: 'application/json' };
+                    if (x.file) o.id = x.file.id; else o.parent = x.folder.id;
+                    return call('upload', o);
+                });
+            },
+            loadJson: function (name, def) {
+                return inApp(name).then(function (x) { return x.file ? download(x.file.id).then(function (r) { return JSON.parse(text(r.buf)); }) : (def === undefined ? null : def); });
+            },
+            stream: stream,
+            _message: ch._message
+        };
+    })();
+
     var pub = {
         version: VERSION,
-        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,
@@ -1692,6 +1914,7 @@ var MyPC = (function () {
         mic: mic,
         notify: notify,
         text: text,
+        drive: drive,
         // The notification that opened the app ({ link, app, path, title, text, at }) or null; read it in onInit.
         // A notification chosen while the app runs: MyPC.init({ onLaunch(launch) }) (and MyPC.launch is updated)
         launch: null,

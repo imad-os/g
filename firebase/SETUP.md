@@ -87,6 +87,17 @@ The App Store Manager's **Settings** page writes `settings/mypc`:
 Every My PC reads it at start and when Settings > Personalization opens (`js/core/global-settings.js`) and keeps a copy
 (`arc_dev_global`, not in the TV backup). **Publish the rules again** after this update (the `settings` block).
 
+## 3a++. Google Drive of every My PC (`settings/google`)
+
+One Google client for Google Drive on every My PC (owner request 2026-11-05): each profile signs in once in Control Panel >
+Google Drive; the Music app and every app (`MyPC.drive`, sdk/GUIDE.md section 19) use that sign-in, apps never see a token.
+
+1. Publish the rules again (`firebase/firestore.rules` now allows `settings/google`: anyone reads it, admins write it).
+2. App Store Manager > **Google Drive**: press **Copy from MyDrive's config** (the client MyDrive already uses, so the accounts
+   linked in MyDrive keep working) or paste the IDs, then **Save**. Until then every My PC uses MyDrive's config.
+3. For "Add files from your phone": in the Google Cloud console, add the referrer `https://imad-os.github.io/g/*` to the
+   Picker API key (it only had `.../g_drive/*`). The phone page is `https://imad-os.github.io/g/drive-picker.html`.
+
 ## 3b. What the TVs write
 | collection | document | written by | rules |
 |---|---|---|---|
