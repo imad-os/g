@@ -912,6 +912,8 @@ svg { display: block; width: 100%; height: 100%; }
 .wdg-btn:not(:has(svg)) { width: auto; min-width: 64px; }
 #wdg-weather { border-top-color: #ffc83d; } #wdg-playtime { border-top-color: #9a7bff; } #wdg-sysmon { border-top-color: #3ad29f; } #wdg-music { border-top-color: #ff6fa8; }
 #wdg-sysmon .wdg-bar i { background: #3ad29f; } #wdg-music .wdg-bar i { background: #ff6fa8; }
+/* the song: the empty bar half as visible, the loaded part in the usual bar grey */
+#wdg-music .wdg-bar { background: rgba(255, 255, 255, 0.07); } #wdg-music .wdg-load { background: rgba(255, 255, 255, 0.14); }
 #wdg-weather .wdg-ic, #wdg-sysmon .wdg-ic { width: 34px; }
 .wdg-medium .wdg-btns, .wdg-large .wdg-btns { bottom: 18px; }
 .compact .desk-widgets { width: 560px; height: calc(var(--sh) - 240px); }
