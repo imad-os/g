@@ -123,10 +123,47 @@ var Shortcuts = (function () {
     }
 
     // Input's key hook: true = the key was a shortcut (Input does nothing more with it)
+    // "press the button": for a few seconds every remote button is registered and the next one pressed is reported
+    // (Control Panel > Shortcuts > Button). cb(id) with the button, cb(null, 'cancel') on Back, cb(null, 'timeout').
+    var capture = null;
+    function codeButton(code) {
+        for (var i = 0; i < BUTTONS.length; i++) {
+            var b = BUTTONS[i];
+            if (b.codes.indexOf(code) >= 0 || (tvCode(b.tv) === code && code)) return b;
+        }
+        return null;
+    }
+    function listen(cb, ms) {
+        stopListen();
+        var tvi = window.tizen && tizen.tvinputdevice;
+        if (tvi) for (var i = 0; i < BUTTONS.length; i++) { var k = BUTTONS[i].tv; if (!registered[k]) { try { tvi.registerKey(k); registered[k] = true; } catch (e) {} } }
+        capture = { cb: cb, timer: setTimeout(function () { finish(null, 'timeout'); }, ms || 5000), down: {} };
+    }
+    function finish(id, why) {
+        var c = capture;
+        if (!c) return;
+        clearTimeout(c.timer);
+        capture = null;
+        apply();                                             // back to only this profile's keys
+        try { c.cb(id, why); } catch (e) {}
+    }
+    function stopListen() { if (capture) { clearTimeout(capture.timer); capture = null; apply(); } }
+    function captureKey(code, down) {
+        if (!down) { if (!held[code]) return false; held[code] = false; return true; }   // a key pressed before (OK on the row) is let go normally
+        held[code] = true;                                   // its keyup is swallowed too
+        if (code === 10009 || code === 27 || code === 8) { finish(null, 'cancel'); return true; }
+        var b = codeButton(code);
+        if (b) finish(b.id);
+        else if (window.App) App.toast(t('scCantUse'), { id: 'shortcut', kind: 'warn', timeout: 2000 });
+        return true;
+    }
+
     function onKey(code, down, e) {
+        if (capture) return captureKey(code, down);          // every key is the listener's while it waits
+        if (!down && held[code]) { held[code] = false; return true; }    // the release of a key that was a shortcut or was captured
         var id = codeMap[code];
         if (!id) return false;
-        if (!down) { if (!held[code]) return false; held[code] = false; return true; }
+        if (!down) return false;
         if (held[code]) return true;                         // held: no repeat
         if (!mayRun(id)) return false;
         held[code] = true;
@@ -247,7 +284,7 @@ var Shortcuts = (function () {
 
     return {
         BUTTONS: BUTTONS, ACTIONS: ACTIONS, DEFAULTS: DEFAULTS, MAX: MAX,
-        init: init, resume: resume, list: list, put: put, remove: remove, reset: reset, forKey: forKey, run: run,
+        init: init, resume: resume, listen: listen, stopListen: stopListen, listening: function () { return !!capture; }, list: list, put: put, remove: remove, reset: reset, forKey: forKey, run: run,
         button: button, action: actionDef, buttonName: buttonName, describe: describe, targets: targets,
         setPages: function (l) { pages = l || []; }, pages: function () { return pages; },
         onChange: function (fn) { if (listeners.indexOf(fn) < 0) listeners.push(fn); },

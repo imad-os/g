@@ -550,13 +550,15 @@
     function scEditRows(out) {
         var d = scDraft, a = Shortcuts.action(d.act), cur = Shortcuts.forKey(d.key);
         out.push({ kind: 'action', label: t('back'), run: function () { leaveSub(); } });
-        out.push({ kind: 'action', label: t('scButton'), desc: Shortcuts.buttonName(d.key), run: function () { scGo('sckey', 0); } });
+        out.push({ kind: 'action', label: t('scButton'), desc: Shortcuts.listening() ? t('scListen') : Shortcuts.buttonName(d.key), run: scListen });
+        if (Shortcuts.listening()) out.push({ kind: 'status', title: t('scListen'), detail: t('scListenLeft').replace('%n', scLeft), busy: true });
         out.push({ kind: 'action', label: t('scAction'), desc: a ? t(a.label) : '\u2014', run: function () { scGo('scact', 0); } });
         if (a && a.arg) out.push({ kind: 'action', label: t(a.arg === 'app' ? 'scWhichApp' : 'scWhichPage'),
             desc: d.arg ? Shortcuts.describe(d) : t('scPick'), run: function () { scGo('scarg', 0); } });
         // another shortcut already on this button is replaced when this one is saved
         var l = Shortcuts.list();
         if (cur && !(scIdx >= 0 && l[scIdx] && l[scIdx].key === d.key)) out.push({ kind: 'text', value: t('scReplaces').replace('%s', Shortcuts.describe(cur)) });
+        out.push({ kind: 'action', label: t('scList'), desc: t('scListDesc'), run: function () { scGo('sckey', 0); } });
         var b = Shortcuts.button(d.key);
         if (b && b.use) out.push({ kind: 'text', value: t('scUse').replace('%s', t(b.use)) });
         out.push({ kind: 'action', label: t('scSave'), primary: true, run: function () {
@@ -570,6 +572,25 @@
             App.toast(t('scRemoved').replace('%s', Shortcuts.buttonName(d.key)));
             scDraft = null; scGo(null, 1);
         } });
+    }
+    // Button: listen 5 s for the button the user presses on the remote (Back cancels); the list stays for a keyboard / PC
+    var scLeft = 5, scTick = 0;
+    function scListen() {
+        scLeft = 5;
+        Shortcuts.listen(function (id, why) {
+            clearInterval(scTick); scTick = 0;
+            if (!scDraft || Win.current() !== 'settings' || sub !== 'shortcut') return;
+            if (id) { scDraft.key = id; A11y.announce(Shortcuts.buttonName(id)); }
+            else if (why === 'timeout') App.toast(t('scNoKey'), { id: 'shortcut', kind: 'warn' });
+            scGo('shortcut', 1);
+        }, 5000);
+        scGo('shortcut', 1);
+        A11y.announce(t('scListen'));
+        scTick = setInterval(function () {
+            scLeft = Math.max(0, scLeft - 1);
+            var d = main && main.querySelector('.set-status .set-row-desc');
+            if (d) d.textContent = t('scListenLeft').replace('%n', scLeft);
+        }, 1000);
     }
     // every button of the remote, with what it does now
     function scKeyRows(out) {
@@ -992,7 +1013,7 @@
             renderMain();
             return navBtn();
         },
-        close: function () { Updater.offChange(onUpdater); Input.offDevices(onDevices); Controllers.offChange(onCtrl); Controllers.monitor(null); monEl = null; sub = null; Updater.cancel(); stopPadTest(); body = nav = main = home = null; rows = []; page = null; },
+        close: function () { Shortcuts.stopListen(); clearInterval(scTick); scTick = 0; Updater.offChange(onUpdater); Input.offDevices(onDevices); Controllers.offChange(onCtrl); Controllers.monitor(null); monEl = null; sub = null; Updater.cancel(); stopPadTest(); body = nav = main = home = null; rows = []; page = null; },
         refresh: function () { if (!nav) return; if (!page) { var c = Focus.current(), id = c && c.getAttribute('data-page'); Focus.focus(showHome(id)); return; } renderNav(); renderMain(); },
         action: action,
         back: back

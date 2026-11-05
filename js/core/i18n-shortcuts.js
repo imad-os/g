@@ -3,6 +3,7 @@
     'use strict';
     I18n.add({
         en: {
+            scListen: 'Press the button on your remote…', scListenLeft: '%n s left · Back cancels', scNoKey: 'No button pressed. Try again.', scCantUse: 'This button can\u2019t be used for a shortcut', scList: 'Choose the button from a list', scListDesc: 'For a keyboard, or a button the TV keeps for itself',
             sysShortcuts: 'Shortcuts', cpd_shortcuts: 'Remote buttons that open apps, settings, users or play music',
             gmMusicPlay: 'Play music', gmMusicPause: 'Pause music',
             scNoMusic: 'No music to play. Open Music to choose songs.', scPlaying: 'Playing: %s', scPaused: 'Music paused',
@@ -28,6 +29,7 @@
             sca_menu: "My PC's menu", sca_menuDesc: 'Pauses the game and shows the menu'
         },
         fr: {
+            scListen: 'Appuyez sur la touche de votre télécommande…', scListenLeft: 'encore %n s · Retour annule', scNoKey: 'Aucune touche appuyée. Réessayez.', scCantUse: 'Cette touche ne peut pas servir de raccourci', scList: 'Choisir la touche dans une liste', scListDesc: 'Pour un clavier, ou une touche que le téléviseur garde',
             sysShortcuts: 'Raccourcis', cpd_shortcuts: 'Touches de la télécommande pour ouvrir des applis, réglages, utilisateurs ou la musique',
             gmMusicPlay: 'Lire la musique', gmMusicPause: 'Mettre la musique en pause',
             scNoMusic: 'Aucune musique à lire. Ouvrez Musique pour choisir des chansons.', scPlaying: 'Lecture : %s', scPaused: 'Musique en pause',
@@ -53,6 +55,7 @@
             sca_menu: 'Menu de My PC', sca_menuDesc: 'Met le jeu en pause et affiche le menu'
         },
         es: {
+            scListen: 'Pulsa el botón en tu mando…', scListenLeft: 'quedan %n s · Atrás cancela', scNoKey: 'No se pulsó ningún botón. Inténtalo de nuevo.', scCantUse: 'Este botón no se puede usar como atajo', scList: 'Elegir el botón de una lista', scListDesc: 'Para un teclado, o un botón que el televisor se reserva',
             sysShortcuts: 'Atajos', cpd_shortcuts: 'Botones del mando que abren apps, ajustes, usuarios o la música',
             gmMusicPlay: 'Reproducir música', gmMusicPause: 'Pausar la música',
             scNoMusic: 'No hay música. Abre Música para elegir canciones.', scPlaying: 'Sonando: %s', scPaused: 'Música en pausa',
@@ -78,6 +81,7 @@
             sca_menu: 'Menú de My PC', sca_menuDesc: 'Pausa el juego y muestra el menú'
         },
         ar: {
+            scListen: 'اضغط الزر على جهاز التحكم…', scListenLeft: 'متبقٍ %n ث · رجوع للإلغاء', scNoKey: 'لم يُضغط أي زر. حاول مرة أخرى.', scCantUse: 'لا يمكن استخدام هذا الزر كاختصار', scList: 'اختيار الزر من قائمة', scListDesc: 'للوحة مفاتيح، أو زر يحتفظ به التلفاز لنفسه',
             sysShortcuts: 'الاختصارات', cpd_shortcuts: 'أزرار جهاز التحكم لفتح التطبيقات والإعدادات والمستخدمين أو تشغيل الموسيقى',
             gmMusicPlay: 'تشغيل الموسيقى', gmMusicPause: 'إيقاف الموسيقى مؤقتاً',
             scNoMusic: 'لا توجد موسيقى. افتح الموسيقى لاختيار الأغاني.', scPlaying: 'قيد التشغيل: %s', scPaused: 'الموسيقى متوقفة مؤقتاً',

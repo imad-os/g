@@ -4550,8 +4550,19 @@ async function main() {
         const row = (re) => page.evaluate((s) => { const b = [...document.querySelectorAll('.set-main .set-row')].find((x) => new RegExp(s).test(x.textContent)); if (b) { b.focus(); b.click(); } return !!b; }, re);
         await row('Add a shortcut');
         await row('^Button');
+        check(await page.evaluate(() => Shortcuts.listening()) && /Press the button on your remote/.test(await page.textContent('.set-main')) && /5 s left/.test(await page.textContent('.set-main')),
+            'Button listens for the next remote button (5 s countdown)');
+        await remote(37);                                   // an arrow: not a shortcut button, still listening
+        check(await page.evaluate(() => Shortcuts.listening()), 'an arrow is not taken (still listening)');
+        await remote(10009);                                // Back cancels, and stays on the shortcut
+        check(await page.evaluate(() => !Shortcuts.listening() && Win.current() === 'settings' && /^Button/.test(document.activeElement.textContent)), 'Back cancels the listening');
+        await row('^Button');
+        await remote(406);
+        await page.waitForTimeout(100);
+        check(await page.evaluate(() => !Shortcuts.listening() && /Blue button/.test(document.activeElement.textContent)), 'pressing Blue picks the Blue button');
+        await row('^Choose the button from a list');
         const keys = await page.evaluate(() => document.querySelectorAll('.set-main .set-row').length);
-        check(keys >= 30 && /Blue button/.test(await page.textContent('.set-main')) && /Number 5/.test(await page.textContent('.set-main')), 'Button lists every remote button (' + (keys - 1) + ')');
+        check(keys >= 30 && /Blue button/.test(await page.textContent('.set-main')) && /Number 5/.test(await page.textContent('.set-main')), 'the list (for a keyboard) has every remote button (' + (keys - 1) + ')');
         await row('^Blue button');
         await row('^Action');
         check(/Open an app or game/.test(await page.textContent('.set-main')) && /Open a Control Panel page/.test(await page.textContent('.set-main')), 'Action lists every action');
