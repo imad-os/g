@@ -13,9 +13,9 @@ import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)('playwright');
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const [DIR = '/tmp/saver', MODE = 'live'] = process.argv.slice(2);
+const [DIR = '/tmp/saver', MODE = 'live', SONG = 'pattern.mp3'] = process.argv.slice(2);
 const OUT = path.join(DIR, 'shots'); fs.mkdirSync(OUT, { recursive: true });
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.webmanifest': 'application/manifest+json' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.flac': 'audio/flac', '.webmanifest': 'application/manifest+json' };
 const app = http.createServer((q, r) => {
     const u = decodeURIComponent(q.url.split('?')[0]);
     const p = u.startsWith('/__songs/') ? path.join(DIR, path.basename(u)) : path.join(ROOT, u);
@@ -33,7 +33,11 @@ const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, s
 await ctx.route(/imad-os\.github\.io|firestore\.googleapis|identitytoolkit|securetoken|api\.open-meteo|get\.geojs/, (r) => r.abort('internetdisconnected'));
 const page = await ctx.newPage();
 const errors = [];
+// THROTTLE=6: the page's CPU 6 times slower, like a TV
+if (process.env.THROTTLE) await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: +process.env.THROTTLE });
 page.on('pageerror', (e) => errors.push(e.message));
+// NOCAP=1: a browser without captureStream (some TVs): the other live path (the player's sound through Web Audio)
+if (process.env.NOCAP) await page.addInitScript(() => { delete HTMLMediaElement.prototype.captureStream; HTMLMediaElement.prototype.captureStream = undefined; });
 if (MODE === 'file') {
     // Samsung's player: opens the address, "plays" by the clock (no sound at all here)
     await page.addInitScript(() => {
@@ -61,13 +65,18 @@ await page.evaluate((b) => {
     });
 }, base);
 const play = (file, title) => page.evaluate(([f, t]) => { Music.playList([{ s: 't', p: f, n: f, t: t, a: 'My PC test' }], 0); }, [file, title]);
-const shot = (name) => page.screenshot({ path: path.join(OUT, MODE + '-' + name + '.png') });
+const shot = (name) => page.screenshot({ path: path.join(OUT, MODE + '-' + SONG.replace(/\W+/g, '-') + name + '.png') });
 
 // 1. the pattern: the bars must follow it
 await page.evaluate(() => { Music.setPref('saver', 'bars'); Win.open('music'); });
-await play('pattern.mp3', 'Test pattern (80 Hz, silence, 3 kHz, silence)');
+await play(SONG, 'Test pattern (80 Hz, silence, 3 kHz, silence)');
 await page.waitForFunction(() => Music.state().playing && !Music.state().loading && Music.time() > 0.2, null, { timeout: 15000 });
-await page.evaluate(() => MusicSaver.show(true));
+// opened in the middle of the song (21.5 s: in the 3 kHz part), the way it opens after the remote rested: how soon does it move?
+await page.evaluate(() => { Music.seek(21.5); });
+await page.waitForTimeout(150);
+await page.evaluate(() => { window.__long = []; try { new PerformanceObserver((l) => l.getEntries().forEach((e) => window.__long.push(Math.round(e.duration)))).observe({ entryTypes: ['longtask'] }); } catch (x) {} window.__t0 = performance.now(); MusicSaver.show(true); });
+const firstMove = await page.waitForFunction(() => Math.max(...MusicSaver._levels()) > 0.3 && performance.now() - window.__t0, null, { timeout: 10000, polling: 16 }).then((h) => h.jsonValue()).catch(() => -1);
+console.log(SONG + ' (' + MODE + '): opened at ' + (await page.evaluate(() => Music.time().toFixed(2))) + ' s, the bars move after ' + Math.round(firstMove) + ' ms');
 const rows = [];
 let lowShot = false, highShot = false, quietShot = false;
 const t0 = Date.now();
@@ -91,6 +100,8 @@ console.log(MODE + ': engine ' + rows[rows.length - 1].eng + ', data from ' + [.
 console.log('averages', JSON.stringify(byPart));
 const pass = byPart.tone80.low > 0.5 && byPart.tone80.high < 0.15 && byPart.tone3k.high > 0.5 && byPart.tone3k.low < 0.15 && byPart.silence.all < 0.1;
 console.log(pass ? 'OK: low bars only on the 80 Hz tone, right bars only on the 3 kHz tone, flat in the silences: the real sound' : 'NOT OK');
+const lt = await page.evaluate(() => window.__long);
+console.log('long tasks (over 50 ms) on the page while it showed: ' + (lt.length ? lt.join(', ') + ' ms' : 'none'));
 console.log(rows.filter((r, i) => i % 5 === 0).map((r) => r.t + ' ' + r.part + ' low=' + r.low + ' high=' + r.high + ' all=' + r.all + ' ' + r.src).join('\n'));
 await page.evaluate(() => MusicSaver.hide());
 

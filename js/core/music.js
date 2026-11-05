@@ -256,7 +256,10 @@ var Music = (function () {
             next();
         }, track);
         // another song: the download stops at once (the piece on its way is cancelled too)
-        return function () { stopped = true; if (inflight && inflight.abort) { try { inflight.abort(); } catch (x) {} } inflight = null; };
+        var stop = function () { stopped = true; if (inflight && inflight.abort) { try { inflight.abort(); } catch (x) {} } inflight = null; };
+        // a new copy of everything here so far (the player moves to it before the old copy runs out): { url, f = part of the song }
+        stop.snap = function () { if (stopped || !sent || !size) return null; return { url: blob(), f: Math.min(1, (at - (fs ? fs.at : 0) + (fs ? fs.at : 0)) / size) }; };
+        return stop;
     }
     function msStream(src, now, fail) {
         var ms = new MediaSource(), url = URL.createObjectURL(ms), sb = null, at = 0, size = src.size || 0, pending = null, reading = false, stopped = false, errs = 0, inflight = null;
@@ -508,16 +511,31 @@ var Music = (function () {
             // (an M4A with its index at the end) simply starts when the download is done.
             function growPlan(gsrc) {
                 var gr = { part: '', full: '', done: false, started: false, waiting: false, stop: function () {} };
+                // the copy the player has is about to run out (4 s left) or ran out, and more arrived: it moves to a bigger copy at the
+                // same place, so the song goes on while the rest downloads (it no longer waits for the whole file)
+                function refresh() {
+                    if (my !== gen || grow !== gr || !gr.started || gr.done || !gr.stop.snap) return;
+                    var d = duration(), pos = HTML.time();
+                    if (!gr.waiting && !(d && pos > (gr.partF || 0) * d - 4)) return;
+                    var sn = gr.stop.snap();
+                    if (!sn) return;
+                    if (sn.f < (gr.partF || 0) + 0.03) { URL.revokeObjectURL(sn.url); return; }
+                    var old = gr.part;
+                    gr.part = sn.url; gr.partF = sn.f; blobUrl = sn.url;
+                    HTML.swap(sn.url, pos, want);
+                    if (gr.waiting) { gr.waiting = false; error = ''; playing = want; emit('play'); }
+                    if (old) setTimeout(function () { try { URL.revokeObjectURL(old); } catch (x2) {} }, 3000);
+                }
                 grow = gr; mode = 'grow'; loadedF = 0;
                 error = t('muDownloading'); emit('loading');
                 gr.stop = growDl(gsrc, function (u, partF) {
                     gr.partF = partF;
                     if (my !== gen || grow !== gr) { URL.revokeObjectURL(u); return; }
                     gr.part = u; blobUrl = u;
-                    HTML.open(u, lastPos, function () { if (my !== gen) return; if (!gr.done) { gr.waiting = true; error = t('muDownloading'); emit('loading'); } else ended(); },
+                    HTML.open(u, lastPos, function () { if (my !== gen) return; if (!gr.done) { gr.waiting = true; error = t('muDownloading'); emit('loading'); refresh(); } else ended(); },
                         function () { if (my !== gen) return; if (!gr.done) { gr.waiting = true; if (!gr.started) error = t('muDownloading'); emit('loading'); } else if (loading) tryNext({ code: 'format' }); else failed({ code: 'format' }, my); },
                         function (blocked) { if (my !== gen) return; gr.started = true; ready(HTML, blocked); });
-                }, function (f) { if (my === gen && grow === gr) setLoaded(f); }, function (x, u) {
+                }, function (f) { if (my === gen && grow === gr) { setLoaded(f); refresh(); } }, function (x, u) {
                     if (my !== gen || grow !== gr) { if (u) URL.revokeObjectURL(u); return; }
                     if (x) { if (gr.started && !gr.waiting) return; return gr.started ? failed(x, my) : tryNext(x); }
                     gr.done = true; gr.full = u; mode = 'full'; setLoaded(1);

@@ -67,6 +67,7 @@ const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PAT
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, ignoreHTTPSErrors: true, serviceWorkers: MODE === 'web' ? 'allow' : 'block' });
 await ctx.route(/imad-os\.github\.io|firestore\.googleapis|identitytoolkit|securetoken|api\.open-meteo|get\.geojs/, (r) => r.abort('internetdisconnected'));
 const page = await ctx.newPage();
+if (process.env.THROTTLE) await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: +process.env.THROTTLE });
 page.on('pageerror', (e) => log.push('PAGE ERROR ' + e.message));
 const mydrive = { id: 'mydrive', name: 'MyDrive', url: 'https://mydrive.example/', entry: 'https://mydrive.example/index.html', icon: '', type: 'app', version: '1.0.4', enabled: true, order: 1, config: { google: { tvClientId: 'cid', tvClientSecret: 'sec' } } };
 await page.addInitScript((a) => { localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'mydrive', at: 1 }])); localStorage.setItem('arc_dev_catalog', JSON.stringify([a])); }, mydrive);
@@ -83,6 +84,34 @@ const t0 = Date.now();
 await page.click('.mx-row >> nth=0');            // a real click, like a person
 const states = [];
 let shotAt = 0;
+if (process.env.SAVER) {
+    // the screensaver over a Drive song: SAVER=0 opens it at once, SAVER=3 after 3 s. Its bars must move from the song's first
+    // second, the song must not stall, and the song must be downloaded only once (no second download for the analysis)
+    const at = +process.env.SAVER || 0;
+    if (at) await page.waitForTimeout(at * 1000);
+    await page.evaluate(() => { Music.setPref('saver', 'bars'); MusicSaver.show(true); });
+    const ts = Date.now();
+    const seq = [];
+    for (let i = 0; i < 80; i++) {
+        seq.push(await page.evaluate(() => { const s = Music.state(); return { pos: +s.pos.toFixed(2), play: s.playing && !s.loading, src: MusicSaver._src(), lv: +Math.max(...MusicSaver._levels()).toFixed(2), ctx: MusicSaver._ctx ? MusicSaver._ctx() : '' }; }));
+        seq[i].t = Date.now() - ts;
+        if (i === 25) await page.screenshot({ path: path.join(OUT, 'saver-' + MODE + '-' + FORMAT + '.png') });
+        if (i === 40) { await page.evaluate(() => Music.next()); seq[i].next = true; }
+        await page.waitForTimeout(100);
+    }
+    const first = seq.find((x) => x.lv > 0.2), firstPlay = seq.find((x) => x.play && x.pos > 0.05);
+    const ni = seq.findIndex((x) => x.next), back = seq.findIndex((x, i) => i > ni + 2 && x.lv > 0.2 && x.play);
+    console.log('after Next (the saver open): the bars move again after ' + (back > 0 ? seq[back].t - seq[ni].t + ' ms (song at ' + seq[back].pos + ' s)' : 'NEVER'));
+    let stalls = 0; for (let i = 5; i < seq.length; i++) if ((i < ni || i > ni + 20) && seq[i].play && seq[i - 5].play && seq[i].pos - seq[i - 5].pos < 0.2) stalls++;   // (not while Next opens the next song)
+    const gets = log.filter((l) => /GET \S*files\/big\d /.test(l));
+    console.log('saver ' + MODE + ' ' + FORMAT + ' opened ' + (at ? at + ' s after the click' : 'at the click') + ': bars move after ' + (first ? first.t + ' ms (song at ' + first.pos + ' s, ' + first.src + ')' : 'NEVER'));
+    console.log('song playing after ' + (firstPlay ? firstPlay.t : 'NEVER') + ' ms; stalls (0.5 s windows without progress while playing): ' + stalls);
+    console.log('requests for the song: ' + gets.length + ' (' + gets.map((l) => l.split(' ').slice(3, 4).join('')).join(' ') + ')' + (log.some((l) => /STOPPED/.test(l)) ? ' some stopped' : ''));
+    console.log(seq.filter((x, i) => process.env.ALL || i % 4 === 0).map((x) => x.t + 'ms pos=' + x.pos + ' ' + x.src + ' lv=' + x.lv + ' ' + x.ctx).join('\n'));
+    console.log(log.filter((l) => /PAGE ERROR/.test(l)).join('\n'));
+    await browser.close(); app.close(); google.close();
+    process.exit(0);
+}
 if (process.env.NEXT) {
     // play 3 s, then Next: the grey bar must go straight to empty (no animation back), then only grow; the old download stops
     await page.waitForTimeout(3000);
