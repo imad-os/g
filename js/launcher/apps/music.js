@@ -772,7 +772,12 @@
         var s = Music.state(), f = s.dur ? Math.min(1, s.pos / s.dur) : 0;
         var l = Math.max(f, s.loaded || 0);
         if (ui.miniFill) { ui.miniFill.style.transform = 'scaleX(' + f + ')'; ui.miniLoad.style.transform = 'scaleX(' + l + ')'; }
-        if (npOpen && ui.npLoad) ui.npLoad.style.transform = 'scaleX(' + l + ')';
+        if (npOpen && ui.npLoad) {
+            // grows smoothly; going back (another song) it jumps: no animation from full to empty
+            ui.npLoad.style.transition = l < (ui.npLoadV || 0) ? 'none' : '';
+            ui.npLoadV = l;
+            ui.npLoad.style.transform = 'scaleX(' + l + ')';
+        }
         if (npOpen && ui.npFill) {
             ui.npFill.style.transform = 'scaleX(' + f + ')';
             ui.npKnob.style.left = (f * 100) + '%';

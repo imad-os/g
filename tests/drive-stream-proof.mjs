@@ -47,7 +47,7 @@ const google = https.createServer({ cert: fs.readFileSync(CERT), key: fs.readFil
         const m = /bytes=(\d+)-(\d*)/.exec(q.headers.range || ''), a = m ? +m[1] : 0, b = m && m[2] ? Math.min(+m[2], song.length - 1) : song.length - 1;
         r.writeHead(m ? 206 : 200, Object.assign({ 'Content-Type': S.mime, 'Accept-Ranges': 'bytes', 'Content-Length': b - a + 1, 'Content-Range': 'bytes ' + a + '-' + b + '/' + song.length }, cors));
         let at = a, gone = false;
-        q.on('close', () => { gone = true; });
+        q.on('close', () => { if (at <= b) log.push((Date.now() % 100000) + ' STOPPED by the player: ' + q.url.replace(/\?.*/, '') + ' ' + (q.headers.range || '') + ' at ' + at); gone = true; });
         (function send() {
             if (gone) return;
             if (at > b) return r.end();
@@ -57,7 +57,7 @@ const google = https.createServer({ cert: fs.readFileSync(CERT), key: fs.readFil
         })();
         return;
     }
-    if (/files/.test(q.url)) return json({ files: [{ id: 'big1', name: S.name, mimeType: S.mime, size: String(song.length) }] });
+    if (/files/.test(q.url)) return json({ files: [{ id: 'big1', name: S.name, mimeType: S.mime, size: String(song.length) }, { id: 'big2', name: '2 ' + S.name, mimeType: S.mime, size: String(song.length) }] });
     r.writeHead(404, cors); r.end();
 }).listen(0);
 const G = 'https://localhost:' + google.address().port;
@@ -80,9 +80,31 @@ await page.waitForFunction(() => [...document.querySelectorAll('.mx-tile')].some
 await page.evaluate(() => [...document.querySelectorAll('.mx-tile')].find((t) => /^My Drive/.test(t.textContent)).click());
 await page.waitForSelector('.mx-row', { timeout: 15000 }).catch(async () => { console.log('NO SONG ROW\n' + log.join('\n')); await page.screenshot({ path: path.join(OUT, 'fail.png') }); process.exit(1); });
 const t0 = Date.now();
-await page.click('.mx-row');            // a real click, like a person
+await page.click('.mx-row >> nth=0');            // a real click, like a person
 const states = [];
 let shotAt = 0;
+if (process.env.NEXT) {
+    // play 3 s, then Next: the grey bar must go straight to empty (no animation back), then only grow; the old download stops
+    await page.waitForTimeout(3000);
+    log.push((Date.now() % 100000) + ' --- NEXT pressed ---');
+    await page.click('.mx-np-ctl button[data-c="next"], .mx-np [aria-label="Next"]').catch(async () => { await page.evaluate(() => Music.next()); });
+    const seq = [];
+    for (let i = 0; i < 60; i++) {
+        seq.push(await page.evaluate(() => { const b = document.querySelector('.mx-np-load'); return { l: +(Music.state().loaded || 0).toFixed(2), bar: b ? b.style.transform.replace(/scaleX\(|\)/g, '').slice(0, 4) : '', anim: b ? b.style.transition || 'smooth' : '', title: Music.state().title }; }));
+        await page.waitForTimeout(50);
+    }
+    let back = 0;
+    for (let i = 1; i < seq.length; i++) if (seq[i].l < seq[i - 1].l && seq[i].l > 0) back++;
+    const firstDrop = seq.findIndex((x) => x.l === 0);
+    console.log('after Next: loaded values ' + seq.map((x) => x.l).join(' '));
+    console.log('bar (DOM) ' + seq.map((x) => x.bar + (x.anim === 'none' ? '!' : '')).join(' '));
+    console.log('titles ' + [...new Set(seq.map((x) => x.title))].join(' -> '));
+    console.log(back ? 'NOT OK: the bar went back ' + back + ' time(s) after it started growing' : 'OK: after Next the bar goes to 0 at once (no animation) and then only grows');
+    await page.screenshot({ path: path.join(OUT, 'next-' + MODE + '-' + FORMAT + '.png') });
+    console.log(log.filter((l) => /NEXT|STOPPED|big1|big2/.test(l)).slice(-16).join('\n'));
+    await browser.close(); app.close(); google.close();
+    process.exit(0);
+}
 for (let i = 0; i < 26; i++) {
     await page.waitForTimeout(400);
     const s = await page.evaluate(() => { const st = Music.state(); return { playing: st.playing && !st.loading, engine: Music.engineName(), pos: +st.pos.toFixed(1), dur: Math.round(st.dur), loaded: +(st.loaded || 0).toFixed(2), err: st.error, grow: Music._grow(), stream: Music._streaming(), src: (Music._engines.HTML._src() || '').slice(0, 40) }; });

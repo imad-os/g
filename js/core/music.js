@@ -184,9 +184,10 @@ var Music = (function () {
         }
         return ok;
     }
-    function faststart(src, cb) {
+    function faststart(src, cb, track) {
+        track = track || function (h) { return h; };
         if (!isMp4(src)) return cb(null, null);
-        src.read(0, 65536, function (x, head) {
+        track(src.read(0, 65536, function (x, head) {
             if (x || !head || head.length < 16) return cb(null, null);
             var o = 0, size = src.size || (src.sizeOf && src.sizeOf()) || 0, mdat = -1, mdatEnd = 0;
             while (o + 8 <= head.length) {
@@ -199,23 +200,24 @@ var Music = (function () {
                 o += sz;
             }
             if (mdat < 0 || !size || mdatEnd + 8 > size) return cb(null, null);
-            src.read(mdatEnd, 8, function (x2, h) {
+            track(src.read(mdatEnd, 8, function (x2, h) {
                 if (x2 || !h || h.length < 8 || String.fromCharCode(h[4], h[5], h[6], h[7]) !== 'moov') return cb(null, null);
                 var msz = u32(h, 0);
                 if (msz < 8 || msz > 16 * 1024 * 1024) return cb(null, null);
-                src.read(mdatEnd, msz, function (x3, moov) {
+                track(src.read(mdatEnd, msz, function (x3, moov) {
                     if (x3 || !moov || moov.length < msz) return cb(null, null);
                     moov = new Uint8Array(moov);                                 // our own copy: the offsets change
                     if (!moveOffsets(moov, msz)) return cb(null, null);
                     cb(null, { at: mdat, moov: moov, end: mdatEnd });
-                });
-            });
-        });
+                }));
+            }));
+        }));
     }
     // reads a whole song in pieces: first(url of the first 512 KB, its part of the file) once, prog(0..1), done(err, url of the whole song)
     function growDl(src, first, prog, done) {
         var parts = [], at = 0, size = src.size || 0, stopped = false, sent = false, errs = 0, FIRST = 512 * 1024, CH = 1024 * 1024, MAXB = 80 * 1024 * 1024;
-        var type = src.mime || 'audio/mpeg', fs = null, last = 0;
+        var type = src.mime || 'audio/mpeg', fs = null, last = 0, inflight = null;
+        function track(h) { inflight = h; return h; }
         // the copy: the pieces, with the moved index put in just before mdat (fast start)
         function blob() {
             if (!fs) return URL.createObjectURL(new Blob(parts, { type: type }));
@@ -231,7 +233,8 @@ var Music = (function () {
         function next() {
             var want = at ? CH : FIRST;
             if (last && at + want > last) want = last - at;
-            src.read(at, want, function (x, b) {
+            track(src.read(at, want, function (x, b) {
+                inflight = null;
                 if (stopped) return;
                 if (x) { if (++errs <= 3) return setTimeout(next, 1000 * errs); stopped = true; return done(x); }
                 errs = 0;
@@ -243,17 +246,19 @@ var Music = (function () {
                 if (!sent && (!fs || at > fs.at)) { sent = true; first(blob(), size ? at / size : 0); }
                 if (at >= MAXB) { stopped = true; return done({ code: 'toobig' }); }
                 next();
-            });
+            }));
         }
         faststart(src, function (x, r) {
+            inflight = null;
             if (stopped) return;
             if (r) { fs = r; last = r.end; }                 // the index is here already: the download stops where it starts
             next();
-        });
-        return function () { stopped = true; };
+        }, track);
+        // another song: the download stops at once (the piece on its way is cancelled too)
+        return function () { stopped = true; if (inflight && inflight.abort) { try { inflight.abort(); } catch (x) {} } inflight = null; };
     }
     function msStream(src, now, fail) {
-        var ms = new MediaSource(), url = URL.createObjectURL(ms), sb = null, at = 0, size = src.size || 0, pending = null, reading = false, stopped = false, errs = 0;
+        var ms = new MediaSource(), url = URL.createObjectURL(ms), sb = null, at = 0, size = src.size || 0, pending = null, reading = false, stopped = false, errs = 0, inflight = null;
         var FIRST = 256 * 1024, NEXT = 1024 * 1024;
         function bad(x) { if (stopped) return; stopped = true; fail(x || { code: 'format' }); }
         function got() { if (size) setLoaded(at / size); }
@@ -283,8 +288,8 @@ var Music = (function () {
             if (size && at >= size) { try { ms.endOfStream(); } catch (x4) {} return; }
             var len = at ? NEXT : FIRST;
             reading = true;
-            src.read(at, len, function (x, b) {
-                reading = false;
+            inflight = src.read(at, len, function (x, b) {
+                reading = false; inflight = null;
                 if (stopped) return;
                 if (x) { if (++errs <= 3) return setTimeout(pump, 1000 * errs); return bad(x); }
                 errs = 0;
@@ -297,7 +302,7 @@ var Music = (function () {
                 pump();
             });
         }
-        return { url: url, stop: function () { stopped = true; try { URL.revokeObjectURL(url); } catch (x) {} } };
+        return { url: url, stop: function () { stopped = true; if (inflight && inflight.abort) { try { inflight.abort(); } catch (x0) {} } inflight = null; try { URL.revokeObjectURL(url); } catch (x) {} } };
     }
 
     /* ---------------- saving ---------------- */
@@ -421,8 +426,7 @@ var Music = (function () {
     }
     function loaded() {
         if (mode === 'full') return 1;
-        if (mode === 'url' && engine === HTML) return HTML.loaded();
-        if (mode === 'url') return 1;
+        if (mode === 'url') return engine === HTML && !loading ? HTML.loaded() : engine && !loading ? 1 : 0;
         return loadedF;
     }
     function position() { return engine && !loading ? engine.time() : lastPos; }

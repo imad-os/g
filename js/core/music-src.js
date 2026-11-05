@@ -248,7 +248,7 @@ var MusicSrc = (function () {
     }
     function proxy(req, cb) {
         if (typeof WebProxy === 'undefined') return cb(err('unsupported'));
-        WebProxy.request(req, {}, null, function (e, r) {
+        return WebProxy.request(req, {}, null, function (e, r) {
             if (e) return cb(err(e.code === 'timeout' || e.code === 'network' ? 'network' : e.code, e.message));
             cb(null, r);
         });
@@ -275,23 +275,27 @@ var MusicSrc = (function () {
         });
     }
     // an authorized Drive request; a 401 gets a new token once
-    function gd(req, cb, retried) {
+    function gd(req, cb, retried, hd) {
+        hd = hd || { off: false, req: null, abort: function () { this.off = true; if (this.req) { try { this.req.abort(); } catch (x) {} } } };
         gdToken(function (e, tok) {
+            if (hd.off) return;
             if (e) return cb(e);
             var h = {}, k;
             for (k in req.headers || {}) h[k] = req.headers[k];
             h.Authorization = 'Bearer ' + tok;
             var r2 = {}; for (k in req) r2[k] = req[k];
             r2.headers = h;
-            proxy(r2, function (e2, r) {
+            hd.req = proxy(r2, function (e2, r) {
+                if (hd.off) return;
                 if (e2) return cb(e2);
-                if (r.status === 401 && !retried) { token = null; return gd(req, cb, true); }
+                if (r.status === 401 && !retried) { token = null; return gd(req, cb, true, hd); }
                 if (r.status === 401 || (r.status === 403 && /insufficient|scope/i.test(JSON.stringify(r.body || '')))) return cb(err('reauth'));
                 if (r.status === 404) return cb(err('gone'));
                 if (r.status < 200 || r.status >= 300) return cb(err('http', 'Google Drive: HTTP ' + r.status));
                 cb(null, r);
             });
         }, retried);
+        return hd;
     }
     function gdEntry(f) {
         return { s: 'gd', p: f.id, n: f.name || '', dir: f.mimeType === FOLDER, size: +f.size || 0, mime: f.mimeType || '', thumb: f.thumbnailLink || '', root: 'Google Drive' };
@@ -317,7 +321,7 @@ var MusicSrc = (function () {
         page('');
     }
     function gdRead(e, at, len, cb) {
-        gd({ url: DRIVE_API + '/' + encodeURIComponent(e.p) + '?alt=media', headers: { Range: 'bytes=' + (at || 0) + '-' + ((at || 0) + len - 1) }, responseType: 'arraybuffer', timeout: 30000 }, function (x, r) {
+        return gd({ url: DRIVE_API + '/' + encodeURIComponent(e.p) + '?alt=media', headers: { Range: 'bytes=' + (at || 0) + '-' + ((at || 0) + len - 1) }, responseType: 'arraybuffer', timeout: 30000 }, function (x, r) {
             if (x) return cb(x);
             var m = /\/(\d+)\s*$/.exec((r.headers && r.headers['content-range']) || '');
             if (m) e.size = +m[1];
@@ -339,7 +343,7 @@ var MusicSrc = (function () {
                 type: typeof Music !== 'undefined' && Music._msType ? Music._msType(e) : '',
                 size: e.size || 0,
                 dur: e.d || 0,
-                read: function (at, len, done) { gdRead(e, at, len, done); },
+                read: function (at, len, done) { return gdRead(e, at, len, done); },
                 name: e.n, mime: e.mime || '',
                 sizeOf: function () { return e.size || 0; },
                 blob: function (progress, done) {
