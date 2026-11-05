@@ -4870,6 +4870,24 @@ async function musicTests(browser, base) {
     await page.evaluate(() => { MusicSaver.hide(); Music.setPref('saver', 'cover'); MusicSaver.show(true); });
     check(await page.evaluate(() => !!document.querySelector('.mxs-cover') && !document.querySelector('.mxs canvas')), 'the Cover screensaver needs no drawing loop');
     await page.evaluate(() => MusicSaver.hide());
+    // Now playing's Screensaver button: with the remote's OK, and with a mouse click (the click and a resting pointer do not close it)
+    await page.evaluate(() => { Music.setPref('saver', 'bars'); Win.open('music', 'np'); });
+    await page.waitForSelector('.mx-np:not([hidden]) .mx-np-tool');
+    const svBtn = () => page.evaluate(() => [...document.querySelectorAll('.mx-np-tool')].find((b) => /Screensaver/.test(b.textContent)).focus());
+    await svBtn(); await press(13);
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => MusicSaver.isOn()), 'OK on Now playing\'s Screensaver button opens it');
+    await press(13);
+    check(await page.evaluate(() => !MusicSaver.isOn() && !!document.querySelector('.mx-np:not([hidden])')), 'a key closes it, back on Now playing');
+    const box = await page.evaluate(() => { const r = [...document.querySelectorAll('.mx-np-tool')].find((b) => /Screensaver/.test(b.textContent)).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+    await page.mouse.move(box.x, box.y); await page.mouse.click(box.x, box.y);
+    await page.mouse.move(box.x + 3, box.y + 2);
+    await page.waitForTimeout(1500);
+    await page.mouse.move(box.x + 8, box.y + 6);
+    check(await page.evaluate(() => MusicSaver.isOn()), 'a mouse click on the button opens it, and the click or a resting pointer does not close it');
+    await page.mouse.move(box.x + 200, box.y + 120);
+    check(await page.evaluate(() => !MusicSaver.isOn()), 'moving the pointer for real closes it');
+    await page.waitForTimeout(700);
     // armed only while music plays
     await page.evaluate(() => { Music.setPref('saver', 'bars'); Music.play(); });
     await page.waitForFunction(() => Music.state().playing);

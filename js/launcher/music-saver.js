@@ -10,6 +10,7 @@ var MusicSaver = (function () {
 
     var W = 480, H = 270, BARS = 40;
     var timer = 0, shown = false, root = null, cv = null, g = null, raf = 0, last = 0, t0 = 0, moveT = 0, clockT = 0, eatUntil = 0;
+    var shownAt = 0, px = -1, py = -1;
     var levels = [], peaks = [], style = 'bars', acc = '#4cc2ff', tint = '', trackKey = '', inited = false;
 
     function t(k) { return I18n.t(k); }
@@ -27,10 +28,21 @@ var MusicSaver = (function () {
         if (p.saver === 'off' || !s.playing) return;
         timer = setTimeout(function () { timer = 0; if (blocked()) return arm(); show(false); }, Math.max(1, +p.saverMin || 2) * 60000);
     }
-    function activity() { if (shown) { hide(); eatUntil = Date.now() + 500; } else if (timer) arm(); }
+    // a click or a pointer that really moves; not the click that opened it (Now playing's Screensaver button) and not a
+    // mouse / Magic Remote pointer resting (it sends small moves on its own)
+    function activity(e) {
+        if (shown && Date.now() - shownAt < 1200) return;
+        if (e && e.type === 'pointermove') {
+            if (px < 0) { px = e.clientX; py = e.clientY; return; }          // where it rests: not a move
+            if (Math.abs(e.clientX - px) + Math.abs(e.clientY - py) <= 24) return;
+            px = e.clientX; py = e.clientY;
+        }
+        if (shown) { hide(); eatUntil = Date.now() + 500; } else if (timer) arm();
+    }
     // from the router (main.js): true = the key was used to leave the screensaver
     function input(pressed) {
-        if (shown) { if (pressed) { hide(); eatUntil = Date.now() + 600; } return true; }
+        // (one OK press gives several actions, confirm then jump: the rest of the press that opened it does not close it)
+        if (shown) { if (pressed && Date.now() - shownAt > 250) { hide(); eatUntil = Date.now() + 600; } return true; }
         if (!pressed && Date.now() < eatUntil) return true;
         if (timer) arm();
         return false;
@@ -43,7 +55,7 @@ var MusicSaver = (function () {
         if (shown) return;
         var p = Music.prefs();
         style = p.saver === 'off' ? 'bars' : p.saver;
-        shown = true;
+        shown = true; shownAt = Date.now(); px = py = -1;
         palette();
         root = el('div', 'mxs mxs-s-' + style);
         root._test = !!test;
@@ -63,7 +75,7 @@ var MusicSaver = (function () {
         card.appendChild(el('div', 'mxs-title'));
         card.appendChild(el('div', 'mxs-artist'));
         root.appendChild(card);
-        root.addEventListener('pointerdown', function (e) { e.preventDefault(); e.stopPropagation(); activity(); }, true);
+        root.addEventListener('pointerdown', function (e) { e.preventDefault(); e.stopPropagation(); activity(e); }, true);
         document.body.appendChild(root);
         levels = []; peaks = [];
         for (var i = 0; i < BARS; i++) { levels.push(0); peaks.push(0); }
