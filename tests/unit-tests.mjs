@@ -524,6 +524,23 @@ console.log('8. Desktop widgets (js/core/widget-lib.js), Music, Playtime');
     const sm = P.summary();
     check(sm.today === 60 + 65 + 30 && sm.top.id === 'blocks' && sm.top.t === 'Block Drop' && sm.week === sm.today && !iv, 'Playtime counts only while the game runs and My PC is on screen, a long gap adds at most one tick');
     check(P.length(3725, 'h', 'min') === '1 h 02 min' && P.length(59, 'h', 'min') === '0 min', 'Playtime text: 1 h 02 min');
+    // Playtime app stats: sessions, longest session, 7 / 30 days, streak, the week before
+    const g0 = JSON.parse(mem.playtime).games.blocks;
+    check(g0.n === 1 && g0.best === 155 && g0.first > 0, 'Playtime counts one session and its length: ' + JSON.stringify(g0));
+    P.start('snake', 'Snake'); now += 60000; iv(); P.stop();
+    P.start('snake', 'Snake'); now += 60000; iv(); now += 60000; iv(); P.stop();
+    const pst = P.stats(7);
+    check(pst.games.length === 2 && pst.games[0].id === 'snake' && pst.games[0].n === 2 && pst.games[0].best === 120 && pst.all === 155 + 180 &&
+        pst.days.length === 7 && pst.days[6].s === 335 && pst.today === 335 && pst.streak === 1 && pst.played === 1 && pst.best.s === 335,
+        'Playtime stats: most played first, sessions, longest, today is the last day: ' + JSON.stringify(pst).slice(0, 300));
+    const pd = JSON.parse(mem.playtime), today = new RealDate(now), ago = (n) => { const d = new RealDate(today.getTime()); d.setDate(d.getDate() - n); return P.day(d); };
+    pd.days[ago(1)] = 600; pd.days[ago(2)] = 300; pd.days[ago(4)] = 900; pd.days[ago(9)] = 1200; pd.days[ago(200)] = 50;
+    mem.playtime = JSON.stringify(pd);
+    const s30 = P.stats(30), s7 = P.stats(7);
+    check(s7.streak === 3 && s7.week === 335 + 600 + 300 + 900 && s7.prevWeek === 1200 && s30.days.length === 30 && s30.played === 5 && s30.total === s7.week + 1200,
+        'Playtime: streak (days in a row), this week against the week before, 30 days');
+    P.clear();
+    check(P.stats(7).games.length === 0 && P.stats(7).total === 0 && P.summary().today === 0, 'Clear my playtime starts over');
 }
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall unit checks passed');
 process.exit(failures ? 1 : 0);

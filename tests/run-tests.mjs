@@ -49,6 +49,8 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HOSTED = 'https://imad-os.github.io/g/';
+// the build in the repo, and a newer one for the update tests (so they keep working at every build bump)
+const BUILD = JSON.parse(fs.readFileSync(path.join(ROOT, 'app-manifest.json'), 'utf8')).build, NEXT = BUILD + 1;
 const TYPES = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
 
 let failures = 0;
@@ -323,11 +325,11 @@ async function main() {
     console.log('1. hosted newer build runs');
     {
         const page = await newPage(browser, base);
-        await routeHosted(page, { manifest: { build: 99 } });
+        await routeHosted(page, { manifest: { build: NEXT } });
         await page.goto(base + 'index.html');
         await page.waitForFunction(() => window.AppBoot && window.Desktop && document.querySelector('.dicon'), null, { timeout: 15000 });
         check(await page.evaluate(() => AppBoot.source()) === 'remote', 'AppBoot.source() is "remote"');
-        check(await page.evaluate(() => AppBoot.build()) === 99, 'build 99 is running');
+        check(await page.evaluate(() => AppBoot.build()) === NEXT, 'build ' + NEXT + ' is running');
         check(await page.evaluate(() => document.querySelector('base') && document.querySelector('base').href) === HOSTED, '<base href> points to the hosted copy');
         check(await playable(page), 'a game is playable from the hosted copy');
         check(await playable(page, 'jumper'), 'Super Jumper loads from the hosted copy');
@@ -947,7 +949,7 @@ async function main() {
         check(/\d{1,2}:\d{2}/.test(await page.textContent('#tray-time')) && (await page.textContent('#tray-date')).length > 5, 'taskbar clock shows time and date (' + await page.textContent('#tray-time') + ')');
         check(await page.evaluate(() => document.querySelectorAll('#desk-icons [data-game]').length === 7 && !!document.querySelector('#desk-icons [data-app="explorer"]')), 'desktop icons: 7 games plus apps');
         await page.focus('#tb-start'); await key('Enter');
-        check(await page.evaluate(() => Desktop.startOpen() && document.querySelectorAll('#start-pinned [data-focus]').length === 16), 'Start menu lists 9 apps (with the App Store, Memo and Music) and 7 games');
+        check(await page.evaluate(() => Desktop.startOpen() && document.querySelectorAll('#start-pinned [data-focus]').length === 17), 'Start menu lists 10 apps (with the App Store, Memo, Music and Playtime) and 7 games');
         await key('Escape');
         check(await page.evaluate(() => !Desktop.startOpen() && document.activeElement.id === 'tb-start'), 'Back closes Start');
         // shortcut menu: hold OK on a shortcut (a short press still opens it), a long press with the mouse or a finger, a right click
@@ -1628,17 +1630,17 @@ async function main() {
         }, [full, HOSTED, build]);
         // 1) the server does not answer the manifest, but the last online build is known and its files load
         let page = await newPage(browser, base);
-        await seed(page, 99);
+        await seed(page, NEXT);
         await routeHosted(page, { breakFile: 'app-manifest.json' });
         await page.goto(base + 'index.html');
         await page.waitForFunction(() => window.AppBoot && window.Desktop && document.querySelector('.dicon'), null, { timeout: 20000 });
-        check(await page.evaluate(() => AppBoot.source() === 'remote' && AppBoot.build() === 99 && AppBoot.reason() === 'stale' && AppBoot.stale()), 'slow server: the last known online build runs instead of the older built-in copy');
+        check(await page.evaluate((n) => AppBoot.source() === 'remote' && AppBoot.build() === n && AppBoot.reason() === 'stale' && AppBoot.stale(), NEXT), 'slow server: the last known online build runs instead of the older built-in copy');
         check(await playable(page), 'a game is playable from it');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
         // 2) the network is really down: built-in copy, and the last known build is not blamed
         page = await newPage(browser, base);
-        await seed(page, 99);
+        await seed(page, NEXT);
         await routeHosted(page, { offline: true });
         await page.goto(base + 'index.html');
         await page.waitForFunction(() => window.AppBoot && AppBoot.source() === 'local' && document.querySelector('.dicon'), null, { timeout: 20000 });
@@ -1649,10 +1651,10 @@ async function main() {
         await page.context().close();
         // 3) a hosted build that reaches ready is remembered
         page = await newPage(browser, base);
-        await routeHosted(page, { manifest: { build: 98 } });
+        await routeHosted(page, { manifest: { build: NEXT } });
         await page.goto(base + 'index.html');
         await page.waitForFunction(() => window.AppBoot && AppBoot.source() === 'remote' && document.querySelector('.dicon'), null, { timeout: 15000 });
-        check(await page.evaluate((h) => { const g = JSON.parse(localStorage.getItem('boot_good')); return g.manifest.build === 98 && g.base === h && AppBoot.reason() === 'update'; }, HOSTED), 'a hosted build that started fine is saved as the last known good one');
+        check(await page.evaluate(([h, b]) => { const g = JSON.parse(localStorage.getItem('boot_good')); return g.manifest.build === b && g.base === h && AppBoot.reason() === 'update'; }, [HOSTED, NEXT]), 'a hosted build that started fine is saved as the last known good one');
         await page.context().close();
     }
 
@@ -1671,22 +1673,22 @@ async function main() {
         await page.waitForFunction(() => /up to date/.test((document.querySelector('.set-status .set-card-name') || {}).textContent || ''), null, { timeout: 8000 });
         check(true, 'opening the page checks by itself: "' + await status(page) + '"');
         check(await page.evaluate(() => !/Never/.test(document.querySelector('.set-main').textContent) && /Built-in copy/.test(document.querySelector('.set-main').textContent)), 'it shows the last check and where the app runs from');
-        over.build = 99; over.version = '9.9.0';
+        over.build = NEXT; over.version = '9.9.0';
         await key(page, 'ArrowRight', 'Enter');                                       // Check for updates
         await page.waitForFunction(() => /available/.test((document.querySelector('.set-status .set-card-name') || {}).textContent || ''), null, { timeout: 8000 });
-        check(/9\.9\.0.*99/.test(await page.textContent('.set-status')), 'a newer build is found: ' + (await page.textContent('.set-status')));
+        check(new RegExp('9\\.9\\.0.*' + NEXT).test(await page.textContent('.set-status')), 'a newer build is found: ' + (await page.textContent('.set-status')));
         check(await page.evaluate(() => document.activeElement.classList.contains('set-primary')), 'the focus is on "Download and restart"');
         await key(page, 'Enter');
         await page.waitForFunction(() => Updater.state().state === 'ready', null, { timeout: 15000 });
-        check(await page.evaluate((h) => { const g = JSON.parse(localStorage.getItem('boot_good')); const u = Updater.state(); return g.manifest.build === 99 && g.base === h && u.done === u.total && u.total > 20; }, HOSTED), 'every file was downloaded and the build is saved as the one to start');
+        check(await page.evaluate(([h, n]) => { const g = JSON.parse(localStorage.getItem('boot_good')); const u = Updater.state(); return g.manifest.build === n && g.base === h && u.done === u.total && u.total > 20; }, [HOSTED, NEXT]), 'every file was downloaded and the build is saved as the one to start');
         check(/ready/.test(await status(page)), 'the page says it is ready: "' + await status(page) + '"');
         await key(page, 'Enter');                                                      // Restart now
-        await page.waitForFunction(() => window.AppBoot && AppBoot.build && AppBoot.build() === 99 && document.querySelector('.dicon'), null, { timeout: 20000 });
+        await page.waitForFunction((n) => window.AppBoot && AppBoot.build && AppBoot.build() === n && document.querySelector('.dicon'), NEXT, { timeout: 20000 });
         check(await page.evaluate(() => AppBoot.source() === 'remote' && AppBoot.reason() === 'update'), 'after the restart the new build runs');
         await page.context().close();
         // a build whose files cannot all be downloaded is not saved
         page = await newPage(browser, base);
-        await routeHosted(page, { manifest: { build: 99 }, breakFile: 'js/launcher/main.js' });
+        await routeHosted(page, { manifest: { build: NEXT }, breakFile: 'js/launcher/main.js' });
         await page.goto(base + 'index.html');
         await page.waitForFunction(() => window.AppBoot && AppBoot.source() === 'local' && document.querySelector('.dicon'), null, { timeout: 20000 });
         await page.evaluate(() => Win.open('settings', 'update'));
@@ -1707,7 +1709,7 @@ async function main() {
         await page.context().close();
         // a build for another shell cannot be installed from here
         page = await newPage(browser, base);
-        await routeHosted(page, { manifest: { build: 99, shell: 2 } });
+        await routeHosted(page, { manifest: { build: NEXT, shell: 2 } });
         await page.goto(base + 'index.html');
         await page.waitForSelector('.dicon', { timeout: 15000 });
         await page.evaluate(() => Win.open('settings', 'update'));
@@ -4365,6 +4367,44 @@ async function main() {
         await page.evaluate(() => { Playtime._check(); });
         const pt = await page.evaluate(() => { const l = Date.now; Date.now = () => l() + 40000; Playtime._check(); Date.now = l; return Playtime.summary(); });
         check(pt.today >= 39 && pt.top && pt.top.id === 'blocks', 'Playtime counts the time the game runs: ' + JSON.stringify(pt));
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('42c. Playtime app: in Start, opened from its widget; per profile stats, 7 / 30 days, OK on a game plays it');
+    {
+        const page = await newPage(browser, base);
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon');
+        check(await page.evaluate(() => !!Desktop.appById('playtime')), 'Playtime is one of the apps (Start > All apps)');
+        await page.evaluate(() => {
+            const d = new Date(), k = (n) => { const x = new Date(d.getTime()); x.setDate(x.getDate() - n); return Playtime.day(x); }, days = {};
+            days[k(0)] = 1500; days[k(1)] = 3900; days[k(2)] = 600; days[k(8)] = 900; days[k(20)] = 7200;
+            Store.set('playtime', { days, games: { blocks: { s: 9000, t: 'Block Drop', at: Date.now(), n: 6, best: 3000 }, gone: { s: 1200, t: 'Old Game', at: Date.now() - 86400000 * 3 } } });
+        });
+        await page.waitForSelector('#wdg-playtime');
+        await page.focus('#wdg-playtime'); await page.keyboard.press('Enter');          // OK on the Playtime widget opens the app
+        await page.waitForSelector('.pt-card');
+        const ui = await page.evaluate(() => ({
+            cards: [...document.querySelectorAll('.pt-card')].map((c) => c.getAttribute('aria-label')),
+            bars: document.querySelectorAll('.pt-col').length, games: [...document.querySelectorAll('.pt-game')].map((g) => g.getAttribute('aria-label')),
+            focus: document.activeElement.className, title: document.getElementById('win-title').textContent }));
+        check(ui.title === 'Playtime' && ui.bars === 7 && /pt-card/.test(ui.focus) && /Today: 25 min/.test(ui.cards[0]) && /This week: 1 h 40 min/.test(ui.cards[1]) &&
+            /Streak: 3 days/.test(ui.cards[3]) && /Best day/.test(ui.cards[3]),
+            'Playtime opens on its cards: today, this week, daily average, streak: ' + JSON.stringify(ui.cards));
+        check(ui.games.length === 2 && /^Block Drop: 2 h 30 min\. 6 sessions, longest 50 min, last played Today\. OK to play/.test(ui.games[0]) && /not installed any more/.test(ui.games[1]),
+            'games: most played first, sessions, longest, last played; a removed game is still listed: ' + JSON.stringify(ui.games));
+        await page.click('.pt-range-btn:nth-child(2)');
+        check(await page.evaluate(() => document.querySelectorAll('.pt-col').length === 30 && /Last 30 days/.test(document.querySelector('.pt-h').textContent) && Store.get('playtime_range') === 30),
+            '30 days: 30 bars, remembered for the profile');
+        await page.evaluate(() => { Win.close(); Win.open('playtime'); });
+        check(await page.evaluate(() => document.querySelectorAll('.pt-col').length === 30), 'it opens again on 30 days');
+        await page.evaluate(() => Win.refresh());
+        check(await page.evaluate(() => document.querySelectorAll('.pt-chart').length === 1 && /pt-card/.test(document.activeElement.className)), 'a redraw (language or profile change) builds it once and keeps the focus in it');
+        await page.focus('.pt-game');
+        await Promise.all([page.waitForURL(/play=blocks/), page.keyboard.press('Enter')]);
+        check(true, 'OK on a game in Playtime plays it');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }

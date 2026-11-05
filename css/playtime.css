@@ -1,0 +1,76 @@
+/* Playtime app (js/launcher/apps/playtime.js). Plain boxes and CSS bars: no images but the game covers, no blur, no
+   animation. The accent is the theme's --acc (css/themes.css); Windows 11 has none, so Playtime's own violet. */
+.pt { --pt: var(--acc, #9a7bff); --pt-ink: var(--ink, #fff); --pt-card: #232329; --pt-line: rgba(255, 255, 255, 0.1); --pt-dim: #a9a9b6; --pt-r: 16px;
+      height: 100%; overflow-y: auto; padding: 32px 56px 40px; scrollbar-width: none; }
+.pt::-webkit-scrollbar { display: none; }
+.pt button:focus { box-shadow: 0 0 0 4px #fff; }
+
+.pt-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+.pt-card { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 22px 28px; border-radius: var(--pt-r); background: var(--pt-card);
+           border-top: 5px solid var(--pt); text-align: start; }
+.pt-card-label { font-size: 22px; color: var(--pt-dim); }
+.pt-card-big { font-size: 46px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pt-card-sub { min-height: 28px; font-size: 21px; color: var(--pt-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pt-c-week.up .pt-card-sub { color: #6fdc8c; }
+.pt-c-week.down .pt-card-sub { color: #ff9b8f; }
+
+.pt-panel { margin-top: 28px; padding: 24px 28px; border-radius: var(--pt-r); background: var(--pt-card); }
+.pt-head { display: flex; align-items: center; gap: 24px; margin-bottom: 16px; }
+.pt-h { flex: 1; margin: 0; font-size: 28px; font-weight: 600; }
+.pt-all { font-size: 22px; color: var(--pt-dim); }
+.pt-range { display: flex; gap: 8px; padding: 6px; border-radius: 999px; background: rgba(0, 0, 0, 0.3); }
+.pt-range-btn { height: 48px; padding: 0 26px; border-radius: 999px; font-size: 22px; color: var(--pt-dim); }
+.pt-range-btn.on { background: var(--pt); color: var(--pt-ink); }
+
+.pt-chart { display: flex; align-items: stretch; gap: 18px; width: 100%; height: 260px; padding: 8px 12px 0; border-radius: 12px; }
+.pt-chart.pt-r30 { gap: 6px; }
+.pt-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.pt-track { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding-top: 30px; }
+.pt-r30 .pt-track { padding-top: 8px; }
+.pt-bar { width: 100%; max-width: 120px; border-radius: 8px 8px 2px 2px; background: var(--pt); opacity: 0.55; }
+.pt-now .pt-bar { opacity: 1; }
+.pt-zero .pt-bar { height: 4px !important; background: var(--pt-line); opacity: 1; }
+.pt-val { flex: none; height: 30px; font-size: 20px; color: var(--pt-dim); white-space: nowrap; }
+.pt-day { flex: none; height: 36px; text-align: center; padding-top: 8px; font-size: 20px; color: var(--pt-dim); white-space: nowrap; }
+.pt-now .pt-day, .pt-now .pt-val { color: inherit; font-weight: 600; }
+
+.pt-games { display: flex; flex-direction: column; gap: 8px; }
+.pt-game { display: flex; align-items: center; gap: 24px; width: 100%; padding: 12px 20px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); text-align: start; }
+.pt-game:focus { background: rgba(255, 255, 255, 0.1); }
+.pt-gic { flex: none; width: 72px; height: 72px; border-radius: 12px; overflow: hidden; background: var(--pt); color: var(--pt-ink);
+          font-size: 34px; font-weight: 600; line-height: 72px; text-align: center; }
+.pt-gic img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.pt-gtx { flex: 1; min-width: 0; }
+.pt-gname { display: block; font-size: 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pt-gmeta { display: block; margin-top: 2px; font-size: 20px; color: var(--pt-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pt-gbar { display: block; height: 8px; margin-top: 10px; border-radius: 4px; background: var(--pt-line); overflow: hidden; }
+.pt-gbar i { display: block; height: 100%; border-radius: 4px; background: var(--pt); }
+.pt-gtime { flex: none; min-width: 170px; font-size: 26px; font-weight: 600; text-align: end; }
+.pt-gone { opacity: 0.6; }
+.pt-empty { width: 100%; padding: 36px 20px; border-radius: 12px; font-size: 24px; color: var(--pt-dim); text-align: center; }
+
+.pt-foot { display: flex; align-items: center; gap: 24px; margin-top: 24px; }
+.pt-note { flex: 1; margin: 0; font-size: 20px; color: var(--pt-dim); }
+.pt-clear { height: 56px; padding: 0 28px; border-radius: 10px; background: #3a2a2e; color: #ffb3a8; font-size: 22px; }
+
+/* the themes: corners and surfaces like the rest of each theme */
+.th-win7 .pt { --pt-card: #1d2a3a; --pt-r: 8px; }
+.th-win7 .pt-bar, .th-win7 .pt-gbar i { background: linear-gradient(180deg, #8cc8ff, var(--pt)); }
+.th-xp .pt { --pt-card: #1b2a4a; --pt-r: 6px; }
+.th-xp .pt-card { border-top-width: 6px; }
+.th-mac .pt { --pt-card: #2a2a2e; --pt-r: 14px; }
+.th-android .pt { --pt-card: #1f2026; --pt-r: 28px; }
+.th-android .pt-game { border-radius: 20px; }
+.th-ios .pt { --pt-card: #1c1c1e; --pt-r: 22px; --pt-dim: #98989f; }
+.th-ios .pt-card { border-top: 0; }
+.th-ios .pt-card-label { color: var(--pt); font-weight: 600; }
+.th-ios .pt-gic { border-radius: 16px; }
+:is(.th-mac, .th-ios) .pt-game { background: transparent; border-bottom: 1px solid var(--pt-line); border-radius: 0; }
+:is(.th-mac, .th-ios) .pt-game:focus { border-radius: 12px; }
+
+/* upright phone: two cards a row, smaller chart labels */
+.tall .pt { padding: 24px 24px 32px; }
+.tall .pt-cards { grid-template-columns: 1fr 1fr; gap: 16px; }
+.tall .pt-chart { gap: 8px; }
+.tall .pt-r7 .pt-val { font-size: 16px; }
+.tall .pt-foot { flex-direction: column; align-items: stretch; }

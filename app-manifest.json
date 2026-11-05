@@ -1,10 +1,11 @@
 {
-  "build": 98,
+  "build": 99,
   "version": "2.24.0",
   "shell": 1,
   "css": [
     "css/launcher.css",
-    "css/themes.css"
+    "css/themes.css",
+    "css/playtime.css"
   ],
   "js": [
     "js/core/native.js",
@@ -38,6 +39,7 @@
     "js/core/i18n.js",
     "js/core/i18n-users.js",
     "js/core/i18n-widgets.js",
+    "js/core/i18n-playtime.js",
     "js/core/a11y.js",
     "js/core/scores.js",
     "js/core/audio.js",
@@ -61,6 +63,7 @@
     "js/launcher/apps/calendar.js",
     "js/launcher/apps/memo.js",
     "js/launcher/apps/music.js",
+    "js/launcher/apps/playtime.js",
     "js/launcher/apps/scores.js",
     "js/launcher/apps/store.js",
     "js/launcher/apps/gamepad.js",

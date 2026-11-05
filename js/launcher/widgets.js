@@ -155,7 +155,8 @@ var Widgets = (function () {
               return [{ id: 'place', type: 'text', label: t('wgPlace'), 'default': '' },
                       { id: 'units', type: 'select', label: t('wgUnits'), 'default': 'c', options: [{ value: 'c', label: t('wgCelsius') }, { value: 'f', label: t('wgFahrenheit') }] }];
           }, refresh: weather, keep: true },
-        { id: 'playtime', icon: 'hourglass', title: function () { return t('wg_playtime'); }, size: 'small', every: 300, choices: [60, 300, 900, 1800], bg: false, refresh: playtime },
+        { id: 'playtime', icon: 'hourglass', title: function () { return t('wg_playtime'); }, size: 'small', every: 300, choices: [60, 300, 900, 1800], bg: false, refresh: playtime,
+          open: function () { Win.open('playtime'); } },
         { id: 'sysmon', icon: 'chip', title: function () { return t('wg_sysmon'); }, size: 'medium', every: 5, choices: [2, 5, 10, 30, 60], bg: false, refresh: sysmon },
         { id: 'music', icon: 'music', title: function () { return t('wg_music'); }, size: 'medium', every: 2, choices: [1, 2, 5, 10], bg: true, refresh: music,
           idle: function () { return !Music.state().playing; },

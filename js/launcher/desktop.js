@@ -19,6 +19,7 @@ var Desktop = (function () {
         { id: 'calendar', icon: 'calendar', label: 'calendar' },
         { id: 'memo', icon: 'memo', label: 'memo' },
         { id: 'music', icon: 'music', label: 'music' },
+        { id: 'playtime', icon: 'hourglass', label: 'playtime' },
         { id: 'scores', icon: 'scores', label: 'leaderboards' },
         { id: 'gamepad', icon: 'controller', label: 'gamepad' },
         { id: 'settings', icon: 'settings', label: 'settings' }

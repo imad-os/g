@@ -93,7 +93,8 @@
   that app with `MyPC.launch.path` (`Push.parseLink`; already open: `GameHost.deepLink` -> SDK `onLaunch`), `https://` = Browser, old `app?...` = own app). Docs: GUIDE.md section 16.
 - **Desktop widgets** (owner request 2026-11-04): `js/launcher/widgets.js` draws cards in `#desk-widgets` (right of the icons; a
   row above the taskbar on a tall phone): built in Weather (Open-Meteo + GeoJS, no key; keep the `wgPrivacy` line true), Playtime
-  (`js/core/playtime.js`, counted on the game page once a minute), System Monitor (Tizen systeminfo CPU / memory, else JS heap), Music
+  (`js/core/playtime.js`, counted on the game page once a minute; OK opens the **Playtime app** `apps/playtime.js`: today / week / daily average /
+  streak cards, 7 or 30 day CSS bars, games with sessions + longest + last played (OK plays), Clear; per profile key `playtime`, 120 days kept), System Monitor (Tizen systeminfo CPU / memory, else JS heap), Music
   Player (`js/core/music.js` + Win app `music`: a PLACEHOLDER, no sound; owner builds the real one later behind the same API). Per profile
   (`widgets` key): show, refresh rate, "Run in the background", own settings, order; Control Panel > Widgets (list, then a page per
   widget). **Owner rule: every refresh stops while an app or game is open (Desktop.hide, the game page, document.hidden) except widgets
