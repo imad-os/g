@@ -1,5 +1,5 @@
 {
-  "build": 120,
+  "build": 121,
   "version": "2.29.0",
   "shell": 1,
   "css": [
@@ -82,6 +82,7 @@
     "js/launcher/apps/music.js",
     "js/launcher/apps/playtime.js",
     "js/launcher/apps/weather.js",
+    "js/core/music-viz.js",
     "js/launcher/music-saver.js",
     "js/launcher/apps/scores.js",
     "js/launcher/apps/store.js",

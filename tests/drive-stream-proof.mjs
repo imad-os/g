@@ -67,6 +67,10 @@ const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PAT
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, ignoreHTTPSErrors: true, serviceWorkers: MODE === 'web' ? 'allow' : 'block' });
 await ctx.route(/imad-os\.github\.io|firestore\.googleapis|identitytoolkit|securetoken|api\.open-meteo|get\.geojs/, (r) => r.abort('internetdisconnected'));
 const page = await ctx.newPage();
+// TVLIKE=1: exactly what the Samsung TV does: no live copy of the sound (the TV's chip decodes it), pieces of the file instead
+if (process.env.TVLIKE) await page.addInitScript(() => { window.__tvLike = true; });
+// SILENTCAP=1: like the Samsung TV, a copy of the player's sound is silent (the TV decodes in its own chip)
+if (process.env.SILENTCAP) await page.addInitScript(() => { HTMLMediaElement.prototype.captureStream = function () { const c = new AudioContext(), d = c.createMediaStreamDestination(); return d.stream; }; });
 if (process.env.THROTTLE) await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: +process.env.THROTTLE });
 page.on('pageerror', (e) => log.push('PAGE ERROR ' + e.message));
 const mydrive = { id: 'mydrive', name: 'MyDrive', url: 'https://mydrive.example/', entry: 'https://mydrive.example/index.html', icon: '', type: 'app', version: '1.0.4', enabled: true, order: 1, config: { google: { tvClientId: 'cid', tvClientSecret: 'sec' } } };
@@ -89,11 +93,11 @@ if (process.env.SAVER) {
     // second, the song must not stall, and the song must be downloaded only once (no second download for the analysis)
     const at = +process.env.SAVER || 0;
     if (at) await page.waitForTimeout(at * 1000);
-    await page.evaluate(() => { Music.setPref('saver', 'bars'); MusicSaver.show(true); });
+    await page.evaluate(() => { if (window.__tvLike) MusicViz._noLive(true); Music.setPref('saver', 'bars'); MusicSaver.show(true); });
     const ts = Date.now();
     const seq = [];
     for (let i = 0; i < 80; i++) {
-        seq.push(await page.evaluate(() => { const s = Music.state(); return { pos: +s.pos.toFixed(2), play: s.playing && !s.loading, src: MusicSaver._src(), lv: +Math.max(...MusicSaver._levels()).toFixed(2), ctx: MusicSaver._ctx ? MusicSaver._ctx() : '' }; }));
+        seq.push(await page.evaluate(() => { const s = Music.state(); return { pos: +s.pos.toFixed(2), play: s.playing && !s.loading, src: MusicSaver._src(), lv: +Math.max(...MusicSaver._levels()).toFixed(2), ctx: MusicViz._kind() }; }));
         seq[i].t = Date.now() - ts;
         if (i === 25) await page.screenshot({ path: path.join(OUT, 'saver-' + MODE + '-' + FORMAT + '.png') });
         if (i === 40) { await page.evaluate(() => Music.next()); seq[i].next = true; }

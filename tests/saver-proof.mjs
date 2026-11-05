@@ -15,7 +15,7 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const [DIR = '/tmp/saver', MODE = 'live', SONG = 'pattern.mp3'] = process.argv.slice(2);
 const OUT = path.join(DIR, 'shots'); fs.mkdirSync(OUT, { recursive: true });
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.flac': 'audio/flac', '.webmanifest': 'application/manifest+json' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.flac': 'audio/flac', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg', '.webmanifest': 'application/manifest+json' };
 const app = http.createServer((q, r) => {
     const u = decodeURIComponent(q.url.split('?')[0]);
     const p = u.startsWith('/__songs/') ? path.join(DIR, path.basename(u)) : path.join(ROOT, u);
@@ -60,7 +60,7 @@ await page.evaluate((b) => {
     MusicSrc.add('t', {
         list: (d, cb) => cb(null, []),
         url: (e, cb) => cb(null, { url: b + '__songs/' + e.p }),
-        read: (e, at, len, cb) => fetch(b + '__songs/' + e.p, { headers: { Range: 'bytes=' + at + '-' + (at + len - 1) } }).then((r) => r.arrayBuffer()).then((x) => cb(null, new Uint8Array(x)), (x) => cb({ code: 'io' })),
+        read: (e, at, len, cb) => fetch(b + '__songs/' + e.p, { headers: { Range: 'bytes=' + at + '-' + (at + len - 1) } }).then((r) => { const m = /\/(\d+)/.exec(r.headers.get('content-range') || ''); if (m) e.size = +m[1]; window.__reads = (window.__reads || 0) + 1; window.__bytes = (window.__bytes || 0) + len; return r.arrayBuffer(); }).then((x) => cb(null, new Uint8Array(x)), (x) => cb({ code: 'io' })),
         rename: (e, n, cb) => cb({ code: 'unsupported' })
     });
 }, base);
@@ -76,6 +76,7 @@ await page.evaluate(() => { Music.seek(21.5); });
 await page.waitForTimeout(150);
 await page.evaluate(() => { window.__long = []; try { new PerformanceObserver((l) => l.getEntries().forEach((e) => window.__long.push(Math.round(e.duration)))).observe({ entryTypes: ['longtask'] }); } catch (x) {} window.__t0 = performance.now(); MusicSaver.show(true); });
 const firstMove = await page.waitForFunction(() => Math.max(...MusicSaver._levels()) > 0.3 && performance.now() - window.__t0, null, { timeout: 10000, polling: 16 }).then((h) => h.jsonValue()).catch(() => -1);
+console.log('format reader: ' + (await page.evaluate(() => MusicViz._kind())) + ', file read so far: ' + (await page.evaluate(() => Math.round((window.__bytes || 0) / 1024))) + ' KB');
 console.log(SONG + ' (' + MODE + '): opened at ' + (await page.evaluate(() => Music.time().toFixed(2))) + ' s, the bars move after ' + Math.round(firstMove) + ' ms');
 const rows = [];
 let lowShot = false, highShot = false, quietShot = false;
