@@ -143,17 +143,39 @@ var App = (function () {
         if (GameHost.active()) return GameHost.onAction(action, pressed, repeat, dev);
 
         if (action === 'padLost') { toast(I18n.t('padOff').split('.')[0], { id: 'pad', kind: 'err' }); return; }
+        // the Music screensaver (js/launcher/music-saver.js): any key brings My PC back and does nothing else
+        if (typeof MusicSaver !== 'undefined' && MusicSaver.input(pressed)) return;
         if (!pressed) {
             // OK let go on the desktop: opens the shortcut (held long, it showed the shortcut menu instead)
             if (action === 'confirm' && !Keyboard.isOpen() && !ProfilesUI.screenOpen() && !Win.isOpen()) Desktop.action(action, repeat, false);
+            else if (Win.isOpen() && !Keyboard.isOpen() && !ProfilesUI.screenOpen()) Win.release(action);
             return;
         }
+        // the remote's media keys play the music anywhere on the desktop and in the apps (js/core/music.js)
+        if (mediaKey(action, repeat)) return;
 
         // top to bottom: keyboard over everything, profiles overlay, the open app, the desktop
         if (Keyboard.isOpen()) return Keyboard.action(action, repeat);
         if (ProfilesUI.screenOpen()) return ProfilesUI.screenAction(action, repeat);
         if (Win.isOpen()) return Win.action(action, repeat, dev);
         Desktop.action(action, repeat);
+    }
+
+    // Play / Pause (and P), ⏭ ⏮ ⏩ ⏪ ⏹: the Music player, once it has songs. The Memo app keeps Play / Pause for its memos.
+    function mediaKey(action, repeat) {
+        if (typeof Music === 'undefined' || !Music.has() || Keyboard.isOpen()) return false;
+        if (action === 'pause') {
+            if (Win.current() === 'memo') return false;
+            if (!repeat) { Music.toggle(); toast(Music.state().playing ? '▶  ' + Music.state().title : '❚❚  ' + I18n.t('wgPause'), { id: 'music', kind: 'info', timeout: 2500 }); }
+            return true;
+        }
+        if (action === 'mediaNext' || action === 'mediaPrev') {
+            if (!repeat) { if (action === 'mediaNext') Music.next(); else Music.prev(); toast('♪  ' + Music.state().title, { id: 'music', kind: 'info', timeout: 2500 }); }
+            return true;
+        }
+        if (action === 'mediaFf' || action === 'mediaRew') { Music.seekBy(action === 'mediaFf' ? 15 : -15); return true; }
+        if (action === 'mediaStop') { if (!repeat) Music.stop(); return true; }
+        return false;
     }
 
     /* ---------- game list from the active app manifest ---------- */
@@ -231,6 +253,7 @@ var App = (function () {
             Playtime.start(g.id, I18n.pick(g.manifest.title));     // the Playtime widget
             Widgets.background();                      // only the widgets that run in the background (Control Panel > Widgets)
             Push.start();                              // notifications also arrive during a game (small cards, no focus taken)
+            Music.init({ resume: true, lite: true });  // the music goes on under the game (the game menu can pause it)
         };
         if (id.indexOf('app-') === 0) {
             // an installed app: from the saved Firebase list (no network needed)
@@ -320,6 +343,9 @@ var App = (function () {
     }
 
     function desktop() {
+        // the profile's music: back from a game, it plays on where it was (Music app > Settings)
+        Music.init({ resume: !!param('from') });
+        if (typeof MusicSaver !== 'undefined') MusicSaver.init();
         loadGames(function (games) {
             Desktop.init(games, play);
             ProfilesUI.init(profileChanged);

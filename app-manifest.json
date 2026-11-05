@@ -1,12 +1,13 @@
 {
-  "build": 100,
-  "version": "2.25.0",
+  "build": 101,
+  "version": "2.26.0",
   "shell": 1,
   "css": [
     "css/launcher.css",
     "css/themes.css",
     "css/playtime.css",
-    "css/weather.css"
+    "css/weather.css",
+    "css/music.css"
   ],
   "js": [
     "js/core/native.js",
@@ -30,6 +31,8 @@
     "js/core/qr.js",
     "js/core/memo-store.js",
     "js/core/widget-lib.js",
+    "js/core/music-tags.js",
+    "js/core/music-src.js",
     "js/core/music.js",
     "js/core/weather.js",
     "js/core/playtime.js",
@@ -43,6 +46,7 @@
     "js/core/i18n-widgets.js",
     "js/core/i18n-playtime.js",
     "js/core/i18n-weather.js",
+    "js/core/i18n-music.js",
     "js/core/a11y.js",
     "js/core/scores.js",
     "js/core/audio.js",
@@ -68,6 +72,7 @@
     "js/launcher/apps/music.js",
     "js/launcher/apps/playtime.js",
     "js/launcher/apps/weather.js",
+    "js/launcher/music-saver.js",
     "js/launcher/apps/scores.js",
     "js/launcher/apps/store.js",
     "js/launcher/apps/gamepad.js",

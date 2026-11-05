@@ -336,6 +336,8 @@ async function main() {
     const srv = await serve();
     const base = `http://localhost:${srv.address().port}/`;
     const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--autoplay-policy=no-user-gesture-required', '--disable-features=WebRtcHideLocalIpsWithMdns', '--js-flags=--expose-gc', '--enable-precise-memory-info', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
+    // MYPC_ONLY=music node tests/run-tests.mjs: only the Music app's checks (quick while working on it)
+    if (process.env.MYPC_ONLY === 'music') { await musicTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
 
     console.log('1. hosted newer build runs');
     {
@@ -1669,7 +1671,8 @@ async function main() {
         await routeHosted(page, { manifest: { build: NEXT } });
         await page.goto(base + 'index.html');
         await page.waitForFunction(() => window.AppBoot && AppBoot.source() === 'remote' && document.querySelector('.dicon'), null, { timeout: 15000 });
-        check(await page.evaluate(([h, b]) => { const g = JSON.parse(localStorage.getItem('boot_good')); return g.manifest.build === b && g.base === h && AppBoot.reason() === 'update'; }, [HOSTED, NEXT]), 'a hosted build that started fine is saved as the last known good one');
+        await page.waitForFunction(() => localStorage.getItem('boot_good'), null, { timeout: 8000 }).catch(() => {});
+        check(await page.evaluate(([h, b]) => { const g = JSON.parse(localStorage.getItem('boot_good')) || { manifest: {} }; return g.manifest.build === b && g.base === h && AppBoot.reason() === 'update'; }, [HOSTED, NEXT]), 'a hosted build that started fine is saved as the last known good one');
         await page.context().close();
     }
 
@@ -3622,7 +3625,7 @@ async function main() {
         await H.waitForSelector('#desk-icons .dicon', { timeout: 20000 });
         const look = await H.evaluate(() => ({ compact: document.documentElement.classList.contains('compact'), pad: !!document.querySelector('#desk-icons [data-app="gamepad"]'),
             btn: document.querySelector('.tb-btn').getBoundingClientRect().height, apps: document.querySelector('.tb-apps').getBoundingClientRect().right, tray: document.querySelector('.tray').getBoundingClientRect().left }));
-        check(look.compact && look.btn >= 50 && look.apps < look.tray, 'phone: taskbar buttons big enough for a finger (' + Math.round(look.btn) + ' px), not over the clock');
+        check(look.compact && look.btn >= 50 && look.apps < look.tray, 'phone: taskbar buttons big enough for a finger (' + Math.round(look.btn) + ' px), not over the clock ' + JSON.stringify(look));
         check(look.pad, 'phone: the Game controller has a desktop shortcut');
         check(await H.evaluate(() => { const b = document.querySelector('[data-app="getapp"]'); return !!b && b.textContent === I18n.t('getAppUpdate'); }), 'inside the Android app the shortcut is "Update the app"');
         // an Android phone's browser: "Get the app" downloads the latest APK
@@ -4274,10 +4277,28 @@ async function main() {
             widgets: { stars__stars: { app: 'stars', widget: 'stars', code, sha, at: 1 } } };
         const page = await newPage(browser, base, db);
         await page.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'stars', at: 1 }, { id: 'pending', at: 1 }])); });
+        // the TV's player (plays by the clock) and a test source of 5 songs for the Music Player card
+        await page.addInitScript(() => {
+            const av = { state: 'NONE', cur: 0, t: 0, l: null };
+            window.webapis = window.webapis || {};
+            window.webapis.avplay = {
+                open: () => { av.state = 'IDLE'; av.cur = 0; }, setListener: (l) => { av.l = l; }, setDisplayRect() {},
+                prepareAsync: (ok) => setTimeout(() => { av.state = 'READY'; ok(); }, 10),
+                play: () => { av.state = 'PLAYING'; av.t = Date.now(); }, pause: () => { if (av.state === 'PLAYING') av.cur += Date.now() - av.t; av.state = 'PAUSED'; },
+                stop: () => { av.state = 'IDLE'; }, close: () => { av.state = 'NONE'; }, seekTo: (ms, ok) => { av.cur = ms; av.t = Date.now(); if (ok) setTimeout(ok, 1); },
+                getCurrentTime: () => av.state === 'PLAYING' ? av.cur + Date.now() - av.t : av.cur, getDuration: () => 200000, getState: () => av.state
+            };
+        });
         await routeHosted(page, { offline: true });
         await page.goto(base + 'index.html');
         await page.waitForSelector('#desk-icons .dicon');
+        await page.evaluate(() => {
+            MusicSrc.add('t', { list: (d, cb) => cb({ code: 'unsupported' }), read: (e, a, l, cb) => cb({ code: 'unsupported' }), url: (e, cb) => cb(null, { url: 'https://music.test/' + e.n, path: '/t/' + e.n }) });
+            Music.playList(['Morning Pixels', 'Neon Avenue', 'Level Two', 'Night Drive', 'Last Boss'].map((t, i) => ({ s: 't', p: '/t/' + i + '.mp3', n: i + '.mp3', t, a: 'Lab' })), 0);
+            Music.pause();
+        });
         await page.waitForFunction(() => /21/.test((document.getElementById('wdg-weather') || {}).textContent || ''), null, { timeout: 8000 }).catch(() => {});
+        await page.waitForFunction(() => /Morning Pixels/.test((document.getElementById('wdg-music') || {}).textContent || ''), null, { timeout: 5000 }).catch(() => {});
         const cards = await page.evaluate(() => [...document.querySelectorAll('#desk-widgets .wdg')].map((c) => c.id + ':' + c.textContent));
         check(['wdg-weather', 'wdg-playtime', 'wdg-sysmon', 'wdg-music'].every((id) => cards.some((c) => c.indexOf(id + ':') === 0)) && cards.some((c) => /wdg-weather:.*21°.*Casablanca.*Partly cloudy/.test(c)) &&
             cards.some((c) => /wdg-sysmon:.*(Memory|My PC memory)/.test(c)) && cards.some((c) => /wdg-music:.*Morning Pixels/.test(c)) && cards.some((c) => /wdg-playtime:.*0 min/.test(c)),
@@ -4359,7 +4380,8 @@ async function main() {
         // Music app and the card's buttons
         await page.evaluate(() => Win.open('music'));
         await page.waitForTimeout(150);
-        check(await page.evaluate(() => /Morning Pixels|Neon Avenue|Level Two/.test(document.querySelector('.mu').textContent) && document.querySelectorAll('.mu-track').length === 5), 'the Music app (placeholder) shows its tracks');
+        await page.waitForSelector('.mx-np:not([hidden])', { timeout: 3000 }).catch(() => {});
+        check(await page.evaluate(() => /Morning Pixels|Neon Avenue|Level Two|Night Drive|Last Boss/.test(document.querySelector('.mx-np').textContent)), 'the Music app opens on Now playing while a song plays');
         await page.evaluate(() => Win.close());
         await page.waitForTimeout(150);
         const t0 = await page.evaluate(() => Music.state().index);
@@ -4490,11 +4512,324 @@ async function main() {
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }
+    await musicTests(browser, base);
 
     await browser.close();
     srv.close();
     console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed');
     process.exit(failures ? 1 : 0);
+}
+
+// 43. The Music app with a simulated USB drive (Tizen filesystem), the TV's player (AVPlay) and Google Drive through MyDrive.
+// Its own function so that MYPC_ONLY=music runs just these checks.
+async function musicTests(browser, base) {
+    console.log('43. Music: USB drive, song details and covers, hold-OK menu, playlists, the TV player, queue, resume, screensaver, Google Drive');
+    const F = await import('./music-fixtures.mjs');
+    const cover = F.png(32, 32, [30, 140, 220]), art = F.png(24, 24, [220, 60, 40]);
+    const D = '/opt/media/USBDriveA1';
+    const files = {
+        [D + '/Music/Artist A/Album One/cover.png']: cover,
+        [D + '/Music/Artist A/Album One/01 - Song One.mp3']: F.mp3({ title: 'Song One', artist: 'Artist A', album: 'Album One', track: 1, pic: art }),
+        [D + '/Music/Artist A/Album One/02 - Song Two.mp3']: F.mp3({ title: 'Song Two', artist: 'Artist A', album: 'Album One', track: 2 }),
+        [D + '/Music/Artist A/Album One/03 Song Three.flac']: F.flac({ title: 'Song Three', artist: 'Artist A', album: 'Album One', seconds: 200 }),
+        [D + '/Music/Artist A/Album Two/01.m4a']: F.m4a({ title: 'Harbor', artist: 'Artist A', album: 'Album Two', pic: art }),
+        [D + '/Music/Artist A/Album Two/02 Broken.mp3']: F.mp3({ title: 'Broken' }),
+        [D + '/Music/Loose.wav']: F.wav({ title: 'Loose Tone', artist: 'Lab' }),
+        [D + '/Photos/beach.jpg']: cover,
+        [D + '/.Trashes/x.mp3']: F.mp3({ title: 'hidden' })
+    };
+    const b64 = {};
+    for (const k in files) b64[k] = Buffer.from(files[k]).toString('base64');
+    const MOCK = ([files, D]) => {
+        const bin = (s) => { const r = atob(s), b = new Uint8Array(r.length); for (let i = 0; i < r.length; i++) b[i] = r.charCodeAt(i); return b; };
+        const tree = {}; // path -> Uint8Array | true (folder)
+        const addDirs = (p) => { const parts = p.split('/'); for (let i = 2; i < parts.length; i++) tree[parts.slice(0, i).join('/')] = true; };
+        for (const k in files) { tree[k] = bin(files[k]); addDirs(k); }
+        const fsErr = (name) => { const e = new Error(name); e.name = name; return e; };
+        const listeners = [];
+        window.__usb = { tree, mounted: true, listeners, reads: 0 };
+        const fs = {
+            listStorages: (ok) => setTimeout(() => ok(window.__usb.mounted ? [{ label: 'removable_sda1', type: 'EXTERNAL', state: 'MOUNTED' }, { label: 'internal0', type: 'INTERNAL', state: 'MOUNTED' }] : [{ label: 'internal0', type: 'INTERNAL', state: 'MOUNTED' }]), 5),
+            resolve: (loc, ok, err) => setTimeout(() => { if (loc === 'removable_sda1' && window.__usb.mounted) ok({ fullPath: 'removable_sda1', toURI: () => 'file://' + D }); else err(fsErr('NotFoundError')); }, 5),
+            listDirectory: (p, ok, err) => setTimeout(() => {
+                if (p === '/opt/media') return ok(window.__usb.mounted ? ['USBDriveA1'] : []);
+                if (tree[p] !== true || !window.__usb.mounted) return err(fsErr('NotFoundError'));
+                const out = []; for (const k in tree) if (k.indexOf(p + '/') === 0 && k.slice(p.length + 1).indexOf('/') < 0) out.push(k.slice(p.length + 1));
+                ok(out.reverse(), p);
+            }, 5),
+            isDirectory: (p) => { if (!(p in tree) && p !== '/opt/media/USBDriveA1') throw fsErr('NotFoundError'); return tree[p] === true || p === D; },
+            toURI: (p) => 'file://' + encodeURI(p),
+            openFile: (p) => {
+                const d = tree[p]; if (!d || d === true || !window.__usb.mounted) throw fsErr('NotFoundError');
+                let pos = 0;
+                return { seek: (o, w) => (pos = w === 'END' ? d.length + o : o), readDataNonBlocking: (ok, e, n) => { window.__usb.reads++; const r = d.slice(pos, pos + n); pos += r.length; setTimeout(() => ok(r), 3); }, close() {}, closeNonBlocking() {} };
+            },
+            rename: (p, name, ok, err) => setTimeout(() => {
+                const to = p.slice(0, p.lastIndexOf('/') + 1) + name;
+                if (to in tree) return err(fsErr('InvalidValuesError'));
+                for (const k of Object.keys(tree)) if (k === p || k.indexOf(p + '/') === 0) { tree[to + k.slice(p.length)] = tree[k]; delete tree[k]; }
+                ok();
+            }, 5),
+            addStorageStateChangeListener: (fn) => { listeners.push(fn); return 1; }
+        };
+        window.tizen.filesystem = fs;
+        // the TV's player: opens paths and URLs, "plays" by the clock; a file named Broken fails to open
+        const av = { log: [], state: 'NONE', cur: 0, t: 0, l: null, url: '' };
+        window.__av = av;
+        window.webapis.avplay = {
+            open: (u) => { av.log.push('open ' + u); av.url = u; av.state = 'IDLE'; av.cur = 0; },
+            setListener: (l) => { av.l = l; }, setDisplayRect() {},
+            prepareAsync: (ok, err) => setTimeout(() => { if (/Broken/.test(av.url)) return err('PLAYER_ERROR_INVALID_URI'); av.state = 'READY'; ok(); }, 10),
+            play: () => { av.state = 'PLAYING'; av.t = Date.now(); av.log.push('play'); },
+            pause: () => { if (av.state === 'PLAYING') av.cur += Date.now() - av.t; av.state = 'PAUSED'; av.log.push('pause'); },
+            stop: () => { av.state = 'IDLE'; }, close: () => { av.state = 'NONE'; av.log.push('close'); },
+            seekTo: (ms, ok) => { av.cur = ms; av.t = Date.now(); av.log.push('seek ' + ms); if (ok) setTimeout(ok, 1); },
+            getCurrentTime: () => av.state === 'PLAYING' ? av.cur + Date.now() - av.t : av.cur,
+            getDuration: () => 200000, getState: () => av.state,
+        };
+        av.end = () => av.l && av.l.onstreamcompleted();
+    };
+    const db = { apps: {} };
+    const page = await newPage(browser, base, db);
+    await page.addInitScript(MOCK, [b64, D]);
+    await routeHosted(page, { offline: true });
+    await page.goto(base + 'index.html');
+    await page.waitForSelector('#desk-icons .dicon');
+    const key = (code, down) => page.evaluate(([c, d]) => Input.onKey({ keyCode: c, repeat: false, preventDefault() {} }, d), [code, down]);
+    const press = async (code) => { await key(code, true); await key(code, false); };
+    // MYPC_SHOTS=<folder>: screenshots of each screen (to look at the design)
+    const shot = async (name) => { if (process.env.MYPC_SHOTS) { await page.waitForTimeout(150); await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, name + '.png') }); } };
+    const focusText = (sel, re) => page.evaluate(([s, r]) => { const b = [...document.querySelectorAll(s)].find((x) => new RegExp(r).test(x.textContent)); if (b) b.focus(); return !!b; }, [sel, re.source]);
+
+    // Home: the USB drive and Google Drive
+    await page.evaluate(() => Win.open('music'));
+    await page.waitForFunction(() => [...document.querySelectorAll('.mx-tile')].some((t) => /USB A1/.test(t.textContent)), null, { timeout: 5000 }).catch(() => {});
+    const home = await page.evaluate(() => ({ tiles: [...document.querySelectorAll('.mx-tile')].map((t) => t.textContent), side: [...document.querySelectorAll('.mx-nav')].map((t) => t.textContent) }));
+    await shot('1-home');
+    check(home.tiles.some((t) => /USB A1/.test(t)) && home.tiles.some((t) => /Google Drive/.test(t)) && home.side.some((t) => /USB A1/.test(t)), 'Home lists the USB drive plugged into the TV and Google Drive ' + JSON.stringify(home));
+
+    // a folder: sub-folders as tiles, songs as rows; hidden and system folders are left out
+    await page.evaluate(() => [...document.querySelectorAll('.mx-tile')].find((t) => /USB A1/.test(t.textContent)).click());
+    await page.waitForSelector('.mx-grid .mx-tile');
+    const root = await page.evaluate(() => [...document.querySelectorAll('.mx-scroll .mx-tile, .mx-scroll .mx-row')].map((t) => t.querySelector('.mx-name, .mx-rt').textContent));
+    check(root.join() === 'Music,Photos', 'the drive shows its folders, without .Trashes: ' + root);
+    await page.evaluate(() => [...document.querySelectorAll('.mx-tile')].find((t) => /Music/.test(t.textContent)).click());
+    await page.waitForFunction(() => document.querySelectorAll('.mx-row').length === 1);
+    await page.evaluate(() => [...document.querySelectorAll('.mx-tile')].find((t) => /Artist A/.test(t.textContent)).click());
+    await page.waitForFunction(() => /Album One/.test((document.querySelector('.mx-grid') || {}).textContent || ''));
+    // the folder tile shows the folder's cover.png
+    await page.waitForFunction(() => { const t = [...document.querySelectorAll('.mx-tile')].find((x) => /Album One/.test(x.textContent)); return t && t.querySelector('img'); }, null, { timeout: 6000 }).catch(() => {});
+    await shot('2-artist');
+    const tileArt = await page.evaluate(() => { const t = [...document.querySelectorAll('.mx-tile')].find((x) => /Album One/.test(x.textContent)); const i = t && t.querySelector('img'); return i ? i.src.slice(0, 5) : ''; });
+    check(tileArt === 'blob:', 'a folder tile shows its cover picture (cover.png, made small): ' + tileArt);
+    // inside the album: titles, artists and the song's own cover from the files
+    await page.evaluate(() => [...document.querySelectorAll('.mx-tile')].find((t) => /Album One/.test(t.textContent)).click());
+    await page.waitForFunction(() => document.querySelectorAll('.mx-row').length === 3);
+    await page.waitForFunction(() => /Song Three/.test(document.querySelector('.mx-rows').textContent) && document.querySelector('.mx-row img'), null, { timeout: 8000 }).catch(() => {});
+    const rows = await page.evaluate(() => [...document.querySelectorAll('.mx-row')].map((r) => r.querySelector('.mx-rt').textContent + '|' + r.querySelector('.mx-ra').textContent + '|' + !!r.querySelector('img')));
+    await shot('3-album');
+    check(rows[0] === 'Song One|Artist A · Album One|true' && /^Song Two\|Artist A/.test(rows[1]) && /^Song Three\|Artist A · Album One/.test(rows[2]),
+        'songs show the title, artist and album inside the files, and their cover: ' + JSON.stringify(rows));
+    check(await page.evaluate(() => /Song Three.*3:20/.test(document.querySelector('.mx-rows').textContent)), 'the FLAC song shows its length (3:20)');
+
+    // hold OK on a folder: its menu; Save as playlist
+    await page.evaluate(() => Focus.focus(document.querySelector('.mx-act-main')));
+    await press(10009);                                    // back to Artist A
+    await page.waitForFunction(() => /Album Two/.test(document.querySelector('.mx-scroll').textContent));
+    await focusText('.mx-tile', /Album One/);
+    await key(13, true); await page.waitForTimeout(750); await key(13, false);
+    const menu = await page.evaluate(() => document.querySelector('.mx-menu') ? [...document.querySelectorAll('.mx-menu-i')].map((b) => b.textContent) : null);
+    await shot('4-menu');
+    check(menu && ['Play all', 'Shuffle', 'Save as playlist', 'Rename'].every((x) => menu.indexOf(x) >= 0), 'holding OK on a folder opens its menu: ' + JSON.stringify(menu));
+    check(await page.evaluate(() => /Album One/.test(document.querySelector('.mx-title').textContent) === false), 'letting OK go after the hold does not open the folder');
+    await focusText('.mx-menu-i', /Save as playlist/);
+    await press(13);
+    await page.waitForFunction(() => Keyboard.isOpen());
+    await page.evaluate(() => Keyboard.submit());
+    const lists = await page.evaluate(() => Store.get('music_lists'));
+    check(lists && lists.length === 1 && lists[0].n === 'Album One' && lists[0].dir && lists[0].dir.p === '/opt/media/USBDriveA1/Music/Artist A/Album One', 'Save as playlist keeps the folder as a playlist of this profile');
+    // + on a folder: the same menu; Play all plays it with the TV's player
+    await focusText('.mx-tile', /Album One/);
+    await press(80); // P = pause key: nothing queued yet, does nothing
+    await page.evaluate(() => Win.action('menu', false));
+    await focusText('.mx-menu-i', /^Play all$/);
+    await press(13);
+    await page.waitForFunction(() => Music.engineName() === 'av' && document.querySelector('.mx-np') && !document.querySelector('.mx-np').hidden, null, { timeout: 5000 }).catch(() => {});
+    let st = await page.evaluate(() => ({ s: Music.state(), log: __av.log.slice(), np: document.querySelector('.mx-np-title').textContent, eng: Music.engineName() }));
+    check(st.s.playing && st.eng === 'av' && st.log.indexOf('open /opt/media/USBDriveA1/Music/Artist A/Album One/01 - Song One.mp3') >= 0 && st.np === 'Song One' && st.s.count === 3,
+        'Play all: the TV\'s own player opens the first song by its path; Now playing shows it ' + JSON.stringify({ log: st.log, np: st.np, eng: st.eng }));
+    await page.waitForFunction(() => document.querySelector('.mx-np-art img'), null, { timeout: 5000 }).catch(() => {});
+    await page.evaluate(() => Focus.focus(document.querySelector('.mx-cb-main')));
+    await shot('5-np-win11');
+    for (const th of ['ios', 'android', 'win7', 'xp', 'mac']) { await page.evaluate((x) => Themes.set(x), th); await shot('5-np-' + th); }
+    await page.evaluate(() => Themes.set('win11'));
+    check(await page.evaluate(() => !!document.querySelector('.mx-np-art img') && !!document.querySelector('.mx-np').style.getPropertyValue('--mx-tint')), 'Now playing shows the song\'s cover and takes its colour');
+    // the remote's ⏭ and the end of a song
+    await press(10233);
+    await page.waitForFunction(() => Music.state().title === 'Song Two' && Music.state().playing);
+    await page.evaluate(() => __av.end());
+    await page.waitForFunction(() => Music.state().title === 'Song Three' && Music.state().playing, null, { timeout: 4000 }).catch(() => {});
+    check(await page.evaluate(() => Music.state().title === 'Song Three' && /03 Song Three\.flac/.test(__av.url)), 'the ⏭ key and the end of a song move on to the next one');
+    // seek on the bar
+    await page.evaluate(() => Focus.focus(document.querySelector('.mx-np-seek')));
+    await press(39); await press(39);
+    const sk = await page.evaluate(() => ({ pos: Music.state().pos, log: __av.log.filter((l) => /^seek/.test(l)) }));
+    check(sk.pos >= 19 && sk.log.some((l) => /^seek (1\d|2\d)\d{3}$/.test(l)), 'Right on the bar moves 10 s forward ' + JSON.stringify(sk));
+    // ⏯ pauses anywhere
+    await press(10252);
+    check(await page.evaluate(() => !Music.state().playing && __av.state === 'PAUSED'), 'the Play / Pause key pauses');
+    await press(10252);
+    check(await page.evaluate(() => Music.state().playing && __av.state === 'PLAYING'), 'and plays again');
+    // shuffle / repeat buttons
+    await page.evaluate(() => document.querySelector('.mx-cb[data-c="repeat"]').click());
+    check(await page.evaluate(() => Music.state().repeat === 'all' && document.querySelector('.mx-cb[data-c="repeat"]').classList.contains('on')), 'Repeat: all');
+    await page.evaluate(() => __av.end());
+    await page.waitForFunction(() => Music.state().title === 'Song One' && Music.state().playing, null, { timeout: 4000 }).catch(() => {});
+    check(await page.evaluate(() => Music.state().title === 'Song One'), 'repeat all: after the last song, the first one');
+    await page.evaluate(() => Music.setRepeat('off'));
+    // Back: Now playing -> the folder; the mini player shows the song
+    await press(10009);
+    check(await page.evaluate(() => document.querySelector('.mx-np').hidden && !document.querySelector('.mx-mini').hidden && /Song One/.test(document.querySelector('.mx-mini').textContent)), 'Back leaves Now playing; the mini player under the list shows the song');
+
+    // playlists screen and a playlist of a folder
+    await page.evaluate(() => document.querySelector('.mx-nav[data-nav="lists"]').click());
+    check(await page.evaluate(() => /Album One/.test(document.querySelector('.mx-scroll').textContent)), 'Playlists lists the saved folder');
+
+    // a song that cannot be played: the TV's player, then the web player, then the next song
+    await page.evaluate(() => Music.playList([{ s: 'usb', p: '/opt/media/USBDriveA1/Music/Artist A/Album Two/02 Broken.mp3', n: '02 Broken.mp3' }, { s: 'usb', p: '/opt/media/USBDriveA1/Music/Artist A/Album Two/01.m4a', n: '01.m4a' }], 0));
+    await page.waitForFunction(() => Music.state().index === 1 && Music.state().playing, null, { timeout: 8000 }).catch(() => {});
+    check(await page.evaluate(() => Music.state().index === 1 && Music.state().playing && /01\.m4a/.test(__av.url)), 'a song that fails in both players is skipped (with a notice) and the next one plays');
+    await page.waitForFunction(() => Music.state().title === 'Harbor', null, { timeout: 5000 }).catch(() => {});
+    check(await page.evaluate(() => Music.state().title === 'Harbor' && Music.queue().list[1].t === 'Harbor'), 'the details of an M4A (moov after the sound) are read and kept in the queue');
+
+    // rename a song from its menu
+    await page.evaluate(() => { Win.close(); Music.pause(); Win.open('music'); });
+    await page.waitForTimeout(100);
+    await page.evaluate(() => [...document.querySelectorAll('.mx-tile')].find((t) => /USB A1/.test(t.textContent)).click());
+    await page.waitForSelector('.mx-grid .mx-tile');
+    await page.evaluate(() => [...document.querySelectorAll('.mx-tile')].find((t) => /Music/.test(t.textContent)).click());
+    await page.waitForFunction(() => document.querySelectorAll('.mx-row').length === 1);
+    await focusText('.mx-row', /Loose/);
+    await key(13, true); await page.waitForTimeout(750); await key(13, false);
+    await focusText('.mx-menu-i', /^Rename$/);
+    await press(13);
+    await page.waitForFunction(() => Keyboard.isOpen());
+    await page.evaluate(() => { Keyboard.setText('Calm Tone'); Keyboard.submit(); });
+    await page.waitForFunction(() => '/opt/media/USBDriveA1/Music/Calm Tone.wav' in __usb.tree, null, { timeout: 3000 }).catch(() => {});
+    check(await page.evaluate(() => '/opt/media/USBDriveA1/Music/Calm Tone.wav' in __usb.tree && !('/opt/media/USBDriveA1/Music/Loose.wav' in __usb.tree)), 'Rename renames the file on the drive (its extension kept)');
+
+    // the screensaver: shown, then any key brings My PC back and does nothing else
+    await page.evaluate(() => MusicSaver.show(true));
+    await page.waitForTimeout(150);
+    await page.waitForTimeout(800);
+    await shot('6-saver-bars');
+    check(await page.evaluate(() => !!document.querySelector('.mxs canvas') && MusicSaver.isOn()), 'the screensaver draws its visualizer');
+    const title0 = await page.evaluate(() => document.querySelector('.mx-title').textContent);
+    await press(10009);
+    check(await page.evaluate((t0) => !MusicSaver.isOn() && !document.querySelector('.mxs') && document.querySelector('.mx-title').textContent === t0 && Win.isOpen(), title0), 'a key closes the screensaver and does nothing else (Back did not leave the folder)');
+    await page.evaluate(() => { Music.setPref('saver', 'cover'); MusicSaver.show(true); });
+    await shot('6-saver-cover');
+    await page.evaluate(() => { MusicSaver.hide(); Music.setPref('saver', 'waves'); MusicSaver.show(true); });
+    await page.waitForTimeout(1200);
+    await shot('6-saver-waves');
+    await page.evaluate(() => { MusicSaver.hide(); Music.setPref('saver', 'cover'); MusicSaver.show(true); });
+    check(await page.evaluate(() => !!document.querySelector('.mxs-cover') && !document.querySelector('.mxs canvas')), 'the Cover screensaver needs no drawing loop');
+    await page.evaluate(() => MusicSaver.hide());
+    // armed only while music plays
+    await page.evaluate(() => { Music.setPref('saver', 'bars'); Music.play(); });
+    await page.waitForFunction(() => Music.state().playing);
+    check(await page.evaluate(() => MusicSaver._armed()), 'while a song plays the screensaver waits for the remote to rest');
+    await page.evaluate(() => Music.pause());
+    check(await page.evaluate(() => !MusicSaver._armed()), 'paused: no screensaver timer');
+
+    // the widget on the desktop follows the player
+    await page.evaluate(() => { Win.close(); Music.play(); });
+    await page.waitForTimeout(300);
+    await shot('7-widget');
+    check(await page.evaluate(() => /Harbor/.test(document.getElementById('wdg-music').textContent)), 'the Music Player widget shows the song playing');
+
+    // resume after a game: the page changes, then back on the desktop it plays on where it was
+    await page.waitForTimeout(1600);
+    const pos0 = await page.evaluate(() => Music.state().pos);
+    await page.evaluate(() => { location.replace(location.href.split('?')[0] + '?play=blocks'); });
+    await page.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 15000 });
+    await page.waitForFunction(() => Music.state().playing, null, { timeout: 5000 }).catch(() => {});
+    const inGame = await page.evaluate(() => ({ s: Music.state(), log: __av.log.slice(), reads: __usb.reads }));
+    check(inGame.s.playing && inGame.s.title === 'Harbor' && inGame.log.some((l) => /^seek \d+/.test(l) && +l.slice(5) >= Math.floor(pos0 * 1000) - 500),
+        'the music plays on under the game, from where it was ' + JSON.stringify(inGame.log));
+    await page.evaluate(() => Music.pause());
+    check(await page.evaluate(() => Music.has() && !Music.state().playing), 'on the game page Music can be paused (the game menu)');
+    await page.evaluate(() => Music.play());
+    await page.waitForFunction(() => Music.state().playing, null, { timeout: 3000 }).catch(() => {});
+    await page.waitForTimeout(1200);
+    const pos1 = await page.evaluate(() => Music.state().pos);
+    await page.evaluate(() => { location.replace(location.href.split('?')[0] + '?from=blocks'); });
+    await page.waitForSelector('#desk-icons .dicon');
+    await page.waitForFunction(() => Music.state().playing, null, { timeout: 5000 }).catch(() => {});
+    const res = await page.evaluate(() => ({ s: Music.state(), log: __av.log.slice() }));
+    check(res.s.playing && res.s.title === 'Harbor' && res.log.some((l) => /^open .*01\.m4a/.test(l)) && res.log.some((l) => /^seek \d+/.test(l) && +l.slice(5) >= Math.floor(pos1 * 1000) - 500),
+        'back from a game the music plays on from where it was ' + JSON.stringify(res.log) + ' at ' + pos1);
+    // another profile has its own queue and playlists
+    const other = await page.evaluate(() => { const p2 = Profiles.create('Nadia'); Store.setProfile(p2.id); const o = { q: Store.get('music', null), l: Store.get('music_lists', null) }; Store.setProfile('p1'); return o; });
+    check(other.q === null && other.l === null, 'queue and playlists are per profile');
+
+    // the drive is removed
+    await page.evaluate(() => Win.open('music'));
+    await page.waitForFunction(() => [...document.querySelectorAll('.mx-nav')].some((t) => /USB A1/.test(t.textContent)));
+    await page.evaluate(() => { __usb.mounted = false; __usb.listeners.forEach((f) => f({ label: 'removable_sda1', state: 'REMOVED' })); });
+    await page.waitForFunction(() => ![...document.querySelectorAll('.mx-nav')].some((t) => /USB A1/.test(t.textContent)), null, { timeout: 4000 }).catch(() => {});
+    check(await page.evaluate(() => ![...document.querySelectorAll('.mx-nav')].some((t) => /USB A1/.test(t.textContent)) && /No USB drive/.test(document.querySelector('.mx-scroll').textContent)), 'a removed drive leaves the side bar and Home');
+    await page.evaluate(() => Music.stop());
+
+    // Google Drive through MyDrive: every missing piece has its own message
+    const gdText = () => page.evaluate(async () => { document.querySelector('.mx-nav[data-nav="gd"]').click(); for (let i = 0; i < 40; i++) { await new Promise((r) => setTimeout(r, 50)); const m = document.querySelector('.mx-msg, .mx-scroll .mx-grid'); if (m) return document.querySelector('.mx-main').textContent; } return document.querySelector('.mx-main').textContent; });
+    let gt = await gdText();
+    await shot('8-gd-noapp');
+    check(/needs the MyDrive app/.test(gt) && /Open the App Store/.test(gt), 'MyDrive not installed: says to install it');
+    const mydrive = (config) => ({ id: 'mydrive', name: 'MyDrive', url: 'https://mydrive.example/', entry: 'https://mydrive.example/index.html', icon: '', type: 'app', version: '1.0.4', enabled: true, order: 1, config });
+    db.apps.mydrive = mydrive({ pageSize: 100 });
+    await page.evaluate((a) => { localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'mydrive', at: 1 }])); localStorage.setItem('arc_dev_catalog', JSON.stringify([a])); }, db.apps.mydrive);
+    gt = await gdText();
+    check(/Google settings are missing/.test(gt), 'MyDrive without its Google client in the config: says an App Store manager must add it');
+    db.apps.mydrive = mydrive({ google: { tvClientId: 'cid.apps.googleusercontent.com', tvClientSecret: 'sec' } });
+    await page.evaluate((a) => localStorage.setItem('arc_dev_catalog', JSON.stringify([a])), db.apps.mydrive);
+    gt = await gdText();
+    check(/No Google account is linked for/.test(gt) && /Open MyDrive/.test(gt), 'no account linked in MyDrive for this profile: says to link one there');
+    await page.evaluate(() => Store.set('game_app-mydrive_data', { accounts: [{ id: 'g1', email: 'imad@example.com', name: 'Imad', refreshToken: 'RT', needsReauth: true }], active: 'g1' }));
+    gt = await gdText();
+    check(/link imad@example.com again/.test(gt), 'an account Google wants linked again: says so, with its address');
+    const gcalls = [];
+    await page.context().route(/^https:\/\/(oauth2|www)\.googleapis\.com\//, (r) => {
+        const u = r.request().url();
+        gcalls.push(r.request().method() + ' ' + u + ' ' + (r.request().headers().authorization || '') + ' ' + (r.request().postData() || ''));
+        const json = (o) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(o) });
+        if (/oauth2/.test(u)) return json({ access_token: 'AT1', expires_in: 3600, scope: 'openid https://www.googleapis.com/auth/drive.file' });
+        if (/alt=media/.test(u)) return r.fulfill({ status: 206, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'Content-Range', 'Content-Range': 'bytes 0-100/5000' }, body: Buffer.from(F.mp3({ title: 'Cloud Song', artist: 'Sky' })) });
+        if (/files\?/.test(u)) return json({ files: [{ id: 'f1', name: 'Albums', mimeType: 'application/vnd.google-apps.folder' }, { id: 'a1', name: 'Cloud Song.mp3', mimeType: 'audio/mpeg', size: '5000' }, { id: 'n1', name: 'notes.txt', mimeType: 'text/plain' }] });
+        return r.fulfill({ status: 404, body: '' });
+    });
+    await page.evaluate(() => Store.set('game_app-mydrive_data', { accounts: [{ id: 'g1', email: 'imad@example.com', name: 'Imad', refreshToken: 'RT' }], active: 'g1' }));
+    gt = await gdText();
+    check(/My Drive/.test(gt) && /All my music files/.test(gt) && /imad@example.com/.test(gt), 'linked: My Drive and All my music files, as the MyDrive account: ' + gt);
+    await page.evaluate(() => [...document.querySelectorAll('.mx-tile')].find((t) => /^My Drive/.test(t.textContent)).click());
+    await page.waitForFunction(() => document.querySelectorAll('.mx-row').length === 1, null, { timeout: 5000 }).catch(() => {});
+    const gl = await page.evaluate(() => [...document.querySelectorAll('.mx-scroll .mx-tile, .mx-scroll .mx-row')].map((t) => t.querySelector('.mx-name, .mx-rt').textContent));
+    await shot('9-gd-list');
+    check(gl.join() === 'Albums,Cloud Song', 'a Drive folder lists folders and songs only: ' + gl);
+    check(gcalls.some((c) => /oauth2.*refresh_token=RT/.test(c) && /client_id=cid/.test(c) && /client_secret=sec/.test(c)) && gcalls.some((c) => /drive\/v3\/files\?.*%27root%27%20in%20parents/.test(c) && /Bearer AT1/.test(c)),
+        'the token comes from MyDrive\'s client and the profile\'s linked account, then Drive is asked with it ' + JSON.stringify(gcalls).slice(0, 600));
+    await page.evaluate(() => [...document.querySelectorAll('.mx-row')][0].click());
+    await page.waitForFunction(() => Music.state().playing, null, { timeout: 5000 }).catch(() => {});
+    check(await page.evaluate(() => Music.state().playing && /googleapis\.com\/drive\/v3\/files\/a1\?alt=media&access_token=AT1/.test(__av.url)), 'a Drive song plays in the TV\'s player, streamed with the token');
+    await page.evaluate(() => Music.stop());
+
+    // themes: Now playing follows the profile's theme
+    await page.evaluate(() => { Themes.set ? Themes.set('ios') : null; });
+    const ios = await page.evaluate(() => { Music.play(); document.querySelector('.mx-nav[data-nav="np"]').click(); const a = document.querySelector('.mx-np-art'); return { th: document.documentElement.className, r: getComputedStyle(a).borderTopLeftRadius }; });
+    check(!/th-ios/.test(ios.th) || ios.r === '30px', 'iOS theme: Now playing looks like Apple Music (rounded cover) ' + JSON.stringify(ios));
+    await page.evaluate(() => { Music.stop(); Win.close(); });
+    check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+    await page.context().close();
 }
 
 // After a profile switch the app restarts as that profile (welcome screen): wait for the new desktop.

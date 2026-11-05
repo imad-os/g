@@ -104,7 +104,9 @@ var Icons = (function () {
         play: '<path d="M15 9l25 15-25 15z" fill="#fff"/>',
         pause: '<rect x="12" y="9" width="9" height="30" rx="2" fill="#fff"/><rect x="27" y="9" width="9" height="30" rx="2" fill="#fff"/>',
         next: '<path d="M9 10l20 14-20 14z" fill="#fff"/><rect x="32" y="10" width="6" height="28" rx="2" fill="#fff"/>',
-        prev: '<path d="M39 10L19 24l20 14z" fill="#fff"/><rect x="10" y="10" width="6" height="28" rx="2" fill="#fff"/>'
+        prev: '<path d="M39 10L19 24l20 14z" fill="#fff"/><rect x="10" y="10" width="6" height="28" rx="2" fill="#fff"/>',
+        shuffle: '<g fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15h7c9 0 13 18 22 18h6M6 33h7c3 0 6-2 8-5M27 20c2-3 5-5 8-5h6"/><path d="M36 10l5 5-5 5M36 28l5 5-5 5"/></g>',
+        repeat: '<g fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 22v-3a6 6 0 0 1 6-6h22M39 26v3a6 6 0 0 1-6 6H11"/><path d="M32 8l5 5-5 5M16 30l-5 5 5 5"/></g>'
     };
 
     function svg(name) {

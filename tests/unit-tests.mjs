@@ -495,21 +495,12 @@ console.log('8. Desktop widgets (js/core/widget-lib.js), Music, Playtime');
     const ex = JSON.parse(fs.readFileSync(path.join(ROOT, 'sdk/example/mypc-app.json'), 'utf8'));
     check(W.parseWidgets(ex.widgets, base).length === 1, 'the example app\'s widget (sdk/example) is valid');
 
-    // Music (placeholder) and Playtime, with a fake clock and storage
+    // Playtime, with a fake clock and storage
     let now = 1000000, mem = {};
     const store = { get: (k, def) => (k in mem ? JSON.parse(mem[k]) : def), set: (k, v) => { mem[k] = JSON.stringify(v); return true; } };
     const RealDate = Date;
     function FakeDate(...a) { return a.length ? new RealDate(...a) : new RealDate(now); }
     FakeDate.now = () => now;
-    const mc = load('js/core/music.js', vm.createContext({ Store: store, Date: FakeDate, Math, JSON, Object, Array, String }));
-    const M = mc.Music;
-    M.play(); now += 160000;
-    const s1 = M.state();
-    check(s1.index === 1 && s1.playing && s1.pos === 6, 'Music keeps playing with the clock (the next track after the first one ended), even with no timer');
-    M.pause(); now += 60000;
-    check(M.state().pos === 6 && !M.state().playing, 'paused: the position stays');
-    M.next(); M.prev();
-    check(M.state().index === 1 && M.state().pos === 0 && M.clock(125) === '2:05', 'next / previous (back to the start of the track) and the clock text');
     let hidden = false, state = 'running', iv = null;
     const doc = { get hidden() { return hidden; } };
     const pc = load('js/core/playtime.js', vm.createContext({ Store: store, Date: FakeDate, Math, JSON, Object, Array, String, document: doc, GameHost: { state: () => state },
@@ -541,6 +532,41 @@ console.log('8. Desktop widgets (js/core/widget-lib.js), Music, Playtime');
         'Playtime: streak (days in a row), this week against the week before, 30 days');
     P.clear();
     check(P.stats(7).games.length === 0 && P.stats(7).total === 0 && P.summary().today === 0, 'Clear my playtime starts over');
+}
+
+console.log('Music: song details read from the files (js/core/music-tags.js)');
+{
+    const F = await import('./music-fixtures.mjs');
+    const T = load('js/core/music-tags.js', vm.createContext({ TextDecoder, Uint8Array, String, Math, parseInt, Object, escape, decodeURIComponent })).MusicTags;
+    const pic = F.png(8, 8);
+    const same = (a, b) => a && a.length === b.length && a.every((x, i) => x === b[i]);
+    let r = T.parse(F.mp3({ title: 'Morning Rain', artist: 'Lina K', album: 'Blue Hours', track: 3, pic }), 0, true);
+    check(r.title === 'Morning Rain' && r.artist === 'Lina K' && r.album === 'Blue Hours' && r.track === 3 && r.pic && r.pic.mime === 'image/png' && same(r.pic.data, pic),
+        'ID3v2.3: title, artist, album, track number and the cover picture');
+    r = T.parse(F.mp3({ title: 'Été à Fès', artist: 'Café', v4: true, pic }), 0, true);
+    check(r.title === 'Été à Fès' && r.artist === 'Café' && same(r.pic.data, pic), 'ID3v2.4: synchsafe sizes and UTF-8 text');
+    r = T.parse(F.mp3({ title: 'Wide', utf16: true }), 0, false);
+    check(r.title === 'Wide', 'ID3v2.3 UTF-16 text');
+    const bigPic = new Uint8Array(300000); bigPic.set(pic);
+    const big = F.mp3({ title: 'Long Tag', artist: 'X', pic: bigPic, pad: 2000 });
+    r = T.parse(big.subarray(0, T.HEAD), big.length, true);
+    check(r.title === 'Long Tag' && !r.pic && r.more === big.length - 4096, 'only the head read: the text is there, more: says how much to read for the picture (' + r.more + ')');
+    check(T.parse(big.subarray(0, T.HEAD), big.length, false).more === undefined, 'no picture wanted: nothing more to read');
+    r = T.parse(F.flac({ title: 'Sand', artist: 'Dunes', album: 'Desert', seconds: 200, pic }), 0, true);
+    check(r.title === 'Sand' && r.artist === 'Dunes' && r.album === 'Desert' && Math.round(r.dur) === 200 && same(r.pic.data, pic), 'FLAC: Vorbis comments, length from STREAMINFO, PICTURE block');
+    const m = F.m4a({ title: 'Harbor', artist: 'Gulls', album: 'Coast', seconds: 185, pic });
+    r = T.parse(m.subarray(0, T.HEAD), m.length, true);
+    check(r.at > 200000 && r.len > 0 && !r.title, 'M4A with moov after the sound: tells where to read (' + r.at + ')');
+    const r2 = T.parseMp4(m.subarray(r.at, r.at + r.len), {});
+    check(r2.title === 'Harbor' && r2.artist === 'Gulls' && r2.album === 'Coast' && Math.round(r2.dur) === 185 && same(r2.pic.data, pic), 'M4A: ilst atoms, length from mvhd, covr picture');
+    r = T.parse(F.m4a({ title: 'Early', moovLast: false }), 0, false);
+    check(r.title === 'Early', 'M4A with moov first: read at once');
+    const w = F.wav({ title: 'Tone', artist: 'Lab', seconds: 2 });
+    r = T.parse(w, w.length, false);
+    check(r.title === 'Tone' && r.artist === 'Lab' && Math.round(r.dur) === 2, 'WAV: LIST INFO and the length');
+    check(T.parse(new Uint8Array(40), 0, true).title === undefined, 'unknown bytes: no details, no error');
+    const n1 = T.fromName('03 - Nass El Ghiwane - Mahmouma.mp3'), n2 = T.fromName('track_07.flac');
+    check(n1.track === 3 && n1.artist === 'Nass El Ghiwane' && n1.title === 'Mahmouma' && n2.title === 'track 07', 'a title and an artist from the file name when the file has none');
 }
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall unit checks passed');
 process.exit(failures ? 1 : 0);

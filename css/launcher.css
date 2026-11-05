@@ -929,25 +929,3 @@ svg { display: block; width: 100%; height: 100%; }
 .tall.compact .desk-widgets { height: 420px; bottom: 216px; }
 .tall.compact .has-wdg .desk-icons { height: calc(var(--sh) - 680px); }
 
-/* ---------- Music (placeholder app, js/launcher/apps/music.js) ---------- */
-.mu { width: 1100px; max-width: calc(100% - 64px); margin: 40px auto 0; }
-.mu-now { display: flex; gap: 40px; align-items: center; }
-.mu-art { flex: none; width: 240px; height: 240px; padding: 50px; border-radius: 24px; background: linear-gradient(135deg, #3a2350, #13233f); }
-.mu-art svg { display: block; width: 100%; height: 100%; }
-.mu-info { flex: 1; min-width: 0; }
-.mu-title { font-size: 44px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mu-artist, .mu-time { font-size: 26px; color: #b8b8c2; }
-.mu-bar { height: 10px; margin: 20px 0 8px; }
-.mu-bar i { background: #ff6fa8; }
-.mu-ctl { display: flex; gap: 24px; margin-top: 18px; direction: ltr; }
-.mu-btn { width: 96px; height: 80px; padding: 18px 26px; border-radius: 16px; background: #2d2d33; }
-.mu-btn.mu-main { background: #ff6fa8; }
-.mu-btn svg { display: block; width: 100%; height: 100%; }
-.mu-btn:focus, .mu-track:focus { box-shadow: 0 0 0 4px #fff; }
-.mu-note { margin: 26px 0 10px; font-size: 22px; color: #9c9ca8; }
-.mu-list { display: flex; flex-direction: column; gap: 6px; }
-.mu-track { display: flex; gap: 24px; height: 64px; padding: 0 24px; align-items: center; border-radius: 12px; background: #232327; font-size: 24px; text-align: start; }
-.mu-track.on { background: #3a2a36; color: #ffb3d1; }
-.mu-n { width: 32px; color: #8a8a96; } .mu-tt { flex: 1; } .mu-ta { width: 300px; color: #b8b8c2; } .mu-td { width: 80px; text-align: end; color: #b8b8c2; }
-.tall .mu-now { flex-direction: column; align-items: stretch; }
-.tall .mu-ta { display: none; }

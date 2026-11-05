@@ -5,7 +5,7 @@
         en: {
             sysWidgets: 'Widgets', cpd_widgets: 'Weather, playtime, system monitor, music on the desktop',
             wg_weather: 'Weather', wg_playtime: 'Playtime', wg_sysmon: 'System Monitor', wg_music: 'Music Player',
-            music: 'Music', musicNote: 'This is a preview of the Music app: the songs are examples and play no sound yet.',
+            music: 'Music',
             wgShowAll: 'Show widgets on the desktop', wgShowAllDesc: 'Small cards on the right of the desktop. Only for your profile.',
             wgHelp: 'Widgets stop refreshing while an app or a game is open, so they cost nothing then. A widget with "Run in the background" on keeps going. Pick a widget to change it.',
             wgAppsHelp: 'Apps from the App Store can add their own widgets: they show up here once the app is installed and an App Store manager approved them.',
@@ -30,7 +30,7 @@
         fr: {
             sysWidgets: 'Widgets', cpd_widgets: 'Météo, temps de jeu, moniteur système, musique sur le bureau',
             wg_weather: 'Météo', wg_playtime: 'Temps de jeu', wg_sysmon: 'Moniteur système', wg_music: 'Lecteur de musique',
-            music: 'Musique', musicNote: 'Ceci est un aperçu de l’app Musique : les titres sont des exemples et ne jouent pas encore de son.',
+            music: 'Musique',
             wgShowAll: 'Afficher les widgets sur le bureau', wgShowAllDesc: 'Petites cartes à droite du bureau. Seulement pour votre profil.',
             wgHelp: 'Les widgets ne se mettent plus à jour quand une app ou un jeu est ouvert : ils ne coûtent alors rien. Un widget avec « Exécuter en arrière-plan » continue. Choisissez un widget pour le modifier.',
             wgAppsHelp: 'Les apps de l’App Store peuvent ajouter leurs propres widgets : ils apparaissent ici une fois l’app installée et approuvés par un gestionnaire de l’App Store.',
@@ -55,7 +55,7 @@
         es: {
             sysWidgets: 'Widgets', cpd_widgets: 'Tiempo, tiempo de juego, monitor del sistema, música en el escritorio',
             wg_weather: 'Tiempo', wg_playtime: 'Tiempo de juego', wg_sysmon: 'Monitor del sistema', wg_music: 'Reproductor de música',
-            music: 'Música', musicNote: 'Esta es una vista previa de la app Música: las canciones son ejemplos y aún no suenan.',
+            music: 'Música',
             wgShowAll: 'Mostrar widgets en el escritorio', wgShowAllDesc: 'Tarjetas pequeñas a la derecha del escritorio. Solo para tu perfil.',
             wgHelp: 'Los widgets dejan de actualizarse mientras hay una app o un juego abierto, así no cuestan nada. Un widget con «Ejecutar en segundo plano» sigue. Elige un widget para cambiarlo.',
             wgAppsHelp: 'Las apps de la App Store pueden añadir sus propios widgets: aparecen aquí cuando la app está instalada y un gestor de la App Store los aprobó.',
@@ -80,7 +80,7 @@
         ar: {
             sysWidgets: 'الأدوات المصغّرة', cpd_widgets: 'الطقس، وقت اللعب، مراقب النظام، الموسيقى على سطح المكتب',
             wg_weather: 'الطقس', wg_playtime: 'وقت اللعب', wg_sysmon: 'مراقب النظام', wg_music: 'مشغّل الموسيقى',
-            music: 'الموسيقى', musicNote: 'هذه معاينة لتطبيق الموسيقى: الأغاني أمثلة ولا يصدر عنها صوت بعد.',
+            music: 'الموسيقى',
             wgShowAll: 'إظهار الأدوات على سطح المكتب', wgShowAllDesc: 'بطاقات صغيرة على يمين سطح المكتب. لملفك الشخصي فقط.',
             wgHelp: 'تتوقف الأدوات عن التحديث عند فتح تطبيق أو لعبة، فلا تكلّف شيئاً حينها. الأداة التي فُعّل لها «التشغيل في الخلفية» تستمر. اختر أداة لتغييرها.',
             wgAppsHelp: 'يمكن لتطبيقات متجر التطبيقات إضافة أدواتها الخاصة: تظهر هنا بعد تثبيت التطبيق وموافقة أحد مديري المتجر عليها.',

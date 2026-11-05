@@ -95,7 +95,7 @@
   row above the taskbar on a tall phone): built in Weather (Open-Meteo + GeoJS, no key; keep the `wgPrivacy` line true), Playtime
   (`js/core/playtime.js`, counted on the game page once a minute; OK opens the **Playtime app** `apps/playtime.js`: today / week / daily average /
   streak cards, 7 or 30 day CSS bars, games with sessions + longest + last played (OK plays), Clear; per profile key `playtime`, 120 days kept), System Monitor (Tizen systeminfo CPU / memory, else JS heap), Music
-  Player (`js/core/music.js` + Win app `music`: a PLACEHOLDER, no sound; owner builds the real one later behind the same API). Per profile
+  Player (the real Music app, below). Per profile
   (`widgets` key): show, refresh rate, "Run in the background", own settings, order; Control Panel > Widgets (list, then a page per
   widget). **Owner rule: every refresh stops while an app or game is open (Desktop.hide, the game page, document.hidden) except widgets
   with background on (Music by default).** App widgets: `"widgets"` in `mypc-app.json` (`js/core/widget-lib.js`, max 3), approved in App
@@ -105,6 +105,17 @@
   7 days (wind + gusts + direction, precipitation + chance, humidity, pressure, UV, sunrise / sunset). Data in `js/core/weather.js`, shared with
   the Weather widget: ONE Open-Meteo request for both, kept 10 min in `arc_dev_wxfc`; same place / units setting (`Widgets.setSetting('weather', ...)`).
   The widget's OK opens the app. Light: DOM built once, one 15 min timer while open, no animation; looks follow the theme (cards in css/weather.css).
+- **Music app** (owner request 2026-11-05, Win app `music`): `js/core/music-src.js` (sources: `usb` = Tizen filesystem drives under
+  `/opt/media`, needs package **1.6.0** privileges filesystem.read / write + externalstorage; `gd` = Google Drive through the **MyDrive** store
+  app: client in Firestore `apps/mydrive.config.google`, the profile's linked accounts in `game_app-mydrive_data`, scope drive.file so only
+  files MyDrive may open; `gdStatus` codes noapp / noconfig / nouser / reauth each have their own message; `loc` = PC folders via
+  showDirectoryPicker), `js/core/music-tags.js` (ID3 / FLAC / Ogg / MP4 / WAV tags + covers), `js/core/music.js` (queue, engines: Samsung
+  **AVPlay** first, then HTML audio, then a blob download; per profile `music`, `music_lists`, `music_recent`, `music_prefs`; position in
+  `arc_dev_music_pos`, not backed up; with `prefs.resume` it plays on across page changes: the game page runs `Music.init({ resume, lite })`, player only, so music goes on under a game and its menu can pause it), UI `js/launcher/apps/music.js` (hold OK / + = item menu
+  via `Win.release`), screensaver `js/launcher/music-saver.js` (Bars / Waves canvas 480x270, Cover CSS only; `MusicSaver.input` in the router),
+  strings `js/core/i18n-music.js`, look `css/music.css` (per theme). Remote media keys = Input actions `mediaNext` / `mediaPrev` / `mediaFf` /
+  `mediaRew` / `mediaStop` (+ `pause`), handled in `main.js mediaKey`, never sent to games. Keyboard mode `title` keeps capitals and spaces.
+  Tests: `MYPC_ONLY=music node tests/run-tests.mjs` (fixtures `tests/music-fixtures.mjs`), `MYPC_SHOTS=<folder>` saves screenshots.
 - `apps/store.js`: the App Store app (Home / Games / Apps / Library / Search, Install / Open / Uninstall).
 - **Settings of every My PC** (owner decision): App Store Manager > Settings writes Firestore `settings/mypc` (admins only, read by
   every TV): backgrounds (`wallpapers: [{ url, title, thumb }]`, an empty title is taken from the address) and the background of new

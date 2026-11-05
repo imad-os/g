@@ -100,9 +100,16 @@ var Widgets = (function () {
         } else fin(null);
     }
 
+    var musicArt = '';
     function music(ctx, done) {
         var s = Music.state();
-        done({ icon: 'i:music', text: s.title, sub: s.artist + ' · ' + Music.clock(s.pos) + ' / ' + Music.clock(s.dur), progress: s.pos / s.dur,
+        if (!s.has) return done({ icon: 'i:music', text: t('muNothing'), sub: t('muWidgetHint'), buttons: [{ id: 'open', icon: 'play', label: t('music') }] });
+        // the song's cover once the Music app has read it (asked once here, never read again while it plays)
+        var art = typeof MusicSrc !== 'undefined' ? MusicSrc.peekArt(s.track) : null;
+        var k = s.track.s + ':' + s.track.p;
+        if (!art && typeof MusicSrc !== 'undefined' && musicArt !== k) { musicArt = k; MusicSrc.art(s.track, function (v) { if (v) refresh('music'); }); }
+        done({ icon: 'i:music', image: art ? art.url : '', text: s.title, sub: (s.loading ? t('wgLoading') : s.artist ? s.artist + ' · ' : '') + (s.loading ? '' : Music.clock(s.pos) + (s.dur ? ' / ' + Music.clock(s.dur) : '')),
+               progress: s.dur ? Math.min(1, s.pos / s.dur) : 0,
                buttons: [{ id: 'prev', icon: 'prev', label: t('wgPrev') }, { id: 'toggle', icon: s.playing ? 'pause' : 'play', label: t(s.playing ? 'wgPause' : 'wgPlay') },
                          { id: 'next', icon: 'next', label: t('wgNext') }] });
     }
@@ -118,7 +125,7 @@ var Widgets = (function () {
         { id: 'sysmon', icon: 'chip', title: function () { return t('wg_sysmon'); }, size: 'medium', every: 5, choices: [2, 5, 10, 30, 60], bg: false, refresh: sysmon },
         { id: 'music', icon: 'music', title: function () { return t('wg_music'); }, size: 'medium', every: 2, choices: [1, 2, 5, 10], bg: true, refresh: music,
           idle: function () { return !Music.state().playing; },
-          press: function (b) { if (b === 'toggle') Music.toggle(); else if (b === 'next') Music.next(); else if (b === 'prev') Music.prev(); },
+          press: function (b) { if (b === 'toggle') Music.toggle(); else if (b === 'next') Music.next(); else if (b === 'prev') Music.prev(); else if (b === 'open') Win.open('music'); },
           open: function () { Win.open('music'); } }
     ];
 

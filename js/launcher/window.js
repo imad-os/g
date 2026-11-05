@@ -8,6 +8,7 @@
  *   close()            frees everything (timers, iframes, listeners)
  *   action(a, repeat)  optional: return true when the app used the key itself
  *   back()             optional: return true when Back was used inside the app (e.g. go up a folder)
+ *   release(a)         optional: a key let go (OK held on an item opens its menu in the Music app)
  */
 var Win = (function () {
     'use strict';
@@ -77,10 +78,12 @@ var Win = (function () {
         else if (a === 'confirm' && !repeat) { var c = Focus.current(); if (c) c.click(); }
     }
 
+    function release(a) { if (cur && cur.release) { try { cur.release(a); } catch (e) {} } }
+
     function init() { $('win-close').onclick = function () { close(); }; }
 
     return {
-        init: init, register: register, open: open, close: close, action: action, setTitle: setTitle, refresh: refresh,
+        init: init, register: register, open: open, close: close, action: action, release: release, setTitle: setTitle, refresh: refresh,
         isOpen: function () { return !!cur; }, current: function () { return curId; }
     };
 })();

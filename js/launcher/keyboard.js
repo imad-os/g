@@ -4,7 +4,8 @@
  * 'name' capitalises each word, 'url' adds . / : - _ and keeps lower case, 'text' is free text,
  * 'user' is a username (lower case letters, digits, _ and .), 'password' hides what is typed (a Show key,
  * a Shift key for capitals, a few symbols) and Voice Guide says only how many characters there are; 'code' is typed as is
- * (Shift for capitals, / : . - _, no space: AI model names, addresses with capitals). Pasting (a PC or phone keyboard) types the text.
+ * (Shift for capitals, / : . - _, no space: AI model names, addresses with capitals); 'title' is typed as is with spaces and a Shift
+ * key (file and playlist names in the Music app). Pasting (a PC or phone keyboard) types the text.
  * A phone in the Game controller's Text mode types here too (js/launcher/textin.js: Keyboard.info / setText / submit). */
 var Keyboard = (function () {
     'use strict';
@@ -15,6 +16,7 @@ var Keyboard = (function () {
     var USER_EXTRA = ['_', '.'];
     var PASS_EXTRA = ['.', '-', '_', '@', '!', '?', '#', '$', '*'];
     var CODE_EXTRA = ['.', '/', ':', '-', '_', '@', '=', '+'];
+    var TITLE_EXTRA = ['.', ',', '-', '_', '!', '?', '(', ')', '&', "'"];
     var cb = null, cancelCb = null, text = '', opts = null, isOpen = false, caps = false, shown = false, opens = 0;
 
     function $(id) { return document.getElementById(id); }
@@ -63,12 +65,12 @@ var Keyboard = (function () {
         var lower = m !== 'name';
         for (i = 0; i < LETTERS.length; i++) {
             var c = lower ? LETTERS[i].toLowerCase() : LETTERS[i];
-            var b = key(box, c, '', (function (ch) { return function () { type((m === 'password' || m === 'code') && caps ? ch.toUpperCase() : ch); }; })(c));
-            if ((m === 'password' || m === 'code') && /[a-z]/.test(c)) b.setAttribute('data-ch', c);
+            var b = key(box, c, '', (function (ch) { return function () { type((m === 'password' || m === 'code' || m === 'title') && caps ? ch.toUpperCase() : ch); }; })(c));
+            if ((m === 'password' || m === 'code' || m === 'title') && /[a-z]/.test(c)) b.setAttribute('data-ch', c);
         }
-        var extra = m === 'url' ? URL_EXTRA : m === 'text' ? TEXT_EXTRA : m === 'user' ? USER_EXTRA : m === 'password' ? PASS_EXTRA : m === 'code' ? CODE_EXTRA : [];
+        var extra = m === 'url' ? URL_EXTRA : m === 'text' ? TEXT_EXTRA : m === 'title' ? TITLE_EXTRA : m === 'user' ? USER_EXTRA : m === 'password' ? PASS_EXTRA : m === 'code' ? CODE_EXTRA : [];
         for (i = 0; i < extra.length; i++) key(box, extra[i], extra[i].length > 1 ? 'key-mid' : '', (function (ch) { return function () { type(ch); }; })(extra[i]));
-        if (m === 'code') key(box, '⇧', 'key-mid', function () { caps = !caps; relabel(); A11y.announce(I18n.t(caps ? 'capsOn' : 'capsOff')); }, I18n.t('capsKey'));
+        if (m === 'code' || m === 'title') key(box, '⇧', 'key-mid', function () { caps = !caps; relabel(); A11y.announce(I18n.t(caps ? 'capsOn' : 'capsOff')); }, I18n.t('capsKey'));
         if (m === 'password') {
             key(box, '⇧', 'key-mid', function () { caps = !caps; relabel(); A11y.announce(I18n.t(caps ? 'capsOn' : 'capsOff')); }, I18n.t('capsKey'));
             key(box, I18n.t('showPw'), 'key-wide', function () { shown = !shown; this.textContent = I18n.t(shown ? 'hidePw' : 'showPw'); draw(); if (shown) A11y.announce(text); });

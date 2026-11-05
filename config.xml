@@ -9,7 +9,7 @@
      Every package upload needs a higher version. Never change SHELL in js/boot/loader.js or "shell" in
      app-manifest.json: older packages would stop accepting the online builds. -->
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
-        id="https://imad-os.github.io/g/arcade" version="1.5.0" viewmodes="maximized">
+        id="https://imad-os.github.io/g/arcade" version="1.6.0" viewmodes="maximized">
     <tizen:application id="XXXXXXXXXX.arcade" package="XXXXXXXXXX" required_version="4.0"/>
     <name>My PC</name>
     <description>Seven arcade and board games for your TV: a platformer with 3 worlds and 2-player co-op, Parchís for 2 to 4 players with Moroccan rules, plus falling blocks, sky hopping, snake, brick breaking and tile merging. Player profiles keep everyone's progress apart.</description>
@@ -39,4 +39,10 @@
     <!-- the microphone for installed apps (MyPC.mic, js/core/mic.js: getUserMedia in My PC, the sound goes to the app).
          Added in package 1.5.0: a TV needs this package for MyPC.mic (the rest of the update comes online). -->
     <tizen:privilege name="http://tizen.org/privilege/mediacapture"/>
+
+    <!-- the Music app (js/core/music-src.js): songs on USB drives and hard disks plugged into the TV, read (song details,
+         covers) and renamed from the app, played by the TV's own player (webapis.avplay). Added in package 1.6.0. -->
+    <tizen:privilege name="http://tizen.org/privilege/filesystem.read"/>
+    <tizen:privilege name="http://tizen.org/privilege/filesystem.write"/>
+    <tizen:privilege name="http://tizen.org/privilege/externalstorage"/>
 </widget>
