@@ -366,7 +366,7 @@ var GDrive = (function () {
                         h.off = true;
                         if (e2) return cb(e2);
                         var t = r2.body || {};
-                        if (!r2.ok || !t.access_token) return cb(err(t.error === 'invalid_client' || t.error === 'redirect_uri_mismatch' ? 'noconfig' : 'http', 'Google: ' + (t.error_description || t.error || r2.status), r2.status));
+                        if (!r2.ok || !t.access_token) return cb(err(t.error === 'invalid_client' || t.error === 'unauthorized_client' ? 'badclient' : t.error === 'redirect_uri_mismatch' ? 'badredirect' : 'http', 'Google: ' + (t.error_description || t.error || r2.status), r2.status));
                         saveAccount(t, c.pickerClientId, cb);
                     });
                 });

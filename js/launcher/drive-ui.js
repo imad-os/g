@@ -68,6 +68,8 @@ var DriveUI = (function () {
         var c = e && e.code;
         if (c === 'noconfig') return t('gdNoConfig');
         if (c === 'denied') return t('gdDenied');
+        if (c === 'badclient') return t('gdBadClient');
+        if (c === 'badredirect') return t('gdBadRedirect');
         if (c === 'expired') return t('gdExpired');
         if (c === 'network' || c === 'timeout') return t('gdOffline');
         return t('gdFailed') + ' (' + ((e && e.message) || c || '?') + ')';

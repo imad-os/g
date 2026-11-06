@@ -1430,6 +1430,7 @@
     c.projectNumber = c.projectNumber.replace(/[^0-9]/g, '');
     if (!c.tvClientId !== !c.tvClientSecret) return say('gd-msg', 'The client ID and the client secret go together.', 'err');
     if (c.tvClientId && !/\.apps\.googleusercontent\.com$/.test(c.tvClientId)) return say('gd-msg', 'The client ID ends with .apps.googleusercontent.com.', 'err');
+    if (c.webClientSecret && c.webClientSecret === c.tvClientSecret) return say('gd-msg', 'The web client secret is the same as the TV client\'s. Each Google client has its own secret: copy it from the Web application client (Google Cloud > Credentials).', 'err');
     if (c.webClientSecret && !/\.apps\.googleusercontent\.com$/.test(c.pickerClientId)) return say('gd-msg', 'The web client secret needs the web client ID (Google Picker card).', 'err');
     if (!c.tvClientId && !c.webClientSecret) return say('gd-msg', 'Fill in the TV code sign-in client, or the web client with its secret.', 'err');
     for (const k in c) if (!c[k]) delete c[k];

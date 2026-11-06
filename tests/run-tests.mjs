@@ -4725,6 +4725,7 @@ async function fakeGoogle(ctx, g) {
             const f = new URLSearchParams(body);
             if (f.get('grant_type') === 'authorization_code') {        // the phone sign-in (drive-signin.html): checked like Google does
                 g.codeSwap = Object.fromEntries(f);
+                if (f.get('client_secret') !== 'wsec') return json({ error: 'invalid_client', error_description: 'The provided client secret is invalid.' }, 401);
                 const ok = f.get('code') === g.code && f.get('client_id') === 'web.apps.googleusercontent.com' && f.get('client_secret') === 'wsec' &&
                     f.get('redirect_uri') === 'https://pc.geekspro.us/drive-signin.html' &&
                     crypto.createHash('sha256').update(f.get('code_verifier') || '').digest('base64url') === g.challenge;
@@ -4885,6 +4886,17 @@ async function drivePhoneTests(browser, base) {
     await phone.waitForFunction(() => /cancelled/.test(document.getElementById('msg').textContent), null, { timeout: 5000 }).catch(() => {});
     await page.waitForFunction(() => /not allowed/.test((document.querySelector('.gdui') || document.body).textContent), null, { timeout: 8000 }).catch(() => {});
     check(/not allowed/.test(await page.evaluate(() => document.querySelector('.gdui').textContent)), 'Cancel on Google\'s page: the phone says nothing was shared and the TV shows "not allowed" with Try again');
+    await page.keyboard.press('Escape');
+    // the TV client's secret pasted as the web client's (imad, 2026-11-06): Google says invalid_client; My PC says which field is wrong
+    await page.evaluate(() => { GDrive.setConfig(Object.assign({}, GDrive.config(), { webClientSecret: 'sec' })); window.__gurl = ''; DriveUI.signIn(() => {}); });
+    await page.waitForFunction(() => window.__gurl, null, { timeout: 5000 });
+    const sid2 = new URLSearchParams((await page.evaluate(() => window.__gurl)).split('#')[1]).get('s');
+    g.code = '4/another';
+    await phone.goto('https://pc.geekspro.us/drive-signin.html?state=' + sid2 + '&code=' + encodeURIComponent(g.code));
+    await page.waitForFunction(() => /web client secret/.test((document.querySelector('.gdui') || document.body).textContent), null, { timeout: 8000 }).catch(() => {});
+    const bad = await page.evaluate(() => (document.querySelector('.gdui') || document.body).textContent);
+    await shot(page, 'drive-11-wrong-secret');
+    check(/refused My PC's web client secret/.test(bad) && !/not set up for My PC yet/.test(bad), 'a wrong web client secret: the TV says the Web client secret is wrong (not "not set up") ' + bad.slice(0, 160));
     await page.keyboard.press('Escape');
     check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
     await ctx.close();
