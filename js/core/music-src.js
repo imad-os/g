@@ -498,6 +498,7 @@ var MusicSrc = (function () {
                  guessT: !r.title, guessA: !(r.artist || r.albumArtist) };     // guessed from the file name: never over a title we already have
     }
     function getInfo(e, cb) {
+        if (e && e.s === 'radio') return cb({ title: e.n, artist: e.g || '', album: '', dur: 0 });      // a station (js/core/radio.js)
         var k = key(e);
         if (info[k]) return cb(info[k]);
         if (typeof MusicTags === 'undefined') return cb({ title: e.n });
@@ -530,6 +531,7 @@ var MusicSrc = (function () {
     function dropArt(v) { if (v && v.url) { try { URL.revokeObjectURL(v.url); } catch (x) {} } }
     function keepArt(k, v) { remember(art, artKeys, k, v || false, ART_MAX, dropArt); }
     function trackArt(e, cb) {
+        if (e && e.s === 'radio') return cb(e.i ? { url: e.i, color: '' } : null);                     // a station's logo, as it is
         var k = key(e);
         if (k in art) return cb(art[k] || null);
         job('a' + k, function (done) {

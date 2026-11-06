@@ -4,10 +4,10 @@
     'use strict';
     var S = {
         en: {
-            music: 'Music', muSettings: 'Settings', muNowPlaying: 'Now playing', muContinue: 'Continue listening', muQueue: 'Queue', muPlaylists: 'Playlists',
+            music: 'MyMusic', muSettings: 'Settings', muNowPlaying: 'Now playing', muContinue: 'Continue listening', muQueue: 'Queue', muPlaylists: 'Playlists',
             muPlaces: 'Your music', muRecent: 'Recently played', muUsb: 'USB drive', muViaMyDrive: 'Your Google account', muPcFolder: 'Folder of this computer',
             muAddFolder: 'Add a folder', muNoDrive: 'No USB drive', muNoDriveSub: 'Plug one into the TV', muDriveIn: 'USB drive connected.', muDriveOut: 'A USB drive was removed.',
-            muNothing: 'Nothing playing', muWidgetHint: 'Open Music to play your songs', muAt: 'at %s', muSongs: '%s songs', muFolders: '%s folders', muNLists: '%s playlists',
+            muNothing: 'Nothing playing', muWidgetHint: 'Open MyMusic to play your songs or the radio', muAt: 'at %s', muSongs: '%s songs', muFolders: '%s folders', muNLists: '%s playlists',
             muFrom: 'Playing from %s', muUpNext: 'Up next: %s', muPosition: 'Position in the song',
             muPlayAll: 'Play all', muShuffle: 'Shuffle', muShuffleOn: 'Shuffle on', muShuffleOff: 'Shuffle off', muPlayNext: 'Play next', muAddQueue: 'Add to queue',
             muAdded: '%s songs added to the queue.', muAddedNext: '%s songs will play next.', muSaveList: 'Save as playlist', muSaveQueue: 'Save the queue as a playlist',
@@ -28,7 +28,7 @@
             muGdNote: 'You see the files My PC may open: the ones My PC and its apps made, and the ones you add with \'Add files from your phone\'.',
             muGdShared: 'Shared with me',
             muGd_noconfig: 'Google Drive is not set up for My PC yet. An App Store manager adds the Google client in the App Store Manager > Google Drive.',
-            muGd_nouser: 'Sign in to Google Drive once for %s: Music and every app that works with Drive then use it (also in Control Panel > Google Drive).',
+            muGd_nouser: 'Sign in to Google Drive once for %s: MyMusic and every app that works with Drive then use it (also in Control Panel > Google Drive).',
             muGd_reauth: 'Google asks to sign in to %s again.',
             muTryAgain: 'Try again',
             muSaver: 'Audio visualizer', muSaverDesc: 'While music plays and nobody uses the remote. CH + / CH − change the style.', muSaverScope: 'Waveform', muSaverParticles: 'Particles', muSaverPulse: 'Pulsating rings', muSaverBars: 'Bars', muSaverWaves: 'Waves', muSaverCover: 'Cover', muSaverRing: 'Ring',
@@ -40,10 +40,10 @@
             muPrivacy: 'Your playlists, queue and settings stay in this profile on this TV (and in its cloud backup when that is on). Songs are read from the drive; Google Drive songs come straight from Google with the account signed in in Control Panel > Google Drive.'
         },
         fr: {
-            music: 'Musique', muSettings: 'Paramètres', muNowPlaying: 'En cours de lecture', muContinue: 'Reprendre l’écoute', muQueue: 'File d’attente', muPlaylists: 'Playlists',
+            music: 'MyMusic', muSettings: 'Paramètres', muNowPlaying: 'En cours de lecture', muContinue: 'Reprendre l’écoute', muQueue: 'File d’attente', muPlaylists: 'Playlists',
             muPlaces: 'Votre musique', muRecent: 'Écouté récemment', muUsb: 'Clé USB', muViaMyDrive: 'Votre compte Google', muPcFolder: 'Dossier de cet ordinateur',
             muAddFolder: 'Ajouter un dossier', muNoDrive: 'Aucune clé USB', muNoDriveSub: 'Branchez-en une sur la TV', muDriveIn: 'Clé USB branchée.', muDriveOut: 'Une clé USB a été retirée.',
-            muNothing: 'Rien en lecture', muWidgetHint: 'Ouvrez Musique pour écouter vos titres', muAt: 'à %s', muSongs: '%s titres', muFolders: '%s dossiers', muNLists: '%s playlists',
+            muNothing: 'Rien en lecture', muWidgetHint: 'Ouvrez MyMusic pour écouter vos titres ou la radio', muAt: 'à %s', muSongs: '%s titres', muFolders: '%s dossiers', muNLists: '%s playlists',
             muFrom: 'Lecture depuis %s', muUpNext: 'Ensuite : %s', muPosition: 'Position dans le titre',
             muPlayAll: 'Tout lire', muShuffle: 'Aléatoire', muShuffleOn: 'Lecture aléatoire activée', muShuffleOff: 'Lecture aléatoire désactivée', muPlayNext: 'Lire ensuite', muAddQueue: 'Ajouter à la file',
             muAdded: '%s titres ajoutés à la file.', muAddedNext: '%s titres seront lus ensuite.', muSaveList: 'Enregistrer comme playlist', muSaveQueue: 'Enregistrer la file comme playlist',
@@ -64,7 +64,7 @@
             muGdNote: 'Vous voyez les fichiers que My PC peut ouvrir : ceux créés par My PC et ses applis, et ceux ajoutés avec « Ajouter des fichiers depuis le téléphone ».',
             muGdShared: 'Partagés avec moi',
             muGd_noconfig: 'Google Drive n’est pas encore configuré pour My PC. Un gestionnaire de l’App Store ajoute le client Google dans l’App Store Manager > Google Drive.',
-            muGd_nouser: 'Connectez une fois Google Drive pour %s : Musique et toutes les applis compatibles l’utilisent ensuite (aussi dans Panneau de configuration > Google Drive).',
+            muGd_nouser: 'Connectez une fois Google Drive pour %s : MyMusic et toutes les applis compatibles l’utilisent ensuite (aussi dans Panneau de configuration > Google Drive).',
             muGd_reauth: 'Google demande de reconnecter %s.',
             muTryAgain: 'Réessayer',
             muSaver: 'Visualiseur audio', muSaverDesc: 'Pendant la musique, quand personne n’utilise la télécommande. CH + / CH − changent le style.', muSaverScope: 'Forme d’onde', muSaverParticles: 'Particules', muSaverPulse: 'Anneaux pulsants', muSaverBars: 'Barres', muSaverWaves: 'Vagues', muSaverCover: 'Pochette', muSaverRing: 'Anneau',
@@ -76,10 +76,10 @@
             muPrivacy: 'Vos playlists, votre file et vos réglages restent dans ce profil sur cette TV (et dans sa sauvegarde cloud si elle est activée). Les titres sont lus depuis la clé ; ceux de Google Drive viennent directement de Google avec le compte connecté dans Panneau de configuration > Google Drive.'
         },
         es: {
-            music: 'Música', muSettings: 'Ajustes', muNowPlaying: 'Reproduciendo', muContinue: 'Seguir escuchando', muQueue: 'Cola', muPlaylists: 'Listas',
+            music: 'MyMusic', muSettings: 'Ajustes', muNowPlaying: 'Reproduciendo', muContinue: 'Seguir escuchando', muQueue: 'Cola', muPlaylists: 'Listas',
             muPlaces: 'Tu música', muRecent: 'Escuchado hace poco', muUsb: 'Memoria USB', muViaMyDrive: 'Tu cuenta de Google', muPcFolder: 'Carpeta de este ordenador',
             muAddFolder: 'Añadir una carpeta', muNoDrive: 'No hay memoria USB', muNoDriveSub: 'Conecta una a la TV', muDriveIn: 'Memoria USB conectada.', muDriveOut: 'Se quitó una memoria USB.',
-            muNothing: 'No suena nada', muWidgetHint: 'Abre Música para escuchar tus canciones', muAt: 'en %s', muSongs: '%s canciones', muFolders: '%s carpetas', muNLists: '%s listas',
+            muNothing: 'No suena nada', muWidgetHint: 'Abre MyMusic para escuchar tus canciones o la radio', muAt: 'en %s', muSongs: '%s canciones', muFolders: '%s carpetas', muNLists: '%s listas',
             muFrom: 'Sonando desde %s', muUpNext: 'A continuación: %s', muPosition: 'Posición en la canción',
             muPlayAll: 'Reproducir todo', muShuffle: 'Aleatorio', muShuffleOn: 'Aleatorio activado', muShuffleOff: 'Aleatorio desactivado', muPlayNext: 'Reproducir después', muAddQueue: 'Añadir a la cola',
             muAdded: '%s canciones añadidas a la cola.', muAddedNext: '%s canciones sonarán a continuación.', muSaveList: 'Guardar como lista', muSaveQueue: 'Guardar la cola como lista',
@@ -100,7 +100,7 @@
             muGdNote: 'Ves los archivos que My PC puede abrir: los creados por My PC y sus apps, y los añadidos con «Añadir archivos desde el móvil».',
             muGdShared: 'Compartido conmigo',
             muGd_noconfig: 'Google Drive aún no está configurado para My PC. Un gestor de la App Store añade el cliente de Google en el App Store Manager > Google Drive.',
-            muGd_nouser: 'Inicia sesión una vez en Google Drive para %s: Música y todas las apps compatibles lo usarán (también en Panel de control > Google Drive).',
+            muGd_nouser: 'Inicia sesión una vez en Google Drive para %s: MyMusic y todas las apps compatibles lo usarán (también en Panel de control > Google Drive).',
             muGd_reauth: 'Google pide iniciar sesión de nuevo en %s.',
             muTryAgain: 'Reintentar',
             muSaver: 'Visualizador de audio', muSaverDesc: 'Mientras suena música y nadie usa el mando. CH + / CH − cambian el estilo.', muSaverScope: 'Forma de onda', muSaverParticles: 'Partículas', muSaverPulse: 'Anillos pulsantes', muSaverBars: 'Barras', muSaverWaves: 'Ondas', muSaverCover: 'Portada', muSaverRing: 'Anillo',
@@ -112,10 +112,10 @@
             muPrivacy: 'Tus listas, tu cola y tus ajustes se quedan en este perfil en esta TV (y en su copia en la nube si está activada). Las canciones se leen de la memoria; las de Google Drive llegan directamente de Google con la cuenta iniciada en Panel de control > Google Drive.'
         },
         ar: {
-            music: 'الموسيقى', muSettings: 'الإعدادات', muNowPlaying: 'قيد التشغيل', muContinue: 'متابعة الاستماع', muQueue: 'قائمة الانتظار', muPlaylists: 'قوائم التشغيل',
+            music: 'MyMusic', muSettings: 'الإعدادات', muNowPlaying: 'قيد التشغيل', muContinue: 'متابعة الاستماع', muQueue: 'قائمة الانتظار', muPlaylists: 'قوائم التشغيل',
             muPlaces: 'موسيقاك', muRecent: 'شُغّل مؤخراً', muUsb: 'ذاكرة USB', muViaMyDrive: 'حساب Google الخاص بك', muPcFolder: 'مجلد من هذا الحاسوب',
             muAddFolder: 'إضافة مجلد', muNoDrive: 'لا توجد ذاكرة USB', muNoDriveSub: 'صِل واحدة بالتلفاز', muDriveIn: 'تم توصيل ذاكرة USB.', muDriveOut: 'تمت إزالة ذاكرة USB.',
-            muNothing: 'لا شيء قيد التشغيل', muWidgetHint: 'افتح الموسيقى لتشغيل أغانيك', muAt: 'عند %s', muSongs: '%s أغنية', muFolders: '%s مجلد', muNLists: '%s قائمة',
+            muNothing: 'لا شيء قيد التشغيل', muWidgetHint: 'افتح MyMusic لتشغيل أغانيك أو الراديو', muAt: 'عند %s', muSongs: '%s أغنية', muFolders: '%s مجلد', muNLists: '%s قائمة',
             muFrom: 'يُشغَّل من %s', muUpNext: 'التالي: %s', muPosition: 'الموضع في الأغنية',
             muPlayAll: 'تشغيل الكل', muShuffle: 'عشوائي', muShuffleOn: 'التشغيل العشوائي مفعّل', muShuffleOff: 'التشغيل العشوائي متوقف', muPlayNext: 'تشغيل تالياً', muAddQueue: 'إضافة إلى الانتظار',
             muAdded: 'أضيفت %s أغنية إلى قائمة الانتظار.', muAddedNext: 'ستُشغَّل %s أغنية تالياً.', muSaveList: 'حفظ كقائمة تشغيل', muSaveQueue: 'حفظ قائمة الانتظار كقائمة تشغيل',
@@ -136,7 +136,7 @@
             muGdNote: 'تظهر الملفات التي يستطيع My PC فتحها: تلك التي أنشأها My PC وتطبيقاته، والتي تضيفها عبر «إضافة ملفات من هاتفك».',
             muGdShared: 'تمت مشاركتها معي',
             muGd_noconfig: 'لم يُضبط Google Drive لـ My PC بعد. يضيف مدير متجر التطبيقات عميل Google في مدير متجر التطبيقات > Google Drive.',
-            muGd_nouser: 'سجّل الدخول إلى Google Drive مرة واحدة لـ %s: ستستخدمه الموسيقى وكل تطبيق يعمل مع Drive (وأيضاً في لوحة التحكم > Google Drive).',
+            muGd_nouser: 'سجّل الدخول إلى Google Drive مرة واحدة لـ %s: سيستخدمه MyMusic وكل تطبيق يعمل مع Drive (وأيضاً في لوحة التحكم > Google Drive).',
             muGd_reauth: 'تطلب Google تسجيل الدخول إلى %s مجدداً.',
             muTryAgain: 'إعادة المحاولة',
             muSaver: 'مُصوّر الصوت', muSaverDesc: 'أثناء تشغيل الموسيقى وعدم استخدام جهاز التحكم. CH + / CH − لتغيير النمط.', muSaverScope: 'شكل الموجة', muSaverParticles: 'جسيمات', muSaverPulse: 'حلقات نابضة', muSaverBars: 'أعمدة', muSaverWaves: 'موجات', muSaverCover: 'الغلاف', muSaverRing: 'حلقة',

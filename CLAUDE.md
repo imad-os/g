@@ -133,6 +133,18 @@
   reminders `js/launcher/cal-remind.js` (one timer, Notify, also on the game page, `cal_fired`). Widget `calendar` (off by default) tells
   tomorrow's holiday once (`cal_told`). Strings `js/core/i18n-calendar.js` (+ `calPrivacy`, keep it and `evPrivacy` true).
   Tests: `node tests/unit-tests.mjs` (section 9), `MYPC_ONLY=calendar node tests/run-tests.mjs` (fixture `tests/calendar-fixtures.mjs`).
+- **Online radio in MyMusic** (owner request 2026-11-06; the Music app is now called **MyMusic**, app id still `music`): `js/core/radio.js`
+  (`Radio`) = Radio Browser's public JSON API (de1 / fi1 / de2 mirrors, no key; `stations/search?countrycode=..&hidebroken=true`, Morocco
+  default, max 1000 by clicks; `countries`; `url/<uuid>` click on play), list cached on the device `arc_dev_radio_<cc>` (shown at once, asked again
+  after 24 h; 3 countries kept), stream tests `arc_dev_radio_tests` (no-cors fetch, 7 s, kept 3 days; 'no' = this device cannot: HLS without
+  a player for it, WMA in a browser; on an https page http streams are tried as https), stations that fail to play are marked bad.
+  Per profile (backed up): `radio_favs`, `radio_recent` (12), `radio_custom` (own URLs, .pls / .m3u resolved), `radio_prefs` { cc, lang, tag, showBad }.
+  A station is a Music track `s: 'radio'` (MusicSrc source 'radio', `u` stream, `i` logo...) played by the normal player (AVPlay first on
+  the TV: MP3 / AAC / OGG / HLS); `Music` treats it as live (`state().live`, no length / seek, a dropped stream reopens 3 times a minute,
+  a failing station is not skipped). UI in `apps/music.js` (nav Radio, view `radio` / `countries`; filters = left / right steppers;
+  search via Keyboard; hold OK / + menu: favorite, test, edit / delete own). Strings `js/core/i18n-radio.js` (keep `raPrivacy` true).
+  The visualizer stays flat on radio (no file to read; cross-origin live sound cannot be captured): never fake it.
+  Proof: `node tests/radio-proof.mjs <dir with groove.mp3> live|file` (Radio Browser answered locally, fake live stations, screenshots).
 - **Music app** (owner request 2026-11-05, Win app `music`): `js/core/music-src.js` (sources: `usb` = Tizen filesystem drives under
   `/opt/media`, needs package **1.6.0** privileges filesystem.read / write + externalstorage; `gd` = Google Drive through My PC's own sign-in
   (`GDrive`, see "Google Drive" below; scope drive.file); Google refuses a token in the address, so a Drive song plays: on the web / phone app through `sw.js` (`__music/gd/<id>?t=`, adds the header, passes Range: every format, seeking); else MP3 / AAC / WebM read in Range pieces into a Media Source (`msStream`); else a download that plays from its first 512 KB, moves to a bigger copy whenever the one playing has 4 s left (`refresh`, `growDl` `stop.snap`) and to the whole file when done (`HTML.swap`, same place; before build 120 it stopped ~4 s in and waited for the whole file); an M4A with its index at the end gets it read first and put at the front, `faststart`). Proof in a real browser with real songs on a slow line + screenshots: `tests/drive-stream-proof.mjs` (needs ffmpeg-made songs and a local cert, see its header); `gdStatus` codes noconfig / nouser / reauth each have their own message (nouser / reauth: a Sign in with Google button right in Music); `loc` = PC folders via

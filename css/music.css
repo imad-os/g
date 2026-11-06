@@ -55,6 +55,7 @@
 .mx-act .mx-ic, .mx-np-tool .mx-ic { width: 30px; height: 30px; }
 .mx-act-main { background: var(--mx-acc); color: var(--mx-ink); }
 .mx-act-main svg * { fill: var(--mx-ink); }
+.mx-act-main svg [stroke] { fill: none; stroke: var(--mx-ink); }
 .mx-act:focus, .mx-np-tool:focus { box-shadow: 0 0 0 4px #fff; }
 
 .mx-cont-btn { display: flex; align-items: center; gap: 30px; width: 100%; max-width: 1180px; padding: 22px; border-radius: 22px; text-align: start;
@@ -295,3 +296,16 @@
     50% { transform: translate(6vw, 4vh) scale(1.04); }
     100% { transform: translate(20vw, -4vh) scale(0.96); }
 }
+
+/* ---------------- Radio (MyMusic) ---------------- */
+.mx-filters { margin-top: -8px; }
+.mx-step { font-size: 22px; height: 56px; }
+.mx-st .mx-art img { object-fit: contain; background: #fff; }
+.mx-st-r { width: auto; min-width: 48px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.mx-st-fav { width: 30px; height: 30px; }
+.mx-st-bad { font-size: 18px; color: #ff8a80; white-space: nowrap; }
+.mx-st.bad .mx-rt, .mx-st.bad .mx-art { opacity: 0.45; }
+.mx-st-more { margin: 14px auto 0; }
+.mx-st-foot { margin-top: 18px; }
+.mx-np.live .mx-np-knob, .mx-np.live .mx-np-fill { display: none; }
+.mx-np.live .mx-np-times span:first-child { color: #ff5a5a; font-weight: 700; letter-spacing: 0.06em; }

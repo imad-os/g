@@ -88,6 +88,9 @@ var Icons = (function () {
                  '<rect x="26" y="21" width="17" height="22" rx="4" fill="#ffb84d"/><rect x="5" y="31" width="17" height="12" rx="4" fill="#4cd97b"/>',
         music: '<path d="M18 10l22-5v26" fill="none" stroke="#ff6fa8" stroke-width="4" stroke-linejoin="round"/><path d="M18 10v25" stroke="#ff6fa8" stroke-width="4"/>' +
                '<ellipse cx="12.5" cy="36" rx="7" ry="5.5" fill="#ff6fa8"/><ellipse cx="34.5" cy="32" rx="7" ry="5.5" fill="#ff6fa8"/>',
+        radio: '<rect x="5" y="17" width="38" height="25" rx="5" fill="none" stroke="#ffb547" stroke-width="3.5"/><path d="M12 17L34 6" stroke="#ffb547" stroke-width="3.5" stroke-linecap="round"/>' +
+               '<circle cx="31" cy="29.5" r="6.5" fill="none" stroke="#ffb547" stroke-width="3.5"/><path d="M11 25h9M11 31h9M11 37h9" stroke="#ffb547" stroke-width="3" stroke-linecap="round"/>',
+        star: '<path d="M24 5l5.6 12.2 13.4 1.5-10 9 2.8 13.2L24 34.2 12.2 40.9 15 27.7l-10-9 13.4-1.5z" fill="#ffd54a"/>',
         weather: '<circle cx="18" cy="17" r="9" fill="#ffc83d"/><path d="M15 40a8 8 0 0 1 1-16 11 11 0 0 1 21 3 7 7 0 0 1 0 13z" fill="#e8f1ff"/>',
         sun: '<circle cx="24" cy="24" r="9" fill="#ffc83d"/><g stroke="#ffc83d" stroke-width="3.5" stroke-linecap="round"><path d="M24 4v6M24 38v6M4 24h6M38 24h6M9.9 9.9l4.2 4.2M33.9 33.9l4.2 4.2M9.9 38.1l4.2-4.2M33.9 14.1l4.2-4.2"/></g>',
         moon: '<path d="M30 6a17 17 0 1 0 12 26A14 14 0 0 1 30 6z" fill="#cfd8ff"/>',

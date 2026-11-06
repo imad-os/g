@@ -1,5 +1,8 @@
-/* Music app (owner request 2026-11-05): plays the songs of USB drives / hard disks plugged into the TV, of Google Drive
- * (through My PC's Google Drive sign-in, Control Panel > Google Drive) and, in a browser, of a folder of the computer.
+/* MyMusic (was Music; owner requests 2026-11-05 and 2026-11-06; the app id stays 'music'): plays the songs of USB drives / hard
+ * disks plugged into the TV, of Google Drive (through My PC's Google Drive sign-in, Control Panel > Google Drive), in a browser of
+ * a folder of the computer, and online radio stations (js/core/radio.js: Radio Browser, Morocco first; filters by country,
+ * language and genre, search, favorites, recently played, stations added by hand; the streams are tested and the ones that do
+ * not work here are hidden).
  *
  * Screens: Home (continue, drives, playlists, recently played), a folder (sub-folders as tiles with their cover, songs as
  * rows with their own cover and details), Playlists, Google Drive, the queue, Settings, and Now playing (full screen,
@@ -135,6 +138,7 @@
         nav('np', 'music', t('muNowPlaying'), function () { showNp(); });
         nav('queue', 'document', t('muQueue'), function () { go({ v: 'queue' }); });
         nav('lists', 'folder', t('muPlaylists'), function () { go({ v: 'lists' }); });
+        nav('radio', 'radio', t('raTitle'), function () { go({ v: 'radio' }); });
         drives.forEach(function (d) { nav('d:' + d.p, 'drive', d.n, function () { go({ v: 'dir', e: d }); }); });
         nav('gd', 'cloud', 'Google Drive', function () { go({ v: 'gd' }); });
         if (MusicSrc.locOk()) {
@@ -152,6 +156,7 @@
             if (view.e.s === 'loc') id = 'l:' + String(view.e.p).split('/')[0];
         }
         if (view && view.v === 'settings') id = 'set';
+        if (view && view.v === 'countries') id = 'radio';
         var l = ui.side.querySelectorAll('.mx-nav');
         for (var k = 0; k < l.length; k++) l[k].classList.toggle('on', l[k].getAttribute('data-nav') === id);
     }
@@ -191,6 +196,8 @@
         else if (v === 'gd') first = gdHome();
         else if (v === 'queue') first = queue(focusKey);
         else if (v === 'settings') first = settings();
+        else if (v === 'radio') first = radio(focusKey);
+        else if (v === 'countries') first = countries();
         Win.setTitle(t('music') + (ui.title.textContent && v !== 'home' ? ' – ' + ui.title.textContent : ''));
         drawMini();
         if (focusKey) { var f = ui.scroll.querySelector('[data-k="' + cssEsc(focusKey) + '"]'); if (f) first = f; }
@@ -248,6 +255,8 @@
         if (!a || a.querySelector('img')) return;
         var im = new Image();
         im.alt = ''; im.decoding = 'async';
+        // a logo from the web that does not load: the icon stays
+        im.onerror = function () { if (im.parentNode === a) { a.innerHTML = ''; a.classList.remove('has'); a.appendChild(icon(b._e && b._e.s === 'radio' ? 'radio' : 'music', 'mx-art-ic')); } };
         im.src = v.url;
         a.innerHTML = '';
         a.appendChild(im);
@@ -279,6 +288,7 @@
                         if (want) MusicSrc.art(e, function (v) { done(v); MusicSrc.info(e, function (inf) { if (g === gen) fillRow(b, inf); }); });
                         else if (e.s !== 'gd') MusicSrc.folderArt({ s: e.s, p: MusicSrc.parent(e.p), n: '', dir: true, root: e.root }, done);
                     } else if (kind === 'list' && b._cover) MusicSrc.folderArt(b._cover, done);
+                    else if (kind === 'station') MusicSrc.art(e, done);
                 })(b);
             }
         }, 220);
@@ -316,7 +326,16 @@
         gdt.removeAttribute('data-hold');
         g.appendChild(gdt);
         locs.forEach(function (d) { g.appendChild(tile(d, d.n, t('muPcFolder'), 'pc', function () { go({ v: 'dir', e: d }); })); });
+        var rt = tile(null, t('raTitle'), t('raSub'), 'radio', function () { go({ v: 'radio' }); }, 'none');
+        rt.removeAttribute('data-hold');
+        g.appendChild(rt);
         if (!first) first = g.firstChild;
+        var fv = Radio.favs();
+        if (fv.length) {
+            var fr = el('div', 'mx-rows'), fs = section(t('raFavs'));
+            fs.parentNode.replaceChild(fr, fs);
+            fv.slice(0, 6).forEach(function (st, i) { fr.appendChild(stRow(st, i, fv, t('raFavs'))); });
+        }
         var pl = lists();
         if (pl.length) {
             var lg = section(t('muPlaylists'));
@@ -489,6 +508,245 @@
         });
         return null;
     }
+    /* ---------------- Radio (js/core/radio.js) ---------------- */
+    // a station row: logo, name, genres · kbit/s · codec, a star for a favorite; OK plays the list it is in from it
+    function stRow(st, i, list, from) {
+        var b = btn('mx-row mx-st', '', function () { playStation(list, i, from); });
+        var a = el('span', 'mx-art mx-art-s'); a.appendChild(icon('radio', 'mx-art-ic'));
+        b.appendChild(a);
+        var tx = el('span', 'mx-rtext'), sub = stSub(st);
+        tx.appendChild(el('span', 'mx-rt', st.n));
+        tx.appendChild(el('span', 'mx-ra', sub));
+        b.appendChild(tx);
+        var right = el('span', 'mx-rd mx-st-r');
+        if (Radio.isFav(st)) right.appendChild(icon('star', 'mx-ic mx-st-fav'));
+        b.appendChild(right);
+        var stt = Radio.status(st);
+        if (stt === 'bad' || stt === 'no') { b.classList.add('bad'); right.appendChild(el('span', 'mx-st-bad', t('raNotWorking'))); }
+        b.setAttribute('aria-label', st.n + (sub ? ', ' + sub : '') + (Radio.isFav(st) ? ', ' + t('raFavs') : ''));
+        b.setAttribute('data-hold', 'station');
+        b.setAttribute('data-k', key(st));
+        b._e = st;
+        return b;
+    }
+    function stSub(st) {
+        var p = [];
+        if (st.g) p.push(st.g.split(', ').slice(0, 2).join(', '));
+        if (st.br) p.push(st.br + ' kbps');
+        if (st.c) p.push(st.c + (st.h ? ' · HLS' : ''));
+        else if (st.h) p.push('HLS');
+        if (st.own) p.push(st.u.replace(/^https?:\/\//i, '').slice(0, 40));
+        return p.join(' · ');
+    }
+    function playStation(list, i, from) {
+        var st = list[i];
+        if (Radio.status(st) === 'no') return toast(t('raCant'), 'warn');
+        Music.playList(list, i, { shuffle: false, from: { n: from || t('raTitle'), s: 'radio', p: '' } });
+        Radio.played(st);
+        showNp();
+    }
+    // the radio screen: actions, filters, favorites, recently played, my stations, then the country's stations
+    function radio(focusKey) {
+        var p = Radio.prefs(), g = gen, q = view.q || '';
+        ui.title.textContent = t('raTitle');
+        var bar = el('div', 'mx-actions');
+        var sb = btn('mx-act mx-act-main', '', function () {
+            Keyboard.open({ title: t('raSearchT'), text: view.q || '', max: 40, mode: 'title' }, function (v) { view.q = String(v || '').trim(); render(); });
+        });
+        sb.appendChild(icon('search')); sb.appendChild(el('span', '', t('raSearch')));
+        var cb = btn('mx-act', '', function () { go({ v: 'countries' }); });
+        cb.appendChild(icon('globe')); cb.appendChild(el('span', '', t('raCountry') + ': ' + Radio.countryName(p.cc)));
+        cb.setAttribute('data-k', 'act:cc');
+        var ab = btn('mx-act', '', function () { addStation(null); });
+        ab.appendChild(icon('plus')); ab.appendChild(el('span', '', t('raAdd')));
+        bar.appendChild(sb); bar.appendChild(cb); bar.appendChild(ab);
+        if (q) {
+            var qc = btn('mx-act', '', function () { view.q = ''; render(); });
+            qc.appendChild(icon('close')); qc.appendChild(el('span', '', tf('raSearchFor', q)));
+            qc.setAttribute('aria-label', t('raClear') + ', ' + q);
+            bar.appendChild(qc);
+        }
+        ui.scroll.appendChild(bar);
+        var fil = el('div', 'mx-actions mx-filters');
+        ui.scroll.appendChild(fil);
+        var mine = Radio.custom(), favs = Radio.favs(), rec = Radio.recent();
+        if (!q && !p.lang && !p.tag) {
+            if (favs.length) addRows(t('raFavs'), favs, t('raFavs'));
+            if (rec.length) addRows(t('raRecent'), rec, t('raRecent'));
+            if (mine.length) addRows(t('raMine'), mine, t('raMine'));
+        } else if (q) {
+            // a search looks in the own stations too
+            var mq = Radio.filter(mine, { q: q });
+            if (mq.length) addRows(t('raMine'), mq, t('raMine'));
+        }
+        ui.scroll.appendChild(el('h3', 'mx-sec-t', t('raStations')));
+        var rows = el('div', 'mx-rows');
+        ui.scroll.appendChild(rows);
+        var foot = el('div', 'mx-actions mx-st-foot');
+        ui.scroll.appendChild(foot);
+        rows.appendChild(el('p', 'mx-empty', t('wgLoading')));
+        var drawn = 0, mv = view;
+        Radio.stations(p.cc, function (e, all, meta) {
+            if (g !== gen || view !== mv) return;
+            if (e) { rows.innerHTML = ''; rows.appendChild(el('p', 'mx-empty mx-err', t('raOffline'))); retryBtn(); return; }
+            // the cached list first, then the new one: drawn again only when the list really changed
+            var sig = all.length + ':' + (all[0] && all[0].p) + ':' + (all[all.length - 1] && all[all.length - 1].p);
+            if (drawn && mv._sig === sig) return;
+            mv._sig = sig;
+            drawn++;
+            var keep = drawn > 1 && Focus.current() && ui.scroll.contains(Focus.current()) ? Focus.current().getAttribute('data-k') : focusKey;
+            filters(all);
+            var list = Radio.filter(all, { lang: p.lang, tag: p.tag, q: q }), ok = p.showBad ? list : list.filter(function (s) { var x = Radio.status(s); return x !== 'bad' && x !== 'no'; });
+            mv.list = ok; mv.shownN = 0; mv.hidden = list.length - ok.length; mv.foot = function () { footer(foot, p, mv.hidden); mv.subText(); };
+            mv.subText = function () { ui.sub.textContent = Radio.countryName(p.cc) + ' · ' + tf('raNStations', list.length - mv.hidden) + (meta && meta.at ? ' · ' + tf('raUpdated', when(meta.at)) : ''); };
+            rows.innerHTML = '';
+            if (!ok.length) rows.appendChild(el('p', 'mx-empty', t('raNone')));
+            moreStations(rows);
+            mv.foot();
+            var f = keep && ui.scroll.querySelector('[data-k="' + cssEsc(keep) + '"]');
+            if (f && !npOpen && !menu) { Focus.focus(f); keepVisible(f); }
+            lazyArt();
+            testRows(rows, g);
+        });
+        function addRows(label, list, from) {
+            ui.scroll.appendChild(el('h3', 'mx-sec-t', label));
+            var r = el('div', 'mx-rows');
+            list.forEach(function (st, i) { r.appendChild(stRow(st, i, list, from)); });
+            ui.scroll.appendChild(r);
+        }
+        function retryBtn() {
+            var rb = btn('mx-act', '', function () { Radio.stations(p.cc, function () { if (body && view && view.v === 'radio') render(); }, true); });
+            rb.appendChild(icon('reload')); rb.appendChild(el('span', '', t('muTryAgain')));
+            foot.innerHTML = ''; foot.appendChild(rb);
+        }
+        function filters(all) {
+            fil.innerHTML = '';
+            fil.appendChild(stepper(t('raLang'), [['', t('raAll')]].concat(Radio.langs(all).map(function (x) { return [x.v, cap(x.v)]; })), p.lang, function (v) { Radio.setPref('lang', v); }));
+            fil.appendChild(stepper(t('raGenre'), [['', t('raAll')]].concat(Radio.tags(all).map(function (x) { return [x.v, cap(x.v)]; })), p.tag, function (v) { Radio.setPref('tag', v); }));
+        }
+        return sb;
+    }
+    // a filter: left / right on the remote (or OK) changes it; the list follows a moment after the last press
+    var stepT = 0;
+    function stepper(label, values, cur, fn) {
+        var b = btn('mx-act mx-step', ''), i = 0, lab = el('span', '', ''), k;
+        for (k = 0; k < values.length; k++) if (values[k][0] === cur) i = k;
+        b.appendChild(lab);
+        function draw() { lab.textContent = label + ':  ‹ ' + values[i][1] + ' ›'; b.setAttribute('aria-label', label + ': ' + values[i][1]); }
+        b._step = function (d) {
+            i = (i + d + values.length) % values.length; draw(); fn(values[i][0]); A11y.announce(values[i][1]);
+            clearTimeout(stepT); stepT = setTimeout(function () { if (body && view && view.v === 'radio') render('step:' + label); }, 700);
+        };
+        b.onclick = function () { b._step(1); };
+        b.setAttribute('data-k', 'step:' + label);
+        draw();
+        return b;
+    }
+    function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+    function when(at) {
+        var d = new Date(at), now = new Date();
+        var hm = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+        return d.toDateString() === now.toDateString() ? hm : d.getDate() + '/' + (d.getMonth() + 1) + ' ' + hm;
+    }
+    function moreStations(rows) {
+        var l = view.list, end = Math.min(l.length, view.shownN + CHUNK), mb = rows.querySelector('.mx-st-more'), from = Radio.countryName(Radio.prefs().cc);
+        if (mb) mb.remove();
+        for (var i = view.shownN; i < end; i++) rows.appendChild(stRow(l[i], i, l, from));
+        view.shownN = end;
+        if (end < l.length) {
+            var m = btn('mx-act mx-st-more', '', function () { var n0 = rows.querySelectorAll('.mx-st').length; moreStations(rows); var r = rows.querySelectorAll('.mx-st'); if (r[n0]) Focus.focus(r[n0]); lazyArt(); testRows(rows, gen); });
+            m.appendChild(el('span', '', t('raMore')));
+            rows.appendChild(m);
+        }
+    }
+    function footer(foot, p, hidden) {
+        foot.innerHTML = '';
+        if (hidden || p.showBad) {
+            var hb = btn('mx-act', '', function () { Radio.setPref('showBad', !p.showBad); render(); });
+            hb.appendChild(el('span', '', p.showBad ? t('raHideBad') : tf('raShowBad', hidden)));
+            foot.appendChild(hb);
+        }
+        var rb = btn('mx-act', '', function () { ui.sub.textContent = t('wgLoading'); Radio.stations(p.cc, function (e) { if (body && view && view.v === 'radio') { if (e) toast(t('raOffline'), 'err'); render(); } }, true); });
+        rb.appendChild(icon('reload')); rb.appendChild(el('span', '', t('raRefresh')));
+        foot.appendChild(rb);
+        var old = ui.scroll.querySelector('.mx-st-note');
+        if (!old) ui.scroll.appendChild(el('p', 'mx-note mx-st-note', t('raPrivacy')));
+    }
+    // the stations on screen are tested two at a time (each one once in 3 days): the ones that do not answer are hidden
+    function testRows(rows, g) {
+        var l = rows.querySelectorAll('.mx-st'), todo = [];
+        for (var i = 0; i < l.length; i++) if (!Radio.status(l[i]._e)) todo.push(l[i]);
+        function next() {
+            if (g !== gen || !body || !todo.length) return;
+            var b = todo.shift();
+            Radio.test(b._e, function (r) {
+                if (g !== gen || !body) return;
+                if (r !== 'ok') hideBad(b);
+                next();
+            });
+        }
+        next(); next();
+    }
+    function hideBad(b) {
+        if (!b.parentNode) return;
+        if (!Radio.prefs().showBad && b !== Focus.current()) { b.remove(); if (view && view.foot) { view.hidden++; view.foot(); } return; }
+        b.classList.add('bad');
+        var r = b.querySelector('.mx-st-r');
+        if (r && !r.querySelector('.mx-st-bad')) r.appendChild(el('span', 'mx-st-bad', t('raNotWorking')));
+    }
+    function testOne(b, e) {
+        toast(t('raTesting'), 'info');
+        Radio.test(e, function (r) {
+            toast(t(r === 'ok' ? 'raWorks' : r === 'no' ? 'raCant' : 'raBroken'), r === 'ok' ? 'ok' : 'err');
+            if (r === 'ok') { b.classList.remove('bad'); var x = b.querySelector('.mx-st-bad'); if (x) x.remove(); } else if (b.parentNode) hideBad(b);
+        });
+    }
+    // add (or edit) a station by hand: its name, then the address of its stream
+    function addStation(old) {
+        Keyboard.open({ title: t('raAddName'), text: old ? old.n : '', max: 60, mode: 'title' }, function (name) {
+            name = String(name || '').trim();
+            if (!name) return;
+            setTimeout(function () {
+                Keyboard.open({ title: t('raAddUrl'), text: old ? old.u : 'http://', max: 300, mode: 'title' }, function (u) {
+                    var done = function (e, st) {
+                        if (e) return toast(t('raBadUrl'), 'err');
+                        toast(t(old ? 'raSaved' : 'raAdded'), 'ok');
+                        if (body && view && view.v === 'radio') render(key(st));
+                    };
+                    if (old) Radio.editCustom(old.p, name, u, done); else Radio.addCustom(name, u, done);
+                });
+            }, 0);
+        });
+    }
+    function countries() {
+        ui.title.textContent = t('raPick');
+        var g = gen, rows = el('div', 'mx-rows'), cur = Radio.prefs().cc;
+        ui.scroll.appendChild(rows);
+        rows.appendChild(el('p', 'mx-empty', t('wgLoading')));
+        Radio.countries(function (list) {
+            if (g !== gen) return;
+            rows.innerHTML = '';
+            // Morocco and the chosen country first, then by how many stations
+            var top = list.filter(function (c) { return c.cc === 'MA' || c.cc === cur; }), rest = list.filter(function (c) { return c.cc !== 'MA' && c.cc !== cur; });
+            if (!top.some(function (c) { return c.cc === 'MA'; })) top.unshift({ cc: 'MA', n: 'Morocco', count: 0 });
+            var first = null;
+            top.concat(rest).forEach(function (c) {
+                var name = Radio.countryName(c.cc), b = btn('mx-row', '', function () {
+                    Radio.setPref('cc', c.cc); Radio.setPref('lang', ''); Radio.setPref('tag', '');
+                    if (!goBack()) go({ v: 'radio' }, true);
+                });
+                b.appendChild(el('span', 'mx-num', c.cc));
+                var tx = el('span', 'mx-rtext'); tx.appendChild(el('span', 'mx-rt', name)); tx.appendChild(el('span', 'mx-ra', c.count ? tf('raNStations', c.count) : ''));
+                b.appendChild(tx);
+                b.setAttribute('aria-label', name + (c.count ? ', ' + tf('raNStations', c.count) : ''));
+                if (c.cc === cur) { b.classList.add('on'); first = b; }
+                rows.appendChild(b);
+            });
+            if (!npOpen && !menu) { Focus.focus(first || rows.firstChild); keepVisible(Focus.current()); }
+        });
+        return null;
+    }
+
     /* ---------------- queue ---------------- */
     function queue(focusKey) {
         ui.title.textContent = t('muQueue');
@@ -602,6 +860,15 @@
                 if (view.v !== 'dir' && e.s !== 'gd') add(t('muGoFolder'), function () { var p = MusicSrc.parent(e.p); go({ v: 'dir', e: { s: e.s, p: p, n: MusicSrc.base(p), dir: true, root: e.root } }); });
             }
             if (kind === 'track' && view.v === 'dir') add(t('muRename'), function () { rename(b, e); });
+        } else if (kind === 'station') {
+            add(t('wgPlay'), function () { b.click(); });
+            var fav = Radio.isFav(e);
+            add(t(fav ? 'raUnfav' : 'raFav'), function () { Radio.setFav(e, !fav); toast(t(fav ? 'raFavOff' : 'raFavOn'), 'ok'); render(key(e), ui.scroll.scrollTop); });
+            add(t('raTest'), function () { testOne(b, e); });
+            if (e.own) {
+                add(t('raEdit'), function () { addStation(e); });
+                add(t('raDelete'), function () { Radio.removeCustom(e.p); toast(t('raDeleted'), 'ok'); render(); }, 'danger');
+            }
         } else if (kind === 'list') {
             add(t('storeOpen'), function () { b.click(); });
             add(t('muPlayAll'), function () { playFrom({ list: e.id }, 'play'); });
@@ -775,6 +1042,7 @@
     function progress() {
         var s = Music.state(), f = s.dur ? Math.min(1, s.pos / s.dur) : 0;
         var l = Math.max(f, s.loaded || 0);
+        if (s.live) { f = 0; l = s.playing && !s.loading ? 1 : 0; }
         if (ui.miniFill) { ui.miniFill.style.transform = 'scaleX(' + f + ')'; ui.miniLoad.style.transform = 'scaleX(' + l + ')'; }
         if (npOpen && ui.npLoad) {
             // grows smoothly; going back (another song) it jumps: no animation from full to empty
@@ -785,8 +1053,9 @@
         if (npOpen && ui.npFill) {
             ui.npFill.style.transform = 'scaleX(' + f + ')';
             ui.npKnob.style.left = (f * 100) + '%';
-            ui.npPos.textContent = Music.clock(s.pos);
-            ui.npDur.textContent = s.dur ? '-' + Music.clock(s.dur - s.pos) : '';
+            ui.npPos.textContent = s.live ? '● ' + t('raLive') : Music.clock(s.pos);
+            ui.npDur.textContent = s.live ? (s.playing && !s.loading ? Music.clock(s.pos) : '') : s.dur ? '-' + Music.clock(s.dur - s.pos) : '';
+            ui.np.classList.toggle('live', !!s.live);
             ui.npSeek.setAttribute('aria-valuenow', Math.floor(s.pos));
             ui.npSeek.setAttribute('aria-valuemax', Math.floor(s.dur));
             ui.npSeek.setAttribute('aria-valuetext', Music.clock(s.pos) + ' / ' + Music.clock(s.dur));

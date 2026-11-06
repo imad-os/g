@@ -2,7 +2,8 @@
  *
  * One queue per profile, played by the TV's own media player when there is one (Samsung AVPlay: hardware decoding, more
  * formats, almost no CPU), else (or when AVPlay cannot open a song) one <audio> element. Songs come from
- * js/core/music-src.js (USB drives, Google Drive (My PC's own sign-in), a folder of a PC).
+ * js/core/music-src.js (USB drives, Google Drive (My PC's own sign-in), a folder of a PC) and online radio stations (js/core/radio.js:
+ * live, s: 'radio': no length, no seeking; a stream that stops is opened again, a station that fails is not skipped).
  *
  *   Music.init({ resume })        on the desktop page only (main.js): loads the profile's queue; resume = back from a game:
  *                                 plays on where it was when "Keep playing after a game" is on
@@ -318,8 +319,10 @@ var Music = (function () {
         if (e.a) o.a = e.a;
         if (e.b) o.b = e.b;
         if (e.d) o.d = Math.round(e.d);
+        if (e.s === 'radio' && typeof Radio !== 'undefined') return Radio.slim(e);
         return o;
     }
+    function isLive(e) { return !!e && e.s === 'radio'; }
     function trackKey(e) { return e ? e.s + ':' + e.p : ''; }
     function saveQueue() { Store.set(KEY, { v: 2, q: q, ord: order, at: at, sh: shuffle, rp: repeat, from: from }); }
     function posMap() { var m = Store.rawGet(POS); return m && typeof m === 'object' ? m : {}; }
@@ -435,6 +438,7 @@ var Music = (function () {
     }
     function position() { return engine && !loading ? engine.time() : lastPos; }
     function duration() {
+        if (isLive(current())) return 0;
         var d = engine && !loading ? engine.duration() : 0, c = current();
         // streaming or a growing download: the player knows only what arrived; the song's length from its details, else
         // from how many seconds the part that arrived holds and how much of the file that part is
@@ -462,6 +466,7 @@ var Music = (function () {
         stopEngine();
         my = gen;
         if (!cur) { emit('track'); return; }
+        if (isLive(cur)) start = 0;
         lastPos = start || 0; lastDur = cur.d || 0; error = '';
         want = autoplay !== false;
         if (!want) { playing = false; savePos(); emit('track'); details(cur); return; }
@@ -565,6 +570,7 @@ var Music = (function () {
                 }, function (blocked) {
                     if (my !== gen) return;
                     ready(eng, blocked);
+                    if (isLive(cur) && typeof Radio !== 'undefined') Radio.mark(cur, true);
                 });
             }
             tryNext(null);
@@ -578,12 +584,27 @@ var Music = (function () {
                 code === 'network' ? t('muErrNet') : t('muErrPlay');
         emit('error');
         if (typeof App !== 'undefined' && App.toast) App.toast(error + (current() ? ' ' + current().n : ''), { id: 'music', kind: 'err', timeout: 4000 });
+        var cur0 = current();
+        if (isLive(cur0)) {
+            // a station is not skipped (the listener chose it): marked as not working on this device, stopped
+            if (typeof Radio !== 'undefined') Radio.mark(cur0, false);
+            want = false; tickSave(false); savePos();
+            return;
+        }
         // one bad song: the next one; several in a row (drive removed, offline): stop
         if (++fails < 3 && q.length > 1 && (at < order.length - 1 || repeat === 'all')) {
             setTimeout(function () { if (my === gen && !playing) step(1, true); }, 1200);
         } else { want = false; tickSave(false); savePos(); }
     }
+    var liveRetry = [];
     function ended() {
+        if (isLive(current())) {
+            // a live stream does not end: the connection dropped. Opened again (3 times a minute at most)
+            var n = Date.now();
+            liveRetry = liveRetry.filter(function (x) { return n - x < 60000; });
+            if (liveRetry.length < 3) { liveRetry.push(n); var g0 = gen; setTimeout(function () { if (g0 === gen && want) openCurrent(0, true); }, 1000); return; }
+            return failed({ code: 'network' }, gen);
+        }
         if (repeat === 'one') { openCurrent(0, true); return; }
         if (at < order.length - 1 || repeat === 'all') return step(1, true);
         // the end of the queue: back to its first song, stopped
@@ -605,7 +626,7 @@ var Music = (function () {
 
     // title / artist / length from the file, kept in the queue (shown after a restart without reading again)
     function details(cur) {
-        if (!cur || (cur.t && cur.d) || !prefs().details || lite) return;
+        if (!cur || isLive(cur) || (cur.t && cur.d) || !prefs().details || lite) return;
         MusicSrc.info(cur, function (inf) {
             if (!inf) return;
             var ch = false;
@@ -636,7 +657,7 @@ var Music = (function () {
     function next() { step(1, false); }
     // back to the start of the song, or the one before when it just started
     function prev() {
-        if (position() > 4 && engine) { seek(0); return; }
+        if (position() > 4 && engine && !isLive(current())) { seek(0); return; }
         step(-1, false);
     }
     function pick(qi) {
@@ -647,6 +668,7 @@ var Music = (function () {
         openCurrent(0, true);
     }
     function seek(s) {
+        if (isLive(current())) return;
         var d = duration();
         s = Math.max(0, d ? Math.min(s, d - 1) : s);
         if (engine && !loading) engine.seek(s);
@@ -671,7 +693,7 @@ var Music = (function () {
     function mediaSession(cur) {
         try {
             if (!navigator.mediaSession || typeof MediaMetadata === 'undefined' || !cur) return;
-            navigator.mediaSession.metadata = new MediaMetadata({ title: cur.t || cur.n, artist: cur.a || '', album: cur.b || '' });
+            navigator.mediaSession.metadata = new MediaMetadata({ title: cur.t || cur.n, artist: cur.a || cur.g || '', album: cur.b || '', artwork: cur.i ? [{ src: cur.i }] : [] });
         } catch (e) {}
     }
     function bindSession() {
@@ -686,7 +708,7 @@ var Music = (function () {
         var c = current(), d = duration();
         return {
             has: !!c, track: c, index: c ? order[at] : -1, at: at, count: q.length,
-            title: c ? c.t || MusicTagsName(c.n) : t('muNothing'), artist: c ? c.a || '' : '', album: c ? c.b || '' : '',
+            title: c ? c.t || (isLive(c) ? c.n : MusicTagsName(c.n)) : t('muNothing'), artist: c ? c.a || (isLive(c) ? c.g || '' : '') : '', album: c ? c.b || '' : '', live: isLive(c),
             pos: Math.min(position(), d || 1e9), dur: d, loaded: c ? loaded() : 0, playing: playing || (loading && want), loading: loading, error: error,
             shuffle: shuffle, repeat: repeat, from: from
         };
