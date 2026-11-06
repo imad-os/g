@@ -1613,6 +1613,11 @@ async function main() {
         check(/Goal alerts/.test(await page.textContent(svRow)) && /Waiting for approval/.test(await page.textContent(svRow)) && /\b2\b/.test(await page.textContent(svRow + ' td.num')) &&
             await page.evaluate(() => document.querySelector('tr[data-k="soccer__goals"] button[data-act="now"]').disabled) && /App updates/.test(await page.textContent('#sv-list')),
             'Services lists an app\'s service waiting for approval, how many players allowed the app, and the built-in App updates');
+        const svHidden = await page.evaluate(() => ({ others: Object.keys(window.__db.apps).filter((id) => id !== 'soccer' && !(window.__db.apps[id].services || []).length),
+            rows: [...document.querySelectorAll('#sv-list tr')].map((tr) => tr.dataset.k) }));
+        check(svHidden.others.length > 0 && svHidden.rows.length === 2 && svHidden.rows.every((k) => k.startsWith('soccer__')),
+            'Services hides the apps with no service of their own, like Widgets (' + svHidden.others.join() + ' hidden; rows ' + svHidden.rows.join() + ')');
+        if (process.env.MYPC_SHOTS) await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'manager-services.png') });
         check(/Services run in this tab/.test(await page.textContent('#sv-runner')) && await page.evaluate(() => !!window.__db.services._runner), 'this tab holds the runner lease');
         await page.click(svRow + ' button[data-act="review"]');
         await page.waitForFunction(() => !document.getElementById('sv-modal').hidden);

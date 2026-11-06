@@ -180,9 +180,11 @@ export function initServices(env) {
   function renderList() {
     const box = $('sv-list');
     if (!box) return;
-    const rows = list();
-    const appsWith = rows.filter((r) => !r.s.builtin).length;
-    $('sv-empty').hidden = appsWith > 0;
+    // like the Widgets tab: only apps with at least one service of their own (their App updates row stays with them);
+    // the others still get App updates, they are just not listed
+    const all = list(), withSvc = new Set(all.filter((r) => !r.s.builtin).map((r) => r.app.id));
+    const rows = all.filter((r) => withSvc.has(r.app.id));
+    $('sv-empty').hidden = rows.length > 0;
     box.innerHTML = rows.map((it) => {
       const d = docs[it.k] || {}, [cls, label] = status(it), sub = subs[it.app.id];
       const every = SL.EVERY.map((m) => '<option value="' + m + '"' + ((d.every || it.s.every || 5) === m ? ' selected' : '') + '>every ' + m + ' min</option>').join('');
