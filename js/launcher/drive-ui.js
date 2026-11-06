@@ -101,7 +101,8 @@ var DriveUI = (function () {
                 paint({ title: t('gdSignInTitle'), lines: [errText(e)], error: true, buttons: [[t('gdTryAgain'), true, start], [t('gdClose'), false, onBack]] });
             });
         }
-        if (GDrive.config()) start(); else GDrive.syncConfig(function () { if (box && done === cb) start(); });
+        // always read the Manager's settings first (one Firestore read): a client or secret fixed there works at once, not 12 h later
+        GDrive.syncConfig(function () { if (box && done === cb) start(); });
     }
 
     function addFiles(cb) {

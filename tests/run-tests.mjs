@@ -4826,6 +4826,8 @@ async function drivePhoneTests(browser, base) {
     await shot(page, 'drive-5-limited');
     check(cp0.full && cp0.a.limited && !cp0.a.full && /My PC only sees some of your files/.test(cp0.t) && /Add files from your phone/.test(cp0.t),
         'with the web client secret set, an old drive.file account is "limited": Control Panel offers to sign in again for the whole Drive ' + JSON.stringify(cp0.a));
+    // the TV still remembers an old, wrong secret (imad, 2026-11-06: fixed in the Manager, the TV kept its 12 h copy): sign-in reads the Manager's first
+    await page.evaluate(() => { localStorage.setItem('arc_dev_google', JSON.stringify(Object.assign({}, GDrive.config(), { webClientSecret: 'old-wrong' }))); GDrive._reset(); });
     // sign in: a QR code for the phone page (no code to type)
     await page.evaluate(() => { const s = GDrive.signIn; GDrive.signIn = (on, cb) => s((c) => { window.__gurl = c.url; on(c); }, cb); });
     await page.evaluate(() => [...document.querySelectorAll('.set-main .set-row')].find((b) => /only sees some of your files/.test(b.textContent)).click());
