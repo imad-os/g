@@ -5393,16 +5393,37 @@ async function musicTests(browser, base) {
     await shot('6-saver-ring');
     check(await page.evaluate(() => !!document.querySelector('.mxs-s-ring canvas') && getComputedStyle(document.querySelector('.mxs-s-ring .mxs-cover')).borderRadius === '50%'), 'the Ring screensaver draws its bars around a round cover');
     await page.evaluate(() => MusicSaver.hide());
+    // the new styles (owner request 2026-11-06): Waveform, Particles, Pulsating rings; CH + / CH − change the style in place
+    for (const st of ['scope', 'particles', 'pulse']) {
+        await page.evaluate((x) => { MusicSaver.hide(); Music.setPref('saver', x); MusicSaver.show(true); }, st);
+        await page.waitForTimeout(600);
+        await shot('6-viz-' + st);
+        check(await page.evaluate((x) => MusicSaver.isOn() && MusicSaver.style() === x && !!document.querySelector('.mxs-s-' + x + ' canvas') && MusicSaver._stats().frames > 10, st), 'the audio visualizer draws the ' + st + ' style');
+    }
+    await page.evaluate(() => { MusicSaver.hide(); Music.setPref('saver', 'bars'); MusicSaver.show(true); });
+    await page.waitForTimeout(400);
+    await press(427);                                                                   // CH +
+    check(await page.evaluate(() => MusicSaver.isOn() && MusicSaver.style() === 'scope' && !!document.querySelector('.mxs-s-scope') && document.querySelectorAll('.mxs').length === 1 && Music.prefs().saver === 'scope'), 'CH + shows the next style and keeps it (the visualizer stays open)');
+    await page.waitForTimeout(250); await press(428); await page.waitForTimeout(250); await press(428);   // CH − twice
+    check(await page.evaluate(() => MusicSaver.isOn() && MusicSaver.style() === 'cover' && Music.prefs().saver === 'cover'), 'CH − goes back, round to the last style');
+    await page.evaluate(() => Music.setPref('saver', 'off'));
+    await page.waitForTimeout(250); await press(427);
+    await page.waitForTimeout(100);
+    const offT = await page.evaluate(() => ({ on: MusicSaver.isOn(), st: MusicSaver.style(), saver: Music.prefs().saver, viz: Music.prefs().vizStyle }));
+    check(offT.st === 'bars' && offT.saver === 'off' && offT.viz === 'bars', 'with the automatic visualizer off, CH + only remembers the style for the button ' + JSON.stringify(offT));
+    await press(13);
+    check(await page.evaluate(() => !MusicSaver.isOn()), 'another key still closes it');
+    await page.evaluate(() => MusicSaver.hide());
     // Now playing's Screensaver button: with the remote's OK, and with a mouse click (the click and a resting pointer do not close it)
     await page.evaluate(() => { Music.setPref('saver', 'bars'); Win.open('music', 'np'); });
     await page.waitForSelector('.mx-np:not([hidden]) .mx-np-tool');
-    const svBtn = () => page.evaluate(() => [...document.querySelectorAll('.mx-np-tool')].find((b) => /Screensaver/.test(b.textContent)).focus());
+    const svBtn = () => page.evaluate(() => [...document.querySelectorAll('.mx-np-tool')].find((b) => /Audio visualizer/.test(b.textContent)).focus());
     await svBtn(); await press(13);
     await page.waitForTimeout(300);
     check(await page.evaluate(() => MusicSaver.isOn()), 'OK on Now playing\'s Screensaver button opens it');
     await press(13);
     check(await page.evaluate(() => !MusicSaver.isOn() && !!document.querySelector('.mx-np:not([hidden])')), 'a key closes it, back on Now playing');
-    const box = await page.evaluate(() => { const r = [...document.querySelectorAll('.mx-np-tool')].find((b) => /Screensaver/.test(b.textContent)).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+    const box = await page.evaluate(() => { const r = [...document.querySelectorAll('.mx-np-tool')].find((b) => /Audio visualizer/.test(b.textContent)).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
     await page.mouse.move(box.x, box.y); await page.mouse.click(box.x, box.y);
     await page.mouse.move(box.x + 3, box.y + 2);
     await page.waitForTimeout(1500);
@@ -5417,6 +5438,23 @@ async function musicTests(browser, base) {
     check(await page.evaluate(() => MusicSaver._armed()), 'while a song plays the screensaver waits for the remote to rest');
     await page.evaluate(() => Music.pause());
     check(await page.evaluate(() => !MusicSaver._armed()), 'paused: no screensaver timer');
+    // Play in the background (owner request 2026-11-06): in a browser (PC, phone) a hidden tab keeps playing when it is on;
+    // on the TV (webapis) hidden always pauses (another app or source is on screen)
+    const bgT = await page.evaluate(async () => {
+        const hide = (h) => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => h }); document.dispatchEvent(new Event('visibilitychange')); };
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms)), out = {};
+        Music.play(); await wait(300);
+        out.tvRow = Music.canBackground();
+        Music.setPref('bg', true); hide(true); await wait(200); out.tvHidden = Music.state().playing; hide(false); await wait(400);
+        const w = window.webapis, tz = window.tizen; delete window.webapis; delete window.tizen;
+        out.webRow = Music.canBackground();
+        hide(true); await wait(200); out.webBgOn = Music.state().playing; hide(false); await wait(100);
+        Music.setPref('bg', false); hide(true); await wait(200); out.webBgOff = Music.state().playing;
+        window.webapis = w; if (tz) window.tizen = tz; hide(false); await wait(400); out.back = Music.state().playing;
+        delete document.hidden; Music.pause();
+        return out;
+    });
+    check(!bgT.tvRow && bgT.tvHidden === false && bgT.webRow && bgT.webBgOn === true && bgT.webBgOff === false && bgT.back === true, 'Play in the background: a hidden browser tab plays on when it is on, pauses when off; the TV always pauses ' + JSON.stringify(bgT));
     // real sound on the TV's player: AVPlay gives no sound data, so the song file is read and analysed, shown at the player's
     // position. A 440 Hz tone: the middle bars move, the low and the high ones stay down; paused: everything goes flat.
     const q0 = await page.evaluate(() => { const q = Music.queue(); return { list: q.list.slice(), i: q.order[q.at] }; });

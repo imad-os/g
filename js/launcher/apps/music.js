@@ -547,11 +547,12 @@
             return b;
         }
         var on = [[true, t('on')], [false, t('off')]];
-        var first = opt(t('muSaver'), t('muSaverDesc'), [['bars', t('muSaverBars')], ['waves', t('muSaverWaves')], ['cover', t('muSaverCover')], ['ring', t('muSaverRing')], ['off', t('off')]], p.saver, function (v) { Music.setPref('saver', v); });
+        var first = opt(t('muSaver'), t('muSaverDesc'), [['bars', t('muSaverBars')], ['scope', t('muSaverScope')], ['waves', t('muSaverWaves')], ['particles', t('muSaverParticles')], ['pulse', t('muSaverPulse')], ['ring', t('muSaverRing')], ['cover', t('muSaverCover')], ['off', t('off')]], p.saver, function (v) { Music.setPref('saver', v); });
         opt(t('muSaverAfter'), '', [[1, '1 min'], [2, '2 min'], [5, '5 min'], [10, '10 min'], [20, '20 min']], p.saverMin, function (v) { Music.setPref('saverMin', v); });
         var test = btn('mx-set-row mx-set-btn', t('muSaverTry'), function () { if (typeof MusicSaver !== 'undefined') MusicSaver.show(true); });
         box.appendChild(test);
         opt(t('muResume'), t('muResumeDesc'), on, p.resume, function (v) { Music.setPref('resume', v); });
+        if (Music.canBackground()) opt(t('muBg'), t('muBgDesc'), on, !!p.bg, function (v) { Music.setPref('bg', v); });
         opt(t('muSub'), t('muSubDesc'), on, p.sub, function (v) { Music.setPref('sub', v); });
         opt(t('muDetails'), t('muDetailsDesc'), on, p.details, function (v) { Music.setPref('details', v); });
         if (typeof webapis !== 'undefined' && webapis.avplay) opt(t('muEngine'), t('muEngineDesc'), [['auto', t('muEngineTv')], ['html', t('muEngineWeb')]], p.engine, function (v) { Music.setPref('engine', v); });

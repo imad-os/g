@@ -21,7 +21,7 @@ var Music = (function () {
     'use strict';
 
     var KEY = 'music', POS = 'arc_dev_music_pos', PREFS = 'music_prefs', MAXQ = 1000, SAVE_EVERY = 15000;
-    var DEFAULT_PREFS = { saver: 'bars', saverMin: 2, resume: true, engine: 'auto', sub: true, details: true };
+    var DEFAULT_PREFS = { saver: 'bars', saverMin: 2, resume: true, engine: 'auto', sub: true, details: true, bg: false, vizStyle: 'bars' };
 
     var q = [], order = [], at = 0, shuffle = false, repeat = 'off', from = null;
     var playing = false, loading = false, want = false, lastPos = 0, lastDur = 0, error = '', fails = 0;
@@ -700,15 +700,19 @@ var Music = (function () {
 
     // o.resume: plays on if it played when the last page went away (prefs.resume). o.lite: the game page (main.js startGame):
     // only the player, so the music goes on under a game and its menu can pause it; no tag reading
+    // a browser, not the TV (on the TV hidden = another app or source is on screen: the music always pauses)
+    function bgOk() { return typeof tizen === 'undefined' && typeof webapis === 'undefined'; }
     function init(o) {
         if (inited) return;
         inited = true;
         lite = !!(o && o.lite);
         load();
         bindSession();
-        // My PC hidden (another TV app or source): the music pauses, and plays on when My PC is back
+        // My PC hidden (another TV app or source): the music pauses, and plays on when My PC is back. In a browser (PC, phone)
+        // Music > Settings > Play in the background (prefs.bg, owner request 2026-11-06) keeps it playing in a hidden tab
         document.addEventListener('visibilitychange', function () {
             if (leaving) return;
+            if (document.hidden && bgOk() && prefs().bg) return;
             if (document.hidden) { if (playing || (loading && want)) { hiddenPause = true; pause(); } }
             else if (hiddenPause) { hiddenPause = false; play(); }
         });
@@ -734,7 +738,7 @@ var Music = (function () {
     return {
         init: init, peek: peek, state: state, playList: playList, enqueue: enqueue, remove: remove, clear: clear,
         play: play, pause: pause, toggle: toggle, next: next, prev: prev, pick: pick, seek: seek, seekBy: seekBy, stop: stop,
-        setShuffle: setShuffle, setRepeat: setRepeat, cycleRepeat: cycleRepeat, clock: clock, prefs: prefs, setPref: setPref,
+        setShuffle: setShuffle, setRepeat: setRepeat, cycleRepeat: cycleRepeat, clock: clock, prefs: prefs, setPref: setPref, canBackground: bgOk,
         has: function () { return q.length > 0; },
         queue: function () { return { list: q, order: order, at: at }; },
         engineName: function () { return engine ? engine.name : ''; },

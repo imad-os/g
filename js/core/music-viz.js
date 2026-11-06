@@ -15,11 +15,16 @@
  *             other (Ogg...) a USB file is read in 1 MB pieces with pauses and decoded once; a Drive one waits for the
  *                   player's own whole copy (a Drive song is never downloaded twice)
  *   'wait'  the next piece is on its way;  'none'  nothing to hear (flat bars: never a made-up beat).
+ * wave(out) fills out (Float32Array, WAVE points, -1..1) with the song's real waveform around now (about 32 ms, starting on a
+ * rising zero crossing so it stands still on a steady note): live from the analyser, else from the same file pieces (a small
+ * snapshot per frame, kept with the spectra). False when there is nothing to show.
+ * read() is cheap enough for 60 frames a second: the player's position is asked 4 times a second and moved on by the clock in
+ * between; a spectrum between two of the 30 a second is the mix of both.
  * start() / stop(): nothing runs while stopped (stop frees the AudioContext and the work in progress). */
 var MusicViz = (function () {
     'use strict';
 
-    var BANDS = 40, LO_HZ = 50, HI_HZ = 6000, FPS = 30, N = 1024, RATE = 12000, SEG = 6, AHEAD = 10, MAXB = 40 * 1024 * 1024;
+    var BANDS = 40, WAVE = 128, LO_HZ = 50, HI_HZ = 6000, FPS = 30, N = 1024, RATE = 12000, SEG = 6, AHEAD = 10, MAXB = 40 * 1024 * 1024;
     var TV = typeof tizen !== 'undefined' || typeof webapis !== 'undefined';
     var on = false, noLive = TV;
     var edges = [];
@@ -45,7 +50,7 @@ var MusicViz = (function () {
         }
     }
     function flat(db) { for (var i = 0; i < BANDS; i++) db[i] = -200; }
-    var rev = null, cosT = null, sinT = null, win = null, re = null, im = null, spec = null, outB = null, maps = {};
+    var outB2 = new Float32Array(WAVE), rev = null, cosT = null, sinT = null, win = null, re = null, im = null, spec = null, outB = null, maps = {};
     function fftInit() {
         if (rev) return;
         rev = new Uint16Array(N); cosT = new Float32Array(N / 2); sinT = new Float32Array(N / 2); win = new Float32Array(N);
@@ -73,7 +78,7 @@ var MusicViz = (function () {
     }
 
     /* ---------------- live (a browser only) ---------------- */
-    var ac = null, an = null, anSrc = null, anZero = null, anStream = null, anEl = null, anTrack = null, rewire = false, liveBuf = null, liveMap = null, quiet = 0, liveNext = 0;
+    var ac = null, an = null, anSrc = null, anZero = null, anStream = null, anEl = null, anTrack = null, rewire = false, liveBuf = null, liveMap = null, quiet = 0, liveNext = 0, tdBuf = null;
     function htmlEl() { var h = Music._engines && Music._engines.HTML; return h && h._el ? h._el() : null; }
     function liveOk(a) {
         if (noLive || !a || !a.src || !(a.captureStream || a.mozCaptureStream) || !(window.AudioContext || window.webkitAudioContext)) return false;
@@ -122,7 +127,7 @@ var MusicViz = (function () {
         toBands(liveBuf, liveMap, db);
         var top = -200; for (var i = 0; i < BANDS; i++) if (db[i] > top) top = db[i];
         // silent while the song really plays: this browser gives a silent copy -> the file from now on
-        if (top < -110 && playing && !a.paused && a.readyState > 2 && a.currentTime > 0.5) { if (++quiet > FPS * 1.5) { noLive = true; liveClose(); } } else quiet = 0;
+        if (top < -110 && playing && !a.paused && a.readyState > 2 && a.currentTime > 0.5) { if (!quiet) quiet = Date.now(); else if (Date.now() - quiet > 1500) { noLive = true; liveClose(); } } else quiet = 0;
         return 'live';
     }
 
@@ -449,13 +454,13 @@ var MusicViz = (function () {
     /* ---------------- the table: 30 spectra a second, made just ahead of where the song is ---------------- */
     var J = null, tickT = 0;
     function grow(n) {
-        var m = Math.max(n, J.frames * 2), d = new Uint8Array(m * BANDS), r = new Uint8Array(m);
-        d.set(J.data); r.set(J.ready); J.data = d; J.ready = r; J.frames = m;
+        var m = Math.max(n, J.frames * 2), d = new Uint8Array(m * BANDS), r = new Uint8Array(m), w = new Int8Array(m * WAVE), k = new Float32Array(m);
+        d.set(J.data); r.set(J.ready); w.set(J.wv); k.set(J.pk); J.data = d; J.ready = r; J.wv = w; J.pk = k; J.frames = m;
     }
     function job(track, key) {
         if (J && J.key === key && !J.fail) { J.off = false; return J; }
         if (J) { J.off = true; clearTimeout(J.job); }
-        J = { key: key, track: track, kind: '', size: 0, frames: 0, data: new Uint8Array(0), ready: new Uint8Array(0), busy: true, fail: false, off: false, job: 0, errs: 0 };
+        J = { key: key, track: track, kind: '', size: 0, frames: 0, data: new Uint8Array(0), ready: new Uint8Array(0), wv: new Int8Array(0), pk: new Float32Array(0), busy: true, fail: false, off: false, job: 0, errs: 0 };
         var my = J;
         grow(60 * FPS);
         probe(my, function (x) {
@@ -469,10 +474,11 @@ var MusicViz = (function () {
     // spectra of frames [f0, f1) from pcm (rate) starting at time t0, in slices of 5 ms so the page (and the music) never waits
     function frames(my, pcm, pcm2, rate, t0, f0, f1, done) {
         fftInit();
-        var map = maps[rate] || (maps[rate] = bandMap(rate / N, N / 2)), f = f0;
+        var map = maps[rate] || (maps[rate] = bandMap(rate / N, N / 2)), f = f0, step = Math.max(1, Math.round(rate * 0.032 / WAVE)), trig = Math.round(rate * 0.012);
+        function at(j) { return j < 0 || j >= pcm.length ? 0 : pcm2 ? (pcm[j] + pcm2[j]) * 0.5 : pcm[j]; }
         (function slice() {
             if (my.off) return;
-            var end = Date.now() + 5;
+            var end = performance.now() + 3;
             for (; f < f1; f++) {
                 if (f >= my.frames) grow(f + 1);
                 var e = Math.round((f / FPS - t0) * rate), k;
@@ -482,8 +488,16 @@ var MusicViz = (function () {
                 for (k = 0; k < N / 2; k++) { var m = Math.sqrt(re[k] * re[k] + im[k] * im[k]) / N; spec[k] = m > 1e-10 ? 20 * Math.log(m) / Math.LN10 : -200; }
                 toBands(spec, map, outB);
                 for (k = 0; k < BANDS; k++) { var q = Math.round((outB[k] + 120) * 2); my.data[f * BANDS + k] = q < 0 ? 0 : q > 255 ? 255 : q; }
+                // the waveform: WAVE points ending at this frame, from a rising zero crossing (on the signal smoothed over one point)
+                var s0 = e - WAVE * step - trig, best = s0 + trig, slope = 0, prev = 0, cur, j2;
+                for (j2 = 0; j2 < trig; j2 += 2) { cur = at(s0 + j2) + at(s0 + j2 + 1) + at(s0 + j2 + step); if (j2 && prev < 0 && cur >= 0 && cur - prev > slope) { slope = cur - prev; best = s0 + j2; } prev = cur; }
+                var pk = 0, w0 = f * WAVE;
+                for (k = 0; k < WAVE; k++) { var v = at(best + k * step); if (v > pk) pk = v; else if (-v > pk) pk = -v; outB2[k] = v; }
+                var sc = pk > 1e-4 ? 127 / pk : 0;
+                for (k = 0; k < WAVE; k++) my.wv[w0 + k] = Math.round(outB2[k] * sc);
+                my.pk[f] = pk;
                 my.ready[f] = 1;
-                if ((f & 3) === 3 && Date.now() > end) { f++; my.job = setTimeout(slice, 8); return; }
+                if (performance.now() > end) { f++; my.job = setTimeout(slice, 8); return; }   // (checked every frame: a slow TV never goes past ~3 ms)
             }
             done();
         })();
@@ -512,26 +526,63 @@ var MusicViz = (function () {
     }
 
     /* ---------------- API ---------------- */
-    var st = null, stAt = 0;
+    var st = null, stAt = 0, tBase = 0, tAt = 0, last = 'none', lastF = -1, lastFr = 0, lastA = null;
+    // where the song is now, smooth at 60 frames a second: asked 4 times a second, moved on by the clock in between
+    function now_(now, playing) {
+        var pred = tBase + (playing ? (now - tAt) / 1000 : 0);
+        if (now - tAt < 250) return pred;
+        var real = Music.time();
+        tBase = playing && Math.abs(real - pred) < 0.12 ? pred + (real - pred) * 0.3 : real;   // a small gap closes slowly, a seek at once
+        tAt = now;
+        return tBase;
+    }
     function read(db) {
+        last = readIn(db);
+        return last;
+    }
+    function readIn(db) {
+        lastF = -1;
         if (!on) { flat(db); return 'none'; }
         // the player's state, 5 times a second (not every frame: it is not free)
         var now = Date.now();
         if (!st || now - stAt > 200) { st = Music.state(); stAt = now; }
         var eng = Music.engineName(), a = eng === 'html' ? htmlEl() : null;
         if (!st.track || !eng) { flat(db); return 'none'; }
+        lastA = a;
         if (a && liveOk(a)) return liveRead(a, st.playing, db);
         if (anStream) liveClose();
         var key = st.track.s + ':' + st.track.p, tb = job(st.track, key);
         if (!tickT) tick();
         if (tb.fail) { flat(db); return 'none'; }
-        var fi = Math.floor(Music.time() * FPS);
+        var fx = now_(now, st.playing && !st.loading) * FPS, fi = Math.floor(fx), fr = fx - fi, i;
         if (fi < 0 || fi >= tb.frames || !tb.ready[fi]) { flat(db); return 'wait'; }
         if (!st.playing || st.loading) { flat(db); return 'file'; }
-        for (var i = 0; i < BANDS; i++) db[i] = tb.data[fi * BANDS + i] / 2 - 120;
+        if (fi + 1 < tb.frames && tb.ready[fi + 1]) { var d0 = fi * BANDS, d1 = d0 + BANDS; for (i = 0; i < BANDS; i++) db[i] = (tb.data[d0 + i] * (1 - fr) + tb.data[d1 + i] * fr) / 2 - 120; }
+        else { fr = 0; for (i = 0; i < BANDS; i++) db[i] = tb.data[fi * BANDS + i] / 2 - 120; }
+        lastF = fi; lastFr = fr;
         return 'file';
     }
-    function start() { on = true; st = null; quiet = 0; rewire = false; liveNext = 0; }
+    // the waveform now (after read() of the same frame)
+    function wave(out) {
+        var i, n = out.length;
+        if (last === 'live' && an) {
+            if (!tdBuf) tdBuf = new Float32Array(an.fftSize);
+            an.getFloatTimeDomainData(tdBuf);
+            var rate = ac.sampleRate, step = Math.max(1, Math.round(rate * 0.032 / n)), trig = Math.round(rate * 0.012), len = tdBuf.length;
+            var s0 = Math.max(1, len - n * step - trig), best = s0 + trig, slope = 0;
+            for (var j = s0; j < s0 + trig; j++) { var p = tdBuf[j - 1] + tdBuf[j], c = tdBuf[j] + tdBuf[j + 1]; if (p < 0 && c >= 0 && c - p > slope) { slope = c - p; best = j; } }
+            var any = false;
+            for (i = 0; i < n; i++) { var v = tdBuf[Math.min(len - 1, best + i * step)]; out[i] = v; if (v > 1e-4 || v < -1e-4) any = true; }
+            return any;
+        }
+        var tb = J;
+        if (last !== 'file' || lastF < 0 || !tb || n !== WAVE) { for (i = 0; i < n; i++) out[i] = 0; return false; }
+        var w0 = lastF * WAVE, k0 = tb.pk[lastF] / 127, k1 = 0, fr = lastFr, w1 = w0 + WAVE;
+        if (fr > 0) k1 = tb.pk[lastF + 1] / 127;
+        for (i = 0; i < n; i++) out[i] = tb.wv[w0 + i] * k0 * (1 - fr) + (fr > 0 ? tb.wv[w1 + i] * k1 * fr : 0);
+        return k0 > 0 || k1 > 0;
+    }
+    function start() { on = true; st = null; quiet = 0; rewire = false; liveNext = 0; tAt = 0; }
     function stop() {
         on = false;
         clearTimeout(tickT); tickT = 0;
@@ -539,5 +590,5 @@ var MusicViz = (function () {
         if (J) { J.off = true; clearTimeout(J.job); J.busy = false; if (J.kind === 'whole') J = null; }   // a small table is kept for the same song
     }
 
-    return { BANDS: BANDS, LO_HZ: LO_HZ, HI_HZ: HI_HZ, FPS: FPS, start: start, stop: stop, read: read, _kind: function () { return J ? J.kind + (J.fail ? ' failed' : '') : ''; }, _noLive: function (v) { if (v !== undefined) noLive = v; return noLive; } };
+    return { BANDS: BANDS, WAVE: WAVE, wave: wave, LO_HZ: LO_HZ, HI_HZ: HI_HZ, FPS: FPS, start: start, stop: stop, read: read, _kind: function () { return J ? J.kind + (J.fail ? ' failed' : '') : ''; }, _noLive: function (v) { if (v !== undefined) noLive = v; return noLive; } };
 })();

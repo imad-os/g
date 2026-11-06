@@ -146,8 +146,8 @@ var App = (function () {
         if (GameHost.active()) return GameHost.onAction(action, pressed, repeat, dev);
 
         if (action === 'padLost') { toast(I18n.t('padOff').split('.')[0], { id: 'pad', kind: 'err' }); return; }
-        // the Music screensaver (js/launcher/music-saver.js): any key brings My PC back and does nothing else
-        if (typeof MusicSaver !== 'undefined' && MusicSaver.input(pressed)) return;
+        // the Music audio visualizer (js/launcher/music-saver.js): CH + / CH − change its style, any other key brings My PC back
+        if (typeof MusicSaver !== 'undefined' && MusicSaver.input(pressed, action)) return;
         if (!pressed) {
             // OK let go on the desktop: opens the shortcut (held long, it showed the shortcut menu instead)
             if (action === 'confirm' && !Keyboard.isOpen() && !ProfilesUI.screenOpen() && !Win.isOpen()) Desktop.action(action, repeat, false);
