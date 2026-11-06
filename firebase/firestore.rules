@@ -105,8 +105,10 @@ service cloud.firestore {
     // TV at start. A "TVs and Limited Input devices" client secret is not confidential for Google; the Picker key is
     // limited to the referrer https://imad-os.github.io/g/*.
     function validGoogle(d) {
-      return d.keys().hasOnly(['tvClientId', 'tvClientSecret', 'pickerClientId', 'pickerApiKey', 'projectNumber', 'updatedAt', 'updatedBy'])
-          && d.tvClientId is string && d.tvClientId.size() <= 200 && d.tvClientSecret is string && d.tvClientSecret.size() <= 200
+      return d.keys().hasOnly(['tvClientId', 'tvClientSecret', 'pickerClientId', 'pickerApiKey', 'projectNumber', 'webClientSecret', 'updatedAt', 'updatedBy'])
+          && (!('tvClientId' in d) || (d.tvClientId is string && d.tvClientId.size() <= 200))
+          && (!('tvClientSecret' in d) || (d.tvClientSecret is string && d.tvClientSecret.size() <= 200))
+          && (!('webClientSecret' in d) || (d.webClientSecret is string && d.webClientSecret.size() <= 200))
           && (!('pickerClientId' in d) || (d.pickerClientId is string && d.pickerClientId.size() <= 200))
           && (!('pickerApiKey' in d) || (d.pickerApiKey is string && d.pickerApiKey.size() <= 200))
           && (!('projectNumber' in d) || (d.projectNumber is string && d.projectNumber.size() <= 40))
@@ -201,6 +203,18 @@ service cloud.firestore {
     // policies: see firebase/SETUP.md) and never put anything private in them.
     //   rooms/{room}            { app, name, max, n, at, exp }
     //   rooms/{room}/reqs/{req} { name, offer, exp, answer?, no? }   offer / answer: opaque strings (WebRTC text)
+    // Google Drive phone sign-in (js/core/gdrive.js phoneSignIn, drive-signin.html): the phone drops Google's one-time code
+    // under a random 32 character id only it and the TV know; the TV reads it, trades it (with its PKCE verifier and the
+    // client secret) and deletes it. No list. TTL policy on `exp` (firebase/SETUP.md) removes forgotten ones.
+    match /gauth/{id} {
+      allow get, delete: if id.matches('^[A-Za-z0-9_-]{32}$');
+      allow create: if id.matches('^[A-Za-z0-9_-]{32}$')
+          && request.resource.data.keys().hasOnly(['code', 'err', 'exp']) && request.resource.data.keys().hasAll(['exp'])
+          && (!('code' in request.resource.data) || (request.resource.data.code is string && request.resource.data.code.size() <= 600))
+          && (!('err' in request.resource.data) || (request.resource.data.err is string && request.resource.data.err.size() <= 60))
+          && request.resource.data.exp is timestamp && request.resource.data.exp < request.time + duration.value(20, 'm');
+    }
+
     function soon(t) { return t is timestamp && t > request.time - duration.value(20, 's') && t < request.time + duration.value(90, 's'); }
     function roomKey(k) { return k.matches('^[a-z0-9]{6,16}$'); }
     match /rooms/{room} {

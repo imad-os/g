@@ -243,10 +243,11 @@ var MusicSrc = (function () {
     }
     function gdRoots() {
         return [{ s: 'gd', p: 'root', n: 'My Drive', dir: true, drive: true, root: 'Google Drive' },
-                { s: 'gd', p: '*audio', n: '*audio', dir: true, drive: true, root: 'Google Drive' }];
+                { s: 'gd', p: '*audio', n: '*audio', dir: true, drive: true, root: 'Google Drive' }].concat(
+                (GDrive.active() || {}).full ? [{ s: 'gd', p: '*shared', n: '*shared', dir: true, drive: true, root: 'Google Drive' }] : []);
     }
     function gdList(dir, cb) {
-        var q = dir.p === '*audio' ? "mimeType contains 'audio/' and trashed = false" : "'" + String(dir.p).replace(/'/g, "\\'") + "' in parents and trashed = false";
+        var q = dir.p === '*audio' ? "mimeType contains 'audio/' and trashed = false" : dir.p === '*shared' ? 'sharedWithMe = true and trashed = false' : "'" + String(dir.p).replace(/'/g, "\\'") + "' in parents and trashed = false";
         var all = [], pages = 0;
         function page(tok) {
             var url = DRIVE_API + '?pageSize=200&spaces=drive&orderBy=folder,name_natural&q=' + encodeURIComponent(q) +

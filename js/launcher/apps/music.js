@@ -28,7 +28,7 @@
     function toast(text, kind) { App.toast(text, { id: 'music', kind: kind || 'info', timeout: 3500 }); }
     function same(a, b) { return !!a && !!b && a.s === b.s && a.p === b.p; }
     function title(e) { return e.t || (MusicSrc.peekInfo(e) || {}).title || MusicTags.fromName(e.n).title || e.n; }
-    function gdName(e) { return e.p === '*audio' ? t('muGdAll') : e.p === 'root' ? t('muGdMine') : e.n; }
+    function gdName(e) { return e.p === '*audio' ? t('muGdAll') : e.p === 'root' ? t('muGdMine') : e.p === '*shared' ? t('muGdShared') : e.n; }
     function dirName(e) { return e.s === 'gd' && e.drive ? gdName(e) : e.n; }
 
     /* ---------------- playlists and recently played (per profile) ---------------- */
@@ -472,13 +472,19 @@
                 if (r.p === '*audio') b.removeAttribute('data-hold');
                 grid.appendChild(b);
             });
-            if (GDrive.pickerUrl()) {
+            var me = GDrive.active() || {};
+            if (me.limited) {
+                var full = tile(null, t('gdLimited'), t('gdLimitedDesc'), 'cloud', function () { DriveUI.signIn(function (e) { if (!e && g === gen) render(); }); }, 'none');
+                full.removeAttribute('data-hold');
+                grid.appendChild(full);
+            }
+            if (GDrive.pickerUrl() && !me.full) {
                 var add = tile(null, t('gdAddTitle'), '', 'plus', function () { DriveUI.addFiles(function () { if (g === gen) render(); }); }, 'none');
                 add.removeAttribute('data-hold');
                 grid.appendChild(add);
             }
             ui.scroll.appendChild(grid);
-            ui.scroll.appendChild(el('p', 'mx-note', t('muGdNote')));
+            if (!me.full) ui.scroll.appendChild(el('p', 'mx-note', t('muGdNote')));
             if (!npOpen && !menu) Focus.focus(grid.firstChild);
         });
         return null;

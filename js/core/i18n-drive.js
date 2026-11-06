@@ -28,6 +28,8 @@
             gdDenied: 'Google Drive access was not allowed. Try again, and on Google\'s page tick the Google Drive box.',
             gdExpired: 'The code expired. Press Try again for a new one.', gdOffline: 'Google cannot be reached. Check the internet connection.',
             gdFailed: 'The sign-in did not work',
+            gdPhone1: 'Scan this code with your phone.', gdPhone2: 'Sign in to Google there and allow My PC to see your Google Drive. The TV continues by itself.', gdPhoneWait: 'Waiting for your phone…', gdLimited: 'My PC only sees some of your files', gdLimitedDesc: 'Sign in again with Google to let My PC see your whole Drive',
+            gdPrivacyFull: 'With the phone sign-in, My PC can see and change every file and folder of this Google Drive, and so can the apps you allow, always through My PC. You can take the access back at myaccount.google.com/permissions.', permDriveTextFull: 'It can see and change the files and folders of %s\'s Google Drive, through My PC. It never sees your password.',
             permDriveTitle: '%s wants to use your Google Drive',
             permDriveText: 'It can see and change the files My PC may open in the Drive of %s (the files My PC and its apps made, and the ones you added). It never sees your password.'
         },
@@ -56,6 +58,8 @@
             gdDenied: 'L’accès à Google Drive n’a pas été autorisé. Réessayez et cochez la case Google Drive sur la page de Google.',
             gdExpired: 'Le code a expiré. Appuyez sur Réessayer pour en avoir un nouveau.', gdOffline: 'Google est injoignable. Vérifiez la connexion internet.',
             gdFailed: 'La connexion n’a pas fonctionné',
+            gdPhone1: 'Scannez ce code avec votre téléphone.', gdPhone2: 'Connectez-vous à Google et autorisez My PC à voir votre Google Drive. La TV continue toute seule.', gdPhoneWait: 'En attente de votre téléphone…', gdLimited: 'My PC ne voit qu’une partie de vos fichiers', gdLimitedDesc: 'Reconnectez-vous avec Google pour que My PC voie tout votre Drive',
+            gdPrivacyFull: 'Avec la connexion par téléphone, My PC peut voir et modifier tous les fichiers et dossiers de ce Google Drive, tout comme les applis que vous autorisez, toujours via My PC. Vous pouvez retirer l’accès sur myaccount.google.com/permissions.', permDriveTextFull: 'Elle peut voir et modifier les fichiers et dossiers du Google Drive de %s, via My PC. Elle ne voit jamais votre mot de passe.',
             permDriveTitle: '%s veut utiliser votre Google Drive',
             permDriveText: 'Elle peut voir et modifier les fichiers que My PC peut ouvrir dans le Drive de %s (ceux créés par My PC et ses applis, et ceux que vous avez ajoutés). Elle ne voit jamais votre mot de passe.'
         },
@@ -84,6 +88,8 @@
             gdDenied: 'No se permitió el acceso a Google Drive. Inténtalo de nuevo y marca la casilla de Google Drive en la página de Google.',
             gdExpired: 'El código caducó. Pulsa Reintentar para obtener otro.', gdOffline: 'No se puede contactar con Google. Revisa la conexión a internet.',
             gdFailed: 'El inicio de sesión no funcionó',
+            gdPhone1: 'Escanea este código con tu móvil.', gdPhone2: 'Inicia sesión en Google y permite que My PC vea tu Google Drive. La TV sigue sola.', gdPhoneWait: 'Esperando a tu móvil…', gdLimited: 'My PC solo ve algunos de tus archivos', gdLimitedDesc: 'Inicia sesión de nuevo con Google para que My PC vea todo tu Drive',
+            gdPrivacyFull: 'Con el inicio de sesión desde el móvil, My PC puede ver y cambiar todos los archivos y carpetas de este Google Drive, igual que las apps que permitas, siempre a través de My PC. Puedes retirar el acceso en myaccount.google.com/permissions.', permDriveTextFull: 'Puede ver y cambiar los archivos y carpetas del Google Drive de %s, a través de My PC. Nunca ve tu contraseña.',
             permDriveTitle: '%s quiere usar tu Google Drive',
             permDriveText: 'Puede ver y cambiar los archivos que My PC puede abrir en el Drive de %s (los que crearon My PC y sus apps, y los que añadiste). Nunca ve tu contraseña.'
         },
@@ -112,6 +118,8 @@
             gdDenied: 'لم يُسمح بالوصول إلى Google Drive. أعد المحاولة وحدّد خانة Google Drive في صفحة Google.',
             gdExpired: 'انتهت صلاحية الرمز. اضغط إعادة المحاولة للحصول على رمز جديد.', gdOffline: 'تعذّر الوصول إلى Google. تحقق من الاتصال بالإنترنت.',
             gdFailed: 'لم ينجح تسجيل الدخول',
+            gdPhone1: 'امسح هذا الرمز بهاتفك.', gdPhone2: 'سجّل الدخول إلى Google واسمح لـ My PC برؤية Google Drive. سيتابع التلفاز وحده.', gdPhoneWait: 'في انتظار هاتفك…', gdLimited: 'يرى My PC بعض ملفاتك فقط', gdLimitedDesc: 'سجّل الدخول مجددًا بـ Google ليرى My PC كل ملفات Drive',
+            gdPrivacyFull: 'مع تسجيل الدخول من الهاتف، يمكن لـ My PC رؤية وتغيير كل ملفات ومجلدات Google Drive هذا، وكذلك التطبيقات التي تسمح لها، دائمًا عبر My PC. يمكنك سحب الوصول من myaccount.google.com/permissions.', permDriveTextFull: 'يمكنه رؤية وتغيير ملفات ومجلدات Google Drive الخاص بـ %s عبر My PC. لا يرى كلمة مرورك أبداً.',
             permDriveTitle: 'يريد %s استخدام Google Drive الخاص بك',
             permDriveText: 'يمكنه رؤية وتغيير الملفات التي يستطيع My PC فتحها في Drive الخاص بـ %s (الملفات التي أنشأها My PC وتطبيقاته، والتي أضفتها). لا يرى كلمة مرورك أبداً.'
         }

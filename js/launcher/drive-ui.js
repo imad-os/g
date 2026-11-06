@@ -1,5 +1,6 @@
 /* My PC's Google Drive screens (js/core/gdrive.js), over the desktop, an app or a game:
- *   DriveUI.signIn(cb)     Google's device flow: a QR code for google.com/device, the code to type, and the wait.
+ *   DriveUI.signIn(cb)     a QR code for drive-signin.html (phone sign-in, whole Drive) or, without it, Google's device flow
+ *                          (a QR code for google.com/device and the code to type), and the wait.
  *                          cb(err, account) once signed in (err.code 'cancelled' when the user leaves).
  *   DriveUI.addFiles(cb)   a QR code for drive-picker.html: the phone picks existing Drive files My PC may then open
  *                          (scope drive.file). cb() when closed.
@@ -84,6 +85,9 @@ var DriveUI = (function () {
             }
             var mine = flow = GDrive.signIn(function (c) {
                 if (flow !== mine || !box) return;
+                if (c.phone) {      // full Drive: the phone signs in on Google's page, the TV goes on by itself
+                    return paint({ title: t('gdSignInTitle'), qr: c.url, lines: [t('gdPhone1'), t('gdPhone2')], status: t('gdPhoneWait'), buttons: [[t('cancel'), false, onBack]] });
+                }
                 var url = c.url, short = url.replace(/^https?:\/\/(www\.)?/, '');
                 paint({ title: t('gdSignInTitle'), qr: url, lines: [t('gdStep1').replace('%s', short), t('gdStep2')], code: c.userCode,
                         status: t('gdWaiting'), buttons: [[t('cancel'), false, onBack]] });

@@ -181,7 +181,7 @@ var Bridges = (function () {
         function dErr(e) { return { code: (e && e.code) || 'failed', message: String((e && e.message) || 'Failed.'), status: (e && e.status) || undefined }; }
         function driveAsk(cb) {
             var acc = GDrive.active();
-            ask(ctx, 'drive', I18n.t('permDriveText').replace('%s', acc ? acc.email : ''), cb);
+            ask(ctx, 'drive', I18n.t(acc && acc.full ? 'permDriveTextFull' : 'permDriveText').replace('%s', acc ? acc.email : ''), cb);
         }
         function hold2(fn) { var paused = ctx.hold(); fn(function () { if (!ctx.dead) ctx.release(paused); }); }
         function driveRun(d) {
@@ -193,7 +193,7 @@ var Bridges = (function () {
                 return GDrive.status(function (st) {
                     var ok = allowed(ctx.appId, 'drive'), acc = st.account;
                     send('drive', { rid: d.rid, result: { configured: st.code !== 'noconfig', signedIn: !!st.ok, needsSignIn: !st.ok && st.code !== 'noconfig', allowed: ok,
-                        account: ok && acc ? { email: acc.email, name: acc.name, picture: acc.picture } : null, picker: !!GDrive.pickerUrl() } });
+                        account: ok && acc ? { email: acc.email, name: acc.name, picture: acc.picture } : null, full: !!(acc && acc.full), picker: !!GDrive.pickerUrl() && !(acc && acc.full) } });
                 });
             }
             if (!alive()) return send('drive', { rid: d.rid, error: { code: 'not-running', message: 'The app is not running.' } });

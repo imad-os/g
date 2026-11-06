@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="referrer" content="no-referrer">
+<title>My PC · Google Drive</title>
+<!-- Phone page opened from the QR code of My PC's Google Drive sign-in (js/launcher/drive-ui.js, js/core/gdrive.js
+     phoneSignIn). It sends the phone to Google's sign-in page for My PC's web client with the FULL Drive scope (Google's TV
+     code sign-in cannot ask for it), then puts Google's one-time code in Firestore gauth/<id> for the TV, which trades it
+     with its own PKCE verifier and the client secret, and deletes it. This page keeps nothing and sees no token.
+     Address: #s=<random id>&c=<web client id>&h=<PKCE challenge>&m=S256|plain&l=<language>. Google sends the phone back
+     here with ?code=...&state=<id> (redirect URI https://imad-os.github.io/g/drive-signin.html in the web client). -->
+<style>
+  html { background: #18191c; color: #e8eaed; font: 17px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { margin: 0; }
+  main { max-width: 34rem; margin: 0 auto; padding: 2.5rem 1.4rem; }
+  h1 { font-size: 1.7rem; margin: 0 0 .6rem; }
+  .sub { color: #bdc1c6; margin: 0 0 1.6rem; }
+  button { width: 100%; min-height: 3.2rem; border: 0; border-radius: 10px; font: 600 1.05rem system-ui, sans-serif; background: #8ab4f8; color: #0b1a33; }
+  button[hidden] { display: none; }
+  #msg { margin: 1.2rem 0; font-size: 1.1rem; }
+  #msg.error { color: #f28b82; }
+  #msg.ok { color: #81c995; }
+  .note { color: #9aa0a6; font-size: .95rem; }
+  [dir="rtl"] main { text-align: right; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="t"></h1>
+  <p class="sub" id="sub"></p>
+  <button id="go" type="button"></button>
+  <p id="msg" role="status" aria-live="polite"></p>
+  <p class="note" id="note"></p>
+</main>
+<script>
+(function () {
+    'use strict';
+    var PAGE = location.origin + location.pathname;
+    var FS = 'https://firestore.googleapis.com/v1/projects/tvgames-f984d/databases/(default)/documents/gauth/', KEY = 'AIzaSyBT0nk8uKUofgF5obP11R96lHtXbEVlKtc';
+    var SCOPE = 'openid email profile https://www.googleapis.com/auth/drive';
+    var S = {
+        en: { t: 'Sign in to Google Drive', sub: 'My PC on your TV will see all the files and folders of this Google Drive, and can open, add, rename and delete them for you and the apps you allow.',
+              go: 'Continue with Google', note: 'This page keeps nothing. You can remove the access at any time in Control Panel > Google Drive on the TV, or in your Google account.',
+              wait: 'Sending the sign-in to your TV…', done: 'Done. Look at your TV: it is signed in. You can close this page.', denied: 'The sign-in was cancelled. Nothing was shared. You can try again.',
+              bad: 'This link is incomplete or too old. Start the sign-in again on the TV.', fail: 'The TV could not be told. Check the phone\'s connection and try again.' },
+        fr: { t: 'Connexion à Google Drive', sub: 'My PC sur votre TV verra tous les fichiers et dossiers de ce Google Drive, et pourra les ouvrir, ajouter, renommer et supprimer pour vous et les apps que vous autorisez.',
+              go: 'Continuer avec Google', note: 'Cette page ne garde rien. Vous pouvez retirer l\'accès à tout moment dans Panneau de configuration > Google Drive sur la TV, ou dans votre compte Google.',
+              wait: 'Envoi de la connexion à votre TV…', done: 'C\'est fait. Regardez votre TV : elle est connectée. Vous pouvez fermer cette page.', denied: 'La connexion a été annulée. Rien n\'a été partagé. Vous pouvez réessayer.',
+              bad: 'Ce lien est incomplet ou trop ancien. Recommencez la connexion sur la TV.', fail: 'Impossible de prévenir la TV. Vérifiez la connexion du téléphone et réessayez.' },
+        es: { t: 'Iniciar sesión en Google Drive', sub: 'My PC en tu TV verá todos los archivos y carpetas de este Google Drive, y podrá abrirlos, añadirlos, renombrarlos y eliminarlos para ti y las apps que permitas.',
+              go: 'Continuar con Google', note: 'Esta página no guarda nada. Puedes quitar el acceso cuando quieras en Panel de control > Google Drive en la TV, o en tu cuenta de Google.',
+              wait: 'Enviando el inicio de sesión a tu TV…', done: 'Listo. Mira tu TV: ya ha iniciado sesión. Puedes cerrar esta página.', denied: 'Se canceló el inicio de sesión. No se compartió nada. Puedes intentarlo de nuevo.',
+              bad: 'Este enlace está incompleto o es demasiado antiguo. Empieza de nuevo en la TV.', fail: 'No se pudo avisar a la TV. Revisa la conexión del teléfono e inténtalo de nuevo.' },
+        ar: { t: 'تسجيل الدخول إلى Google Drive', sub: 'سيرى My PC على التلفاز كل ملفات ومجلدات Google Drive هذا، ويمكنه فتحها وإضافتها وإعادة تسميتها وحذفها لك وللتطبيقات التي تسمح لها.',
+              go: 'المتابعة مع Google', note: 'هذه الصفحة لا تحتفظ بشيء. يمكنك إزالة الوصول في أي وقت من لوحة التحكم > Google Drive على التلفاز، أو من حسابك في Google.',
+              wait: 'جارٍ إرسال تسجيل الدخول إلى التلفاز…', done: 'تم. انظر إلى التلفاز: لقد سُجّل الدخول. يمكنك إغلاق هذه الصفحة.', denied: 'أُلغي تسجيل الدخول. لم تتم مشاركة أي شيء. يمكنك المحاولة مرة أخرى.',
+              bad: 'هذا الرابط ناقص أو قديم. ابدأ تسجيل الدخول من جديد على التلفاز.', fail: 'تعذّر إبلاغ التلفاز. تحقق من اتصال الهاتف وحاول مرة أخرى.' }
+    };
+    var h = new URLSearchParams(location.hash.slice(1)), qs = new URLSearchParams(location.search), st = {};
+    try { st = JSON.parse(sessionStorage.getItem('mypc_gauth') || '{}') || {}; } catch (e) {}
+    var L = S[h.get('l') || st.l] ? (h.get('l') || st.l) : 'en', T = S[L];
+    document.documentElement.lang = L;
+    if (L === 'ar') document.documentElement.dir = 'rtl';
+    function $(id) { return document.getElementById(id); }
+    $('t').textContent = T.t; $('sub').textContent = T.sub; $('go').textContent = T.go; $('note').textContent = T.note;
+    function say(k, cls) { $('msg').textContent = T[k]; $('msg').className = cls || ''; }
+    var go = $('go');
+
+    function tell(sid, fields) {
+        var f = {}, k;
+        for (k in fields) f[k] = { stringValue: fields[k] };
+        f.exp = { timestampValue: new Date(Date.now() + 15 * 60 * 1000).toISOString() };
+        return fetch(FS + encodeURIComponent(sid) + '?currentDocument.exists=false&key=' + KEY, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: f })
+        }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); });
+    }
+
+    // back from Google
+    if (qs.get('state') && (qs.get('code') || qs.get('error'))) {
+        var sid = qs.get('state'), code = qs.get('code'), bad = qs.get('error');
+        try { history.replaceState(null, '', PAGE); } catch (e) {}
+        go.hidden = true;
+        if (!/^[A-Za-z0-9_-]{32}$/.test(sid)) return say('bad', 'error');
+        say('wait');
+        tell(sid, code ? { code: code } : { err: String(bad).slice(0, 60) }).then(function () {
+            try { sessionStorage.removeItem('mypc_gauth'); } catch (e) {}
+            if (code) say('done', 'ok');
+            else { say('denied', 'error'); }
+        }, function () { say('fail', 'error'); });
+        return;
+    }
+
+    // opened from the TV's QR code
+    var cfg = { s: h.get('s') || '', c: h.get('c') || '', ch: h.get('h') || '', m: h.get('m') === 'plain' ? 'plain' : 'S256' };
+    try { history.replaceState(null, '', PAGE); } catch (e) {}
+    if (!/^[A-Za-z0-9_-]{32}$/.test(cfg.s) || !/\.apps\.googleusercontent\.com$/.test(cfg.c) || !cfg.ch) { go.hidden = true; return say('bad', 'error'); }
+    try { sessionStorage.setItem('mypc_gauth', JSON.stringify({ l: L })); } catch (e) {}
+    go.onclick = function () {
+        location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+            client_id: cfg.c, redirect_uri: PAGE, response_type: 'code', scope: SCOPE, access_type: 'offline', prompt: 'consent',
+            include_granted_scopes: 'true', state: cfg.s, code_challenge: cfg.ch, code_challenge_method: cfg.m
+        }).toString();
+    };
+})();
+</script>
+</body>
+</html>

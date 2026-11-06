@@ -234,7 +234,11 @@
   profile key; accounts linked in MyDrive (`game_app-mydrive_data`) are taken over once; Drive v3 list / get / mkdir / rename / move / copy /
   star / trash / remove / read (Range) / download / resumable upload (4 MB) / export / thumb / about / appFolder "My PC/<app>"), Google
   client = Firestore `settings/google` (App Store Manager > **Google Drive**, rules `validGoogle`; copied into `arc_dev_google`, re-read
-  at most every 12 h or when none is known) else MyDrive's `apps/mydrive.config.google`. Screens `js/launcher/drive-ui.js` (`DriveUI.signIn`
+  at most every 12 h or when none is known) else MyDrive's `apps/mydrive.config.google`. **Whole Drive** (owner request 2026-11-05): Google's device flow only allows
+  `drive.file`, so when the Manager has the web client's secret (`webClientSecret`, client = `pickerClientId`) sign-in is a QR for
+  `drive-signin.html` (phone, Google's page, full `drive` scope, PKCE) -> one-time code in Firestore `gauth/<32 char id>` -> the TV trades
+  and deletes it (polls every 3 s only while the screen is open, 10 min max); accounts remember their client (`cid`); a drive.file account
+  shows "My PC only sees some of your files" (`limited`); Music adds "Shared with me". Screens `js/launcher/drive-ui.js` (`DriveUI.signIn`
   QR + code over anything, the app paused; `DriveUI.addFiles` QR for `drive-picker.html` = Google Picker on the phone, needs the Picker key
   referrer `https://imad-os.github.io/g/*`); router hook in `main.js`. Bridge `drive` in `bridges.js` (asks "<app> wants to use your Google
   Drive" once per app per profile, key `drive_apps`; `signIn()` from the app counts as yes). SDK `MyPC.drive` (+ `sdk/drive-sw.js`: the

@@ -5,19 +5,26 @@
  * Google client: one "TVs and Limited Input devices" OAuth client for every My PC, set by an admin in the App Store
  * Manager > Google Drive (Firestore settings/google, read by every TV; copied into arc_dev_google by syncConfig).
  * Until that document exists, the client in the MyDrive app's config (apps/mydrive.config.google) is used.
- * Sign-in: Google's device flow (a code + google.com/device on a phone). Scope drive.file: My PC sees the files it (or
- * any app through it) created, and the files the user picked with "Add files from your phone" (drive-picker.html).
+ * Sign-in, two ways (owner request 2026-11-05: full access to the whole Drive):
+ *   - phone sign-in (when the Manager has the web client's secret): the TV shows a QR code for drive-signin.html; the phone
+ *     signs in on Google's page with the FULL Drive scope and drops the one-time code in Firestore gauth/<random id>; the TV
+ *     reads it there (every 3 s while the screen is open, 10 min max), trades it with its PKCE verifier and deletes it.
+ *     Google's device flow cannot ask for the full Drive scope (only drive.file), hence this.
+ *   - else Google's device flow (a code + google.com/device), scope drive.file: My PC only sees the files it (or an app
+ *     through it) created, and the files picked with "Add files from your phone" (drive-picker.html).
  *
  * Accounts are per profile (Store key 'gdrive': { accounts: [{ id, email, name, picture, refreshToken, scope, cid,
  * addedAt, needsReauth }], active }), so they follow the profile's player account and the TV backup like every other
  * profile setting (the owner's choice for MyDrive's tokens too). Access tokens stay in memory only. Accounts linked in
  * MyDrive before this (its save data game_app-mydrive_data) are taken over once, same Google client.
  *
- *   GDrive.config() -> { tvClientId, tvClientSecret, pickerClientId, pickerApiKey, projectNumber } | null
+ *   GDrive.config() -> { tvClientId, tvClientSecret, pickerClientId, pickerApiKey, projectNumber, webClientSecret } | null
+ *   GDrive.fullAccess()                      true when sign-ins get the whole Drive (phone sign-in set up)
  *   GDrive.syncConfig(cb)                    cb(err) once the copy of settings/google is fresh
  *   GDrive.status(cb)                        cb({ ok, code: 'noconfig' | 'nouser' | 'reauth', account })
  *   GDrive.accounts() / active() / use(id) / signOut(id, cb)
- *   GDrive.signIn(onCode, cb) -> { cancel() }   onCode({ userCode, url, expiresAt }); cb(err, account)
+ *   GDrive.signIn(onCode, cb) -> { cancel() }   onCode({ url, expiresAt, userCode } device flow | { phone: true, url, expiresAt });
+ *                                            cb(err, account); accounts: { id, email, name, picture, needsReauth, full, limited }
  *   GDrive.list(opts, cb)  get(id, cb)  mkdir(name, parent, cb)  rename(id, name, cb)  move(id, to, cb)  copy(id, to, name, cb)
  *   GDrive.star(id, on, cb)  trash(id, cb)  untrash(id, cb)  remove(id, cb)  read(id, start, end, cb)  download(id, opts, cb)
  *   GDrive.upload(opts, onProgress, cb)  exportFile(id, mime, cb)  thumb(link, size, cb)  about(cb)  appFolder(appId, title, cb)
@@ -31,6 +38,8 @@ var GDrive = (function () {
     var API = 'https://www.googleapis.com/drive/v3', UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
     var TOKEN_URL = 'https://oauth2.googleapis.com/token', DEVICE_URL = 'https://oauth2.googleapis.com/device/code', REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
     var SCOPE = 'https://www.googleapis.com/auth/drive.file', SCOPES = 'openid email profile ' + SCOPE;
+    var FULL = 'https://www.googleapis.com/auth/drive', SIGNIN = 'https://imad-os.github.io/g/drive-signin.html';
+    var FS = 'https://firestore.googleapis.com/v1/projects/tvgames-f984d/databases/(default)/documents/gauth/', FS_KEY = 'AIzaSyBT0nk8uKUofgF5obP11R96lHtXbEVlKtc';
     var FOLDER = 'application/vnd.google-apps.folder';
     var FIELDS = 'id,name,mimeType,size,modifiedTime,createdTime,starred,trashed,parents,hasThumbnail,thumbnailLink,iconLink,fileExtension,description,' +
         'appProperties,imageMediaMetadata(width,height),videoMediaMetadata(width,height,durationMillis),owners(displayName),' +
@@ -53,9 +62,12 @@ var GDrive = (function () {
     function cleanCfg(d) {
         d = d && typeof d === 'object' ? d : {};
         return { tvClientId: str(d.tvClientId, 200), tvClientSecret: str(d.tvClientSecret, 200), pickerClientId: str(d.pickerClientId, 200),
-                 pickerApiKey: str(d.pickerApiKey, 200), projectNumber: str(d.projectNumber, 40).replace(/[^0-9]/g, '') };
+                 pickerApiKey: str(d.pickerApiKey, 200), projectNumber: str(d.projectNumber, 40).replace(/[^0-9]/g, ''), webClientSecret: str(d.webClientSecret, 200) };
     }
-    function okCfg(c) { return !!(c && c.tvClientId && c.tvClientSecret); }
+    // the web client (the Picker's) with its secret = phone sign-in with full Drive access
+    function webOk(c) { return !!(c && c.pickerClientId && c.webClientSecret); }
+    function okCfg(c) { return !!(c && ((c.tvClientId && c.tvClientSecret) || webOk(c))); }
+    function fullAccess() { return webOk(config()); }
     function managed() {
         if (cfgMem) return cfgMem;
         var v = null;
@@ -130,7 +142,10 @@ var GDrive = (function () {
         if (storage) storage.save(d); else if (typeof Store !== 'undefined') Store.set(KEY, d);
         for (var i = 0; i < listeners.length; i++) { try { listeners[i](); } catch (e) {} }
     }
-    function pub(a) { return a ? { id: a.id, email: a.email, name: a.name || a.email, picture: a.picture, needsReauth: a.needsReauth || !a.refreshToken } : null; }
+    function isFull(a) { return String(a.scope || '').split(/\s+/).indexOf(FULL) >= 0; }
+    // limited: signed in with drive.file while full access could be had (sign in again to see the whole Drive)
+    function pub(a) { return a ? { id: a.id, email: a.email, name: a.name || a.email, picture: a.picture, needsReauth: a.needsReauth || !a.refreshToken,
+                                   full: isFull(a), limited: !isFull(a) && fullAccess() } : null; }
     function activeAcc() {
         var d = load(), a = null;
         for (var i = 0; i < d.accounts.length; i++) if (d.accounts[i].id === d.active) a = d.accounts[i];
@@ -161,7 +176,7 @@ var GDrive = (function () {
     }
     function statusNow() {
         var a = activeAcc();
-        return { ok: !!(config() && a && a.refreshToken && !a.needsReauth), configured: !!config(), account: pub(a) };
+        return { ok: !!(config() && a && a.refreshToken && !a.needsReauth), configured: !!config(), full: fullAccess(), account: pub(a) };
     }
 
     /* ---------------- web requests ---------------- */
@@ -176,18 +191,26 @@ var GDrive = (function () {
     var FORM = { 'Content-Type': 'application/x-www-form-urlencoded' };
     function hasDrive(scope) { return String(scope || '').split(/\s+/).indexOf(SCOPE) >= 0 || /\/auth\/drive(\s|$)/.test(String(scope || '')); }
 
+    // the client an account was signed in with (its refresh token only works with that one)
+    function client(c, a) {
+        if (webOk(c) && a.cid === c.pickerClientId) return { id: c.pickerClientId, secret: c.webClientSecret };
+        if (c.tvClientId && c.tvClientSecret && (!a.cid || a.cid === c.tvClientId)) return { id: c.tvClientId, secret: c.tvClientSecret };
+        if (c.tvClientId && c.tvClientSecret && !webOk(c)) return { id: c.tvClientId, secret: c.tvClientSecret };
+        return null;
+    }
     // a valid access token of the active account (refreshed when needed, one refresh at a time)
     function token(cb, fresh) {
         var a = activeAcc(), c = config();
         if (!c) return later(function () { cb(err('noconfig', 'Google Drive is not set up for My PC yet.')); });
         if (!a) return later(function () { cb(err('signed-out', 'No Google account is signed in on this profile.')); });
         if (!a.refreshToken || a.needsReauth) return later(function () { cb(err('reauth', 'Google asks to sign in to ' + (a.email || 'this account') + ' again.')); });
-        var k = tkey(a), t = tokens[k];
+        var k = tkey(a), t = tokens[k], cl = client(c, a);
+        if (!cl) return later(function () { cb(err('reauth', 'Sign in to ' + (a.email || 'this account') + ' again.')); });
         if (!fresh && t && t.exp > Date.now()) return later(function () { cb(null, t.tok); });
         if (waiting[k]) { waiting[k].push(cb); return; }
         waiting[k] = [cb];
         http({ url: TOKEN_URL, method: 'POST', headers: FORM, responseType: 'json', timeout: 15000,
-               body: form({ client_id: c.tvClientId, client_secret: c.tvClientSecret, refresh_token: a.refreshToken, grant_type: 'refresh_token' }) }, function (e, r) {
+               body: form({ client_id: cl.id, client_secret: cl.secret, refresh_token: a.refreshToken, grant_type: 'refresh_token' }) }, function (e, r) {
             var x = null;
             if (e) x = e;
             else if (!r.ok || !r.body || !r.body.access_token) {
@@ -269,8 +292,9 @@ var GDrive = (function () {
         } catch (e) { return null; }
     }
     function signIn(onCode, cb) {
+        if (fullAccess()) return phoneSignIn(onCode, cb);
         var c = config(), h = { off: false, cur: null, timer: 0, cancel: function () { if (this.off) return; this.off = true; clearTimeout(this.timer); if (this.cur) try { this.cur.abort(); } catch (x) {} cb(err('cancelled', 'Cancelled.')); } };
-        if (!c) { later(function () { h.off = true; cb(err('noconfig', 'Google Drive is not set up for My PC yet.')); }); return h; }
+        if (!c || !c.tvClientId) { later(function () { h.off = true; cb(err('noconfig', 'Google Drive is not set up for My PC yet.')); }); return h; }
         h.cur = http({ url: DEVICE_URL, method: 'POST', headers: FORM, responseType: 'json', timeout: 15000, body: form({ client_id: c.tvClientId, scope: SCOPES }) }, function (e, r) {
             if (h.off) return;
             if (e || !r.ok || !r.body || !r.body.device_code) { h.off = true; return cb(e || err(r.body && r.body.error === 'invalid_client' ? 'noconfig' : 'http', 'Google: ' + ((r.body && (r.body.error_description || r.body.error)) || r.status), r.status)); }
@@ -295,6 +319,63 @@ var GDrive = (function () {
             }
             poll();
         });
+        function finish(t) { saveAccount(t, c.tvClientId, cb); }
+        return h;
+    }
+
+    /* ---------------- phone sign-in (full Drive): QR -> drive-signin.html -> Firestore gauth/<id> -> the TV ---------------- */
+    function rnd(n) {
+        var a = new Uint8Array(n), s = '', abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+        crypto.getRandomValues(a);
+        for (var i = 0; i < n; i++) s += abc[a[i] & 63];
+        return s;
+    }
+    function b64url(buf) { var b = new Uint8Array(buf), s = ''; for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+    // PKCE: S256 where the browser can hash (secure pages), else plain (the verifier then rides in the QR code; the code
+    // still needs this TV's request within minutes and the client secret)
+    function challenge(v, cb) {
+        try {
+            if (crypto.subtle && typeof TextEncoder !== 'undefined') return crypto.subtle.digest('SHA-256', new TextEncoder().encode(v)).then(function (d) { cb(b64url(d), 'S256'); }, function () { cb(v, 'plain'); });
+        } catch (e) {}
+        later(function () { cb(v, 'plain'); });
+    }
+    function lang() { try { return (typeof I18n !== 'undefined' && I18n.lang && I18n.lang()) || 'en'; } catch (e) { return 'en'; } }
+    function phoneSignIn(onCode, cb) {
+        var c = config(), sid = rnd(32), ver = rnd(64), until = Date.now() + 10 * 60 * 1000;
+        var h = { off: false, cur: null, timer: 0, cancel: function () { if (this.off) return; this.off = true; clearTimeout(this.timer); if (this.cur) try { this.cur.abort(); } catch (x) {} gone(); cb(err('cancelled', 'Cancelled.')); } };
+        function gone() { http({ url: FS + sid + '?key=' + FS_KEY, method: 'DELETE', timeout: 8000 }, noop); }
+        challenge(ver, function (ch, how) {
+            if (h.off) return;
+            var url = SIGNIN + '#s=' + sid + '&c=' + enc(c.pickerClientId) + '&h=' + enc(ch) + '&m=' + how + '&l=' + enc(lang());
+            try { onCode({ phone: true, url: url, expiresAt: until }); } catch (x) {}
+            poll();
+        });
+        function poll() {
+            h.timer = setTimeout(function () {
+                if (h.off) return;
+                if (Date.now() > until) { h.off = true; return cb(err('expired', 'The sign-in took too long. Start again.')); }
+                h.cur = http({ url: FS + sid + '?key=' + FS_KEY, responseType: 'json', timeout: 10000 }, function (e, r) {
+                    if (h.off) return;
+                    if (e || r.status === 404 || !r.ok) return poll();
+                    var f = (r.body && r.body.fields) || {}, code = f.code && f.code.stringValue, bad = f.err && f.err.stringValue;
+                    gone();
+                    if (bad || !code) { h.off = true; return cb(err('denied', 'The sign-in was refused on the phone.')); }
+                    h.cur = http({ url: TOKEN_URL, method: 'POST', headers: FORM, responseType: 'json', timeout: 15000,
+                                   body: form({ client_id: c.pickerClientId, client_secret: c.webClientSecret, code: code, code_verifier: ver, redirect_uri: SIGNIN, grant_type: 'authorization_code' }) }, function (e2, r2) {
+                        if (h.off) return;
+                        h.off = true;
+                        if (e2) return cb(e2);
+                        var t = r2.body || {};
+                        if (!r2.ok || !t.access_token) return cb(err(t.error === 'invalid_client' || t.error === 'redirect_uri_mismatch' ? 'noconfig' : 'http', 'Google: ' + (t.error_description || t.error || r2.status), r2.status));
+                        saveAccount(t, c.pickerClientId, cb);
+                    });
+                });
+            }, 3000);
+        }
+        return h;
+    }
+
+    function saveAccount(t, cid, cb) {
         function finish(t) {
             var who = t.id_token ? idToken(t.id_token) : null;
             if (!who || !who.id) return cb(err('http', 'Google did not say which account signed in.'));
@@ -306,16 +387,18 @@ var GDrive = (function () {
             for (i = 0; i < d.accounts.length; i++) if (d.accounts[i].id === who.id) old = d.accounts[i];
             var rt = t.refresh_token || (old && old.refreshToken) || '';
             if (!rt) return cb(err('http', 'Google did not give a refresh token.'));
-            var acc = cleanAcc({ id: who.id, email: who.email, name: who.name, picture: who.picture, refreshToken: rt, scope: t.scope || '', cid: c.tvClientId, addedAt: Date.now() });
+            if (old && old.cid !== cid && !t.refresh_token) return cb(err('http', 'Google did not give a refresh token.'));
+            var acc = cleanAcc({ id: who.id, email: who.email, name: who.name, picture: who.picture, refreshToken: rt, scope: t.scope || '', cid: cid, addedAt: Date.now() });
             d.accounts = d.accounts.filter(function (x) { return x.id !== who.id; });
             if (d.accounts.length >= MAX_ACCOUNTS) d.accounts.shift();
             d.accounts.push(acc);
             d.active = acc.id;
             save(d);
             tokens[tkey(acc)] = { tok: t.access_token, exp: Date.now() + ((+t.expires_in || 3600) - 120) * 1000 };
+            folders = {};
             cb(null, pub(acc));
         }
-        return h;
+        finish(t);
     }
     function revoke(tok) { if (tok) http({ url: REVOKE_URL, method: 'POST', headers: FORM, body: form({ token: tok }), timeout: 10000 }, noop); }
     // removes the account from this profile and gives Google's grant back (every device of this profile loses it)
@@ -531,7 +614,7 @@ var GDrive = (function () {
     function setConfig(c) { cfgOverride = c ? cleanCfg(c) : null; }
 
     return {
-        FOLDER: FOLDER, SCOPE: SCOPE, FIELDS: FIELDS,
+        FOLDER: FOLDER, SCOPE: SCOPE, FULL: FULL, FIELDS: FIELDS, SIGNIN: SIGNIN, fullAccess: fullAccess,
         config: config, syncConfig: syncConfig, syncSoon: syncSoon, pickerUrl: pickerUrl, cleanConfig: cleanCfg,
         status: status, statusNow: statusNow, accounts: accounts, active: active, use: use, signIn: signIn, signOut: signOut, onChange: onChange,
         list: list, get: get, mkdir: function (n, p, cb) { return mkdir(n, p, cb); }, rename: rename, move: move, copy: copy, star: star, trash: trash, untrash: untrash,

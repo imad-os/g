@@ -407,10 +407,20 @@
         (Control Panel &gt; Google Drive) and Music and every app use it through <code>MyPC.drive</code>. Each TV, phone and computer gets it at its next start.</p></div>
         <button id="gd-save" class="primary" disabled>Save</button></div>
       <p id="gd-msg" class="small"></p>
-      <div class="card warn small">TVs read this without signing in, so anyone who has My PC's Firebase web key can read it. That is fine: Google treats the
-        secret of a "TVs and Limited Input devices" client as not confidential, and the Picker key must be limited to the referrer below.</div>
+      <div class="card warn small">TVs read this without signing in, so anyone who has My PC's Firebase web key can read it. Google treats the secret of a
+        "TVs and Limited Input devices" client as not confidential. The web client's secret is readable the same way: it only works with the redirect page
+        below, and every sign-in still shows Google's own consent page with what My PC asks for. The Picker key must be limited to the referrer below.</div>
       <div class="card">
-        <h2>Sign-in client (required)</h2>
+        <h2>Whole Drive: phone sign-in (recommended)</h2>
+        <p class="muted small" style="margin:0 0 8px">Google's TV code sign-in can only give My PC the files it made or that were picked. To let My PC see
+          <b>every file and folder</b>, fill in the web client below (the same one as the Picker) and its secret. In the Google Cloud console:
+          Credentials &gt; that <b>Web application</b> client &gt; Authorized redirect URIs: add <code>https://imad-os.github.io/g/drive-signin.html</code>;
+          OAuth consent screen &gt; Data access: add the scope <code>.../auth/drive</code>. Sign-ins then go through a QR code and Google's page on the phone.
+          Until Google verifies the app, Google shows "Google hasn't verified this app" (press Advanced &gt; Go to ...) and allows 100 users.</p>
+        <label class="small">Web client secret<input id="gd-wsec" spellcheck="false" autocomplete="off" placeholder="GOCSPX-..."></label>
+      </div>
+      <div class="card">
+        <h2>TV code sign-in client (files made or picked only)</h2>
         <p class="muted small" style="margin:0 0 8px">Google Cloud console &gt; Credentials &gt; Create OAuth client ID &gt; <b>TVs and Limited Input devices</b>.
           Scopes on the consent screen: openid, email, profile, .../auth/drive.file. Publish the app (Production) so sign-ins do not expire after 7 days.
           The same client as MyDrive keeps every account already linked there working.</p>
@@ -1400,12 +1410,12 @@
   };
   /* ---------- Google Drive (Firestore settings/google, read by every My PC: js/core/gdrive.js) ---------- */
   let gd = {}, gdDirty = false, gdErr = '';
-  const GD_FIELDS = { 'gd-cid': 'tvClientId', 'gd-sec': 'tvClientSecret', 'gd-pcid': 'pickerClientId', 'gd-pkey': 'pickerApiKey', 'gd-pnum': 'projectNumber' };
+  const GD_FIELDS = { 'gd-cid': 'tvClientId', 'gd-sec': 'tvClientSecret', 'gd-pcid': 'pickerClientId', 'gd-pkey': 'pickerApiKey', 'gd-pnum': 'projectNumber', 'gd-wsec': 'webClientSecret' };
   function renderGd() {
     for (const id in GD_FIELDS) if (document.activeElement !== $(id)) $(id).value = gd[GD_FIELDS[id]] || '';
     $('gd-save').disabled = !gdDirty;
     if (gdErr) say('gd-msg', gdErr, 'err');
-    else if (!gd.tvClientId) say('gd-msg', 'Not set yet: every My PC uses the Google client in MyDrive\'s config until you save one here.', '');
+    else if (!gd.tvClientId && !gd.webClientSecret) say('gd-msg', 'Not set yet: every My PC uses the Google client in MyDrive\'s config until you save one here.', '');
   }
   for (const id in GD_FIELDS) $(id).addEventListener('input', () => { gd[GD_FIELDS[id]] = $(id).value.trim(); gdDirty = true; $('gd-save').disabled = false; });
   $('gd-from').onclick = () => {
@@ -1420,6 +1430,9 @@
     c.projectNumber = c.projectNumber.replace(/[^0-9]/g, '');
     if (!c.tvClientId !== !c.tvClientSecret) return say('gd-msg', 'The client ID and the client secret go together.', 'err');
     if (c.tvClientId && !/\.apps\.googleusercontent\.com$/.test(c.tvClientId)) return say('gd-msg', 'The client ID ends with .apps.googleusercontent.com.', 'err');
+    if (c.webClientSecret && !/\.apps\.googleusercontent\.com$/.test(c.pickerClientId)) return say('gd-msg', 'The web client secret needs the web client ID (Google Picker card).', 'err');
+    if (!c.tvClientId && !c.webClientSecret) return say('gd-msg', 'Fill in the TV code sign-in client, or the web client with its secret.', 'err');
+    for (const k in c) if (!c[k]) delete c[k];
     $('gd-save').disabled = true;
     try {
       await setDoc(doc(db, 'settings', 'google'), Object.assign(c, { updatedAt: serverTimestamp(), updatedBy: (user && user.email) || '' }));

@@ -42,6 +42,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -199,7 +200,7 @@ async function fakeFirestore(ctx, db) {
         }
         // rooms: any depth (rooms/<id>/reqs/<id>), runQuery, updateMask, currentDocument.exists
         const segs = p.split('/').filter(Boolean);
-        if (segs[0] === 'rooms' || segs[0] === 'inbox' || segs[0] === 'subs' || p === ':runQuery') {
+        if (segs[0] === 'rooms' || segs[0] === 'inbox' || segs[0] === 'subs' || segs[0] === 'gauth' || p === ':runQuery') {
             if (segs[0] === 'inbox' || segs[0] === 'subs') { db.pushAuth = db.pushAuth || []; db.pushAuth.push(method + ' ' + p + ' ' + (req.headers()['authorization'] || '')); }
             const last = segs[segs.length - 1];
             if (last.endsWith(':runQuery')) {
@@ -347,7 +348,7 @@ async function main() {
     const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--autoplay-policy=no-user-gesture-required', '--disable-features=WebRtcHideLocalIpsWithMdns', '--js-flags=--expose-gc', '--enable-precise-memory-info', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
     // MYPC_ONLY=music node tests/run-tests.mjs: only the Music app's checks (quick while working on it)
     if (process.env.MYPC_ONLY === 'wall') { await wallTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
-    if (process.env.MYPC_ONLY === 'drive') { await driveTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'drive') { await driveTests(browser, base); await drivePhoneTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'calendar') { await calendarTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'music') { await musicTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
 
@@ -4563,6 +4564,7 @@ async function main() {
     }
     await musicTests(browser, base);
     await driveTests(browser, base);
+    await drivePhoneTests(browser, base);
     await calendarTests(browser, base);
 
     console.log('42d. remote shortcuts (per profile): Play / Pause = music, Guide = users; Control Panel > Shortcuts; the game menu\'s music button');
@@ -4715,6 +4717,17 @@ async function fakeGoogle(ctx, g) {
         if (/device\/code/.test(u.pathname)) return json({ device_code: 'DEV1', user_code: 'WXYZ-1234', verification_url: 'https://www.google.com/device', expires_in: 1800, interval: 5 });
         if (u.hostname === 'oauth2.googleapis.com' && /token/.test(u.pathname)) {
             if (/device_code/.test(body)) return json({ access_token: 'AT-secret', refresh_token: 'RT-secret', expires_in: 3600, scope: 'openid email profile https://www.googleapis.com/auth/drive.file', id_token: jwt({ sub: 'g7', email: 'sara@example.com', name: 'Sara' }) });
+            const f = new URLSearchParams(body);
+            if (f.get('grant_type') === 'authorization_code') {        // the phone sign-in (drive-signin.html): checked like Google does
+                g.codeSwap = Object.fromEntries(f);
+                const ok = f.get('code') === g.code && f.get('client_id') === 'web.apps.googleusercontent.com' && f.get('client_secret') === 'wsec' &&
+                    f.get('redirect_uri') === 'https://imad-os.github.io/g/drive-signin.html' &&
+                    crypto.createHash('sha256').update(f.get('code_verifier') || '').digest('base64url') === g.challenge;
+                if (!ok) return json({ error: 'invalid_grant' }, 400);
+                g.code = '';                                        // one use only
+                return json({ access_token: 'AT-secret', refresh_token: 'RT-full', expires_in: 3600, scope: 'openid email profile https://www.googleapis.com/auth/drive', id_token: jwt({ sub: 'g7', email: 'sara@example.com', name: 'Sara' }) });
+            }
+            if (f.get('client_id') === 'web.apps.googleusercontent.com') return json({ access_token: 'AT-secret', expires_in: 3600, scope: 'https://www.googleapis.com/auth/drive' });
             return json({ access_token: 'AT-secret', expires_in: 3600, scope: 'https://www.googleapis.com/auth/drive.file' });
         }
         if (u.hostname === 'oauth2.googleapis.com') return json({});
@@ -4745,6 +4758,7 @@ async function fakeGoogle(ctx, g) {
             const nm = /name = '([^']+)'/.exec(qs); if (nm) l = l.filter((f) => f.name === nm[1]);
             if (/mimeType = 'application\/vnd.google-apps.folder'/.test(qs)) l = l.filter((f) => f.mimeType === 'application/vnd.google-apps.folder');
             if (/mimeType contains 'audio\/'/.test(qs)) l = l.filter((f) => /^audio\//.test(f.mimeType));
+            if (/sharedWithMe = true/.test(qs)) l = l.filter((f) => f.shared);
             return json({ files: l.slice(0, +u.searchParams.get('pageSize') || 100).map(meta) });
         }
         if (seg[0] === 'files' && seg.length === 1 && m === 'POST') {
@@ -4769,6 +4783,106 @@ async function fakeGoogle(ctx, g) {
         }
         return json(meta(f));
     });
+}
+
+// 44b. Whole Drive: the phone sign-in (drive-signin.html, Google's page with the full drive scope, the code through Firestore gauth/<id>)
+async function drivePhoneTests(browser, base) {
+    console.log('44b. Google Drive: phone sign-in for the whole Drive (QR -> phone -> Google -> Firestore -> TV), limited accounts, Music sees every folder and Shared with me');
+    const db = { apps: {}, settings: { google: { tvClientId: 'cid.apps.googleusercontent.com', tvClientSecret: 'sec', pickerClientId: 'web.apps.googleusercontent.com', pickerApiKey: 'PKEY', projectNumber: '123', webClientSecret: 'wsec' } } };
+    const page = await newPage(browser, base, db);
+    const ctx = page.context();
+    const g = { files: {
+        f1: { id: 'f1', name: 'Albums', mimeType: 'application/vnd.google-apps.folder', parents: ['root'] },
+        f2: { id: 'f2', name: 'Holiday.mp3', mimeType: 'audio/mpeg', parents: ['f1'], data: Buffer.from('ID3' + 'y'.repeat(3000)) },
+        f3: { id: 'f3', name: 'Report.pdf', mimeType: 'application/pdf', parents: ['root'] },
+        f4: { id: 'f4', name: 'From Omar.mp3', mimeType: 'audio/mpeg', parents: ['x'], shared: true, data: Buffer.from('ID3zz') } } };
+    await fakeGoogle(ctx, g);
+    // the phone page from the repo, and Google's sign-in page: checks what My PC asks, then sends the phone back with a code
+    await ctx.route(/^https:\/\/imad-os\.github\.io\/g\/drive-signin\.html/, (r) => r.fulfill({ status: 200, contentType: 'text/html', body: fs.readFileSync(path.join(ROOT, 'drive-signin.html')) }));
+    await ctx.route('https://accounts.google.com/**', (r) => {
+        const u = new URL(r.request().url());
+        g.auth = Object.fromEntries(u.searchParams);
+        g.code = '4/one-time-code'; g.challenge = u.searchParams.get('code_challenge');
+        // (a 302 here would not go through the routes: Playwright only routes the first address of a redirect)
+        const back = u.searchParams.get('redirect_uri') + '?state=' + u.searchParams.get('state') + '&code=' + encodeURIComponent(g.code) + '&scope=x';
+        r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Google</title><script>location.replace(' + JSON.stringify(back) + ')</script>' });
+    });
+    await routeHosted(page, { offline: true });
+    const shots = process.env.MYPC_SHOTS;
+    const shot = async (pg, name) => { if (shots) { await pg.waitForTimeout(150); await pg.screenshot({ path: path.join(shots, name + '.png') }); } };
+    await page.goto(base + 'index.html');
+    await page.waitForSelector('#desk-icons .dicon');
+    // an account signed in the old way (TV code, drive.file): still works, but My PC says it only sees some files
+    await page.evaluate(() => { Store.set('gdrive', { accounts: [{ id: 'g7', email: 'sara@example.com', name: 'Sara', refreshToken: 'RT-old', scope: 'https://www.googleapis.com/auth/drive.file', cid: 'cid.apps.googleusercontent.com' }], active: 'g7' }); });
+    await page.evaluate(() => GDrive.syncConfig(() => Win.open('settings', 'drive')));
+    await page.waitForFunction(() => /only sees some of your files/.test((document.querySelector('.set-main') || document.body).textContent), null, { timeout: 5000 }).catch(() => {});
+    const cp0 = await page.evaluate(() => ({ t: document.querySelector('.set-main').textContent, full: GDrive.fullAccess(), a: GDrive.active() }));
+    await shot(page, 'drive-5-limited');
+    check(cp0.full && cp0.a.limited && !cp0.a.full && /My PC only sees some of your files/.test(cp0.t) && /Add files from your phone/.test(cp0.t),
+        'with the web client secret set, an old drive.file account is "limited": Control Panel offers to sign in again for the whole Drive ' + JSON.stringify(cp0.a));
+    // sign in: a QR code for the phone page (no code to type)
+    await page.evaluate(() => { const s = GDrive.signIn; GDrive.signIn = (on, cb) => s((c) => { window.__gurl = c.url; on(c); }, cb); });
+    await page.evaluate(() => [...document.querySelectorAll('.set-main .set-row')].find((b) => /only sees some of your files/.test(b.textContent)).click());
+    await page.waitForFunction(() => window.__gurl && document.querySelector('.gdui-qr svg'), null, { timeout: 5000 }).catch(() => {});
+    const tv = await page.evaluate(() => ({ url: window.__gurl, text: document.querySelector('.gdui').textContent, code: !!document.querySelector('.gdui-code') }));
+    await shot(page, 'drive-6-phone-qr');
+    const hp = new URLSearchParams((tv.url || '#').split('#')[1]);
+    check(/^https:\/\/imad-os\.github\.io\/g\/drive-signin\.html#s=[A-Za-z0-9_-]{32}&c=web\.apps\.googleusercontent\.com&h=[A-Za-z0-9_-]{43}&m=S256&l=en$/.test(tv.url) && !tv.code && /Scan this code with your phone/.test(tv.text),
+        'the TV shows a QR code for drive-signin.html with a random id, the web client and a PKCE S256 challenge (never the verifier or a secret) ' + tv.url);
+    // the phone: opens the page, presses Continue with Google, Google sends it back, the page tells the TV through Firestore
+    const phone = await ctx.newPage();
+    await phone.setViewportSize({ width: 412, height: 860 });
+    await phone.goto(tv.url);
+    await shot(phone, 'drive-7-phone-page');
+    const before = await phone.evaluate(() => document.body.innerText);
+    await Promise.all([phone.waitForURL(/drive-signin\.html$/, { timeout: 8000 }).catch(() => {}), phone.click('#go')]);
+    await phone.waitForFunction(() => /Look at your TV/.test(document.getElementById('msg').textContent), null, { timeout: 8000 }).catch(() => {});
+    const done = await phone.evaluate(() => ({ msg: (document.getElementById('msg') || document.body).textContent, url: location.href }));
+    await shot(phone, 'drive-8-phone-done');
+    check(/Continue with Google/.test(before) && /all the files and folders/.test(before), 'the phone page says what My PC will see and has one button ' + before.slice(0, 120));
+    check(g.auth && g.auth.scope === 'openid email profile https://www.googleapis.com/auth/drive' && g.auth.access_type === 'offline' && g.auth.code_challenge_method === 'S256' &&
+        g.auth.state === hp.get('s') && g.auth.client_id === 'web.apps.googleusercontent.com' && g.auth.redirect_uri === 'https://imad-os.github.io/g/drive-signin.html',
+        'Google\'s page is asked for the WHOLE Drive (scope drive), offline, PKCE S256, the TV\'s id as state ' + JSON.stringify(g.auth));
+    check(/Look at your TV/.test(done.msg) && done.url === 'https://imad-os.github.io/g/drive-signin.html', 'back from Google the phone page hands the code to the TV and says so; the code leaves the address bar ' + JSON.stringify(done));
+    // the TV picks it up (every 3 s), trades it with its verifier and the secret, deletes it
+    await page.waitForFunction(() => !DriveUI.screenOpen() && GDrive.active() && GDrive.active().full, null, { timeout: 12000 }).catch(() => {});
+    const acc = await page.evaluate(() => ({ a: GDrive.active(), st: Store.get('gdrive', {}), t: document.querySelector('.set-main').textContent }));
+    const sw = g.codeSwap || {};
+    check(acc.a && acc.a.full && !acc.a.limited && acc.st.accounts.length === 1 && acc.st.accounts[0].cid === 'web.apps.googleusercontent.com' && acc.st.accounts[0].refreshToken === 'RT-full',
+        'the TV is signed in with the whole Drive: the same Google account is replaced, with the web client ' + JSON.stringify(acc.a));
+    check(sw.client_secret === 'wsec' && sw.code_verifier && sw.code_verifier.length === 64 && !tv.url.includes(sw.code_verifier) && !Object.keys(db.gauth || {}).length && db.log.some((l) => /^DELETE \/gauth\//.test(l)),
+        'the code was traded by the TV with its own PKCE verifier (never in the QR) and the web client secret, and the Firestore note is deleted ' + JSON.stringify(db.log.filter((l) => /gauth/.test(l)).slice(-3)));
+    await shot(page, 'drive-9-full');
+    check(!/only sees some of your files/.test(acc.t) && !/Add files from your phone/.test(acc.t) && /every file and folder of this Google Drive/.test(acc.t),
+        'Control Panel: no "limited" row and no Add files any more; the privacy text says My PC sees every file and folder ' + acc.t.slice(0, 200));
+    // Music: My Drive shows every folder and file of the account, plus Shared with me
+    const r = await page.evaluate(() => new Promise((res) => {
+        const out = {};
+        setTimeout(() => res(Object.assign(out, { timeout: true })), 8000);
+        out.roots = MusicSrc.gdRoots().map((x) => x.p).join();
+        const names = (l) => l.dirs.concat(l.tracks).map((x) => x.n).join();
+        MusicSrc.list({ s: 'gd', p: 'root', dir: true }, (e, l) => { out.root = e ? e.code : names(l);
+            MusicSrc.list({ s: 'gd', p: '*shared', dir: true }, (e2, l2) => { out.shared = e2 ? e2.code : names(l2); res(out); }); });
+    }));
+    check(r.roots === 'root,*audio,*shared' && /Albums/.test(r.root) && /From Omar\.mp3/.test(r.shared), 'Music: My Drive lists the real folders (Albums), and Shared with me the files shared with the account ' + JSON.stringify(r));
+    await page.evaluate(() => { Win.close && Win.close(); Win.open('music'); });
+    await page.waitForTimeout(400);
+    await page.evaluate(() => { const b = [...document.querySelectorAll('[data-focus]')].find((x) => /Google Drive/.test(x.textContent)); if (b) b.click(); });
+    await page.waitForFunction(() => /Shared with me/.test(document.body.textContent), null, { timeout: 5000 }).catch(() => {});
+    const mu = await page.evaluate(() => document.body.textContent);
+    await shot(page, 'drive-10-music');
+    check(/Shared with me/.test(mu) && !/Add files from your phone/.test(mu), 'Music\'s Google Drive page has Shared with me and no "Add files from your phone"');
+    // a refused sign-in on the phone: the TV says so
+    await page.evaluate(() => { window.__gurl = ''; window.__res = null; DriveUI.signIn((e) => { window.__res = e ? e.code : 'ok'; }); });
+    await page.waitForFunction(() => window.__gurl, null, { timeout: 5000 });
+    const sid = new URLSearchParams((await page.evaluate(() => window.__gurl)).split('#')[1]).get('s');
+    await phone.goto('https://imad-os.github.io/g/drive-signin.html?state=' + sid + '&error=access_denied');
+    await phone.waitForFunction(() => /cancelled/.test(document.getElementById('msg').textContent), null, { timeout: 5000 }).catch(() => {});
+    await page.waitForFunction(() => /not allowed/.test((document.querySelector('.gdui') || document.body).textContent), null, { timeout: 8000 }).catch(() => {});
+    check(/not allowed/.test(await page.evaluate(() => document.querySelector('.gdui').textContent)), 'Cancel on Google\'s page: the phone says nothing was shared and the TV shows "not allowed" with Try again');
+    await page.keyboard.press('Escape');
+    check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+    await ctx.close();
 }
 
 // 44. Google Drive in the SDK (MyPC.drive, API 14): one sign-in per profile in My PC, every request sent by My PC.

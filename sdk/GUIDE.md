@@ -1199,14 +1199,18 @@ flow, a token, a Google Picker, `MyPC.net` calls to `googleapis.com`, or Drive c
 request for the app, so the app never has a token. Check `MyPC.apiLevel >= 14` (and `MyPC.info().bridges.drive`) and hide
 Drive features when it is missing.
 
-What My PC may see (Google scope `drive.file`): the files My PC and its apps made, and the files the user chose with
-**Add files from your phone** (`MyPC.drive.addFiles()`, also in Control Panel > Google Drive). Nothing else of the Drive.
+What My PC may see: normally **the whole Drive** (Google scope `drive`): every file and folder of the signed-in account, its
+"My Drive" (`folder: 'root'`) and the files shared with it (`q: 'sharedWithMe = true'`). The user signs in with a QR code and
+Google's page on the phone. `status().full` says so. On a My PC still set up the old way (`full: false`), Google only allows
+`drive.file`: the files My PC and its apps made, plus the ones the user chose with **Add files from your phone**
+(`MyPC.drive.addFiles()`; `status().picker` is then true). Write the app so it works both ways: browse with `list()`, and offer
+`addFiles()` only when `status().picker` is true.
 The first time an app uses Drive, My PC asks the user once: "*&lt;app&gt;* wants to use your Google Drive" (per profile;
 Control Panel > Google Drive lists the apps allowed and can take it back). `signIn()` started from the app counts as yes.
 
 ```js
 if (MyPC.apiLevel >= 14) {
-  const st = await MyPC.drive.status();       // { configured, signedIn, needsSignIn, allowed, account, picker }
+  const st = await MyPC.drive.status();       // { configured, signedIn, needsSignIn, allowed, account, full, picker }
   if (!st.configured) showText('Google Drive is not set up for My PC yet.');
   else if (!st.signedIn) button('Sign in to Google Drive', () => MyPC.drive.signIn().then(load, onError));
   else load();
@@ -1223,7 +1227,7 @@ Every call returns a Promise (with `.abort()`); files are Google Drive API v3 fi
 
 | Call | Result |
 |---|---|
-| `status()` | `{ configured, signedIn, needsSignIn, allowed, account: { email, name, picture } \| null, picker }`. Never asks anything. `account` only once the app is allowed. |
+| `status()` | `{ configured, signedIn, needsSignIn, allowed, account: { email, name, picture } \| null, full, picker }`. Never asks anything. `account` only once the app is allowed. `full`: the whole Drive is visible; `picker`: `addFiles()` is needed to see more (never with `full`). |
 | `signIn()` | My PC's sign-in screen over the app (a QR code + Google's code, the app is paused meanwhile) -> `account`. Already signed in: only the permission question, if not answered yet. |
 | `addFiles()` | My PC's "Add files from your phone" screen (a QR code for the Google Picker on the phone). Resolves when closed; then list again. `status().picker` false: not set up. |
 | `list({ folder, place, search, q, orderBy, pageSize, pageToken })` | `{ files, next }`. `folder`: a folder id (`'root'` = My Drive). `place`: `all` `starred` `recent` `images` `videos` `audio` `documents` `folders` `trash`. `search`: name contains. `q`: a Drive query, added with *and*. Nothing given = My Drive's top. `pageSize` 1-1000 (100). `next` -> `pageToken`. |
@@ -1275,4 +1279,4 @@ Protocol (for reference): app -> My PC `drive { rid, op, args }` (`op`: status s
 copy star trash untrash remove setInfo read download upload export thumb about appFolder abort); My PC -> app
 `drive { rid, result | error }` and `{ rid, ev: 'progress', p }`. My PC side: `js/core/gdrive.js` (Google client from
 Firestore `settings/google`, App Store Manager > Google Drive; accounts per profile, key `gdrive`), `js/launcher/bridges.js`,
-`js/launcher/drive-ui.js`; the phone's picker page `drive-picker.html`.
+`js/launcher/drive-ui.js`; the phone's sign-in page `drive-signin.html` and picker page `drive-picker.html`.

@@ -97,6 +97,16 @@ Google Drive; the Music app and every app (`MyPC.drive`, sdk/GUIDE.md section 19
    linked in MyDrive keep working) or paste the IDs, then **Save**. Until then every My PC uses MyDrive's config.
 3. For "Add files from your phone": in the Google Cloud console, add the referrer `https://imad-os.github.io/g/*` to the
    Picker API key (it only had `.../g_drive/*`). The phone page is `https://imad-os.github.io/g/drive-picker.html`.
+4. **Whole Drive** (owner request 2026-11-05: My PC sees every file and folder). Google's TV code sign-in can only ask for
+   `drive.file` (files My PC made or that were picked), so the full `drive` scope goes through the phone:
+   - Google Cloud console > Credentials > the **Web application** client (the Picker's) > Authorized redirect URIs: add
+     `https://imad-os.github.io/g/drive-signin.html`. Copy its **client secret**.
+   - OAuth consent screen > Data access: add the scope `https://www.googleapis.com/auth/drive`. Keep the app **In production**
+     (in Testing, sign-ins stop after 7 days). `drive` is a restricted scope: until Google verifies the app, the phone shows
+     "Google hasn't verified this app" (Advanced > Go to ...) and at most 100 Google accounts can sign in.
+   - App Store Manager > Google Drive > **Web client secret**: paste it, Save. Also publish the rules again: they add `gauth/{id}`
+     (the phone drops Google's one-time code there; the TV reads and deletes it). Optional: a TTL policy on `gauth` field `exp`.
+   - Each profile then signs in again once (Control Panel > Google Drive shows "My PC only sees some of your files").
 
 ## 3b. What the TVs write
 | collection | document | written by | rules |

@@ -1721,7 +1721,7 @@ var MyPC = (function () {
                     save: function (v) { try { localStorage.setItem(LKEY, JSON.stringify(v)); } catch (e) {} }
                 });
                 var own = pub.app_config && pub.app_config.google;
-                if (own && own.tvClientId) { GDrive.setConfig(own); return GDrive; }
+                if (own && (own.tvClientId || own.webClientSecret)) { GDrive.setConfig(own); return GDrive; }
                 return fsGet('settings/google').then(function (c) { return c || fsGet('apps/mydrive'); }).then(function (c) { GDrive.setConfig(c); return GDrive; });
             });
             localP.catch(function () { localP = null; });
@@ -1739,7 +1739,7 @@ var MyPC = (function () {
         function localOp(G, op, a, prog, cb) {
             var id = String(a.id || '');
             switch (op) {
-                case 'status': var st = G.statusNow(); setTimeout(function () { cb(null, { configured: !!G.config(), signedIn: st.ok, needsSignIn: !st.ok && !!G.config(), allowed: true, account: st.account ? { email: st.account.email, name: st.account.name, picture: st.account.picture } : null, picker: !!G.pickerUrl() }); }, 0); return null;
+                case 'status': var st = G.statusNow(); setTimeout(function () { cb(null, { configured: !!G.config(), signedIn: st.ok, needsSignIn: !st.ok && !!G.config(), allowed: true, account: st.account ? { email: st.account.email, name: st.account.name, picture: st.account.picture } : null, full: !!(st.account && st.account.full), picker: !!G.pickerUrl() && !(st.account && st.account.full) }); }, 0); return null;
                 case 'signIn': return localSignIn(G, cb);
                 case 'addFiles': var u = G.pickerUrl(); if (u) window.open(u, '_blank'); setTimeout(function () { cb(u ? null : { code: 'unsupported', message: 'No Google Picker is set up for My PC.' }, !!u); }, 0); return null;
                 case 'list': return G.list(a, cb);
@@ -1776,6 +1776,12 @@ var MyPC = (function () {
             box.querySelector('[data-x]').onclick = function () { if (flow) flow.cancel(); else end({ code: 'cancelled', message: 'Cancelled.' }); };
             if (!G.config()) { setTimeout(function () { end({ code: 'noconfig', message: 'No Google client is set up for My PC (App Store Manager > Google Drive), and the app config has no google.tvClientId.' }); }, 0); return null; }
             flow = G.signIn(function (c) {
+                if (c.phone) {          // full Drive access: Google's page in another tab (or on a phone), then this page goes on by itself
+                    box.querySelector('[data-t]').textContent = 'Open this page, sign in to Google and allow Google Drive. This page continues by itself.';
+                    var a = document.createElement('a'); a.href = c.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Sign in with Google'; a.style.cssText = 'color:#8ab4f8;font:600 28px system-ui,sans-serif';
+                    var cc = box.querySelector('[data-c]'); cc.textContent = ''; cc.appendChild(a);
+                    return;
+                }
                 box.querySelector('[data-t]').textContent = 'On a phone or computer, open ' + c.url + ' and enter this code:';
                 box.querySelector('[data-c]').textContent = c.userCode;
             }, function (e, acc) { end(e, acc ? { email: acc.email, name: acc.name, picture: acc.picture } : null); });

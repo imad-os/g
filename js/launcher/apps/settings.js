@@ -421,8 +421,9 @@
                 })(list[i]);
             }
         }
+        if (act && act.limited) out.push({ kind: 'action', primary: true, label: t('gdLimited'), desc: t('gdLimitedDesc'), run: function () { DriveUI.signIn(function () { driveAgain(); }); } });
         if (act && !act.needsReauth) {
-            if (GDrive.pickerUrl()) out.push({ kind: 'action', primary: true, label: t('gdAddTitle'), desc: t('gdAddDesc'), run: function () { DriveUI.addFiles(); } });
+            if (GDrive.pickerUrl() && !act.full) out.push({ kind: 'action', primary: true, label: t('gdAddTitle'), desc: t('gdAddDesc'), run: function () { DriveUI.addFiles(); } });
             out.push({ kind: 'action', label: t('gdAnother'), desc: t('gdAnotherDesc'), run: function () { DriveUI.signIn(function () { driveAgain(); }); } });
         }
         // the apps this profile allowed (MyPC.drive asks once per app)
@@ -439,6 +440,7 @@
             });
         } });
         var lines = t('gdPrivacy');
+        if (GDrive.fullAccess() || (act && act.full)) lines = [lines[0], t('gdPrivacyFull')];
         for (i = 0; i < lines.length; i++) out.push({ kind: 'text', value: lines[i] });
     }
 
