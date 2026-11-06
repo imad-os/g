@@ -240,7 +240,7 @@
   and deletes it (polls every 3 s only while the screen is open, 10 min max); accounts remember their client (`cid`); a drive.file account
   shows "My PC only sees some of your files" (`limited`); Music adds "Shared with me". Screens `js/launcher/drive-ui.js` (`DriveUI.signIn`
   QR + code over anything, the app paused; `DriveUI.addFiles` QR for `drive-picker.html` = Google Picker on the phone, needs the Picker key
-  referrer `https://imad-os.github.io/g/*`); router hook in `main.js`. Bridge `drive` in `bridges.js` (asks "<app> wants to use your Google
+  referrer `https://pc.geekspro.us/*`); router hook in `main.js`. Bridge `drive` in `bridges.js` (asks "<app> wants to use your Google
   Drive" once per app per profile, key `drive_apps`; `signIn()` from the app counts as yes). SDK `MyPC.drive` (+ `sdk/drive-sw.js`: the
   app's own `sw.js` imports it so `<audio>/<video>` stream by Range; else a blob download); standalone the SDK runs `gdrive.js` in the
   page. Strings `js/core/i18n-drive.js`. Docs: GUIDE.md section 19. Tests: `MYPC_ONLY=drive node tests/run-tests.mjs` (fake Google `fakeGoogle`).

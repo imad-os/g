@@ -414,7 +414,7 @@
         <h2>Whole Drive: phone sign-in (recommended)</h2>
         <p class="muted small" style="margin:0 0 8px">Google's TV code sign-in can only give My PC the files it made or that were picked. To let My PC see
           <b>every file and folder</b>, fill in the web client below (the same one as the Picker) and its secret. In the Google Cloud console:
-          Credentials &gt; that <b>Web application</b> client &gt; Authorized redirect URIs: add <code>https://imad-os.github.io/g/drive-signin.html</code>;
+          Credentials &gt; that <b>Web application</b> client &gt; Authorized redirect URIs: add <code>https://pc.geekspro.us/drive-signin.html</code>;
           OAuth consent screen &gt; Data access: add the scope <code>.../auth/drive</code>. Sign-ins then go through a QR code and Google's page on the phone.
           Until Google verifies the app, Google shows "Google hasn't verified this app" (press Advanced &gt; Go to ...) and allows 100 users.</p>
         <label class="small">Web client secret<input id="gd-wsec" spellcheck="false" autocomplete="off" placeholder="GOCSPX-..."></label>
@@ -429,9 +429,9 @@
       </div>
       <div class="card">
         <h2>Add files from a phone (Google Picker, optional)</h2>
-        <p class="muted small" style="margin:0 0 8px">A <b>Web application</b> OAuth client with the JavaScript origin <code>https://imad-os.github.io</code>, an API key limited to the
-          Google Picker API and to the referrer <code>https://imad-os.github.io/g/*</code>, and the project number (Project settings). The phone page is
-          <code>https://imad-os.github.io/g/drive-picker.html</code>.</p>
+        <p class="muted small" style="margin:0 0 8px">A <b>Web application</b> OAuth client with the JavaScript origin <code>https://pc.geekspro.us</code>, an API key limited to the
+          Google Picker API and to the referrer <code>https://pc.geekspro.us/*</code>, and the project number (Project settings). The phone page is
+          <code>https://pc.geekspro.us/drive-picker.html</code>.</p>
         <label class="small">Web client ID<input id="gd-pcid" spellcheck="false" autocomplete="off"></label>
         <label class="small">Picker API key<input id="gd-pkey" spellcheck="false" autocomplete="off"></label>
         <label class="small">Project number<input id="gd-pnum" spellcheck="false" autocomplete="off" inputmode="numeric"></label>

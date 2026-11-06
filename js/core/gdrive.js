@@ -38,14 +38,14 @@ var GDrive = (function () {
     var API = 'https://www.googleapis.com/drive/v3', UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
     var TOKEN_URL = 'https://oauth2.googleapis.com/token', DEVICE_URL = 'https://oauth2.googleapis.com/device/code', REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
     var SCOPE = 'https://www.googleapis.com/auth/drive.file', SCOPES = 'openid email profile ' + SCOPE;
-    var FULL = 'https://www.googleapis.com/auth/drive', SIGNIN = 'https://imad-os.github.io/g/drive-signin.html';
+    var FULL = 'https://www.googleapis.com/auth/drive', SIGNIN = 'https://pc.geekspro.us/drive-signin.html';
     var FS = 'https://firestore.googleapis.com/v1/projects/tvgames-f984d/databases/(default)/documents/gauth/', FS_KEY = 'AIzaSyBT0nk8uKUofgF5obP11R96lHtXbEVlKtc';
     var FOLDER = 'application/vnd.google-apps.folder';
     var FIELDS = 'id,name,mimeType,size,modifiedTime,createdTime,starred,trashed,parents,hasThumbnail,thumbnailLink,iconLink,fileExtension,description,' +
         'appProperties,imageMediaMetadata(width,height),videoMediaMetadata(width,height,durationMillis),owners(displayName),' +
         'capabilities(canRename,canTrash,canUntrash,canDelete,canCopy,canMoveItemWithinDrive,canAddChildren,canDownload,canEdit)';
     var KEY = 'gdrive', OLD = 'game_app-mydrive_data', CFG_KEY = 'arc_dev_google', CFG_AT = 'arc_dev_google_at';
-    var PICKER = 'https://imad-os.github.io/g/drive-picker.html';
+    var PICKER = 'https://pc.geekspro.us/drive-picker.html';
     var CHUNK = 4 * 1024 * 1024, DL_MAX = 200 * 1024 * 1024, MAX_ACCOUNTS = 8;
 
     var storage = null, cfgOverride = null, cfgMem = null, appCfg = null;

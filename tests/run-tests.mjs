@@ -4726,7 +4726,7 @@ async function fakeGoogle(ctx, g) {
             if (f.get('grant_type') === 'authorization_code') {        // the phone sign-in (drive-signin.html): checked like Google does
                 g.codeSwap = Object.fromEntries(f);
                 const ok = f.get('code') === g.code && f.get('client_id') === 'web.apps.googleusercontent.com' && f.get('client_secret') === 'wsec' &&
-                    f.get('redirect_uri') === 'https://imad-os.github.io/g/drive-signin.html' &&
+                    f.get('redirect_uri') === 'https://pc.geekspro.us/drive-signin.html' &&
                     crypto.createHash('sha256').update(f.get('code_verifier') || '').digest('base64url') === g.challenge;
                 if (!ok) return json({ error: 'invalid_grant' }, 400);
                 g.code = '';                                        // one use only
@@ -4803,7 +4803,7 @@ async function drivePhoneTests(browser, base) {
         f4: { id: 'f4', name: 'From Omar.mp3', mimeType: 'audio/mpeg', parents: ['x'], shared: true, data: Buffer.from('ID3zz') } } };
     await fakeGoogle(ctx, g);
     // the phone page from the repo, and Google's sign-in page: checks what My PC asks, then sends the phone back with a code
-    await ctx.route(/^https:\/\/imad-os\.github\.io\/g\/drive-signin\.html/, (r) => r.fulfill({ status: 200, contentType: 'text/html', body: fs.readFileSync(path.join(ROOT, 'drive-signin.html')) }));
+    await ctx.route(/^https:\/\/pc\.geekspro\.us\/drive-signin\.html/, (r) => r.fulfill({ status: 200, contentType: 'text/html', body: fs.readFileSync(path.join(ROOT, 'drive-signin.html')) }));
     await ctx.route('https://accounts.google.com/**', (r) => {
         const u = new URL(r.request().url());
         g.auth = Object.fromEntries(u.searchParams);
@@ -4832,7 +4832,7 @@ async function drivePhoneTests(browser, base) {
     const tv = await page.evaluate(() => ({ url: window.__gurl, text: document.querySelector('.gdui').textContent, code: !!document.querySelector('.gdui-code') }));
     await shot(page, 'drive-6-phone-qr');
     const hp = new URLSearchParams((tv.url || '#').split('#')[1]);
-    check(/^https:\/\/imad-os\.github\.io\/g\/drive-signin\.html#s=[A-Za-z0-9_-]{32}&c=web\.apps\.googleusercontent\.com&h=[A-Za-z0-9_-]{43}&m=S256&l=en$/.test(tv.url) && !tv.code && /Scan this code with your phone/.test(tv.text),
+    check(/^https:\/\/pc\.geekspro\.us\/drive-signin\.html#s=[A-Za-z0-9_-]{32}&c=web\.apps\.googleusercontent\.com&h=[A-Za-z0-9_-]{43}&m=S256&l=en$/.test(tv.url) && !tv.code && /Scan this code with your phone/.test(tv.text),
         'the TV shows a QR code for drive-signin.html with a random id, the web client and a PKCE S256 challenge (never the verifier or a secret) ' + tv.url);
     // the phone: opens the page, presses Continue with Google, Google sends it back, the page tells the TV through Firestore
     const phone = await ctx.newPage();
@@ -4846,9 +4846,9 @@ async function drivePhoneTests(browser, base) {
     await shot(phone, 'drive-8-phone-done');
     check(/Continue with Google/.test(before) && /all the files and folders/.test(before), 'the phone page says what My PC will see and has one button ' + before.slice(0, 120));
     check(g.auth && g.auth.scope === 'openid email profile https://www.googleapis.com/auth/drive' && g.auth.access_type === 'offline' && g.auth.code_challenge_method === 'S256' &&
-        g.auth.state === hp.get('s') && g.auth.client_id === 'web.apps.googleusercontent.com' && g.auth.redirect_uri === 'https://imad-os.github.io/g/drive-signin.html',
+        g.auth.state === hp.get('s') && g.auth.client_id === 'web.apps.googleusercontent.com' && g.auth.redirect_uri === 'https://pc.geekspro.us/drive-signin.html',
         'Google\'s page is asked for the WHOLE Drive (scope drive), offline, PKCE S256, the TV\'s id as state ' + JSON.stringify(g.auth));
-    check(/Look at your TV/.test(done.msg) && done.url === 'https://imad-os.github.io/g/drive-signin.html', 'back from Google the phone page hands the code to the TV and says so; the code leaves the address bar ' + JSON.stringify(done));
+    check(/Look at your TV/.test(done.msg) && done.url === 'https://pc.geekspro.us/drive-signin.html', 'back from Google the phone page hands the code to the TV and says so; the code leaves the address bar ' + JSON.stringify(done));
     // the TV picks it up (every 3 s), trades it with its verifier and the secret, deletes it
     await page.waitForFunction(() => !DriveUI.screenOpen() && GDrive.active() && GDrive.active().full, null, { timeout: 12000 }).catch(() => {});
     const acc = await page.evaluate(() => ({ a: GDrive.active(), st: Store.get('gdrive', {}), t: document.querySelector('.set-main').textContent }));
@@ -4881,7 +4881,7 @@ async function drivePhoneTests(browser, base) {
     await page.evaluate(() => { window.__gurl = ''; window.__res = null; DriveUI.signIn((e) => { window.__res = e ? e.code : 'ok'; }); });
     await page.waitForFunction(() => window.__gurl, null, { timeout: 5000 });
     const sid = new URLSearchParams((await page.evaluate(() => window.__gurl)).split('#')[1]).get('s');
-    await phone.goto('https://imad-os.github.io/g/drive-signin.html?state=' + sid + '&error=access_denied');
+    await phone.goto('https://pc.geekspro.us/drive-signin.html?state=' + sid + '&error=access_denied');
     await phone.waitForFunction(() => /cancelled/.test(document.getElementById('msg').textContent), null, { timeout: 5000 }).catch(() => {});
     await page.waitForFunction(() => /not allowed/.test((document.querySelector('.gdui') || document.body).textContent), null, { timeout: 8000 }).catch(() => {});
     check(/not allowed/.test(await page.evaluate(() => document.querySelector('.gdui').textContent)), 'Cancel on Google\'s page: the phone says nothing was shared and the TV shows "not allowed" with Try again');
@@ -5008,7 +5008,7 @@ async function driveTests(browser, base) {
     const pk = await page.evaluate(() => ({ open: DriveUI.screenOpen(), qr: !!document.querySelector('.gdui-qr svg'), text: document.querySelector('.gdui').textContent }));
     await shot('drive-4-add-files');
     const pkUrl = await page.evaluate(() => GDrive.pickerUrl());
-    check(pk.open && pk.qr && /sara@example.com/.test(pk.text) && pkUrl === 'https://imad-os.github.io/g/drive-picker.html#c=web.apps.googleusercontent.com&k=PKEY&p=123', 'Add files from your phone: a QR code for My PC\'s picker page with the Picker settings ' + pkUrl);
+    check(pk.open && pk.qr && /sara@example.com/.test(pk.text) && pkUrl === 'https://pc.geekspro.us/drive-picker.html#c=web.apps.googleusercontent.com&k=PKEY&p=123', 'Add files from your phone: a QR code for My PC\'s picker page with the Picker settings ' + pkUrl);
     await page.keyboard.press('Escape');
     await page.waitForTimeout(100);
     check(!(await page.evaluate(() => DriveUI.screenOpen())), 'Back closes it');
