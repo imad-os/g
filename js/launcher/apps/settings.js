@@ -132,6 +132,17 @@
                 I18n.setLang(l[k]); App.refresh(); Win.setTitle(t('settings')); renderNav();
             } });
             out.push({ kind: 'toggle', label: t('clock24'), get: function () { return Store.get('clock24', I18n.lang() !== 'en'); }, set: function (v) { Store.set('clock24', v); } });
+            // the time zone: Automatic = the TV's own clock (js/core/clock.js); a fixed UTC offset only if that is still wrong.
+            // Left / right walk the offsets; the automatic one is shown as Automatic.
+            if (window.Clock) admin(out, { kind: 'select', label: t('tzLabel'), desc: t('tzDesc'), value: function () {
+                var m = Clock.manual();
+                return m === null ? t('tzAuto') + ' (' + utcText(Clock.auto()) + ')' : utcText(m);
+            }, adjust: function (d) {
+                var m = Clock.manual(), a = Clock.auto(), v = (m === null ? a : m) + d * 60;
+                if (v > 14 * 60) v = -12 * 60; else if (v < -12 * 60) v = 14 * 60;
+                Clock.setManual(v === a ? null : v);
+                Desktop.tick();
+            } });
             var now = new Date();
             out.push({ kind: 'info', label: t('dateTime'), value: Desktop.timeText(now) + ', ' + Desktop.dateText(now, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) });
         } else if (id === 'gaming') {
@@ -476,6 +487,7 @@
     /* ---------- roles: what only an administrator changes, Other users (js/core/storage.js) ---------- */
 
     // a row that changes the whole TV: an administrator gets it, a user sees it as "Administrator only"
+    function utcText(v) { var a = Math.abs(v); return 'UTC' + (v < 0 ? '\u2212' : '+') + Math.floor(a / 60) + (a % 60 ? ':' + ('0' + a % 60).slice(-2) : ''); }
     function admin(out, r) {
         if (Profiles.isAdmin()) out.push(r);
         else out.push({ kind: 'info', label: r.label, value: t('adminOnlyShort'), desc: r.desc });

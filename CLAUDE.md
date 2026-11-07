@@ -52,6 +52,12 @@
 - **Game controllers first** (owner decision): apps must use every controller button. `Input.onPadRaw` reports every button / axis
   change; `game-host.js` forwards it to installed apps (`gp` messages, only while running) as `MyPC.gamepad` (API 9; standalone the
   SDK polls the pads itself and maps them to actions like `Input`).
+- **Clock** (fix 2026-11-07, imad's TV showed 19:15 at 18:15): Chromium's own time zone data is old (TV and PC alike): it still puts
+  Africa/Casablanca at GMT+1, but Morocco is plain UTC since 2026-09-20. `js/core/clock.js` (FIRST in app-manifest.json js) moves Date's local
+  getters / setters / local constructor / toLocale*String (never getTime / Date.now) to the right offset: Control Panel > Time & language > Time zone
+  set by hand (`arc_dev_clock_adj`, UTC offset minutes) > the TV's own clock (`tizen.time.getCurrentDateTime()`) > known changes (`RULES`, per date).
+  Nothing patched when the engine is right. Tests: `MYPC_ONLY=clock node tests/run-tests.mjs`. Tests that pin a Moroccan local time after
+  2026-09-20 use `Z`, not `+01:00`. Intl.DateTimeFormat objects are not corrected.
 - `js/core/`: storage (per-profile keys `arc_<profile>_*`, TV-wide `arc_dev_*`), i18n (en, fr,
   es, ar + RTL), input, focus, perf, scores, `cloud.js` (Firestore REST: store catalog, installed list
   `arc_dev_installed`, counters), `backup.js` (Device id, backup/restore), `world.js` (world records).

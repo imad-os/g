@@ -356,6 +356,7 @@ async function main() {
     if (process.env.MYPC_ONLY === 'wall') { await wallTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'drive') { await driveTests(browser, base); await drivePhoneTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'calendar') { await calendarTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'clock') { await clockTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'music') { await musicTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
 
     console.log('1. hosted newer build runs');
@@ -4591,6 +4592,7 @@ async function main() {
     await driveTests(browser, base);
     await drivePhoneTests(browser, base);
     await calendarTests(browser, base);
+    await clockTests(browser, base);
 
     console.log('42d. remote shortcuts (per profile): Play / Pause = music, Guide = users; Control Panel > Shortcuts; the game menu\'s music button');
     {
@@ -5102,6 +5104,72 @@ async function driveTests(browser, base) {
     check(sp.errors.length === 0, 'standalone: no page errors ' + sp.errors.join('; '));
     await ctx2.close();
     solo.close();
+}
+
+// 46. The clock follows the TV, not the web engine's old time zones (js/core/clock.js). MYPC_ONLY=clock runs only these.
+// Chromium still puts Morocco at GMT+1 although it is plain UTC since 2026-09-20: at 18:15 UTC the TV says 18:15, the engine 19:15.
+async function clockTests(browser, base) {
+    console.log('46. Clock: the TV\'s own time (Morocco on UTC since 2026-09-20, the TV\'s clock, a fixed offset in Control Panel)');
+    const NOW = '2026-11-07T18:15:00Z';
+    async function at(tz, prep) {
+        const page = await newPage(browser, base, { settings: { mypc: { wallpapers: [] } } }, { tz });
+        await page.clock.setFixedTime(new Date(NOW));
+        await routeHosted(page, { offline: true });
+        if (prep) await page.addInitScript(prep);
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon');
+        await page.evaluate(() => Desktop.tick());
+        return page;
+    }
+    const tray = (page) => page.evaluate(() => document.getElementById('tray-time').textContent + ' ' + document.getElementById('tray-date').textContent);
+    // 1. Morocco, the engine's zone data is old (GMT+1), no TV clock to ask: the known change puts it right
+    {
+        const page = await at('Africa/Casablanca');
+        const r = await page.evaluate(() => {
+            const d = new Date(), aug = new Date(Date.UTC(2026, 7, 1, 12)), made = new Date(2026, 10, 7, 18, 15), s = new Date('2026-11-07T20:30');
+            const m = new Date(); m.setHours(23, 0, 0, 0);
+            return { info: Clock.info(), h: d.getHours(), off: d.getTimezoneOffset(), aug: aug.getHours(), made: made.getTime() === Date.UTC(2026, 10, 7, 18, 15), str: s.getTime() === Date.UTC(2026, 10, 7, 20, 30),
+                     set: m.getTime() === Date.UTC(2026, 10, 7, 23), loc: d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }), inst: d instanceof Date && Object.prototype.toString.call(d) === '[object Date]',
+                     iso: d.toISOString(), today: Events.today() };
+        });
+        check(r.info.source === 'rule' && r.info.shift === -60 && r.h === 18 && r.off === 0, 'Morocco after 2026-09-20: 18:15 UTC reads 18:15 (the engine said 19:15): ' + JSON.stringify(r.info));
+        check(r.aug === 13, 'Morocco before 2026-09-20 keeps GMT+1 (12:00 UTC in August = 13:00)');
+        check(r.made && r.str && r.set, 'dates made from local fields, local date-time text and setHours use the right clock');
+        check(r.loc === '6:15 PM' && r.inst && r.iso === '2026-11-07T18:15:00.000Z' && r.today === '2026-11-07', 'toLocaleTimeString, instanceof, toISOString (unchanged) and the Calendar\'s today: ' + r.loc);
+        check(/^6:15 PM/.test(await tray(page)), 'the taskbar clock shows the TV\'s 6:15 PM: ' + await tray(page));
+        if (process.env.MYPC_SHOTS) await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'clock-desktop.png') });
+        // Control Panel > Date and time: Automatic (UTC+0); right = a fixed UTC+1, left again = Automatic
+        await page.evaluate(() => Win.open('settings', 'time'));
+        const row = page.locator('button', { hasText: 'Time zone' }).first();
+        await row.waitFor({ timeout: 8000 });
+        check(/Automatic \(UTC\+0\)/.test(await row.textContent()), 'Control Panel > Date and time: Time zone Automatic (UTC+0): ' + await row.textContent());
+        if (process.env.MYPC_SHOTS) await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'clock-control-panel.png') });
+        await row.click();
+        const fixed = await page.evaluate(() => ({ m: Clock.manual(), h: new Date().getHours(), saved: localStorage.getItem('arc_dev_clock_adj') }));
+        check(fixed.m === 60 && fixed.h === 19 && fixed.saved === '60' && /UTC\+1/.test(await page.locator('button', { hasText: 'Time zone' }).first().textContent()) && /^7:15 PM/.test(await tray(page)),
+            'a fixed UTC+1 moves every clock to 7:15 PM and is kept for the TV: ' + JSON.stringify(fixed));
+        await page.keyboard.press('ArrowLeft').catch(() => {});
+        await page.evaluate(() => { Clock.setManual(null); Desktop.tick(); });
+        check(await page.evaluate(() => Clock.manual() === null && new Date().getHours() === 18 && localStorage.getItem('arc_dev_clock_adj') === null), 'back to Automatic');
+        check(!page.errors.length, 'no page errors: ' + page.errors.join(' | '));
+        await page.context().close();
+    }
+    // 2. a TV whose engine zone is off by one hour while the TV's own clock (tizen.time) is right
+    {
+        const page = await at('Europe/Paris', () => {
+            const D = Date;
+            window.tizen.time = { getLocalTimezone: () => 'Africa/Casablanca', getCurrentDateTime: () => { const u = new D(D.now()); return { getFullYear: () => u.getUTCFullYear(), getMonth: () => u.getUTCMonth(), getDate: () => u.getUTCDate(), getHours: () => u.getUTCHours(), getMinutes: () => u.getUTCMinutes(), getSeconds: () => u.getUTCSeconds(), getMilliseconds: () => u.getUTCMilliseconds() }; } };
+        });
+        const r = await page.evaluate(() => ({ info: Clock.info(), h: new Date().getHours() }));
+        check(r.info.source === 'tv' && r.info.shift === -60 && r.h === 18 && /^6:15 PM/.test(await tray(page)), 'the TV\'s own clock wins over the engine (TV 18:15, engine 19:15): ' + JSON.stringify(r.info));
+        await page.context().close();
+    }
+    // 3. nothing wrong: nothing is patched
+    {
+        const page = await at('UTC');
+        check(await page.evaluate(() => Clock.info().source === '' && new Date().getHours() === 18 && Date.prototype.getHours.toString().indexOf('native code') > 0), 'a right zone: Date is left alone');
+        await page.context().close();
+    }
 }
 
 // MYPC_ONLY=calendar node tests/run-tests.mjs: only these checks. The TV's clock is set to Thursday 5 November 2026, 10:00.
@@ -5692,7 +5760,7 @@ async function wallTests(browser, base) {
 
     // events.js alone: Google's names map to our ids, the built-in Moroccan dates, the .ics and ESPN readers
     {
-        const page = await at('2026-11-05T12:00:00+01:00', {});
+        const page = await at('2026-11-05T12:00:00Z', {});
         const r = await page.evaluate(() => {
             const b = Events._builtin(2026), on = (id) => b.filter((e) => e.id === id).map((e) => e.d).join(' ');
             const ics = Events._fromIcs('BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:20270314\r\nDTEND;VALUE=DATE:20270315\r\nSUMMARY:Eid al-Fitr\r\nDESCRIPTION:Public holiday\r\nEND:VEVENT\r\nEND:VCALENDAR');
@@ -5714,7 +5782,7 @@ async function wallTests(browser, base) {
     // Live weather: drawn from the shared forecast (no second request), stopped under an app, moving rain only when asked
     {
         const db = {};
-        const page = await at('2026-11-05T11:00:00+01:00', db);
+        const page = await at('2026-11-05T11:00:00Z', db);
         await page.evaluate(() => Desktop.setWallpaper('dyn_weather'));
         check(await painted(page, 'w,partly,day'), 'Live weather draws the forecast\'s sky (partly cloudy, day): ' + await page.evaluate(() => DynWall._key()));
         check(await varied(page) > 40, 'the canvas holds a real picture (' + await varied(page) + ' colours)');
@@ -5729,7 +5797,7 @@ async function wallTests(browser, base) {
         check(await page.evaluate(() => DynWall._timer() !== 0), 'back on the desktop: it checks again');
         // rain at night, with the moving layer
         await page.context().route(/api\.open-meteo\.com/, (r) => { const b = forecastBody(9); Object.assign(b.current, { weather_code: 63, is_day: 0, cloud_cover: 95, time: '2026-11-05T22:00' }); b.daily.sunrise = b.daily.sunrise.map((x) => x.slice(0, 11) + '07:31'); return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(b) }); });
-        await page.clock.setFixedTime(new Date('2026-11-05T22:00:00+01:00'));
+        await page.clock.setFixedTime(new Date('2026-11-05T22:00:00Z'));
         await page.evaluate(() => { localStorage.removeItem('arc_dev_wxfc'); DynWall.setPref('motion', true); });
         check(await painted(page, 'w,rain,night'), 'rain at night: ' + await page.evaluate(() => DynWall._key()));
         check(await page.evaluate(() => { const f = document.querySelector('#wallpaper .dw-fx'); return !!f && getComputedStyle(f).animationName === 'dw-fall'; }), 'Moving rain and snow on: one sliding layer (CSS transform)');
@@ -5741,12 +5809,12 @@ async function wallTests(browser, base) {
         check(await page.evaluate(() => !document.querySelector('#wallpaper .dw-fx')), 'off by default / turned off: no moving layer');
         // snow, cold, winter at dusk
         await page.context().route(/api\.open-meteo\.com/, (r) => { const b = forecastBody(-2); Object.assign(b.current, { weather_code: 73, is_day: 1, cloud_cover: 90, time: '2026-11-05T17:50' }); return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(b) }); });
-        await page.clock.setFixedTime(new Date('2026-11-05T17:50:00+01:00'));
+        await page.clock.setFixedTime(new Date('2026-11-05T17:50:00Z'));
         await page.evaluate(() => { localStorage.removeItem('arc_dev_wxfc'); DynWall.refresh(); });
         check(await painted(page, 'w,snow,dusk'), 'snow at dusk: ' + await page.evaluate(() => DynWall._key()));
         await shot(page, 'weather-snow-dusk');
         await page.context().route(/api\.open-meteo\.com/, (r) => { const b = forecastBody(31); Object.assign(b.current, { weather_code: 95, is_day: 1, cloud_cover: 100, time: '2026-11-05T15:00' }); return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(b) }); });
-        await page.clock.setFixedTime(new Date('2026-11-05T15:00:00+01:00'));
+        await page.clock.setFixedTime(new Date('2026-11-05T15:00:00Z'));
         await page.evaluate(() => { localStorage.removeItem('arc_dev_wxfc'); DynWall.refresh(); });
         check(await painted(page, 'w,storm,day'), 'thunderstorm: ' + await page.evaluate(() => DynWall._key()));
         await shot(page, 'weather-storm');
@@ -5764,14 +5832,14 @@ async function wallTests(browser, base) {
 
     // Earth now: the globe with day and night, the Moon in its phase, redrawn every 10 minutes at most
     {
-        const page = await at('2026-11-05T18:30:00+01:00', {});
+        const page = await at('2026-11-05T17:30:00Z', {});
         await page.evaluate(() => Desktop.setWallpaper('dyn_astro'));
         check(await painted(page, 'a,'), 'Earth now is drawn');
         const r = await page.evaluate(() => {
             const c = document.querySelector('#wallpaper .dw-cv'), g = c.getContext('2d'), W = c.width, H = c.height, R = Math.min(W, H) * 0.42;
             // average brightness of a patch of the globe
             const px = (x, y) => { const d = g.getImageData(Math.round(x) - 20, Math.round(y) - 20, 40, 40).data; let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i] + d[i + 1] + d[i + 2]; return Math.round(s / (d.length / 4)); };
-            // 18:30 in Morocco (17:30 UTC): the Sun is over the Americas, so the west (left) of the globe is day, the east (Africa, Europe) is night
+            // 17:30 in Morocco (plain UTC since 2026-09-20): the Sun is over the Americas, so the west (left) of the globe is day, the east (Africa, Europe) is night
             // the light alone: a white day photo and a black night one, drawn the same way
             const t = document.createElement('canvas'); t.width = 400; t.height = 400; const tg = t.getContext('2d');
             const flat = (v) => ({ w: 1, h: 1, d: new Uint8ClampedArray([v, v, v, 255]) });
@@ -5791,7 +5859,7 @@ async function wallTests(browser, base) {
     {
         // the evening before Green March (Google's calendar, through the Calendar API), football off
         const db = { cal: GOOGLE, espn: ucl };
-        const page = await at('2026-11-05T20:30:00+01:00', db, () => { localStorage.setItem('arc_p1_events', JSON.stringify({ country: 'ma', football: false })); });
+        const page = await at('2026-11-05T20:30:00Z', db, () => { localStorage.setItem('arc_p1_events', JSON.stringify({ country: 'ma', football: false })); });
         await page.evaluate(() => Desktop.setWallpaper('dyn_events'));
         check(await painted(page, 'e,greenmarch'), 'the evening before Green March shows it: ' + await page.evaluate(() => DynWall._key()));
         check(/Tomorrow: Green March Day/.test(await cap(page)), 'caption: ' + await cap(page));
@@ -5855,8 +5923,8 @@ async function wallTests(browser, base) {
         await shot(page, 'event-eid-adha');
         for (const [when, id, name] of [['2026-07-30T12:00:00+01:00', 'throne', 'event-throne'], ['2026-01-14T12:00:00+01:00', 'yennayer', 'event-yennayer'],
                                          ['2026-03-01T21:00:00+01:00', 'ramadan', 'event-ramadan'], ['2026-08-25T12:00:00+01:00', 'mawlid', 'event-mawlid'],
-                                         ['2026-12-31T22:00:00+01:00', 'nye', 'event-new-year-eve'], ['2026-08-02T12:00:00+01:00', 'season', 'event-summer'],
-                                         ['2026-11-18T12:00:00+01:00', 'independence', 'event-independence'], ['2026-10-12T12:00:00+01:00', 'season', 'event-autumn']]) {
+                                         ['2026-12-31T22:00:00Z', 'nye', 'event-new-year-eve'], ['2026-08-02T12:00:00+01:00', 'season', 'event-summer'],
+                                         ['2026-11-18T12:00:00Z', 'independence', 'event-independence'], ['2026-10-12T12:00:00Z', 'season', 'event-autumn']]) {
             await page.clock.setFixedTime(new Date(when));
             await page.evaluate(() => DynWall.refresh());
             check(await painted(page, 'e,' + id), when.slice(0, 10) + ': ' + await page.evaluate(() => DynWall._key()) + ' ' + await cap(page));
@@ -5868,7 +5936,7 @@ async function wallTests(browser, base) {
     {
         // Morocco plays today (a friendly) beats a Champions League night
         const db = { cal: GOOGLE, espn: Object.assign({ 'fifa.friendly': [match('2026-11-12T20:00:00Z', 'Morocco', 'Senegal', 'MAR')] }, { 'uefa.champions': [match('2026-11-12T20:00:00Z', 'Barcelona', 'Bayern')] }) };
-        const page = await at('2026-11-12T15:00:00+01:00', db);
+        const page = await at('2026-11-12T15:00:00Z', db);
         await page.evaluate(() => Desktop.setWallpaper('dyn_events'));
         check(await painted(page, 'e,morocco'), 'Morocco\'s match: ' + await page.evaluate(() => DynWall._key()));
         check(/Morocco plays today/.test(await cap(page)) && /Morocco – Senegal\s+(21:00|9:00 PM)/.test(await cap(page)), 'caption with the kick-off in local time: ' + await cap(page));

@@ -1,6 +1,6 @@
 {
-  "build": 131,
-  "version": "2.29.0",
+  "build": 132,
+  "version": "2.30.0",
   "shell": 1,
   "css": [
     "css/launcher.css",
@@ -10,6 +10,7 @@
     "css/music.css"
   ],
   "js": [
+    "js/core/clock.js",
     "js/core/native.js",
     "js/core/pwa.js",
     "js/core/storage.js",
