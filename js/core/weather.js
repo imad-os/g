@@ -28,7 +28,7 @@ var Weather = (function () {
     var WMO = [[0, 'clear', 'sun'], [2, 'partly', 'partly'], [3, 'cloudy', 'cloud'], [48, 'fog', 'fog'], [57, 'drizzle', 'rain'],
                [67, 'rain', 'rain'], [77, 'snow', 'snow'], [82, 'showers', 'rain'], [86, 'snow', 'snow'], [99, 'storm', 'storm']];
     function sky(code, day) {
-        if (typeof code === 'number') for (var i = 0; i < WMO.length; i++) if (code <= WMO[i][0]) return { k: WMO[i][1], ic: WMO[i][2] === 'sun' && day === false ? 'moon' : WMO[i][2] };
+        if (typeof code === 'number') for (var i = 0; i < WMO.length; i++) if (code <= WMO[i][0]) return { k: WMO[i][1], ic: day === false && WMO[i][2] === 'sun' ? 'moon' : day === false && WMO[i][2] === 'partly' ? 'pnight' : WMO[i][2] };   // at night: the moon, never the sun
         return { k: 'cloudy', ic: 'cloud' };
     }
 
@@ -181,6 +181,9 @@ var Weather = (function () {
               '<circle class="wa-star" cx="8" cy="9" r="1.6" fill="#fff"/><circle class="wa-star wa-d2" cx="41" cy="12" r="1.3" fill="#fff"/><circle class="wa-star wa-d3" cx="38" cy="42" r="1.4" fill="#fff"/>',
         partly: '<g transform="translate(-6 -7) scale(1)"><g class="wa-spin">' + RAYS.replace('stroke-width="3.5"', 'stroke-width="3"') + '</g><circle class="wa-glow" cx="24" cy="24" r="8" fill="#ffc83d"/></g>' +
                 '<g class="wa-drift"><path d="M15 40a8 8 0 0 1 1-16 11 11 0 0 1 21 3 7 7 0 0 1 0 13z" fill="#e8f1ff"/></g>',
+        pnight: '<g transform="translate(-1 -2) scale(0.56)" style="transform-origin:0 0"><g class="wa-float"><path d="M30 6a17 17 0 1 0 12 26A14 14 0 0 1 30 6z" fill="#cfd8ff"/></g></g>' +
+                '<circle class="wa-star" cx="40" cy="7" r="1.4" fill="#fff"/><circle class="wa-star wa-d2" cx="44" cy="20" r="1.2" fill="#fff"/>' +
+                '<g class="wa-drift"><path d="M15 40a8 8 0 0 1 1-16 11 11 0 0 1 21 3 7 7 0 0 1 0 13z" fill="#d6deea"/></g>',
         cloud: '<g class="wa-drift2"><path d="M20 26a6 6 0 0 1 1-12 9 9 0 0 1 17 2 5 5 0 0 1 0 10z" fill="#b9c6d8"/></g>' +
                '<g class="wa-drift"><path d="M13 38a9 9 0 0 1 1-18 13 13 0 0 1 25 3 7.5 7.5 0 0 1 0 15z" fill="#dfe7f2"/></g>',
         rain: drops('wa-drop', function (x) { return '<path d="M' + x + ' 33l-2 6" stroke="#4fa8ff" stroke-width="3" stroke-linecap="round"/>'; }) +
@@ -191,7 +194,7 @@ var Weather = (function () {
                '<g class="wa-bob"><path d="' + CLOUD_HI + '" fill="#9aa6b8"/></g><path class="wa-bolt" d="M26 28l-7 10h6l-3 8 9-11h-6l3-7z" fill="#ffd23d"/>',
         fog: '<g stroke="#dfe7f2" stroke-width="4" stroke-linecap="round"><path class="wa-fog" d="M8 16h32"/><path class="wa-fog wa-d2" d="M5 24h38"/><path class="wa-fog" d="M10 32h30"/><path class="wa-fog wa-d2" d="M14 40h20"/></g>'
     };
-    // an <svg> string of the animated picture for an icon name (sun, moon, partly, cloud, rain, snow, storm, fog), or ''
+    // an <svg> string of the animated picture for an icon name (sun, moon, partly, pnight, cloud, rain, snow, storm, fog), or ''
     function art(name) { return ART[name] ? '<svg class="wa" viewBox="0 0 48 48" aria-hidden="true">' + ART[name] + '</svg>' : ''; }
 
     // compass point of a wind direction (degrees it blows from), 0..7 = N NE E SE S SW W NW

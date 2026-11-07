@@ -4476,6 +4476,10 @@ async function main() {
         await page.evaluate(() => document.querySelector('.wx-wchip').click());
         check(await page.evaluate(() => document.querySelector('.wx-wchip').textContent === '8 h' && Widgets.conf('weather').s.warn === '8'), 'the warnings button goes to the next time (6 h -> 8 h), same setting as the widget');
         await page.evaluate(() => { Widgets.setSetting('weather', 'warn', '6'); Focus.focus(document.querySelector('.wx-day')); });
+        // at night never a sun: partly cloudy = moon + cloud (owner report 2026-11-07), clear = moon
+        const night = await page.evaluate(() => ({ p: Weather.sky(2, false).ic, c: Weather.sky(0, false).ic, d: Weather.sky(2, true).ic, art: /#ffc83d/.test(Weather.art('pnight')), icon: /#ffc83d/.test(Icons.svg('pnight')),
+            hours: [...document.querySelectorAll('.wx-hour')].filter((h) => !h.hidden && /PM|AM/.test(h.querySelector('.wx-hour-t').textContent) && /^(9:00 PM|12:00 AM|3:00 AM)/.test(h.getAttribute('aria-label')) && /#ffc83d/.test(h.innerHTML)).length }));
+        check(night.p === 'pnight' && night.c === 'moon' && night.d === 'partly' && !night.art && !night.icon && night.hours === 0, 'at night the pictures show the moon, never the sun ' + JSON.stringify(night));
         // a picked day: the hours strip shows that day's 8 points (every 3 h), its storm in red; Today goes back to the next 24 hours
         await page.evaluate(() => Focus.focus(document.querySelectorAll('.wx-day')[2]));
         const sat = await page.evaluate(() => ({ h: document.querySelector('.wx-hours-c .wx-h').textContent, t: [...document.querySelectorAll('.wx-hour-t')].map((e) => e.textContent),

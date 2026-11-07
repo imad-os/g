@@ -95,6 +95,7 @@ var Icons = (function () {
         sun: '<circle cx="24" cy="24" r="9" fill="#ffc83d"/><g stroke="#ffc83d" stroke-width="3.5" stroke-linecap="round"><path d="M24 4v6M24 38v6M4 24h6M38 24h6M9.9 9.9l4.2 4.2M33.9 33.9l4.2 4.2M9.9 38.1l4.2-4.2M33.9 14.1l4.2-4.2"/></g>',
         moon: '<path d="M30 6a17 17 0 1 0 12 26A14 14 0 0 1 30 6z" fill="#cfd8ff"/>',
         partly: '<circle cx="18" cy="17" r="9" fill="#ffc83d"/><path d="M15 40a8 8 0 0 1 1-16 11 11 0 0 1 21 3 7 7 0 0 1 0 13z" fill="#e8f1ff"/>',
+        pnight: '<g transform="translate(-1 -2) scale(0.56)"><path d="M30 6a17 17 0 1 0 12 26A14 14 0 0 1 30 6z" fill="#cfd8ff"/></g><path d="M15 40a8 8 0 0 1 1-16 11 11 0 0 1 21 3 7 7 0 0 1 0 13z" fill="#d6deea"/>',   // partly cloudy at night
         cloud: '<path d="M13 38a9 9 0 0 1 1-18 13 13 0 0 1 25 3 7.5 7.5 0 0 1 0 15z" fill="#dfe7f2"/>',
         rain: '<path d="M13 30a9 9 0 0 1 1-18 13 13 0 0 1 25 3 7.5 7.5 0 0 1 0 15z" fill="#c9d4e4"/><g stroke="#4fa8ff" stroke-width="3.5" stroke-linecap="round"><path d="M16 35l-2 6M25 35l-2 6M34 35l-2 6"/></g>',
         snow: '<path d="M13 30a9 9 0 0 1 1-18 13 13 0 0 1 25 3 7.5 7.5 0 0 1 0 15z" fill="#dfe7f2"/><g fill="#fff"><circle cx="15" cy="38" r="2.5"/><circle cx="24" cy="41" r="2.5"/><circle cx="33" cy="38" r="2.5"/></g>',
