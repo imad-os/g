@@ -626,18 +626,22 @@
         }
         return sb;
     }
-    // a filter: left / right on the remote (or OK) changes it; the list follows a moment after the last press
+    // a filter (owner request 2026-11-07): OK shows the next choice, hold OK / + lists them all; the arrows only move the focus
+    // (they never change a filter). The list follows a moment after the last press.
     var stepT = 0;
     function stepper(label, values, cur, fn) {
         var b = btn('mx-act mx-step', ''), i = 0, lab = el('span', '', ''), k;
         for (k = 0; k < values.length; k++) if (values[k][0] === cur) i = k;
         b.appendChild(lab);
-        function draw() { lab.textContent = label + ':  ‹ ' + values[i][1] + ' ›'; b.setAttribute('aria-label', label + ': ' + values[i][1]); }
-        b._step = function (d) {
-            i = (i + d + values.length) % values.length; draw(); fn(values[i][0]); A11y.announce(values[i][1]);
-            clearTimeout(stepT); stepT = setTimeout(function () { if (body && view && view.v === 'radio') render('step:' + label); }, 700);
-        };
-        b.onclick = function () { b._step(1); };
+        function draw() { lab.textContent = label + ': ' + values[i][1]; b.setAttribute('aria-label', label + ': ' + values[i][1]); }
+        function pick(j, now) {
+            i = (j + values.length) % values.length; draw(); fn(values[i][0]); A11y.announce(values[i][1]);
+            clearTimeout(stepT); stepT = setTimeout(function () { if (body && view && view.v === 'radio') render('step:' + label); }, now ? 0 : 700);
+        }
+        b.onclick = function () { pick(i + 1); };
+        b.setAttribute('data-hold', 'filter');
+        b._label = label;
+        b._opts = function () { return values.map(function (v, j) { return { text: (j === i ? '✓ ' : '') + v[1], fn: function () { pick(j, true); } }; }); };
         b.setAttribute('data-k', 'step:' + label);
         draw();
         return b;
@@ -860,6 +864,8 @@
                 if (view.v !== 'dir' && e.s !== 'gd') add(t('muGoFolder'), function () { var p = MusicSrc.parent(e.p); go({ v: 'dir', e: { s: e.s, p: p, n: MusicSrc.base(p), dir: true, root: e.root } }); });
             }
             if (kind === 'track' && view.v === 'dir') add(t('muRename'), function () { rename(b, e); });
+        } else if (kind === 'filter') {
+            return showMenu(b._label, b._opts(), b);
         } else if (kind === 'station') {
             add(t('wgPlay'), function () { b.click(); });
             var fav = Radio.isFav(e);

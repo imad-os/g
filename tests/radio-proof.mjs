@@ -120,13 +120,32 @@ check(await page.evaluate(() => /1/.test([...document.querySelectorAll('.mx-st-f
 const logos = await page.evaluate(() => document.querySelectorAll('.mx-st .mx-art img').length);
 check(logos >= 8, 'logos shown (' + logos + '), names and bitrate: ' + await page.evaluate(() => document.querySelector('.mx-st .mx-ra').textContent));
 await snap('2-stations');
-// genre filter: right on the Genre stepper twice
+// the arrows only move the focus (owner request 2026-11-07): from the Language filter, Right goes to Genre, Down reaches the stations
+await page.evaluate(() => { const b = [...document.querySelectorAll('.mx-step')][0]; Focus.focus(b); });
+const lang0 = await page.evaluate(() => document.querySelectorAll('.mx-step')[0].textContent);
+await press('ArrowRight');
+const nav1 = await page.evaluate(() => ({ onGenre: Focus.current() === document.querySelectorAll('.mx-step')[1], lang: document.querySelectorAll('.mx-step')[0].textContent }));
+await press('ArrowDown');
+const nav2 = await page.evaluate(() => !!Focus.current() && Focus.current().classList.contains('mx-st') || (Focus.current() && Focus.current().className + ':' + Focus.current().textContent.slice(0, 30)));
+check(nav1.onGenre && nav1.lang === lang0 && nav2 === true, 'arrows move between the filters and down to the stations, never change a filter ' + JSON.stringify(nav1) + ' station focused: ' + nav2);
+// genre filter: OK on the Genre filter twice
 await page.evaluate(() => { const b = [...document.querySelectorAll('.mx-step')][1]; Focus.focus(b); });
-await press('ArrowRight'); await press('ArrowRight');
+await press('Enter'); await press('Enter');
 await page.waitForTimeout(1200);
 const g = await page.evaluate(() => ({ step: [...document.querySelectorAll('.mx-step')][1].textContent, n: document.querySelectorAll('.mx-st').length, names: [...document.querySelectorAll('.mx-st')].map((b) => b._e.n) }));
 check(g.n > 0 && g.n < 11, 'genre filter: ' + g.step.replace(/\s+/g, ' ') + ' -> ' + g.names.join(', '));
 await snap('3-genre');
+// hold OK on a filter: every choice in a list
+await page.evaluate(() => { const b = [...document.querySelectorAll('.mx-step')][1]; Focus.focus(b); });
+await page.keyboard.down('Enter'); await page.waitForTimeout(800); await page.keyboard.up('Enter'); await page.waitForTimeout(200);
+const mopts = await page.evaluate(() => [...document.querySelectorAll('.mx-menu-i')].map((x) => x.textContent));
+check(mopts.length > 5 && mopts.some((x) => /^✓/.test(x)), 'hold OK on a filter lists every choice (' + mopts.length + ')');
+await snap('3b-filter-list');
+await page.evaluate(() => [...document.querySelectorAll('.mx-menu-i')].find((x) => /Jazz/.test(x.textContent)).click());
+await page.waitForTimeout(600);
+const jz = await page.evaluate(() => [...document.querySelectorAll('.mx-st')].map((b) => b._e.n));
+check(jz.join() === 'Luxe Radio', 'picking Jazz from the list: ' + jz.join(', '));
+await page.evaluate(() => Radio.setPref('tag', ''));
 await page.evaluate(() => { Radio.setPref('tag', ''); Radio.setPref('lang', 'french'); });
 await page.evaluate(() => document.querySelector('.mx-nav[data-nav="radio"]').click());
 await page.waitForTimeout(800);

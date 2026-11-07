@@ -50,7 +50,9 @@ var Focus = (function () {
             else if (dir === 'right') { main = dx; side = Math.abs(dy); }
             else if (dir === 'up') { main = -dy; side = Math.abs(dx); }
             else { main = dy; side = Math.abs(dx); }
-            if (main <= 1) continue;
+            // on the same line (or column) is not "below" / "beside": an item must be past a third of the smaller one's size
+            // (a wide row's centre is far away, so a side menu item 2 px lower used to win Down: MyMusic's radio filters)
+            if (main <= Math.max(1, (dir === 'up' || dir === 'down' ? Math.min(r.height, o.height) : Math.min(r.width, o.width)) / 3)) continue;
             var score = main + side * 2.2;
             if (score < bestScore) { bestScore = score; best = el; }
         }

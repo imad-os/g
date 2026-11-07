@@ -141,7 +141,7 @@
   Per profile (backed up): `radio_favs`, `radio_recent` (12), `radio_custom` (own URLs, .pls / .m3u resolved), `radio_prefs` { cc, lang, tag, showBad }.
   A station is a Music track `s: 'radio'` (MusicSrc source 'radio', `u` stream, `i` logo...) played by the normal player (AVPlay first on
   the TV: MP3 / AAC / OGG / HLS); `Music` treats it as live (`state().live`, no length / seek, a dropped stream reopens 3 times a minute,
-  a failing station is not skipped). UI in `apps/music.js` (nav Radio, view `radio` / `countries`; filters = left / right steppers;
+  a failing station is not skipped). UI in `apps/music.js` (nav Radio, view `radio` / `countries`; filters = buttons: OK shows the next choice, hold OK / + lists them all, the arrows only move the focus (owner request 2026-11-07);
   search via Keyboard; hold OK / + menu: favorite, test, edit / delete own). Strings `js/core/i18n-radio.js` (keep `raPrivacy` true).
   The visualizer stays flat on radio (no file to read; cross-origin live sound cannot be captured): never fake it.
   Proof: `node tests/radio-proof.mjs <dir with groove.mp3> live|file` (Radio Browser answered locally, fake live stations, screenshots).
