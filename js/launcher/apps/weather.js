@@ -138,13 +138,13 @@
 
         // next 24 hours, every 3 hours
         var hc = el('div', 'wx-card wx-hours-c');
-        hc.appendChild(el('h3', 'wx-h', t('wxHours')));
+        ui.hoursTitle = el('h3', 'wx-h', t('wxHours'));
+        hc.appendChild(ui.hoursTitle);
         var hl = el('div', 'wx-hours');
         for (var i = 0; i < 8; i++) {
             var h = button('wx-hour');
             var o = { b: h, t: el('span', 'wx-hour-t'), ic: el('span', 'wx-hour-ic'), v: el('span', 'wx-hour-v'), p: el('span', 'wx-hour-p') };
             h.appendChild(o.t); h.appendChild(o.ic); h.appendChild(o.v); h.appendChild(o.p);
-            h.onfocus = function () { pick(-1); };
             hl.appendChild(h);
             ui.hours.push(o);
         }
@@ -231,15 +231,17 @@
         A11y.announce(ui.warn.getAttribute('aria-label') + '. ' + ui.alerts.textContent);
     }
 
+    // today (or nothing picked): the next 24 hours from now; another day: that day's 8 points (00:00 ... 21:00)
     function drawHours() {
-        var hs = data ? data.hours : [];
+        var day = sel > 0 && data && data.days[sel] && data.byDay ? data.byDay[data.days[sel].date] : null, hs = data ? data.hours : [];
+        ui.hoursTitle.textContent = day ? t('wxHoursOf').replace('%s', dayName(sel)) : t('wxHours');
         for (var i = 0; i < 8; i++) {
-            var o = ui.hours[i], h = hs[i * 3];
+            var o = ui.hours[i], h = day ? day[i] : hs[i * 3];
             // a storm inside these 3 hours shows on this one (red), so it is never skipped
-            for (var j = i * 3; j < i * 3 + 3 && j < hs.length; j++) if (Weather.kindOf(hs[j].code) === 'storm') { h = hs[j]; break; }
+            if (!day) for (var j = i * 3; j < i * 3 + 3 && j < hs.length; j++) if (Weather.kindOf(hs[j].code) === 'storm') { h = hs[j]; break; }
             o.b.hidden = !h;
             if (!h) continue;
-            var k = Weather.sky(h.code, h.day), when = i === 0 ? t('wxNow') : Desktop.timeText(dateOf(h.time));
+            var k = Weather.sky(h.code, h.day), when = i === 0 && !day ? t('wxNow') : Desktop.timeText(dateOf(h.time));
             o.t.textContent = when;
             Icons.put(o.ic, k.ic);
             o.v.textContent = deg(h.temp);
@@ -321,6 +323,7 @@
         sel = i;
         for (var k = 0; k < 7; k++) ui.days[k].b.className = 'wx-day' + (k === sel ? ' on' : '');
         drawDetails();
+        drawHours();
     }
 
     /* ---------------- data ---------------- */

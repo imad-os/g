@@ -273,11 +273,17 @@ async function fakeFirestore(ctx, db) {
 // An Open-Meteo forecast answer (js/core/weather.js asks now + hours + 7 days in one request): the hours start 2 hours before now
 function forecastBody(temp) {
     const day = (i) => `2026-11-${String(5 + i).padStart(2, '0')}`, hours = [];
-    for (let i = 0; i < 27; i++) hours.push(new Date(Date.UTC(2026, 10, 5, 7 + i)).toISOString().slice(0, 16));
+    // 7 whole days of hours (like the real answer); hours 7..33 keep the values the older checks expect (index i = hour - 7);
+    // Saturday 7 Nov 15:00 is a thunderstorm (the hours of a picked day)
+    for (let n = 0; n < 168; n++) hours.push(new Date(Date.UTC(2026, 10, 5, n)).toISOString().slice(0, 16));
+    const old = (n) => n >= 7 && n < 34, hr = (n) => n % 24, DAYT = [9, 8, 8, 11, 16, 19, 17, 13];
     return {
         current: { time: '2026-11-05T09:45', temperature_2m: temp, apparent_temperature: temp - 2, relative_humidity_2m: 60, precipitation: 0.4, weather_code: 2, is_day: 1,
                    cloud_cover: 40, pressure_msl: 1016.2, wind_speed_10m: 14, wind_direction_10m: 270, wind_gusts_10m: 31 },
-        hourly: { time: hours, temperature_2m: hours.map((_, i) => temp + i % 5), precipitation_probability: hours.map((_, i) => i * 3), weather_code: hours.map((_, i) => (i === 12 ? 95 : i % 3 ? 2 : 61)), is_day: hours.map((_, i) => (i < 9 ? 1 : 0)) },
+        hourly: { time: hours, temperature_2m: hours.map((_, n) => (old(n) ? temp + (n - 7) % 5 : DAYT[Math.floor(hr(n) / 3)] + Math.floor(n / 24))),
+                  precipitation_probability: hours.map((_, n) => (old(n) ? (n - 7) * 3 : (n * 7) % 100)),
+                  weather_code: hours.map((_, n) => (old(n) ? (n - 7 === 12 ? 95 : (n - 7) % 3 ? 2 : 61) : n === 63 ? 95 : hr(n) < 6 ? 0 : 3)),
+                  is_day: hours.map((_, n) => (old(n) ? (n - 7 < 9 ? 1 : 0) : hr(n) >= 7 && hr(n) <= 18 ? 1 : 0)) },
         daily: { time: [0, 1, 2, 3, 4, 5, 6].map(day), weather_code: [2, 61, 3, 0, 95, 71, 45], temperature_2m_max: [24, 22, 19, 25, 21, 8, 17], temperature_2m_min: [15, 14, 12, 16, 13, 1, 10],
                  precipitation_sum: [0.4, 6.2, 0, 0, 12.5, 3, 0], precipitation_probability_max: [20, 80, 5, 0, 95, 60, 10], wind_speed_10m_max: [18, 25, 12, 9, 40, 22, 11],
                  wind_gusts_10m_max: [35, 48, 20, 15, 70, 40, 18], wind_direction_10m_dominant: [270, 225, 180, 90, 315, 0, 45],
@@ -4367,7 +4373,7 @@ async function main() {
         await page.evaluate(() => Win.open('settings', 'widgets'));
         await page.waitForTimeout(200);
         const cp = await page.textContent('.set-main');
-        check(/Show widgets on the desktop/.test(cp) && /Weather/.test(cp) && /Playtime/.test(cp) && /System Monitor/.test(cp) && /Music Player/.test(cp) && /Stars/.test(cp) && /every 30 min/.test(cp) && /every 5 s/.test(cp),
+        check(/Show widgets on the desktop/.test(cp) && /Weather/.test(cp) && /Playtime/.test(cp) && /System Monitor/.test(cp) && /MyMusic|Music Player/.test(cp) && /Stars/.test(cp) && /every 30 min/.test(cp) && /every 5 s/.test(cp),
             'Control Panel > Widgets lists every widget with its state and refresh rate');
         await page.evaluate(() => { const b = [...document.querySelectorAll('.set-main .set-row')].find((x) => /System Monitor/.test(x.textContent)); b.click(); });
         await page.waitForTimeout(200);
@@ -4470,6 +4476,16 @@ async function main() {
         await page.evaluate(() => document.querySelector('.wx-wchip').click());
         check(await page.evaluate(() => document.querySelector('.wx-wchip').textContent === '8 h' && Widgets.conf('weather').s.warn === '8'), 'the warnings button goes to the next time (6 h -> 8 h), same setting as the widget');
         await page.evaluate(() => { Widgets.setSetting('weather', 'warn', '6'); Focus.focus(document.querySelector('.wx-day')); });
+        // a picked day: the hours strip shows that day's 8 points (every 3 h), its storm in red; Today goes back to the next 24 hours
+        await page.evaluate(() => Focus.focus(document.querySelectorAll('.wx-day')[2]));
+        const sat = await page.evaluate(() => ({ h: document.querySelector('.wx-hours-c .wx-h').textContent, t: [...document.querySelectorAll('.wx-hour-t')].map((e) => e.textContent),
+            v: [...document.querySelectorAll('.wx-hour-v')].map((e) => e.textContent), hot: [...document.querySelectorAll('.wx-hour')].map((e) => e.classList.contains('wx-hot')).indexOf(true) }));
+        check(/^Saturday, hour by hour$/.test(sat.h) && sat.t.join() === '12:00 AM,3:00 AM,6:00 AM,9:00 AM,12:00 PM,3:00 PM,6:00 PM,9:00 PM' && sat.v.join() === '11°,10°,10°,13°,18°,21°,19°,15°' && sat.hot === 5,
+            'picking Saturday shows its 24 hours as 8 points (every 3 h), the storm at 3 PM in red ' + JSON.stringify(sat));
+        await page.evaluate(() => Focus.focus(document.querySelectorAll('.wx-hour')[5]));
+        check(await page.evaluate(() => /Saturday/.test(document.querySelector('.wx-hours-c .wx-h').textContent) && /3:00 PM, 21°, Thunderstorm/.test(document.activeElement.getAttribute('aria-label'))), 'going into the hours keeps the picked day (Voice Guide reads its hour)');
+        await page.evaluate(() => Focus.focus(document.querySelector('.wx-day')));
+        check(await page.evaluate(() => document.querySelector('.wx-hours-c .wx-h').textContent === 'Next 24 hours' && document.querySelector('.wx-hour-t').textContent === 'Now'), 'Today: the next 24 hours from now again');
         // the remote: Down goes through the days; the details follow the focused day
         await page.keyboard.press('ArrowDown');
         await page.keyboard.press('ArrowDown');

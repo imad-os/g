@@ -57,9 +57,9 @@ var Weather = (function () {
     function num(a, i) { var v = a && a[i]; return typeof v === 'number' ? v : null; }
     function hm(s) { return typeof s === 'string' && s.length >= 16 ? s.slice(11, 16) : ''; }
 
-    // Open-Meteo's answer -> { now, hours [24], days [7] } (every field may be null: drawn as "--")
+    // Open-Meteo's answer -> { now, hours [24 from now], days [7], byDay { date: [8 points, every 3 h] } } (every field may be null: drawn as "--")
     function parse(j) {
-        var c = j.current || {}, h = j.hourly || {}, d = j.daily || {}, out = { now: null, hours: [], days: [] }, i;
+        var c = j.current || {}, h = j.hourly || {}, d = j.daily || {}, out = { now: null, hours: [], days: [], byDay: {} }, i;
         out.now = {
             time: c.time || '', temp: num([c.temperature_2m], 0), feels: num([c.apparent_temperature], 0), hum: num([c.relative_humidity_2m], 0),
             precip: num([c.precipitation], 0), code: num([c.weather_code], 0), day: c.is_day !== 0, clouds: num([c.cloud_cover], 0),
@@ -71,6 +71,15 @@ var Weather = (function () {
         for (i = start; i < times.length && out.hours.length < 24; i++) {
             out.hours.push({ time: times[i], temp: num(h.temperature_2m, i), pop: num(h.precipitation_probability, i), code: num(h.weather_code, i),
                              day: h.is_day ? h.is_day[i] !== 0 : true });
+        }
+        // each day's 24 hours as 8 points (00:00, 03:00 ... 21:00); a storm inside a 3 h slot is the point shown (owner request 2026-11-07)
+        for (i = 0; i < times.length; i++) {
+            var tm = String(times[i]), hr = +tm.slice(11, 13), day = tm.slice(0, 10), slot = Math.floor(hr / 3);
+            if (!day || isNaN(hr)) continue;
+            var list = out.byDay[day] || (out.byDay[day] = []), pt = { time: times[i], temp: num(h.temperature_2m, i), pop: num(h.precipitation_probability, i),
+                                                                       code: num(h.weather_code, i), day: h.is_day ? h.is_day[i] !== 0 : true };
+            if (hr % 3 === 0 && !list[slot]) list[slot] = pt;
+            else if (list[slot] && kindOf(pt.code) === 'storm' && kindOf(list[slot].code) !== 'storm') list[slot] = pt;
         }
         var dates = d.time || [];
         for (i = 0; i < dates.length && i < 7; i++) {
@@ -87,11 +96,11 @@ var Weather = (function () {
     function url(loc, f) {
         return 'https://api.open-meteo.com/v1/forecast?latitude=' + loc.lat + '&longitude=' + loc.lon +
             '&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m' +
-            '&hourly=temperature_2m,precipitation_probability,weather_code,is_day&forecast_hours=25' +
+            '&hourly=temperature_2m,precipitation_probability,weather_code,is_day' +
             '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,sunrise,sunset,uv_index_max' +
             '&forecast_days=7&timezone=auto' + (f ? '&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch' : '');
     }
-    function keyOf(loc, f) { return (+loc.lat).toFixed(2) + ',' + (+loc.lon).toFixed(2) + ',' + (f ? 'f' : 'c'); }
+    function keyOf(loc, f) { return 'v2,' + (+loc.lat).toFixed(2) + ',' + (+loc.lon).toFixed(2) + ',' + (f ? 'f' : 'c'); }
     function cache() { var c = Store.rawGet(FC); return c && typeof c === 'object' && c.d ? c : null; }
 
     /* get(settings, maxAge ms, cb(err, data, loc, at)): data younger than maxAge comes from the TV, else one request.
