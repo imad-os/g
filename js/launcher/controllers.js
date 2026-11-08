@@ -290,7 +290,7 @@ var Controllers = (function () {
         // the link in the QR code: the phone's camera opens My PC on the Game controller, which connects by itself
         pairUrl: function () {
             var b = (typeof AppBoot !== 'undefined' && AppBoot.base && AppBoot.base()) || '';
-            if (!/^https:/.test(b)) b = /^https:/.test(location.href) && !/localhost|127\.0\.0\.1/.test(location.host) ? location.href.split(/[?#]/)[0].replace(/[^\/]*$/, '') : 'https://imad-os.github.io/g/';
+            if (!/^https:/.test(b)) b = /^https:/.test(location.href) && !/localhost|127\.0\.0\.1/.test(location.host) ? location.href.split(/[?#]/)[0].replace(/[^\/]*$/, '') : 'https://pc.geekspro.us/';
             return b + 'index.html?pair=' + cfg().code;
         },
         status: function () { return status; },

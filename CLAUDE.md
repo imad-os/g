@@ -17,7 +17,7 @@
 - Original names and art only (no Nintendo/Tetris look-alikes).
 
 ## Where things are
-- `index.html` + `js/boot/loader.js`: picks the hosted copy (imad-os.github.io/g) or the bundled
+- `index.html` + `js/boot/loader.js`: picks the hosted copy (pc.geekspro.us; packages before 1.6.1 ask imad-os.github.io/g, which redirects there) or the bundled
   one, then loads `app.html` and the JS/CSS listed in `app-manifest.json`. TVs get updates from
   the hosted copy at the next start: **bump `build` in `app-manifest.json`** (and a game's
   `game-manifest.json` `build` when it changes). Don't change `shell` unless `config.xml`/loader
@@ -26,7 +26,14 @@
   new .wgt; bump `config.xml` version, **never** bump `shell`: old packages would stop accepting
   online builds). It waits 4 s for the hosted manifest; if the server is slow it runs the last
   hosted build that worked (`boot_good`, saved at ready / by Settings > Update) before falling back
-  to the built-in copy. `js/launcher/updater.js` + Settings > Update (check, download with progress,
+  to the built-in copy. **Package 1.6.1 (2026-11-08, imad: "the TV opens the local files")**: the loader asks
+  `https://pc.geekspro.us/` directly (`imad-os.github.io/g` only redirects there: an extra round trip inside the 4 s; a
+  `boot_good` saved under the old address still counts), waits 5 s, and a hosted build that failed at start is only set
+  aside for 30 min (`boot_bad_build` = `{ b, n, at }`; skipped for good after 3 failures in a row; before 1.6.1 ONE failure,
+  even a network hiccup on one of ~90 files, kept that build away until a newer one was published). Why it failed:
+  `boot_last_fail`, shown in Control Panel > My PC Update ("What went wrong"). The built-in copy that ran because the
+  server did not answer downloads the update in the background (`Updater.background()`, Notify card). Settings > Update's
+  Restart clears the bad mark. Tests: `MYPC_ONLY=boot node tests/run-tests.mjs`. `js/launcher/updater.js` + Settings > Update (check, download with progress,
   restart) are hosted code and reach TVs as a normal online update.
 - **Two pages:** opening a game or installed app loads `index.html?play=<id>` (no desktop is built
   there); quitting loads `index.html?from=<id>` (fresh desktop). Same packaged index.html/loader.

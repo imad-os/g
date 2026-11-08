@@ -49,7 +49,8 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const HOSTED = 'https://imad-os.github.io/g/';
+const HOSTED = 'https://pc.geekspro.us/';          // the loader asks the site itself (the old github.io address only redirects)
+const OLD_HOSTED = 'https://imad-os.github.io/g/';
 // the build in the repo, and a newer one for the update tests (so they keep working at every build bump)
 const BUILD = JSON.parse(fs.readFileSync(path.join(ROOT, 'app-manifest.json'), 'utf8')).build, NEXT = BUILD + 1;
 const TYPES = { '.jpg': 'image/jpeg', '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
@@ -393,11 +394,64 @@ async function main() {
         await routeHosted(page, { manifest: { build: 9077 }, breakFile: 'js/launcher/main.js' });
         await page.goto(base + 'index.html');
         await page.waitForFunction(() => window.AppBoot && AppBoot.source() === 'local' && document.querySelector('.dicon'), null, { timeout: 20000 });
-        check(await page.evaluate(() => localStorage.getItem('boot_bad_build')) === '9077', 'build 9077 recorded as bad');
+        check(await page.evaluate(() => { const b = JSON.parse(localStorage.getItem('boot_bad_build')); const f = AppBoot.lastFail(); return b.b === 9077 && b.n === 1 && f.b === 9077 && /main\.js/.test(f.why); }), 'build 9077 set aside (1st failure) and why is kept for Control Panel > Update');
         check(await playable(page), 'bundled copy is playable after the fallback');
         await page.reload();
         await page.waitForSelector('.dicon', { timeout: 15000 });
-        check(await page.evaluate(() => AppBoot.source()) === 'local', 'blacklisted build is skipped on the next launch');
+        check(await page.evaluate(() => AppBoot.source() === 'local' && AppBoot.reason() === 'bad'), 'the failed build is skipped at the next start (for 30 minutes)');
+        // Control Panel > My PC Update says why
+        await page.evaluate(() => Win.open('settings', 'update'));
+        await page.waitForTimeout(400);
+        if (process.env.MYPC_SHOTS) await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'update-why.png') });
+        check(/What went wrong[\s\S]*9077[\s\S]*main\.js/.test(await page.textContent('body')), 'Control Panel > My PC Update shows what made the online build fail');
+        await page.context().close();
+    }
+
+    console.log('3b. a failed online build is tried again (one failure can be the network), given up after 3');
+    {
+        const page = await newPage(browser, base);
+        await routeHosted(page, { manifest: { build: NEXT } });
+        // an old package's mark (the number alone) and a failure 31 minutes ago: both are tried again now
+        await page.addInitScript((n) => { if (!sessionStorage.getItem('__s')) { sessionStorage.setItem('__s', '1'); localStorage.setItem('boot_bad_build', String(n)); } }, NEXT);
+        await page.goto(base + 'index.html');
+        await page.waitForFunction(() => window.AppBoot && window.Desktop && document.querySelector('.dicon'), null, { timeout: 20000 });
+        check(await page.evaluate((n) => AppBoot.source() === 'remote' && AppBoot.build() === n && localStorage.getItem('boot_bad_build') === null, NEXT),
+            'a build an older package set aside for good is tried again, and the mark goes once it runs');
+        await page.evaluate((n) => localStorage.setItem('boot_bad_build', JSON.stringify({ b: n, n: 2, at: Date.now() - 31 * 60000 })), NEXT);
+        await page.reload();
+        await page.waitForFunction(() => window.AppBoot && window.Desktop && document.querySelector('.dicon'), null, { timeout: 20000 });
+        check(await page.evaluate((n) => AppBoot.source() === 'remote' && AppBoot.build() === n, NEXT), 'a build that failed 31 minutes ago runs again');
+        await page.evaluate((n) => localStorage.setItem('boot_bad_build', JSON.stringify({ b: n, n: 3, at: Date.now() - 31 * 60000 })), NEXT);
+        await page.reload();
+        await page.waitForSelector('.dicon', { timeout: 15000 });
+        check(await page.evaluate(() => AppBoot.source() === 'local' && AppBoot.reason() === 'bad'), 'after 3 failures in a row it waits for a newer build');
+        await page.context().close();
+    }
+
+    console.log('3c. the server is slow as the TV starts: the built-in copy downloads the update and says so');
+    {
+        const page = await newPage(browser, base);
+        let slow = true;
+        await routeHosted(page, {});
+        await page.route(HOSTED + 'app-manifest.json*', async (route) => {      // registered last: asked first
+            if (slow) return route.abort('timedout');
+            const m = JSON.parse(fs.readFileSync(path.join(ROOT, 'app-manifest.json'), 'utf8'));
+            return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(Object.assign(m, { build: NEXT, version: '9.9.9' })) });
+        });
+        await page.goto(base + 'index.html');
+        await page.waitForFunction(() => window.AppBoot && window.Desktop && document.querySelector('.dicon'), null, { timeout: 20000 });
+        check(await page.evaluate(() => AppBoot.source() === 'local' && AppBoot.reason() === 'unreachable'), 'no answer at start: the built-in copy runs');
+        slow = false;
+        await page.evaluate(() => { Updater.state().state = 'idle'; Updater.background(10); });
+        await page.waitForFunction(() => Updater.state().state === 'ready', null, { timeout: 20000 }).catch(() => {});
+        await page.waitForTimeout(300);
+        if (process.env.MYPC_SHOTS) await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'update-background.png') });
+        check(await page.evaluate((n) => { const g = JSON.parse(localStorage.getItem('boot_good')); return Updater.state().state === 'ready' && g.manifest.build === n; }, NEXT) && /My PC update downloaded[\s\S]*9\.9\.9/.test(await page.textContent('#toast')),
+            'once the network answers the update is downloaded in the background and a notification says it starts next time');
+        await page.reload();
+        await page.waitForFunction(() => window.AppBoot && window.Desktop && document.querySelector('.dicon'), null, { timeout: 20000 });
+        check(await page.evaluate((n) => AppBoot.source() === 'remote' && AppBoot.build() === n, NEXT), 'the next start runs the online build');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }
 
@@ -410,6 +464,8 @@ async function main() {
         check(await page.evaluate(() => AppBoot.source()) === 'local', 'shell mismatch keeps the bundled copy');
         await page.context().close();
     }
+
+    if (process.env.MYPC_ONLY === 'boot') { await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }   // MYPC_ONLY=boot: start-up / update checks only
 
     console.log('5/6. memory, destroy() and Back key');
     {
@@ -1149,7 +1205,7 @@ async function main() {
         const page = await newPage(browser, base);
         await routeHosted(page, { offline: true });
         // the SDK and the example app, served from "other websites"
-        await page.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+        await page.route(OLD_HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
         let slowOnce = true;
         await page.context().route(APP + '**', async (r) => {
             const rel = r.request().url().slice(APP.length).split('?')[0] || 'index.html';
@@ -1325,7 +1381,7 @@ async function main() {
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body, null, { timeout: 6000 });
         // standalone: the example opened directly in a browser
         const sp = await page.context().newPage();
-        await sp.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+        await sp.route(OLD_HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
         await sp.goto(APP + 'index.html?app_config=' + encodeURIComponent('{"speed":5}'));
         await sp.waitForFunction(() => window.MyPC && MyPC.info() && MyPC.info().standalone);
         check(await sp.evaluate(() => MyPC.app_config.speed) === 5, 'standalone: MyPC.app_config comes from ?app_config= for testing');
@@ -1682,6 +1738,14 @@ async function main() {
         check(await page.evaluate((n) => AppBoot.source() === 'remote' && AppBoot.build() === n && AppBoot.reason() === 'stale' && AppBoot.stale(), NEXT), 'slow server: the last known online build runs instead of the older built-in copy');
         check(await playable(page), 'a game is playable from it');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+        // 1b) a build saved by a package that still used the old github.io address counts too
+        page = await newPage(browser, base);
+        await page.addInitScript(([m, hosted, b]) => { try { if (!localStorage.getItem('__seeded')) { localStorage.setItem('boot_good', JSON.stringify({ manifest: Object.assign({}, m, { build: b }), base: hosted, at: Date.now() })); localStorage.setItem('__seeded', '1'); } } catch (e) {} }, [full, OLD_HOSTED, NEXT]);
+        await routeHosted(page, { breakFile: 'app-manifest.json' });
+        await page.goto(base + 'index.html');
+        await page.waitForFunction(() => window.AppBoot && window.Desktop && document.querySelector('.dicon'), null, { timeout: 20000 });
+        check(await page.evaluate((n) => AppBoot.source() === 'remote' && AppBoot.build() === n && AppBoot.reason() === 'stale' && AppBoot.base() === 'https://pc.geekspro.us/', NEXT), 'a last online build saved under the old address runs from pc.geekspro.us');
         await page.context().close();
         // 2) the network is really down: built-in copy, and the last known build is not blamed
         page = await newPage(browser, base);
@@ -2407,7 +2471,7 @@ async function main() {
         const setup = async (shellLacksMp) => {
             const pg = await newPage(browser, base, db);
             await routeHosted(pg, { offline: true });
-            await pg.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+            await pg.route(OLD_HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
             await pg.context().route(APP + '**', (r) => {
                 const rel = r.request().url().slice(APP.length).split('?')[0] || 'multiplayer.html';
                 const p = path.join(ROOT, 'sdk/example', rel);
@@ -2557,7 +2621,7 @@ async function main() {
 
         // standalone: two tabs, minimal DOM screens
         const ctx = await browser.newContext();
-        await ctx.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+        await ctx.route(OLD_HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
         await ctx.route(APP + '**', (r) => { const rel = r.request().url().slice(APP.length).split('?')[0] || 'multiplayer.html'; const p = path.join(ROOT, 'sdk/example', rel); r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || 'text/html', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(p) }); });
         const t1 = await ctx.newPage(), t2 = await ctx.newPage();
         for (const t of [t1, t2]) { await t.goto(APP + 'multiplayer.html'); await t.waitForFunction(() => window.MyPC && MyPC.info() && MyPC.info().standalone); }
@@ -2593,14 +2657,14 @@ async function main() {
             'pad-optoff': mkdoc('pad-optoff', 3, 'inline.html?mode=off'),
             'pad-own': mkdoc('pad-own', 4, 'inline.html?mode=own')
         } };
-        const INLINE = `<!doctype html><meta charset=utf-8><body style="background:#123"><script src="${HOSTED}sdk/mypc-sdk.js"></script><script>
+        const INLINE = `<!doctype html><meta charset=utf-8><body style="background:#123"><script src="${OLD_HOSTED}sdk/mypc-sdk.js"></script><script>
             var mode = (/mode=(\\w+)/.exec(location.search) || [])[1]; window.padLog = [];
             MyPC.init({ pad: mode === 'off' ? false : undefined, onInit: function () { if (mode === 'own') MyPC.pad.init({ force: true, onAction: function (a, d) { window.padLog.push([a, d]); } }); MyPC.ready(); } });
         <\/script>`;
         const setup = async (o) => {
             const pg = await newPage(browser, base, db, o);
             await routeHosted(pg, { offline: true });
-            await pg.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+            await pg.route(OLD_HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
             await pg.context().route(APP + '**', (r) => {
                 const rel = r.request().url().slice(APP.length).split('?')[0] || 'index.html';
                 if (rel === 'inline.html') return r.fulfill({ status: 200, contentType: 'text/html', headers: { 'Access-Control-Allow-Origin': '*' }, body: INLINE });
@@ -3837,7 +3901,7 @@ async function main() {
         const page = await newPage(browser, base, fdb);
         await page.context().grantPermissions(['microphone']);
         await routeHosted(page, { offline: true });
-        await page.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+        await page.route(OLD_HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
         await page.context().route(APP + '**', (r) => {
             const rel = r.request().url().slice(APP.length).split('?')[0] || 'index.html', p = path.join(ROOT, 'sdk/example', rel);
             if (!fs.existsSync(p)) return r.fulfill({ status: 404, body: '' });
@@ -4040,9 +4104,9 @@ async function main() {
         const mk = (id, url) => ({ id, name: id, url, entry: url + 'index.html', icon: '', type: 'game', version: '2.0.1', enabled: true, order: 0, config: {} });
         const page = await newPage(browser, base, { apps: { buggy: mk('buggy', APP), stuck: mk('stuck', STUCK) } });
         await routeHosted(page, { offline: true });
-        await page.route(HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+        await page.route(OLD_HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
         // an app that throws before MyPC.init, misses a file, throws in onStart and reports a caught error; another one that never loads
-        const BUGGY = `<!doctype html><meta charset=utf-8><body><script src="${HOSTED}sdk/mypc-sdk.js"></script>
+        const BUGGY = `<!doctype html><meta charset=utf-8><body><script src="${OLD_HOSTED}sdk/mypc-sdk.js"></script>
             <script>window.early.boom = 1;</script><img src="missing.png">
             <script>MyPC.init({ onInit: function () { MyPC.ready(); }, onStart: function () { throw new Error('start went wrong'); } });</script>`;
         await page.context().route('https://apps.example.test/**', (r) => {
@@ -4933,7 +4997,7 @@ async function driveTests(browser, base) {
     // the app: its own https origin, the SDK from My PC, a service worker that imports sdk/drive-sw.js
     const APP = 'https://driveapp.example.test/';
     const APP_HTML = `<!doctype html><meta charset=utf-8><title>Drive Test</title><body style="background:#123;color:#fff;font:40px sans-serif"><p id=t>Drive test app</p>
-<script src="${HOSTED}sdk/mypc-sdk.js"></script><script>MyPC.init({ onInit() { MyPC.ready(); window.__ok = 1; } });</script>`;
+<script src="${OLD_HOSTED}sdk/mypc-sdk.js"></script><script>MyPC.init({ onInit() { MyPC.ready(); window.__ok = 1; } });</script>`;
     const db = { apps: {}, settings: { google: { tvClientId: 'cid.apps.googleusercontent.com', tvClientSecret: 'sec', pickerClientId: 'web.apps.googleusercontent.com', pickerApiKey: 'PKEY', projectNumber: '123' } } };
     db.apps.drivetest = { id: 'drivetest', name: 'Drive Test', url: APP, entry: APP + 'index.html', icon: '', type: 'app', version: '1.0.0', enabled: true, order: 1, config: {} };
     const page = await newPage(browser, base, db);
@@ -4942,10 +5006,10 @@ async function driveTests(browser, base) {
     await page.addInitScript((a) => { if (!localStorage.getItem('arc_dev_installed')) { localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'drivetest', at: 1 }])); localStorage.setItem('arc_dev_catalog', JSON.stringify([a])); } }, db.apps.drivetest);
     await routeHosted(page, { offline: true });
     const sdkFile = (f) => (r) => r.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(ROOT, 'sdk', f)) });
-    await page.route(HOSTED + 'sdk/mypc-sdk.js', sdkFile('mypc-sdk.js'));
-    await page.context().route(HOSTED + 'sdk/drive-sw.js', sdkFile('drive-sw.js'));          // imported by the app's worker
+    await page.route(OLD_HOSTED + 'sdk/mypc-sdk.js', sdkFile('mypc-sdk.js'));
+    await page.context().route(OLD_HOSTED + 'sdk/drive-sw.js', sdkFile('drive-sw.js'));          // imported by the app's worker
     await page.context().route(APP + '**', (r) => {
-        if (/sw\.js/.test(r.request().url())) return r.fulfill({ status: 200, contentType: 'application/javascript', body: `importScripts('${HOSTED}sdk/drive-sw.js');` });
+        if (/sw\.js/.test(r.request().url())) return r.fulfill({ status: 200, contentType: 'application/javascript', body: `importScripts('${OLD_HOSTED}sdk/drive-sw.js');` });
         r.fulfill({ status: 200, contentType: 'text/html', body: APP_HTML });
     });
     const shot = async (name) => { if (process.env.MYPC_SHOTS) { await page.waitForTimeout(150); await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, name + '.png') }); } };

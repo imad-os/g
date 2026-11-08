@@ -71,7 +71,7 @@ Upload them right the first time.
 **Overview:** Arcade is a launcher with six original offline games: Super Jumper (platformer,
 1–2 players), Block Drop, Sky Hopper, Neon Snake, Brick Breaker and Tile Merge. There are no
 accounts, login, purchases, ads, video or region restrictions. Top-10 score tables and progress
-are stored locally. At start the app checks `https://imad-os.github.io/g/` for content updates and
+are stored locally. At start the app checks `https://pc.geekspro.us/` for content updates and
 works fully without a network.
 
 **Main screens:**

@@ -367,6 +367,7 @@ var App = (function () {
             I18n.apply();
             AppBoot.ready();
             Welcome.afterBoot();
+            Updater.background();                      // built-in copy because the server was slow at start: fetch the update now
             // a profile that asks for its password (Settings > Accounts), or "Use on phone" (?signin=<username>)
             var signin = param('signin');
             if (!ProfilesUI.gate() && signin && Accounts.validName(Accounts.clean(signin))) {

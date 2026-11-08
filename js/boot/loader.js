@@ -17,7 +17,13 @@
  * manifest, <base href> = hosted URL) so the Tizen/Samsung APIs keep working.
  *
  * A hosted build that fails to load a file, throws during start-up or does not call
- * AppBoot.ready() within READY_TIMEOUT_MS is blacklisted and the bundled copy restarts.
+ * AppBoot.ready() within READY_TIMEOUT_MS is set aside and the bundled copy restarts. It is tried
+ * again after BAD_RETRY_MS (one failure can be a network hiccup or a slow TV start); only after
+ * BAD_MAX failures in a row is it skipped until a newer build is published. (Before package 1.6.1 a
+ * single failure skipped the build for good, so a TV could stay on its built-in copy for days.)
+ *
+ * The hosted copy is asked at its own address (pc.geekspro.us): the old imad-os.github.io/g address
+ * only answers with a redirect, an extra round trip that ate most of the 4 s a TV waits at start.
  *
  * ES5 only: this file runs on every supported engine before anything else.
  */
@@ -25,17 +31,21 @@
     'use strict';
 
     var SHELL = 1;                                    // bump only together with a new .wgt
-    var DEFAULT_REMOTE_BASE = 'https://imad-os.github.io/g/';
-    var MANIFEST_TIMEOUT_MS = 4000;
+    var DEFAULT_REMOTE_BASE = 'https://pc.geekspro.us/';
+    var OLD_REMOTE_BASES = ['https://imad-os.github.io/g/'];   // same site (redirects): a build saved under it still counts
+    var MANIFEST_TIMEOUT_MS = 5000;
+    var BAD_RETRY_MS = 30 * 60 * 1000;                // a failed build is tried again after this
+    var BAD_MAX = 3;                                  // ... until it failed this many times in a row
     var FILE_TIMEOUT_MS = 10000;
     var STALE_FILE_TIMEOUT_MS = 6000;                 // when running the last known hosted build without a fresh manifest
     var STALE_RETRY_MS = 10 * 60 * 1000;
     var READY_TIMEOUT_MS = 20000;
 
-    var LS_BAD_BUILD = 'boot_bad_build';
+    var LS_BAD_BUILD = 'boot_bad_build';              // { b: build, n: failures, at: time } (packages before 1.6.1: the build number alone)
     var LS_GOOD = 'boot_good';                        // { manifest, base, at }: last hosted build that ran fine
     var LS_STALE_FAIL = 'boot_stale_fail';            // time the last-known build could not be loaded
-    var LS_REMOTE_BASE = 'boot_remote_base';          // optional override (staging, tests)
+    var LS_REMOTE_BASE = 'boot_remote_base';
+    var LS_LAST_FAIL = 'boot_last_fail';              // { b, why, at }: why the last hosted build was given up (Control Panel > Update)          // optional override (staging, tests)
     var SS_FORCE_LOCAL = 'boot_force_local';
 
     var state = {
@@ -87,10 +97,29 @@
 
     function parse(text) { try { return JSON.parse(text); } catch (e) { return null; } }
 
-    // the saved last-known-good hosted manifest, only when it belongs to this hosted address
+    // the saved last-known-good hosted manifest, only when it belongs to this hosted address (or its old name)
     function readGood(base) {
         var o = parse(lsGet(LS_GOOD));
-        return o && o.base === base && isValid(o.manifest) ? o.manifest : null;
+        if (!o || !isValid(o.manifest)) return null;
+        if (o.base === base) return o.manifest;
+        if (base === DEFAULT_REMOTE_BASE) for (var i = 0; i < OLD_REMOTE_BASES.length; i++) if (o.base === OLD_REMOTE_BASES[i]) return o.manifest;
+        return null;
+    }
+
+    // the hosted build that failed here: { b, n, at }. An old package's mark (the number alone) is tried again at once.
+    function readBad() {
+        var v = lsGet(LS_BAD_BUILD), o = parse(v);
+        if (typeof o === 'number') return { b: o, n: 1, at: 0 };
+        return o && typeof o.b === 'number' ? o : null;
+    }
+    function isBad(build) {
+        var o = readBad();
+        return !!(o && o.b === build && (o.n >= BAD_MAX || Date.now() - (o.at || 0) < BAD_RETRY_MS));
+    }
+    function markBad(build) {
+        var o = readBad();
+        var n = o && o.b === build ? (o.n | 0) + 1 : 1;
+        lsSet(LS_BAD_BUILD, JSON.stringify({ b: build, n: n, at: Date.now() }));
     }
 
     function isValid(m) {
@@ -106,7 +135,8 @@
         // a build that failed with a fresh manifest is bad; a last-known build that failed (maybe only
         // the network) is not blamed, it just rests for a while
         if (state.stale) lsSet(LS_STALE_FAIL, String(Date.now()));
-        else lsSet(LS_BAD_BUILD, String(state.build));
+        else markBad(state.build);
+        lsSet(LS_LAST_FAIL, JSON.stringify({ b: state.build, why: String(reason).slice(0, 200), at: Date.now() }));
         ssSet(SS_FORCE_LOCAL, '1');
         location.reload();
     }
@@ -219,13 +249,12 @@
 
             get(base + 'app-manifest.json?t=' + Date.now(), MANIFEST_TIMEOUT_MS, function (rErr, rText) {
                 var remote = parse(rText);
-                var bad = lsGet(LS_BAD_BUILD);
                 var why;
                 if (rErr || !isValid(remote)) {
                     log('hosted manifest unavailable (' + (rErr || 'invalid') + ')');
                     // slow or no network: the last hosted build that worked here beats the (older) bundled copy
                     var good = readGood(base), failedAt = parseInt(lsGet(LS_STALE_FAIL), 10) || 0;
-                    if (good && good.build > local.build && good.shell === SHELL && String(good.build) !== bad && Date.now() - failedAt > STALE_RETRY_MS) {
+                    if (good && good.build > local.build && good.shell === SHELL && !isBad(good.build) && Date.now() - failedAt > STALE_RETRY_MS) {
                         log('using the last hosted build ' + good.build + ' (server slow or unreachable)');
                         state.reason = 'stale';
                         return boot(good, base, true);
@@ -237,8 +266,8 @@
                 } else if (remote.build <= local.build) {
                     log('bundled build ' + local.build + ' is up to date');
                     why = 'current';
-                } else if (bad === String(remote.build)) {
-                    log('hosted build ' + remote.build + ' previously failed, skipping');
+                } else if (isBad(remote.build)) {
+                    log('hosted build ' + remote.build + ' failed here recently, skipping');
                     why = 'bad';
                 } else {
                     state.reason = 'update';
@@ -260,6 +289,8 @@
             window.removeEventListener('error', onStartupError);
             // a hosted build that reached this point works on this TV: remember it for slow starts
             if (state.source === 'remote' && !state.stale) lsSet(LS_GOOD, JSON.stringify({ manifest: state.manifest, base: state.base, at: Date.now() }));
+            // it works now: forget an earlier failure of this build
+            if (state.source === 'remote') { var b = readBad(); if (b && b.b === state.build) { try { localStorage.removeItem(LS_BAD_BUILD); } catch (e) {} } }
             if (state.stale) lsSet(LS_STALE_FAIL, '0');
             hideSplash();
             log('ready (' + state.source + ' build ' + state.build + ')');
@@ -271,6 +302,8 @@
         base: function () { return state.base; },              // '' when bundled
         reason: function () { return state.reason; },          // why this copy runs (see state.reason); Settings > Update shows it
         stale: function () { return state.stale; },
+        remoteBase: remoteBase,                                 // where this package looks for the hosted copy (1.6.1+)
+        lastFail: function () { return parse(lsGet(LS_LAST_FAIL)); },   // { b, why, at } of the last hosted build given up
         manifest: function () { return state.manifest; },
         localManifest: function () { return state.localManifest; },
         localBase: function () { return state.localBase; }   // absolute URL of the packaged copy

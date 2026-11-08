@@ -15,7 +15,8 @@
 var Updater = (function () {
     'use strict';
 
-    var REMOTE_DEFAULT = 'https://imad-os.github.io/g/';
+    // packages before 1.6.1 look at the old address (it redirects to pc.geekspro.us): saved builds must name the same one
+    var REMOTE_OLD = 'https://imad-os.github.io/g/';
     var CHECK_TIMEOUT = 20000, FILE_TIMEOUT = 20000, PARALLEL = 3;
     var st = { state: 'idle', remote: null, done: 0, total: 0, error: '' };
     var listeners = [], token = 0, autoDone = false;
@@ -26,7 +27,7 @@ var Updater = (function () {
         // My PC opened from the web (a browser, the Android app): its own site. imad-os.github.io/g answers with a redirect
         // to the custom domain that carries no CORS header, so a check from another https origin always failed ('network')
         if (!b && location.protocol === 'https:') b = location.href.split(/[?#]/)[0].replace(/[^/]*$/, '');
-        b = b || REMOTE_DEFAULT;
+        if (!b) b = AppBoot.remoteBase ? AppBoot.remoteBase() : REMOTE_OLD;
         return b.charAt(b.length - 1) === '/' ? b : b + '/';
     }
 
@@ -100,6 +101,8 @@ var Updater = (function () {
     }
 
     function restart() {
+        // the person asked for this build: a failure of it at an earlier start must not keep it away
+        try { localStorage.removeItem('boot_bad_build'); localStorage.removeItem('boot_stale_fail'); } catch (e) {}
         var url = location.href.split(/[?#]/)[0];
         location.replace(url);
     }
@@ -111,11 +114,35 @@ var Updater = (function () {
         else if (st.state === 'downloading') set('available');
     }
 
+    // The built-in copy ran because the update server did not answer at start (a slow network as the TV wakes up):
+    // look again once the desktop is up, download the newer build quietly and say so. The next start runs it
+    // (the loader finds it online, or runs this saved copy if the server is slow again). Desktop page only.
+    function background(delay) {
+        if (!window.AppBoot || AppBoot.source() !== 'local' || (AppBoot.reason ? AppBoot.reason() : '') !== 'unreachable') return false;
+        if (location.protocol === 'https:' && !localStorage.getItem('boot_remote_base')) return false;        // the web: always current
+        setTimeout(function () {
+            if (st.state !== 'idle') return;
+            function on(s) {
+                if (s.state === 'available') return install();
+                if (s.state === 'downloading' || s.state === 'checking') return;
+                offChange(on);
+                if (s.state === 'ready' && window.Notify) {
+                    Notify.show({ id: 'upd', kind: 'info', title: I18n.t('updBgTitle'), text: I18n.t('updBgReady').replace('{v}', s.remote.version || s.remote.build), timeout: 9000 });
+                }
+            }
+            listeners.push(on);
+            check();
+        }, delay === undefined ? 15000 : delay);
+        return true;
+    }
+    function offChange(fn) { var i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); }
+
     return {
+        background: background,
         check: check, autoCheck: autoCheck, install: install, restart: restart, cancel: cancel,
         state: function () { return st; },
         onChange: function (fn) { listeners.push(fn); },
-        offChange: function (fn) { var i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); },
+        offChange: offChange,
         lastChecked: function () { return Store.get('update_checked', 0); },
         info: function () {
             return { version: AppBoot.version(), build: AppBoot.build(), source: AppBoot.source(),

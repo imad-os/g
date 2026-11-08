@@ -38,7 +38,7 @@ Games report scores with `host.submitScore(score, { player, players })`.
 - **Apps** (`js/launcher/apps/`): File Explorer (Home, This PC, Desktop, Games, Apps, Pictures,
   Documents), Browser, Calculator, Calendar (notes per day), Settings (System, Personalization,
   Accounts, Sound, Time & language, Gaming, Privacy & security, About) and Leaderboards.
-- **Updates:** the TV runs the online copy (imad-os.github.io/g) when it is newer than the built-in one,
+- **Updates:** the TV runs the online copy (pc.geekspro.us) when it is newer than the built-in one,
 checked at every start. A package with the current `js/boot/loader.js` waits 4 s for the server and, if
 it is slow, runs the last online build that worked on that TV (`boot_good`) instead of the older built-in
 copy. **Settings > My PC Update** (like Windows Update) checks with a 20 s timeout, downloads every file
@@ -183,7 +183,7 @@ docs/certification.md    certification walk-through
 
 This works the same way as Speedy IPTV. The `.wgt` contains the full launcher and every game, so it
 works with no server. At launch `js/boot/loader.js` fetches
-`https://imad-os.github.io/g/app-manifest.json` with a 2.5 s timeout. It runs the hosted copy only
+`https://pc.geekspro.us/app-manifest.json` (packages before 1.6.1: imad-os.github.io/g, which redirects there) with a 5 s timeout. It runs the hosted copy only
 when all of these hold:
 - `shell` equals `SHELL` in the loader;
 - `build` is newer than the bundled build;

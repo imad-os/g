@@ -231,6 +231,9 @@
         out.push({ kind: 'info', label: t('updLast'), value: last ? Desktop.dateText(new Date(last), { day: 'numeric', month: 'short' }) + ' ' + Desktop.timeText(new Date(last)) : t('updNever') });
         var why = { stale: 'updWhyStale', unreachable: 'updWhyUnreachable', bad: 'updWhyBad', forced: 'updWhyForced' }[inf.reason];
         if (why) out.push({ kind: 'info', label: t('updWhy'), value: t(why) });
+        // what made the last online build give up on this TV (package 1.6.1+)
+        var lf = (inf.reason === 'bad' || inf.reason === 'forced') && AppBoot.lastFail ? AppBoot.lastFail() : null;
+        if (lf && lf.why) out.push({ kind: 'info', label: t('updFailWhy'), value: t('build') + ' ' + lf.b + ': ' + lf.why });
         if (!inf.smart) out.push({ kind: 'text', value: t('updOldPackage') });
     }
 
