@@ -6143,7 +6143,7 @@ async function flowTests(browser, base) {
     const reads0 = appsReads();
 
     const open = async (id, forget) => {
-        if (forget) await pg.evaluate(() => Object.keys(sessionStorage).filter((k) => k === 'boot_pick' || /^arc_(games|sync)_/.test(k)).forEach((k) => sessionStorage.removeItem(k)));   // as before build 135 / package 1.6.2
+        if (forget) await pg.evaluate(() => Object.keys(sessionStorage).filter((k) => k === 'boot_pick' || /^arc_(games|sync)_/.test(k)).forEach((k) => sessionStorage.removeItem(k)));   // as before build 136 / package 1.6.2
         const hits = hostedHits.length, t = Date.now();
         await pg.focus(`#desk-icons [data-game="app-${id}"]`);
         await Promise.all([pg.waitForURL(new RegExp('play=app-' + id)), pg.keyboard.press('Enter')]);
@@ -6211,7 +6211,7 @@ async function flowTests(browser, base) {
     // the same switches the old way (the loader asks the server at every page change): for the numbers
     const slowOpen = await open('flow-good', true);
     const slowQuit = await quit('flow-good', true);
-    check(slowOpen.asked === 1 && slowQuit.asked === 1, 'the old way (before build 135 / package 1.6.2) each switch asks the server again');
+    check(slowOpen.asked === 1 && slowQuit.asked === 1, 'the old way (before build 136 / package 1.6.2) each switch asks the server again');
     console.log(`       start ${startMs} ms; open ${o.ms} ms / quit ${quick.ms} ms now; ${slowOpen.ms} ms / ${slowQuit.ms} ms the old way (server 250 ms away)`);
     if (shots) await pg.screenshot({ path: path.join(shots, 'flow-desktop-after-quit.png') });
 
