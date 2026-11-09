@@ -5896,6 +5896,20 @@ async function wallTests(browser, base) {
         check(await painted(page, 'w,rain,night'), 'rain at night: ' + await page.evaluate(() => DynWall._key()));
         check(await page.evaluate(() => { const f = document.querySelector('#wallpaper .dw-fx'); return !!f && getComputedStyle(f).animationName === 'dw-fall'; }), 'Moving rain and snow on: one sliding layer (CSS transform)');
         await shot(page, 'weather-rain-night');
+        // showers by day (imad's report 2026-11-09: rain on the widget, hardly any on the background): the same forecast, a grey sky, rain that is clearly seen and moves
+        await page.context().route(/api\.open-meteo\.com/, (r) => { const b = forecastBody(22); Object.assign(b.current, { weather_code: 81, is_day: 1, cloud_cover: 80, time: '2026-11-03T12:00' }); return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(b) }); });
+        await page.clock.setFixedTime(new Date('2026-11-03T12:00:00Z'));
+        await page.evaluate(() => { localStorage.removeItem('arc_dev_wxfc'); DynWall.refresh(); });
+        check(await painted(page, 'w,showers,day'), 'showers: ' + await page.evaluate(() => DynWall._key()));
+        const rainy = await page.evaluate(async () => {
+            const t = DynArt.rainTile('showers', 512), d = t.getContext('2d').getImageData(0, 0, 512, 512).data; let lit = 0;
+            for (let i = 3; i < d.length; i += 4) if (d[i] > 90) lit++;
+            const f = document.querySelector('#wallpaper .dw-fx'), y0 = new DOMMatrix(getComputedStyle(f).transform).m42;
+            await new Promise((ok) => setTimeout(ok, 150));
+            return { lit, moved: Math.abs(new DOMMatrix(getComputedStyle(f).transform).m42 - y0), widget: Weather.peek().data.now.code };
+        });
+        check(rainy.lit > 1500 && rainy.moved > 5 && rainy.widget === 81, 'the rain layer is clearly seen (' + rainy.lit + ' bright pixels per tile) and moves (' + rainy.moved.toFixed(0) + ' px in 150 ms); same forecast as the widget');
+        await shot(page, 'weather-showers-day');
         await page.evaluate(() => Win.open('calculator'));
         check(await page.evaluate(() => document.querySelector('#wallpaper .dw-fx').style.animationPlayState === 'paused'), 'the moving layer pauses under an app');
         await page.evaluate(() => { Win.close(); DynWall.setPref('motion', false); });

@@ -145,7 +145,7 @@ var DynWall = (function () {
         fxKind = kind;
         if (fx) { if (fx.parentNode) fx.parentNode.removeChild(fx); fx = null; }
         if (!kind || !box) return;
-        var tile = DynArt.rainTile(kind, 256);
+        var tile = DynArt.rainTile(kind, 512);
         fx = el('div', 'dw-fx dw-fx-' + (kind === 'snow' ? 'snow' : 'rain'));
         fx.style.backgroundImage = 'url(' + tile.toDataURL('image/png') + ')';
         tile.width = tile.height = 0;

@@ -265,7 +265,7 @@ var DynArt = (function () {
         autumn: { far: [140, 120, 130], hills: [[188, 126, 70], [160, 98, 54], [120, 74, 46]], tree: 'round', leaf: [214, 110, 40] },
         winter: { far: [120, 136, 160], hills: [[118, 140, 120], [96, 120, 102], [74, 98, 84]], tree: 'pine', leaf: [44, 86, 66] }
     };
-    var OVERCAST = { clear: 0, partly: 0.15, cloudy: 0.7, fog: 0.55, drizzle: 0.6, rain: 0.8, showers: 0.6, snow: 0.7, storm: 0.95 };
+    var OVERCAST = { clear: 0, partly: 0.15, cloudy: 0.7, fog: 0.55, drizzle: 0.65, rain: 0.8, showers: 0.7, snow: 0.7, storm: 0.95 };
 
     function weather(c, W, H, s) {
         var R = rng(s.seed || 1), o = OVERCAST[s.k] !== undefined ? OVERCAST[s.k] : 0.4, ph = s.phase, night = ph === 'night';
@@ -341,7 +341,7 @@ var DynArt = (function () {
         else { cc = [255, 255, 255]; cs = [176, 192, 214]; }
         var lx = night ? W * 0.74 : sx, ly = night ? H * 0.2 : sy, ys = [];
         if (o > 0.5) {
-            var deck = /^(rain|storm|drizzle|snow)$/.test(s.k) ? 0.68 : 0.5;     // rain: the grey comes down to the mountains
+            var deck = /^(rain|showers|storm|drizzle|snow)$/.test(s.k) ? 0.68 : 0.5;     // rain: the grey comes down to the mountains
             c.fillStyle = lin(c, 0, 0, 0, H * deck, [0, rgba(mix(cs, cc, 0.3), 0.85), 0.6, rgba(mix(cs, cc, 0.5), 0.5), 1, rgba(mix(cs, cc, 0.6), 0)]);
             c.fillRect(0, 0, W, H * deck);
             for (var dk = -0.1; dk < 1.1; dk += 0.16) cloud(c, W * (dk + R() * 0.06), H * (0.04 + R() * 0.14), W * (0.3 + R() * 0.12), mix(cc, cs, 0.2), cs, ca, R, lx, ly, true);
@@ -355,21 +355,40 @@ var DynArt = (function () {
         if (o > 0.6) { c.fillStyle = lin(c, 0, 0, 0, H * 0.4, [0, rgba(cs, 0.55), 1, rgba(cs, 0)]); c.fillRect(0, 0, W, H * 0.4); }
 
         if (s.k === 'storm') bolt(c, W * (0.3 + R() * 0.4), H * 0.18, H * 0.5, R);
-        if (!s.motion) {
-            if (s.k === 'rain' || s.k === 'storm') rain(c, W, H, 900, s.wind || -0.25, [210, 222, 240], 0.45, R, H * 0.12);
-            else if (s.k === 'showers') rain(c, W, H, 500, s.wind || -0.2, [215, 225, 240], 0.4, R, H * 0.15);
-            else if (s.k === 'drizzle') rain(c, W, H, 300, -0.1, [220, 228, 240], 0.3, R, H * 0.2);
-            else if (s.k === 'snow') snow(c, W, H, 420, R);
-        }
+        var still = s.motion ? 0.45 : 1;
+        if (s.k === 'rain' || s.k === 'storm') rain(c, W, H, Math.round(1400 * still), s.wind || -0.25, [222, 232, 248], 0.5 * still, R, H * 0.1);
+        else if (s.k === 'showers') rain(c, W, H, Math.round(1000 * still), s.wind || -0.2, [222, 232, 248], 0.45 * still, R, H * 0.12);
+        else if (s.k === 'drizzle') rain(c, W, H, Math.round(600 * still), -0.1, [226, 232, 244], 0.35 * still, R, H * 0.16);
+        else if (s.k === 'snow' && !s.motion) snow(c, W, H, 420, R);
         if (s.k === 'fog') fog(c, W, H, 0.4, R);
     }
     // the moving layer (tile of 256 px): rain or snow that slides down with a CSS transform (composited, no repaint)
+    // the moving layer (one square tile, slid down by a CSS transform: composited, no repaint): long bright streaks for rain,
+    // soft flakes for snow; near drops longer and brighter than far ones (owner report 2026-11-09: the old tile was too faint to see)
     function rainTile(kind, size) {
-        var cv = document.createElement('canvas'), c, R = rng(kind === 'snow' ? 11 : 5);
+        var cv = document.createElement('canvas'), c, R = rng(kind === 'snow' ? 11 : 5), i;
         cv.width = cv.height = size;
         c = cv.getContext('2d');
-        if (kind === 'snow') snow(c, size, size, 70, R, 0.9);
-        else rain(c, size, size, kind === 'drizzle' ? 26 : kind === 'showers' ? 40 : 60, -0.22, [214, 226, 244], kind === 'drizzle' ? 0.35 : 0.5, R);
+        if (kind === 'snow') {
+            for (i = 0; i < 90; i++) {
+                var x = R() * size, y = R() * size, r = 1.5 + Math.pow(R(), 2) * 4.5, g = c.createRadialGradient(x, y, 0, x, y, r);
+                g.addColorStop(0, 'rgba(255,255,255,0.95)'); g.addColorStop(0.6, 'rgba(255,255,255,0.7)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+                c.fillStyle = g; c.fillRect(x - r, y - r, r * 2, r * 2);
+            }
+            return cv;
+        }
+        var n = kind === 'drizzle' ? 70 : kind === 'showers' ? 110 : 150, lmax = kind === 'drizzle' ? 26 : 60, dx = -0.12;
+        c.lineCap = 'round';
+        for (i = 0; i < n; i++) {
+            var near = R(), L = lmax * (0.35 + 0.65 * near), x0 = R() * size, y0 = R() * size, a = 0.25 + 0.55 * near;
+            for (var w = 0; w < 2; w++) {              // drawn twice so a drop cut by the tile's edge comes back on the other side
+                var yy = y0 - w * size;
+                var gr = c.createLinearGradient(x0, yy, x0 + dx * L, yy + L);
+                gr.addColorStop(0, 'rgba(220,232,250,0)'); gr.addColorStop(1, 'rgba(235,242,255,' + a.toFixed(2) + ')');
+                c.strokeStyle = gr; c.lineWidth = 1 + near * 1.6;
+                c.beginPath(); c.moveTo(x0, yy); c.lineTo(x0 + dx * L, yy + L); c.stroke();
+            }
+        }
         return cv;
     }
 
