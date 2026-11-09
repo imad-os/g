@@ -361,6 +361,45 @@ var DynArt = (function () {
         else if (s.k === 'drizzle') rain(c, W, H, Math.round(600 * still), -0.1, [226, 232, 244], 0.35 * still, R, H * 0.16);
         else if (s.k === 'snow' && !s.motion) snow(c, W, H, 420, R);
         if (s.k === 'fog') fog(c, W, H, 0.4, R);
+        if (s.glass && /^(rain|showers|drizzle|storm)$/.test(s.k)) glass(c, W, H, s.glass, rng((s.seed || 1) + 77));
+    }
+    /* Raindrops on the glass (owner request 2026-11-09): the picture as seen through a wet window. Each drop is a small lens that shows
+     * the scene around it upside down (as real drops do), with a dark rim, a bright spot and a few running trails; tiny mist dots
+     * between them; on High the scene behind is a little soft. Drawn once with the picture (one copy of the canvas), never per frame. */
+    var GLASS = { low: [40, 250, 2, 0], medium: [90, 700, 6, 1.5], high: [170, 1400, 14, 3] };   // drops, mist dots, trails, blur behind
+    function glass(c, W, H, level, R) {
+        var g = GLASS[level]; if (!g) return;
+        var u = H / 1080, src = document.createElement('canvas'), sc, i;
+        src.width = W; src.height = H; sc = src.getContext('2d'); sc.drawImage(c.canvas, 0, 0);
+        if (g[3] && 'filter' in c) { c.save(); c.filter = 'blur(' + (g[3] * u).toFixed(1) + 'px)'; c.drawImage(src, 0, 0); c.restore(); }
+        c.fillStyle = 'rgba(225,232,240,' + (0.04 + g[3] * 0.02).toFixed(2) + ')'; c.fillRect(0, 0, W, H);      // the glass is a little misted
+        for (i = 0; i < g[1]; i++) {                                     // mist: tiny dots that catch the light
+            var mx = R() * W, my = R() * H, mr = (0.6 + R() * 1.4) * u;
+            disc(c, mx, my, mr, 'rgba(255,255,255,' + (0.08 + R() * 0.14).toFixed(2) + ')');
+        }
+        for (i = 0; i < g[2]; i++) {                                     // running trails: a thin wet line with a drop at its foot
+            var tx = R() * W, ty = H * (0.1 + R() * 0.6), tl = H * (0.08 + R() * 0.22);
+            c.fillStyle = lin(c, 0, ty, 0, ty + tl, [0, 'rgba(255,255,255,0)', 1, 'rgba(255,255,255,0.22)']);
+            c.fillRect(tx - 2.5 * u, ty, 5 * u, tl);
+            drop(c, src, tx, ty + tl, (9 + R() * 6) * u, R);
+        }
+        for (i = 0; i < g[0]; i++) {
+            var big = R(), r = (4 + Math.pow(big, 2) * 22) * u;
+            drop(c, src, R() * W, R() * H, r, R);
+        }
+    }
+    function drop(c, src, x, y, r, R) {
+        var rx = r * (0.85 + R() * 0.2), ry = r * (0.95 + R() * 0.25), k = 4;       // a drop shows a wide, flipped view of the scene
+        c.save();
+        c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, TAU); c.clip();
+        c.translate(x, y); c.scale(1, -1);
+        c.drawImage(src, x - rx * k, y - ry * k, rx * k * 2, ry * k * 2, -rx, -ry, rx * 2, ry * 2);
+        c.restore();
+        var rim = c.createRadialGradient(x, y, Math.min(rx, ry) * 0.55, x, y, Math.max(rx, ry));
+        rim.addColorStop(0, 'rgba(0,0,0,0)'); rim.addColorStop(0.7, 'rgba(0,0,0,0.1)'); rim.addColorStop(1, 'rgba(0,0,0,0.45)');
+        c.fillStyle = rim; c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, TAU); c.fill();
+        disc(c, x - rx * 0.32, y - ry * 0.38, Math.max(0.8, r * 0.2), 'rgba(255,255,255,0.75)');               // the light on it
+        c.fillStyle = 'rgba(255,255,255,0.22)'; c.beginPath(); c.ellipse(x + rx * 0.15, y + ry * 0.55, rx * 0.45, ry * 0.18, 0, 0, TAU); c.fill();
     }
     // the moving layer (tile of 256 px): rain or snow that slides down with a CSS transform (composited, no repaint)
     // the moving layer (one square tile, slid down by a CSS transform: composited, no repaint): long bright streaks for rain,

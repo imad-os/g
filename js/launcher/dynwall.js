@@ -21,7 +21,8 @@ var DynWall = (function () {
     function t(k) { return I18n.t(k); }
     function is(id) { return IDS.indexOf(id) >= 0; }
     function el(tag, cls) { var e = document.createElement(tag); e.className = cls; return e; }
-    function prefs() { var p = Store.get('dynwall', null) || {}; return { motion: !!p.motion, caption: p.caption !== false, weather: p.weather !== false }; }
+    function prefs() { var p = Store.get('dynwall', null) || {}; return { motion: !!p.motion, caption: p.caption !== false, weather: p.weather !== false, glass: GLASS_LV.indexOf(p.glass) >= 0 ? p.glass : 'medium' }; }
+    var GLASS_LV = ['off', 'low', 'medium', 'high'];        // raindrops on the glass, when it rains (owner request 2026-11-09)
     function setPref(k, v) { var p = prefs(); p[k] = v; Store.set('dynwall', p); refresh(); }
     function base() { return (typeof AppBoot !== 'undefined' && AppBoot.base && AppBoot.base()) || ''; }
     function stageSize() { return window.App && App.screenSize ? App.screenSize() : { w: 1920, h: 1080 }; }
@@ -224,8 +225,8 @@ var DynWall = (function () {
         var wind = n && typeof n.dir === 'number' && typeof n.wind === 'number' ? Math.max(-0.6, Math.min(0.6, -Math.sin(n.dir * Math.PI / 180) * n.wind / (f ? 25 : 40))) : -0.2;
         var motion = prefs().motion && /^(rain|showers|drizzle|storm|snow)$/.test(k);
         var s = { k: k, phase: dp.phase, sunT: dp.sunT, temp: temp, season: se, clouds: n ? n.clouds : 20, moon: moon, wind: wind, motion: motion,
-                  seed: day(Date.now()) };
-        paint(['w', k, s.phase, Math.round(s.sunT * 10), Math.round(temp / 4), se, Math.round((s.clouds || 0) / 20), Math.round(moon * 8), motion].join(','),
+                  glass: prefs().glass === 'off' ? '' : prefs().glass, seed: day(Date.now()) };
+        paint(['w', k, s.phase, Math.round(s.sunT * 10), Math.round(temp / 4), se, Math.round((s.clouds || 0) / 20), Math.round(moon * 8), motion, s.glass].join(','),
               function (c, W, H) { DynArt.weather(c, W, H, s); });
         setFx(motion ? (k === 'snow' ? 'snow' : k === 'storm' ? 'rain' : k) : '');
         setCaption(p && p.soon ? t('dwTomorrow').replace('%s', Events.title(p.soon)) : '', '');
@@ -314,6 +315,6 @@ var DynWall = (function () {
         setCaption(title, sub);
     }
 
-    return { IDS: IDS, OLD: OLD, is: is, start: start, stop: stop, pause: pause, resume: resume, refresh: refresh, prefs: prefs, setPref: setPref,
+    return { IDS: IDS, OLD: OLD, GLASS_LV: GLASS_LV, is: is, start: start, stop: stop, pause: pause, resume: resume, refresh: refresh, prefs: prefs, setPref: setPref,
              current: function () { return cur; }, _key: function () { return key; }, _timer: function () { return timer; }, _pick: pick };
 })();

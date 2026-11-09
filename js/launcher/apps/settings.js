@@ -83,6 +83,8 @@
                     out.push({ kind: 'toggle', label: t('dwWeatherOn'), desc: t('dwWeatherOnDesc'), get: function () { return DynWall.prefs().weather; }, set: function (v) { DynWall.setPref('weather', v); } });
                     out.push({ kind: 'action', label: t('dwWeatherPlace'), desc: wxPlaceText(), run: function () { showPage('widgets'); sub = 'widget'; widgetId = 'weather'; var f = renderMain(1); if (f) Focus.focus(f); } });   // Control Panel > Widgets > Weather
                     out.push({ kind: 'toggle', label: t('dwMotion'), desc: t('dwMotionDesc'), get: function () { return DynWall.prefs().motion; }, set: function (v) { DynWall.setPref('motion', v); } });
+                    out.push({ kind: 'select', label: t('dwGlass'), desc: t('dwGlassDesc'), value: function () { return t('dwLv_' + DynWall.prefs().glass); },
+                               adjust: function (d) { var l = DynWall.GLASS_LV, i2 = (l.indexOf(DynWall.prefs().glass) + d + l.length) % l.length; DynWall.setPref('glass', l[i2]); } });
                     out.push({ kind: 'select', label: t('dwCountry'), value: function () { return t('cc_' + Events.prefs().country); },
                                adjust: function (d) { var l = Events.COUNTRIES, i2 = (l.indexOf(Events.prefs().country) + d + l.length) % l.length; Events.setPrefs({ country: l[i2] }); DynWall.refresh(); } });
                     out.push({ kind: 'toggle', label: t('dwFootball'), desc: t('dwFootballDesc'), get: function () { return Events.prefs().football; }, set: function (v) { Events.setPrefs({ football: v }); DynWall.refresh(); } });

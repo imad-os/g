@@ -5910,6 +5910,26 @@ async function wallTests(browser, base) {
         });
         check(rainy.lit > 1500 && rainy.moved > 5 && rainy.widget === 81, 'the rain layer is clearly seen (' + rainy.lit + ' bright pixels per tile) and moves (' + rainy.moved.toFixed(0) + ' px in 150 ms); same forecast as the widget');
         await shot(page, 'weather-showers-day');
+        // raindrops on the glass: Medium by default, High / Low / Off; Off = no drops at all
+        check(/,medium\|/.test(await page.evaluate(() => DynWall._key())), 'raindrops on the glass: Medium by default ' + await page.evaluate(() => DynWall._key()));
+        await page.evaluate(() => DynWall.setPref('glass', 'high'));
+        check(await painted(page, 'w,showers,day') && /,high\|/.test(await page.evaluate(() => DynWall._key())), 'High: ' + await page.evaluate(() => DynWall._key()));
+        await page.evaluate(() => DynWall.setPref('motion', false));
+        await page.waitForTimeout(300);
+        await shot(page, 'weather-glass-high');
+        const lens = await page.evaluate(() => {        // the drops: the same scene drawn with and without them differs in many places
+            const W = 480, H = 270, a = document.createElement('canvas'), b = document.createElement('canvas'); a.width = b.width = W; a.height = b.height = H;
+            const s = { k: 'rain', phase: 'day', sunT: 0.4, season: 'autumn', temp: 12, seed: 3 };
+            DynArt.weather(a.getContext('2d'), W, H, s); DynArt.weather(b.getContext('2d'), W, H, Object.assign({}, s, { glass: 'high' }));
+            const da = a.getContext('2d').getImageData(0, 0, W, H).data, db = b.getContext('2d').getImageData(0, 0, W, H).data; let diff = 0;
+            for (let i = 0; i < da.length; i += 4) if (Math.abs(da[i] - db[i]) + Math.abs(da[i + 1] - db[i + 1]) + Math.abs(da[i + 2] - db[i + 2]) > 30) diff++;
+            return diff;
+        });
+        check(lens > 2000, 'High draws drops over the picture (' + lens + ' pixels changed)');
+        await page.evaluate(() => DynWall.setPref('glass', 'off'));
+        check(await page.waitForFunction(() => /,\|/.test(DynWall._key()), null, { timeout: 8000 }).then(() => true, () => false), 'Off: no drops ' + await page.evaluate(() => DynWall._key()));
+        await page.evaluate(() => { DynWall.setPref('glass', 'medium'); DynWall.setPref('motion', true); });
+        await page.waitForFunction(() => !!document.querySelector('#wallpaper .dw-fx'), null, { timeout: 8000 }).catch(() => {});
         await page.evaluate(() => Win.open('calculator'));
         check(await page.evaluate(() => document.querySelector('#wallpaper .dw-fx').style.animationPlayState === 'paused'), 'the moving layer pauses under an app');
         await page.evaluate(() => { Win.close(); DynWall.setPref('motion', false); });
@@ -6028,7 +6048,7 @@ async function wallTests(browser, base) {
                                                 [...document.querySelectorAll('.set-wps-live .set-wp')].map((b) => b.getAttribute('data-wp')).join());
         check(/Live backgrounds/.test(txt) && lists === 'bloom,aurora,sunset,night,aero,hills,dunes,material,lagoon|dyn_horizon,dyn_astro',
               'Personalization: the live backgrounds have their own section, Horizon and Earth now ' + lists);
-        check(/Horizon: the weather, the holidays and the big football nights/.test(txt) && /Show the weather/.test(txt) && /Weather place and units/.test(txt) && /Moving rain and snow/.test(txt) &&
+        check(/Horizon: the weather, the holidays and the big football nights/.test(txt) && /Show the weather/.test(txt) && /Weather place and units/.test(txt) && /Moving rain and snow/.test(txt) && /Raindrops on the glass/.test(txt) && /Medium/.test(txt) &&
               /Holidays of/.test(txt) && /Morocco/.test(txt) && /Football nights/.test(txt) && /semi-finals and final only/.test(txt) && /CAF Champions League/.test(txt) && /Show the event’s name/.test(txt),
               'Horizon in use: what it does, the weather, rain and snow, holidays and football options, and the football rules written out');
         await page.evaluate(() => { const m = document.querySelector('.set-main'); m.scrollTop = m.scrollHeight; });
