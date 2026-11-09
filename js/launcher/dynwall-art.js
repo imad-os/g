@@ -93,7 +93,7 @@ var DynArt = (function () {
         g.fillRect(0, 0, cw, ch);
         c.save();
         c.globalAlpha = a;
-        if ('filter' in c) c.filter = 'blur(' + Math.max(1, w * (flat ? 0.006 : 0.004)).toFixed(1) + 'px)';
+        if ('filter' in c && !PX) c.filter = 'blur(' + Math.max(1, w * (flat ? 0.006 : 0.004)).toFixed(1) + 'px)';
         c.drawImage(cv, x - w / 2 - pad, y - (base - h * 0.5));
         c.restore();
     }
@@ -356,12 +356,13 @@ var DynArt = (function () {
 
         if (s.k === 'storm') bolt(c, W * (0.3 + R() * 0.4), H * 0.18, H * 0.5, R);
         var still = s.motion ? 0.45 : 1;
+        if (PX) still *= 0.06;                // pixel art: a few crisp 1 px drops, not a grey veil
         if (s.k === 'rain' || s.k === 'storm') rain(c, W, H, Math.round(1400 * still), s.wind || -0.25, [222, 232, 248], 0.5 * still, R, H * 0.1);
         else if (s.k === 'showers') rain(c, W, H, Math.round(1000 * still), s.wind || -0.2, [222, 232, 248], 0.45 * still, R, H * 0.12);
         else if (s.k === 'drizzle') rain(c, W, H, Math.round(600 * still), -0.1, [226, 232, 244], 0.35 * still, R, H * 0.16);
         else if (s.k === 'snow' && !s.motion) snow(c, W, H, 420, R);
         if (s.k === 'fog') fog(c, W, H, 0.4, R);
-        if (s.glass && /^(rain|showers|drizzle|storm)$/.test(s.k)) glass(c, W, H, s.glass, rng((s.seed || 1) + 77));
+        if (s.glass && !PX && /^(rain|showers|drizzle|storm)$/.test(s.k)) glass(c, W, H, s.glass, rng((s.seed || 1) + 77));
     }
     /* Raindrops on the glass (owner request 2026-11-09): the picture as seen through a wet window. Each drop is a small lens that shows
      * the scene around it upside down (as real drops do), with a dark rim, a bright spot and a few running trails; tiny mist dots
@@ -731,5 +732,8 @@ var DynArt = (function () {
         }
     }
 
-    return { weather: weather, event: event, earth: earth, sun: sun, moonAge: moonAge, rainTile: rainTile, _rng: rng };
+    // game style (dynwall.js pixelate): drawn small, so no soft blurs or glass; set only while that small copy is drawn
+    var PX = false;
+    function pixel(on) { PX = !!on; }
+    return { pixel: pixel, weather: weather, event: event, earth: earth, sun: sun, moonAge: moonAge, rainTile: rainTile, _rng: rng };
 })();

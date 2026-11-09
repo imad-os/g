@@ -79,7 +79,9 @@
                 if (cw === 'dyn_astro') {
                     out.push({ kind: 'toggle', label: t('dwCaptionAstro'), get: function () { return DynWall.prefs().caption; }, set: function (v) { DynWall.setPref('caption', v); } });
                 } else {
-                    // Horizon: weather, then holidays, then football (with its rules written out), then the name on screen
+                    // Horizon: its look, weather, then holidays, then football (with its rules written out), then the name on screen
+                    out.push({ kind: 'select', label: t('dwStyle'), desc: t('dwStyleDesc'), value: function () { return t('dwStyle_' + DynWall.prefs().style); },
+                               adjust: function (d) { var l = DynWall.STYLES, i2 = (l.indexOf(DynWall.prefs().style) + d + l.length) % l.length; DynWall.setPref('style', l[i2]); } });
                     out.push({ kind: 'toggle', label: t('dwWeatherOn'), desc: t('dwWeatherOnDesc'), get: function () { return DynWall.prefs().weather; }, set: function (v) { DynWall.setPref('weather', v); } });
                     out.push({ kind: 'action', label: t('dwWeatherPlace'), desc: wxPlaceText(), run: function () { showPage('widgets'); sub = 'widget'; widgetId = 'weather'; var f = renderMain(1); if (f) Focus.focus(f); } });   // Control Panel > Widgets > Weather
                     out.push({ kind: 'toggle', label: t('dwMotion'), desc: t('dwMotionDesc'), get: function () { return DynWall.prefs().motion; }, set: function (v) { DynWall.setPref('motion', v); } });

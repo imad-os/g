@@ -21,7 +21,8 @@ var DynWall = (function () {
     function t(k) { return I18n.t(k); }
     function is(id) { return IDS.indexOf(id) >= 0; }
     function el(tag, cls) { var e = document.createElement(tag); e.className = cls; return e; }
-    function prefs() { var p = Store.get('dynwall', null) || {}; return { motion: !!p.motion, caption: p.caption !== false, weather: p.weather !== false, glass: GLASS_LV.indexOf(p.glass) >= 0 ? p.glass : 'medium' }; }
+    function prefs() { var p = Store.get('dynwall', null) || {}; return { motion: !!p.motion, caption: p.caption !== false, weather: p.weather !== false, glass: GLASS_LV.indexOf(p.glass) >= 0 ? p.glass : 'medium', style: STYLES.indexOf(p.style) >= 0 ? p.style : 'cartoon' }; }
+    var STYLES = ['cartoon', 'pixel'];                       // Horizon's look (owner request 2026-11-09): drawn, or game style (pixel art)
     var GLASS_LV = ['off', 'low', 'medium', 'high'];        // raindrops on the glass, when it rains (owner request 2026-11-09)
     function setPref(k, v) { var p = prefs(); p[k] = v; Store.set('dynwall', p); refresh(); }
     function base() { return (typeof AppBoot !== 'undefined' && AppBoot.base && AppBoot.base()) || ''; }
@@ -116,15 +117,28 @@ var DynWall = (function () {
     }
     function paint(k, draw) {
         if (!cv || k === key) return false;
-        var c = canvas();
-        k += '|' + cv.width + 'x' + cv.height;
+        var c = canvas(), pix = cur === 'dyn_horizon' && prefs().style === 'pixel';
+        k += (pix ? '|pixel' : '') + '|' + cv.width + 'x' + cv.height;
         if (k === key) return false;
         key = k;
         if (cv.style.backgroundImage) { cv.style.backgroundImage = ''; cv.className = 'dw-cv'; }
         saveLast();
+        if (pix) { var d0 = draw; draw = function (cc, W, H) { pixelate(cc, W, H, d0); }; }
         try { draw(c, cv.width, cv.height); } catch (e) { try { Reports.add('mypc', { kind: 'error', msg: 'background ' + cur + ': ' + String(e && e.message || e).slice(0, 200), stage: 'wallpaper' }); } catch (x) {} }
         painted = Date.now();
         return true;
+    }
+    // game style: the same scene drawn at 1/6 size with a short palette, then blown up with hard pixel edges (once per picture)
+    function pixelate(c, W, H, draw) {
+        var w = Math.max(80, Math.round(W / 6)), h = Math.max(45, Math.round(H / 6)), sm = document.createElement('canvas'), g, im, d, i;
+        sm.width = w; sm.height = h; g = sm.getContext('2d');
+        DynArt.pixel(true);
+        try { draw(g, w, h); } finally { DynArt.pixel(false); }
+        im = g.getImageData(0, 0, w, h); d = im.data;
+        for (i = 0; i < d.length; i += 4) { d[i] = (d[i] >> 4 << 4) + 8; d[i + 1] = (d[i + 1] >> 4 << 4) + 8; d[i + 2] = (d[i + 2] >> 4 << 4) + 8; }
+        g.putImageData(im, 0, 0);
+        c.save(); c.imageSmoothingEnabled = false; c.clearRect(0, 0, W, H); c.drawImage(sm, 0, 0, W, H); c.restore();
+        sm.width = sm.height = 0;
     }
     function setCaption(title, sub) {
         if (!cap) return;
@@ -315,6 +329,6 @@ var DynWall = (function () {
         setCaption(title, sub);
     }
 
-    return { IDS: IDS, OLD: OLD, GLASS_LV: GLASS_LV, is: is, start: start, stop: stop, pause: pause, resume: resume, refresh: refresh, prefs: prefs, setPref: setPref,
+    return { IDS: IDS, OLD: OLD, GLASS_LV: GLASS_LV, STYLES: STYLES, is: is, start: start, stop: stop, pause: pause, resume: resume, refresh: refresh, prefs: prefs, setPref: setPref,
              current: function () { return cur; }, _key: function () { return key; }, _timer: function () { return timer; }, _pick: pick };
 })();

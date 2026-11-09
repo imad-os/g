@@ -137,7 +137,8 @@
   `dyn_events` map to it, `DynWall.OLD`): a holiday / big football night today (or a holiday tomorrow after 18:00) shows that day, else the sky
   from `Weather` data (shared cache: day / dawn / dusk / night, season, temperature), else (profile `dynwall.weather` off) the season (summer =
   beach). Its options in Control Panel > Personalization: Show the weather, Weather place and units (opens Widgets > Weather), Moving rain and
-  snow (`dynwall.motion`, one 512 px tile slid by CSS transform, off by default), Raindrops on the glass (`dynwall.glass` off / low / medium (default) / high,
+  snow (`dynwall.motion`, one 512 px tile slid by CSS transform, off by default), Style (`dynwall.style`: cartoon = drawn / pixel = game style: the same scene drawn at 1/6 with `DynArt.pixel(true)`, 16 levels per
+  colour, scaled up with hard edges; realistic photos and own pictures are planned), Raindrops on the glass (`dynwall.glass` off / low / medium (default) / high,
   owner request 2026-11-09: lens drops showing the scene flipped, mist, trails, soft scene behind; drawn once with the picture, `DynArt` `glass`), Holidays of, Football nights, the football rules written out
   (`dwFootballRules`), Show the event's name (`dynwall.caption`). `dyn_astro` = Earth globe with the real day / night line, city lights, Moon
   phase (NASA public-domain photos `wallpapers/*.jpg`, read only while drawing). Drawn ONCE on a canvas (stage size x 1 / 0.75 / 0.5 by Perf tier)
