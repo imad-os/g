@@ -58,7 +58,7 @@ The app **must** use the same update method as Speedy IPTV (see `js/boot/loader.
 
 - **Back key (10009 / `XF86Back`):**
   - in a game → open the pause menu;
-  - from the pause menu → "Quit to menu" returns to the launcher;
+  - from the pause menu → "Quit" returns to the launcher;
   - on the launcher main menu → an **exit confirmation** dialog
     (`tizen.application.getCurrentApplication().exit()` on Yes).
 
@@ -279,7 +279,7 @@ enemies, world names, art, music and sounds.
 **UI**
 - HUD: lives, coins, score, star coins, timer; large and readable from 3 m (≥ 28 px at 1080p).
 - Pause menu:
-  - Resume, Restart stage, World map, Quit to menu;
+  - Resume, Restart stage, World map, Quit;
   - Voice Guide labels on every item.
 
 **Accessibility and options**

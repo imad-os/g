@@ -47,6 +47,10 @@
     var LS_REMOTE_BASE = 'boot_remote_base';
     var LS_LAST_FAIL = 'boot_last_fail';              // { b, why, at }: why the last hosted build was given up (Control Panel > Update)          // optional override (staging, tests)
     var SS_FORCE_LOCAL = 'boot_force_local';
+    // package 1.6.2: the copy this start picked and that reached ready ({ m: manifest, base, stale, reason }). Opening a game
+    // (?play=) or quitting it (?from=) is a page change inside the same start: it boots that copy again at once instead of
+    // asking the server (up to 5 s) at every switch. A real start (no ?play / ?from) or Settings > Update's Restart asks again.
+    var SS_PICK = 'boot_pick';
 
     var state = {
         source: 'local', base: '', build: 0, version: '', ready: false, aborting: false,
@@ -138,6 +142,7 @@
         else markBad(state.build);
         lsSet(LS_LAST_FAIL, JSON.stringify({ b: state.build, why: String(reason).slice(0, 200), at: Date.now() }));
         ssSet(SS_FORCE_LOCAL, '1');
+        ssDel(SS_PICK);
         location.reload();
     }
 
@@ -244,6 +249,14 @@
 
             if (web) { state.reason = 'current'; return boot(local, state.localBase); }
 
+            // a page change inside this start (a game opens or quits): the same copy as the desktop, no server round trip
+            var pick = /[?&](play|from)=/.test(location.search) ? parse(ssGet(SS_PICK)) : null;
+            if (pick && isValid(pick.m) && pick.m.shell === SHELL && (pick.base ? !isBad(pick.m.build) : pick.m.build === local.build)) {
+                state.reason = pick.reason || 'current';
+                log('page change: same copy as at start (build ' + pick.m.build + ')');
+                return boot(pick.m, pick.base || '', !!pick.stale);
+            }
+
             var base = remoteBase();
             if (base === state.localBase) { state.reason = 'current'; return boot(local, ''); }   // PC browser on the hosted site itself
 
@@ -292,6 +305,7 @@
             // it works now: forget an earlier failure of this build
             if (state.source === 'remote') { var b = readBad(); if (b && b.b === state.build) { try { localStorage.removeItem(LS_BAD_BUILD); } catch (e) {} } }
             if (state.stale) lsSet(LS_STALE_FAIL, '0');
+            ssSet(SS_PICK, JSON.stringify({ m: state.manifest, base: state.base, stale: state.stale, reason: state.reason }));
             hideSplash();
             log('ready (' + state.source + ' build ' + state.build + ')');
         },

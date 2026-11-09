@@ -11,7 +11,7 @@ Office submission.
 | Back on the main menu opens the exit confirmation | `js/launcher/main.js` route(): `confirm(exitTitle…)` | Automated ✅ |
 | Yes exits with `tizen.application.getCurrentApplication().exit()` | `exitApp()` | On TV |
 | Back in a game opens the pause menu | `GameHost.onAction` | Automated ✅ |
-| Pause menu → Quit to menu returns to the launcher and refocuses the game tile | `GameHost.exit` → `onGameExit` | Automated ✅ |
+| Pause menu → Quit returns to the launcher and refocuses the game tile | `GameHost.exit` → `onGameExit` | Automated ✅ |
 | Back on the settings, help, privacy and about screens closes them and restores focus | router | Browser ✅ / On TV |
 | Back while a game loads cancels the load (a late response is ignored) | `GameHost.onAction` | Browser ✅ / On TV |
 | Back is handled in exactly one place, with no `tizenhwkey` listener | `Input.onKey` → router | Code review ✅ |

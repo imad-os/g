@@ -126,6 +126,14 @@ The lifecycle is always:
 `onInit` → (you call `ready()`) → `onStart` → (`onPause` ↔ `onResume`)* → `onDestroy`.
 After `onPause` the game **MUST NOT** move or make sound until `onResume`.
 
+**While paused your app gets no input at all (API 15).** From `onPause` to `onResume` My PC's menu (or one of its screens:
+multiplayer, permission prompts, Google sign-in) is on top and owns every button. My PC sends no actions and no `MyPC.gamepad`
+events, makes your frame `inert` (no focus, mouse or touch), and the SDK also: stops keys pressed inside your frame before your own
+listeners, makes `navigator.getGamepads()` return no pads, pauses your playing `<audio>` / `<video>` (played again after `onResume`).
+An app **without** an `onPause` handler is held still as a safety net: its `requestAnimationFrame` callbacks wait until resume (like a
+hidden browser tab) and its AudioContexts are suspended. Do not rely on that: stop your loop and sound in `onPause` yourself.
+Include the SDK **before** your own scripts so it sees every key, pad read and AudioContext.
+
 **My PC in the background pauses the game.** When My PC loses the focus (the TV switches to another app or
 source, the PC window is minimized or another window is clicked, the phone goes to another app), My PC pauses the
 game (`onPause`) and shows its menu (with a short sound, like every time the menu opens); the player picks **Resume** (`onResume`). Nothing to do in your app.
@@ -152,7 +160,7 @@ still slow down a hidden page by itself. Standalone, outside My PC, the SDK does
 itself. Your app only sees `info.profile` and keeps progress with `MyPC.save` / `MyPC.load`, which are already per
 profile and backed up. **Never** build your own login, accounts, cloud saves, name entry for scores, Firebase or backend.
 
-Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text, 14 drive) and hide the feature
+Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text, 14 drive, 15 no input while paused) and hide the feature
 when it is missing.
 
 ### App config: `MyPC.app_config`

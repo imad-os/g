@@ -39,7 +39,7 @@ Upload them right the first time.
 | Crash, freeze or black screen (also with no network / slow network / server down) | bundled copy runs offline. Automated tests cover offline, broken hosted build and blacklisting |
 | Launch longer than **10 s** (5 s ideal) | splash at once. The menu appears in about 0.2 s offline, or at most 2.5 s waiting for the hosted manifest |
 | **No popup when the network is disconnected** (Speedy was rejected for this) | `#netpop` alert on disconnect and on reconnect, in menus and in games (tested) |
-| Back/Return key does nothing, or exits without confirmation | Back: game → pause menu → quit to menu; main menu → exit confirmation (tested). One handler, no double back |
+| Back/Return key does nothing, or exits without confirmation | Back: game → pause menu → Quit; main menu → exit confirmation (tested). One handler, no double back |
 | Multitasking: app not paused or audio still playing after Home, or state lost | `visibilitychange` → pause menu + `AudioContext.suspend()`. Stays paused on return |
 | Voice Guide reads nothing or garbage | real DOM focus, labels on every item in all 4 languages, live region for status, decorative images hidden |
 | UI cut off or misaligned on some model years | layout at 1920×1080, scaled to fit; plain CSS for Chromium 56+ |
@@ -99,7 +99,7 @@ works fully without a network.
 
 **Test scenarios:**
 1. Launch → main menu (focus on the first tile) → OK → game loads with a progress bar → OK to start.
-2. In a game press Return → pause menu → *Quit to menu* → focus returns to the same tile.
+2. In a game press Return → pause menu → *Quit* → focus returns to the same tile.
 3. Main menu → Return → *Exit Arcade?* → Yes closes the app; No or Return stays.
 4. Super Jumper → OK on stage 1-1 → play. Return → pause menu shows *Two players*. Choose it and
    press OK/A on a second controller (gamepad, or the remote if player 1 uses a gamepad) to add

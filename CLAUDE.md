@@ -37,6 +37,16 @@
   restart) are hosted code and reach TVs as a normal online update.
 - **Two pages:** opening a game or installed app loads `index.html?play=<id>` (no desktop is built
   there); quitting loads `index.html?from=<id>` (fresh desktop). Same packaged index.html/loader.
+  **Kept on purpose (owner asked 2026-11-09 "is the reload really best?")**: one page with the game framed over the desktop would
+  switch faster but keep the desktop and the session's memory under every game on small TVs, and a same-origin built-in game
+  still referenced by the desktop keeps its whole window alive; a page change frees everything for sure. What made switches slow
+  is cut instead: the loader reuses the copy picked at start for `?play=` / `?from=` (sessionStorage `boot_pick`, **package 1.6.2**),
+  the game list is kept for the session (`arc_games_<source>_<build>`), and back from a game the store list / AI services /
+  settings of every My PC are read again only after 30 min (`syncDue` in main.js). The game menu's last item is **Quit** (key `quit`,
+  never "Quit to menu": this is a PC). **While My PC's menu (or any screen that `hold()`s) is over an app, the app gets no input**
+  (owner rule 2026-11-09): the frame is `inert` and loses the focus, and the SDK (API 15, `freeze`) stops keys before the app's
+  listeners, makes `navigator.getGamepads()` empty, pauses its media; an app with no `onPause` also has its rAF held and its
+  AudioContexts suspended. Tests: `MYPC_ONLY=flow node tests/run-tests.mjs`.
 - `js/launcher/`: desktop shell (`desktop.js`), full-screen app window (`window.js`), apps
   (`apps/*.js`: settings, explorer, browser, calculator, calendar, scores), on-screen keyboard,
   profiles, `game-host.js` (bundled games in a same-origin iframe; installed apps in a sandboxed
