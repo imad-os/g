@@ -293,7 +293,7 @@ var Desktop = (function () {
     }
     function pollState() {
         var st = window.Rooms && Rooms.status ? Rooms.status() : [], s = 'off', i;
-        for (i = 0; i < st.length; i++) { if (st[i].state === 'fast') s = 'fast'; else if (st[i].state === 'slow' && s !== 'fast') s = 'slow'; }
+        for (i = 0; i < st.length; i++) { if (st[i].state === 'fast') s = 'fast'; else if (st[i].state === 'slow' && s !== 'fast') s = 'slow'; else if (st[i].state === 'rest' && s === 'off') s = 'rest'; }
         return { s: s, list: st };
     }
     function ago(t) {
@@ -306,7 +306,7 @@ var Desktop = (function () {
         for (i = 0; i < p.list.length; i++) {
             r = p.list[i];
             line = (r.app === 'controller' ? I18n.t('pollCtrl') : I18n.t('pollApp').replace('%s', r.app)) + ' (' + r.room + '): ';
-            line += r.state === 'fast' ? I18n.t('pollFast') : r.state === 'slow' ? I18n.t('pollSlow').replace('%n', Math.round(r.wait / 1000)) : I18n.t('pollOff');
+            line += r.state === 'fast' ? I18n.t('pollFast') : r.state === 'slow' ? I18n.t('pollSlow').replace('%n', Math.round(r.wait / 1000)) : r.state === 'rest' ? I18n.t('pollRest') : I18n.t('pollOff');
             line += '. ' + I18n.t('pollWhy') + ' ' + I18n.t('pollWhy_' + r.why).replace('%s', r.who || '?') + ', ' + ago(r.at) + '.';
             if (r.last) line += ' ' + I18n.t('pollCount').replace('%n', r.polls).replace('%t', ago(r.last)) + '.';
             out.push(line);
@@ -317,7 +317,7 @@ var Desktop = (function () {
         var el = $('tray-poll'); if (!el) return;
         var p = pollState(), cls = 'tray-poll ' + p.s;
         if (el.className !== cls) el.className = cls;
-        var label = I18n.t('pollTitle') + ': ' + I18n.t(p.s === 'fast' ? 'pollFast' : p.s === 'slow' ? 'pollSlowShort' : 'pollOff');
+        var label = I18n.t('pollTitle') + ': ' + I18n.t(p.s === 'fast' ? 'pollFast' : p.s === 'slow' ? 'pollSlowShort' : p.s === 'rest' ? 'pollRest' : 'pollOff');
         if (el.getAttribute('aria-label') !== label) el.setAttribute('aria-label', label);
         el.title = pollText();
     }

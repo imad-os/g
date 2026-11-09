@@ -2446,6 +2446,14 @@ async function main() {
             await E.evaluate(() => { document.dispatchEvent(new Event('visibilitychange')); document.dispatchEvent(new Event('visibilitychange')); });
             const v1 = pq(); await E.waitForTimeout(250);
             check(pq() - v1 <= 1 && /slow/.test((await light()).c), 'shown events in a row (a window uncovering the browser) never restart the fast checks');
+            // 2 minutes (shortened) after the last thing that happened: resting, grey, one check a minute (shortened)
+            await E.evaluate(() => { Rooms.LIMITS.restAfter = 500; Rooms.LIMITS.rest = 1500; });
+            await E.waitForFunction(() => /tray-poll rest/.test(document.getElementById('tray-poll').className), null, { timeout: 4000 }).catch(() => {});
+            const lr = await light(); const r0 = pq(); await E.waitForTimeout(1200);
+            check(/tray-poll rest/.test(lr.c) && /resting, one check every 60 s/.test(lr.t) && /2 minutes without anything/.test(lr.t) && pq() - r0 <= 1, 'resting: grey, one check a minute after 2 minutes with nothing (' + lr.t + ', ' + (pq() - r0) + ' check)');
+            await call(E, 'wake', { room: oq.r.id }); await E.waitForTimeout(150);
+            check(/tray-poll fast/.test((await light()).c), 'resting ends at the next thing that happens (wake): green again');
+            await E.evaluate(() => { Rooms.LIMITS.restAfter = 120000; Rooms.LIMITS.rest = 60000; });
             await E.evaluate(() => window.S.destroy());
             const l3 = await light();
             check(/tray-poll off/.test(l3.c) && /No Firestore checks/.test(l3.t), 'taskbar light: grey with "No Firestore checks" once no room is open');

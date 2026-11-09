@@ -193,7 +193,7 @@
                 if (err === 'full') { stop(); ui.err.textContent = t('gcFull'); return; }
                 if (err) return fail(err);
                 curReq = res.id;
-                wait = setTimeout(function () { fail('timeout'); }, 30000);    // a quiet TV looks for phones every 10 s
+                wait = setTimeout(function () { fail('timeout'); }, 65000);    // a resting TV looks for phones once a minute
             });
         }, function () { fail('connect'); });
     }

@@ -124,6 +124,7 @@ svg { display: block; width: 100%; height: 100%; }
 .tray-wp svg { display: block; width: 100%; height: 100%; }
 @-webkit-keyframes tray-spin { to { -webkit-transform: rotate(360deg); } }
 @keyframes tray-spin { to { transform: rotate(360deg); } }
+/* .rest (one check a minute) keeps the grey of .off */
 .tray-poll:focus { background: rgba(255, 255, 255, 0.12); }
 .compact .tray-poll { width: 72px; height: 72px; }
 .compact .tray-wp { width: 44px; height: 44px; }

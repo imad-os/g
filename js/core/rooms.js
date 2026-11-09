@@ -8,16 +8,17 @@
  *   var s = new Rooms.Session(appId, profileName, function (event, data) { ... });   events: 'request', 'answer', 'denied', 'closed'
  *   s.call(op, args, function (errCode, result) { ... })    op: open list ask accept decline close cancel wake
  * Request polling (the host's only repeated read, one runQuery on rooms/{room}/reqs): every 2 s for the first minute after
- * `open`, a request, a player leaving or `wake`; My PC shown again = one check at once (rate unchanged); then slower and slower (x1.5) up to `idle` ms (open's arg, default 5 s, at most
+ * `open`, a request, a player leaving or `wake`; 2 minutes after the last of those it rests: one check a minute
+ * (owner request 2026-11-09); My PC shown again = one check at once (rate unchanged); then slower and slower (x1.5) up to `idle` ms (open's arg, default 5 s, at most
  * 30 s); none while the room is full or the page is hidden (another TV app / source). Firestore REST has no listener.
- * Rooms.status() -> [{ app, room, state: 'fast' | 'slow' | 'off', wait (ms to the next check), why, at (when `why` happened),
+ * Rooms.status() -> [{ app, room, state: 'fast' | 'slow' | 'rest' | 'off', wait (ms to the next check), why, at (when `why` happened),
  *   polls (checks made), last (time of the last check) }] for every room this page hosts; Rooms.onStatus(fn) is called on every
- *   change (the taskbar's light, js/launcher/desktop.js). `why` is a key: open request left wake shown full hidden backoff.
+ *   change (the taskbar's light, js/launcher/desktop.js). `why` is a key: open request left wake shown full hidden backoff rest.
  * Error codes: offline denied full gone invalid unavailable. */
 var Rooms = (function () {
     'use strict';
 
-    var L = { name: 24, payload: 6000, ttl: 45000, beat: 15000, askTtl: 60000, poll: 2000, pollIdle: 5000, pollMaxIdle: 30000, fastFor: 60000, askPoll: 1500, listMax: 20,
+    var L = { name: 24, payload: 6000, ttl: 45000, beat: 15000, askTtl: 60000, poll: 2000, pollIdle: 5000, pollMaxIdle: 30000, fastFor: 60000, restAfter: 120000, rest: 60000, askPoll: 1500, listMax: 20,
               minMax: 2, maxMax: 8, defMax: 2, asksPerMin: 5, opensPerMin: 6, timeout: 6000 };
     var ALPHA = 'abcdefghjkmnpqrstuvwxyz23456789';
     var asks = [], opens = [];                       // TV-wide rate limits (timestamps)
@@ -95,16 +96,18 @@ var Rooms = (function () {
             clearTimeout(r.poll);
             var t = Date.now(), wait;
             if (t < r.fastUntil) wait = L.poll;
+            else if (t - r.actAt >= L.restAfter) wait = L.rest;              // 2 minutes with nothing happening: resting, 1 check a minute
             else wait = r.wait = Math.min(r.idle, Math.max(L.poll, Math.round((r.wait || L.poll) * 1.5)));
             r.curWait = wait;
             if (r.n >= r.max) note(r, 'off', 'full');
             else if (hidden()) note(r, 'off', 'hidden');
+            else if (wait === L.rest && t >= r.fastUntil) note(r, 'rest', r.state !== 'rest' ? 'rest' : '');
             else if (wait > L.poll) note(r, 'slow', r.state === 'fast' || r.why === 'full' || r.why === 'hidden' ? 'backoff' : '');
             else note(r, 'fast', '');
             r.poll = setTimeout(function () { poll(r); }, wait);
         }
         function fast(r, why, who) {                 // a guest is likely to come soon: poll every 2 s for a minute
-            r.fastUntil = Date.now() + L.fastFor; r.wait = 0;
+            r.fastUntil = r.actAt = Date.now(); r.fastUntil += L.fastFor; r.wait = 0;
             if (why) note(r, 'fast', why, who);
             if (!r.busy) { clearTimeout(r.poll); r.poll = setTimeout(function () { poll(r); }, 0); }
         }
@@ -119,7 +122,7 @@ var Rooms = (function () {
                     var q = docs[i], d = q.data;
                     if (r.seen[q.id] || d.answer || d.no || !str(d.offer, L.payload) || ms(d.exp) < now()) continue;
                     r.seen[q.id] = 1;
-                    r.fastUntil = Date.now() + L.fastFor; r.wait = 0;            // more may follow (a second phone, friends)
+                    r.actAt = Date.now(); r.fastUntil = r.actAt + L.fastFor; r.wait = 0;   // more may follow (a second phone, friends)
                     note(r, 'fast', 'request', cleanName(d.name, ''));
                     fire('request', { room: r.id, id: q.id, name: cleanName(d.name, ''), offer: d.offer });
                 }
@@ -175,7 +178,7 @@ var Rooms = (function () {
                 var idle = Math.floor(+args.idle || L.pollIdle);
                 idle = Math.max(L.poll, Math.min(L.pollMaxIdle, idle));
                 var r = { id: fixed || id(8), name: cleanName(args.name, profileName), max: max, n: 1, seen: {}, busy: false, beat: 0, poll: 0,
-                          idle: idle, wait: 0, fastUntil: Date.now() + L.fastFor,
+                          idle: idle, wait: 0, fastUntil: Date.now() + L.fastFor, actAt: Date.now(),
                           app: appId, state: 'fast', curWait: L.poll, why: 'open', who: '', whyAt: Date.now(), polls: 0, last: 0 };
                 room = r;                                                    // reserved while the write is in flight
                 sync(function (e0) {
