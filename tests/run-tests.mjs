@@ -358,6 +358,7 @@ async function main() {
     if (process.env.MYPC_ONLY === 'drive') { await driveTests(browser, base); await drivePhoneTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'calendar') { await calendarTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'clock') { await clockTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'ring') { await ringTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'flow') { await flowTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'music') { await musicTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
 
@@ -4788,6 +4789,7 @@ async function main() {
 
     await wallTests(browser, base);
     await flowTests(browser, base);
+    await ringTests(browser, base);
 
     await browser.close();
     srv.close();
@@ -6220,4 +6222,55 @@ async function flowTests(browser, base) {
     check(JSON.stringify(labels) === JSON.stringify(['Quit', 'Quitter', 'Salir', 'خروج']), '"Quit" in the 4 languages ' + JSON.stringify(labels));
     check(pg.errors.length === 0, 'no page errors ' + pg.errors.join('; '));
     await pg.context().close();
+}
+
+// 47. The focus ring of a desktop icon / Start tile shows whole at every edge (the scrolling box clips anything outside it). MYPC_ONLY=ring.
+async function ringTests(browser, base) {
+    console.log('47. Focus ring: desktop icons and Start tiles show their whole ring at the left, top and bottom edges');
+    const shots = process.env.MYPC_SHOTS;
+    const page = await newPage(browser, base, {});
+    // the ring of the focused item: drawn, and every side of it inside the box that clips it
+    const ring = () => page.evaluate(() => {
+        const el = document.activeElement, r = el.getBoundingClientRect(), cs = getComputedStyle(el).boxShadow;
+        const m = /(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+(-?[\d.]+)px/.exec(cs), k = r.width / el.offsetWidth;   // the stage is scaled
+        const s = /inset/.test(cs) || !m ? 0 : +m[4] * k;
+        let box = el.parentElement; while (box && getComputedStyle(box).overflowX === 'visible' && getComputedStyle(box).overflowY === 'visible') box = box.parentElement;
+        const b = box.getBoundingClientRect();
+        const cut = { left: b.left - (r.left - s), top: b.top - (r.top - s), right: r.right + s - b.right, bottom: r.bottom + s - b.bottom };
+        return { drawn: !!m, cut: Object.keys(cut).filter((x) => cut[x] > 0.5) };
+    });
+    const say = (r) => r.cut.length ? ' (cut at the ' + r.cut.join(', ') + ')' : '';
+    await page.goto(base + 'index.html');
+    await page.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
+    await page.evaluate(() => { const d = document.getElementById('desk-icons'); while (d.querySelectorAll('.dicon').length < 12) d.appendChild(d.querySelector('.dicon').cloneNode(true)); });   // enough to fill a column and wrap
+    const perCol = await page.evaluate(() => { const a = document.querySelectorAll('#desk-icons .dicon'), x = a[0].offsetLeft; let n = 0; while (a[n] && a[n].offsetLeft === x) n++; return n; });
+    for (const [i, name] of [[0, 'top-left'], [perCol - 1, 'bottom-left'], [perCol, 'top of column 2']]) {
+        await page.evaluate((i) => document.querySelectorAll('#desk-icons .dicon')[i].focus(), i);
+        const r = await ring();
+        check(r.drawn && r.cut.length === 0, `desktop icon at the ${name}: ring drawn whole${say(r)}`);
+        if (shots) await page.screenshot({ path: path.join(shots, 'ring-desktop-' + name.replace(/ /g, '-') + '.png') });
+    }
+    await page.evaluate(() => Desktop.openStart());
+    await page.waitForSelector('#start-pinned .stile', { timeout: 5000 });
+    await page.evaluate(() => document.querySelector('#start-pinned .stile').focus());
+    const r = await ring();
+    check(r.drawn && r.cut.length === 0, `first Start tile: ring drawn whole${say(r)}`);
+    if (shots) { await page.waitForTimeout(500); await page.screenshot({ path: path.join(shots, 'ring-start.png') }); }
+    // every theme (its class only; nothing saved): the top-left icon and the first Start tile
+    const ids = await page.evaluate(() => Themes.LIST.map((t) => t.id));
+    for (const id of ids) {
+        await page.evaluate((id) => { const h = document.documentElement; Themes.LIST.forEach((t) => h.classList.toggle('th-' + t.id, t.id === id)); }, id);
+        const out = [];
+        for (const sel of ['#start-pinned .stile', '#desk-icons .dicon']) {
+            if (sel[1] === 'd') await page.evaluate(() => Desktop.closeStart());
+            await page.evaluate((sel) => document.querySelector(sel).focus(), sel);
+            const t = await ring();
+            if (t.cut.length) out.push(sel + say(t));
+        }
+        check(out.length === 0, `theme ${id}: first icon and Start tile not cut` + (out.length ? ' ' + out.join('; ') : ''));
+        if (shots && (id === 'win7' || id === 'xp')) await page.screenshot({ path: path.join(shots, 'ring-desktop-' + id + '.png') });
+        await page.evaluate(() => Desktop.openStart());
+    }
+    check(page.errors.length === 0, 'no page errors' + (page.errors.length ? ': ' + page.errors[0] : ''));
+    await page.context().close();
 }

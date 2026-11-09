@@ -22,9 +22,12 @@ svg { display: block; width: 100%; height: 100%; }
          background: #202020; -webkit-transform-origin: 0 0; transform-origin: 0 0; }
 
 /* the focus ring: thick and white, readable from the sofa */
-.dicon:focus, .tb-btn:focus, .tray-clock:focus, .stile:focus, .srec:focus, .start-user:focus, .start-power:focus,
+.tb-btn:focus, .tray-clock:focus, .srec:focus, .start-user:focus, .start-power:focus,
 .set-nav-btn:focus, .set-row:focus, .set-wp:focus, .fx-nav:focus, .fx-item:focus, .icon-btn:focus, .pill-btn:focus,
 .br-addr:focus, .br-search:focus, .br-link:focus, .calc-key:focus, .cal-day:focus, .btn:focus, .pcard:focus { box-shadow: 0 0 0 4px #fff; }
+/* desktop icons and Start tiles sit in scrolling boxes, which cut anything drawn outside them: an outer ring lost its
+   left / top / bottom side at the edges. Drawn inside the item instead (same width, no extra layer, nothing to lay out). */
+.dicon:focus, .stile:focus { box-shadow: inset 0 0 0 4px #fff; }
 
 /* ---------- buttons (dialogs, pause menu, profiles) ---------- */
 .btn { display: inline-block; min-width: 200px; padding: 16px 40px; font-size: 28px; font-weight: 600; line-height: 1.2;

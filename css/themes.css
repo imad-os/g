@@ -36,7 +36,7 @@ html.th-ios { --acc: #0a84ff; --ink: #fff; }
 .th-win7 .win-close { align-self: flex-start; width: 112px; height: 56px; margin-right: 16px; padding: 12px 38px; border-radius: 0 0 8px 8px;
                       border: 1px solid rgba(0, 0, 0, 0.45); border-top: 0; background: linear-gradient(180deg, #e8a593, #c75050 50%, #b1291a); }
 .th-win7 .win-close:focus { background: linear-gradient(180deg, #ffbcae, #e64a4a 50%, #c42b1c); box-shadow: 0 0 0 3px #fff; }
-.th-win7 .dicon:focus { background: linear-gradient(180deg, rgba(160, 205, 255, 0.45), rgba(90, 150, 230, 0.3)); box-shadow: 0 0 0 3px rgba(200, 230, 255, 0.95); }
+.th-win7 .dicon:focus { background: linear-gradient(180deg, rgba(160, 205, 255, 0.45), rgba(90, 150, 230, 0.3)); box-shadow: inset 0 0 0 3px rgba(200, 230, 255, 0.95); }
 
 /* ---------- Windows XP style: blue taskbar, green "start", light blue tray, white Start menu ---------- */
 .th-xp .stage { font-family: Tahoma, Verdana, "Segoe UI", Arial, sans-serif; }
@@ -62,7 +62,8 @@ html.th-ios { --acc: #0a84ff; --ink: #fff; }
                        background: linear-gradient(180deg, #3d95ff, #245edb 50%, #1f55c9); border-bottom: 3px solid #f0a33a; }
 .th-xp .start-h { color: #1f55c9; }
 .th-xp .srec-sub { color: #555; }
-.th-xp .start :is(.stile, .srec):focus { background: #dbe8fb; box-shadow: 0 0 0 4px #316ac5; }
+.th-xp .start .srec:focus { background: #dbe8fb; box-shadow: 0 0 0 4px #316ac5; }
+.th-xp .start .stile:focus { background: #dbe8fb; box-shadow: inset 0 0 0 4px #316ac5; }
 .th-xp .start-foot { color: #fff; border: 0; border-radius: 0; background: linear-gradient(180deg, #3d95ff, #245edb 50%, #1f55c9); }
 .th-xp .win-bar { border-bottom: 0; border-radius: 14px 14px 0 0; background: linear-gradient(180deg, #0997ff 0%, #0053ee 10%, #0050ee 50%, #0066ff 90%, #0055e5 100%); }
 .th-xp .win-title { font-size: 30px; font-weight: 700; text-shadow: 1px 1px 1px #0a1f5c; }
