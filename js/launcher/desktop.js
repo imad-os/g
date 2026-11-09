@@ -424,6 +424,7 @@ var Desktop = (function () {
         var def = typeof GlobalSettings !== 'undefined' ? GlobalSettings.defaultWallpaper() : '';
         if (!findWallpaper(def)) def = 'bloom';
         var w = Store.get('wallpaper', def);
+        if (window.DynWall && DynWall.OLD[w]) w = DynWall.OLD[w];       // Live weather / Holidays and events became Horizon
         return findWallpaper(w) ? w : def;
     }
     function setWallpaper(w) { Store.set('wallpaper', w); paintWallpaper(); }

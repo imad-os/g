@@ -46,16 +46,77 @@ var DynArt = (function () {
             disc(c, x, y, r, rgba(R() < 0.15 ? [255, 236, 200] : [225, 235, 255], (0.35 + R() * 0.65) * (a === undefined ? 1 : a)));
         }
     }
-    function cloud(c, x, y, w, col, shade, a, R) {
-        var n = 8 + ((R() * 5) | 0);
-        for (var i = 0; i < n; i++) {
-            var t = (i / (n - 1)) - 0.5, px = x + t * w * 0.85 + (R() - 0.5) * w * 0.08;
-            var r = w * (0.13 + 0.12 * Math.cos(t * PI) + R() * 0.05), py = y - Math.cos(t * PI) * w * 0.07 + (R() - 0.5) * w * 0.04;
-            var g = c.createRadialGradient(px - r * 0.2, py - r * 0.35, r * 0.05, px, py, r);
-            g.addColorStop(0, rgba(col, a)); g.addColorStop(0.55, rgba(mix(col, shade, 0.45), a * 0.9)); g.addColorStop(1, rgba(shade, 0));
-            c.fillStyle = g;
-            c.beginPath(); c.arc(px, py, r, 0, TAU); c.fill();
+    // a cumulus: puffs on a flat base, drawn on its own small canvas, lit from the sun's side (lx, ly), shaded underneath, soft edges.
+    // flat > 0 makes a long, low layer (overcast, rain). Drawn once per background, never per frame.
+    function cloud(c, x, y, w, col, shade, a, R, lx, ly, flat) {
+        var h = w * (flat ? 0.28 : 0.5), pad = Math.ceil(w * 0.1), cw = Math.ceil(w + pad * 2), ch = Math.ceil(h + pad * 2);
+        var cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+        var g = cv.getContext('2d'), base = pad + h * 0.86, puffs = [], n = (flat ? 10 : 6) + ((R() * 5) | 0), i, r, px, py, t;
+        for (i = 0; i < n; i++) {
+            t = n > 1 ? i / (n - 1) : 0.5;
+            var bulge = Math.sin(PI * (0.08 + 0.84 * t));
+            r = w * (flat ? 0.05 + 0.07 * bulge : 0.07 + 0.15 * bulge) * (0.75 + R() * 0.5);
+            px = pad + w * (0.08 + 0.84 * t) + (R() - 0.5) * w * 0.04;
+            py = base - r * (0.5 + R() * 0.3);
+            puffs.push([px, py, r]);
         }
+        if (!flat) for (i = 0; i < 2 + ((R() * 3) | 0); i++) {      // the towers on top
+            t = 0.3 + R() * 0.4; r = w * (0.08 + R() * 0.07);
+            puffs.push([pad + w * t, base - h * (0.42 + R() * 0.22), r]);
+        }
+        var big = puffs.length;
+        for (i = 0; i < big; i++) for (var j = 0; j < 3; j++) {
+            var an = -PI * (0.15 + 0.7 * R()), pr = puffs[i][2];
+            puffs.push([puffs[i][0] + Math.cos(an) * pr * 0.78, puffs[i][1] + Math.sin(an) * pr * 0.78, pr * (0.28 + R() * 0.22)]);
+        }
+        g.fillStyle = '#fff';
+        for (i = 0; i < puffs.length; i++) { g.beginPath(); g.arc(puffs[i][0], puffs[i][1], puffs[i][2], 0, TAU); g.fill(); }
+        g.globalCompositeOperation = 'destination-out';
+        g.fillStyle = lin(g, 0, base - h * 0.06, 0, base + h * 0.04, [0, 'rgba(0,0,0,0)', 1, 'rgba(0,0,0,1)']);
+        g.fillRect(0, base - h * 0.06, cw, ch);
+        // body: lit top, darker belly
+        g.globalCompositeOperation = 'source-atop';
+        g.fillStyle = lin(g, 0, pad, 0, base, [0, mix(col, shade, 0.08), 0.5, mix(col, shade, 0.32), 1, shade]);
+        g.fillRect(0, 0, cw, ch);
+        // every puff a little round: light on the sun's side, shadow on the other
+        var cx = x, cy = y, dx = (lx === undefined ? cx - w : lx) - cx, dy = (ly === undefined ? cy - w : ly) - cy, dl = Math.sqrt(dx * dx + dy * dy) || 1;
+        dx /= dl; dy = Math.min(dy / dl, -0.35);
+        for (i = 0; i < puffs.length; i++) {
+            px = puffs[i][0]; py = puffs[i][1]; r = puffs[i][2];
+            var hl = g.createRadialGradient(px + dx * r * 0.45, py + dy * r * 0.5, r * 0.05, px + dx * r * 0.2, py + dy * r * 0.2, r * 1.05);
+            hl.addColorStop(0, rgba(col, i < big ? 0.7 : 0.5)); hl.addColorStop(0.55, rgba(col, 0.22)); hl.addColorStop(1, rgba(col, 0));
+            g.fillStyle = hl; g.fillRect(px - r * 1.3, py - r * 1.3, r * 2.6, r * 2.6);
+        }
+        // the light through the thin edge (silver lining) on the sun's side
+        g.globalCompositeOperation = 'source-atop';
+        g.fillStyle = lin(g, pad + (dx > 0 ? w : 0), 0, pad + (dx > 0 ? 0 : w), 0, [0, rgba(mix(col, [255, 255, 255], 0.5), 0.35), 0.35, rgba(col, 0)]);
+        g.fillRect(0, 0, cw, ch);
+        c.save();
+        c.globalAlpha = a;
+        if ('filter' in c) c.filter = 'blur(' + Math.max(1, w * (flat ? 0.006 : 0.004)).toFixed(1) + 'px)';
+        c.drawImage(cv, x - w / 2 - pad, y - (base - h * 0.5));
+        c.restore();
+    }
+    // the sun: a wide warm bloom, a halo, soft rays and a bright core whose edge is a little darker (like the real one)
+    function sunDisc(c, x, y, H, low, a) {
+        c.save();
+        c.globalCompositeOperation = 'lighter';
+        glow(c, x, y, H * (low ? 0.75 : 0.6), low ? [255, 140, 70] : [255, 236, 190], (low ? 0.3 : 0.2) * a);
+        glow(c, x, y, H * 0.26, low ? [255, 196, 130] : [255, 248, 222], 0.38 * a);
+        var R = rng(7), n = 10;
+        for (var i = 0; i < n; i++) {
+            var an = (i / n) * TAU + R() * 0.2, len = H * (0.16 + R() * 0.2), wd = 0.012 + R() * 0.014;
+            var gr = c.createRadialGradient(x, y, H * 0.03, x, y, len);
+            gr.addColorStop(0, rgba([255, 246, 220], 0.09 * a)); gr.addColorStop(1, rgba([255, 246, 220], 0));
+            c.fillStyle = gr;
+            c.beginPath(); c.moveTo(x, y);
+            c.arc(x, y, len, an - wd, an + wd); c.closePath(); c.fill();
+        }
+        glow(c, x, y, H * 0.085, [255, 252, 240], 0.75 * a);
+        c.restore();
+        var r = H * 0.042, core = c.createRadialGradient(x - r * 0.15, y - r * 0.15, 0, x, y, r);
+        core.addColorStop(0, rgba([255, 255, 252], a)); core.addColorStop(0.7, rgba(low ? [255, 228, 180] : [255, 252, 236], a)); core.addColorStop(1, rgba(low ? [255, 176, 110] : [255, 236, 190], a));
+        disc(c, x, y, r, core);
     }
     function ridgePath(c, W, H, y, amp, R, freq, sharp) {
         var p1 = R() * 6, p2 = R() * 6, p3 = R() * 6, f1 = (0.8 + R() * 0.6) * freq, f2 = (2.1 + R()) * freq, f3 = (5 + R() * 2) * freq;
@@ -68,10 +129,18 @@ var DynArt = (function () {
         }
         c.lineTo(W, H); c.closePath();
     }
-    function ridge(c, W, H, y, amp, top, bot, R, freq, sharp, snow) {
+    function ridge(c, W, H, y, amp, top, bot, R, freq, sharp, snow, lit) {
         var s = R(); ridgePath(c, W, H, y, amp, rng(s * 1e9), freq, sharp);
         c.fillStyle = lin(c, 0, y - amp, 0, H, [0, top, 1, bot]);
         c.fill();
+        if (lit) {          // { x, col, a }: the side that faces the sun is lighter, the far side a little darker
+            c.save(); ridgePath(c, W, H, y, amp, rng(s * 1e9), freq, sharp); c.clip();
+            c.fillStyle = lin(c, lit.x - W * 0.7, 0, lit.x + W * 0.7, 0, [0, rgba([0, 0, 0], lit.a * 0.5), 0.5, rgba(lit.col, lit.a), 1, rgba([0, 0, 0], lit.a * 0.5)]);
+            c.fillRect(0, y - amp * 1.2, W, H);
+            c.fillStyle = lin(c, 0, y - amp, 0, y + amp * 0.6, [0, rgba(lit.col, lit.a * 0.6), 1, rgba(lit.col, 0)]);   // light on the crests
+            c.fillRect(0, y - amp * 1.2, W, amp * 1.8);
+            c.restore();
+        }
         if (snow) {
             c.save(); ridgePath(c, W, H, y, amp, rng(s * 1e9), freq, sharp); c.clip();
             c.fillStyle = lin(c, 0, y - amp, 0, y + amp * 0.1, [0, rgba(snow, 0.95), 0.55, rgba(snow, 0.55), 1, rgba(snow, 0)]);
@@ -209,17 +278,21 @@ var DynArt = (function () {
         top = mix(top, grey[0], o); bot = mix(bot, grey[1], o); hor = mix(hor, grey[1], o);
         if (!night && s.temp >= 30) { bot = mix(bot, [255, 222, 168], 0.35); hor = mix(hor, [255, 230, 180], 0.45); }
         if (!night && s.temp <= 3) { top = mix(top, [150, 180, 214], 0.2); bot = mix(bot, [214, 228, 242], 0.3); }
-        c.fillStyle = lin(c, 0, 0, 0, H, [0, top, 0.62, bot, 0.78, hor, 1, hor]);
+        c.fillStyle = lin(c, 0, 0, 0, H, [0, mul(top, 0.92), 0.3, mix(top, bot, 0.45), 0.6, bot, 0.76, hor, 1, hor]);
         c.fillRect(0, 0, W, H);
+        // where the sun is (also behind thin clouds): the sky around it is lighter, and at dawn / dusk the horizon glows under it
+        var t = Math.max(0, Math.min(1, s.sunT === undefined ? 0.5 : s.sunT)), sx = W * (0.12 + 0.76 * t), sy = H * (0.66 - 0.5 * Math.sin(PI * t)), low = ph !== 'day';
+        if (!night) {
+            c.save(); c.globalCompositeOperation = 'lighter';
+            glow(c, sx, sy, H * 1.1, low ? [120, 60, 30] : [60, 70, 70], 0.55 * Math.max(0, 1 - o * 1.2));
+            if (low) { c.save(); c.translate(sx, H * 0.62); c.scale(3.2, 1); glow(c, 0, 0, H * 0.28, [255, 120, 60], 0.35 * (1 - o * 0.6)); c.restore(); }
+            c.restore();
+        }
 
         if (night && o < 0.6) stars(c, W, H, Math.round(220 * (1 - o * 1.6)), H * 0.62, R, 1 - o);
         // the sun along its arc (sunT 0 = sunrise, 1 = sunset), the moon at night
         if (!night && o < 0.85) {
-            var t = Math.max(0, Math.min(1, s.sunT)), sx = W * (0.12 + 0.76 * t), sy = H * (0.66 - 0.5 * Math.sin(PI * t)), low = ph !== 'day';
-            var sc = low ? [255, 190, 120] : [255, 246, 214], a = 1 - o;
-            glow(c, sx, sy, H * (low ? 0.6 : 0.45), sc, 0.35 * a);
-            glow(c, sx, sy, H * 0.12, [255, 250, 230], 0.6 * a);
-            disc(c, sx, sy, H * 0.045, rgba(low ? [255, 214, 160] : [255, 252, 240], a));
+            sunDisc(c, sx, sy, H, low, 1 - o);
         }
         if (night && o < 0.9) {
             var mx = W * 0.74, my = H * 0.2, mr = H * 0.05;
@@ -235,12 +308,17 @@ var DynArt = (function () {
         function shade(col) { return mix(mul(col, light), mul(tint, light), night ? 0.35 : ph === 'day' ? 0 : 0.18); }
         var snowy = s.k === 'snow' || s.temp <= 1, capSnow = s.season === 'winter' || s.temp <= 8 || s.k === 'snow';
         var farCol = mix(shade(se.far), hor, 0.45);
-        ridge(c, W, H, H * 0.6, H * 0.16, farCol, mix(farCol, bot, 0.3), R, 1.6, true, capSnow ? mix([240, 244, 250], farCol, night ? 0.6 : 0.1) : null);
+        var lit = night ? null : { x: sx, col: low ? [255, 170, 110] : [255, 248, 230], a: 0.22 * (1 - o * 0.8) };
+        var backCol = mix(farCol, hor, 0.45);
+        ridge(c, W, H, H * 0.56, H * 0.12, backCol, mix(backCol, hor, 0.5), R, 2.3, true, capSnow ? mix([240, 244, 250], backCol, night ? 0.6 : 0.3) : null, lit);
+        ridge(c, W, H, H * 0.6, H * 0.16, farCol, mix(farCol, bot, 0.3), R, 1.6, true, capSnow ? mix([240, 244, 250], farCol, night ? 0.6 : 0.1) : null, lit);
+        c.fillStyle = lin(c, 0, H * 0.6, 0, H * 0.74, [0, rgba(hor, 0), 1, rgba(hor, night ? 0.12 : 0.35)]);   // haze at the foot of the mountains
+        c.fillRect(0, H * 0.6, W, H * 0.14);
         if (s.k === 'fog' || s.k === 'drizzle' || o > 0.5) { c.fillStyle = lin(c, 0, H * 0.4, 0, H * 0.75, [0, rgba(hor, 0), 1, rgba(hor, 0.35 * o + 0.1)]); c.fillRect(0, H * 0.4, W, H * 0.35); }
         var hl = se.hills, snowCol = [236, 242, 250];
         for (var i = 0; i < 3; i++) {
             var hc = snowy ? mix(mix(snowCol, shade(snowCol), night ? 1 : 0.5), shade(hl[i]), 0.12 + i * 0.05) : shade(hl[i]);
-            ridge(c, W, H, H * (0.72 + i * 0.08), H * (0.05 - i * 0.008), hc, mul(hc, 0.82), R, 1 + i * 0.4, false, null);
+            ridge(c, W, H, H * (0.72 + i * 0.08), H * (0.05 - i * 0.008), mix(hc, mul(tint, light), 0.1), mul(hc, 0.78), R, 1 + i * 0.4, false, null, lit && { x: lit.x, col: lit.col, a: lit.a * 0.6 });
             if (i === 1) {
                 // a few trees on the middle hill
                 var tc = snowy ? mix(shade(se.leaf), shade(snowCol), 0.5) : shade(se.leaf), tk = shade([70, 52, 40]);
@@ -261,7 +339,19 @@ var DynArt = (function () {
         else if (ph !== 'day') { cc = [255, 196, 180]; cs = [110, 80, 120]; }
         else if (o > 0.5) { cc = [214, 218, 226]; cs = [128, 136, 150]; }
         else { cc = [255, 255, 255]; cs = [176, 192, 214]; }
-        for (var k = 0; k < n; k++) cloud(c, W * (R() * 1.1 - 0.05), H * (0.06 + R() * (o > 0.5 ? 0.3 : 0.28)), W * (0.16 + R() * 0.14) * (o > 0.5 ? 1.4 : 1), cc, cs, ca, R);
+        var lx = night ? W * 0.74 : sx, ly = night ? H * 0.2 : sy, ys = [];
+        if (o > 0.5) {
+            var deck = /^(rain|storm|drizzle|snow)$/.test(s.k) ? 0.68 : 0.5;     // rain: the grey comes down to the mountains
+            c.fillStyle = lin(c, 0, 0, 0, H * deck, [0, rgba(mix(cs, cc, 0.3), 0.85), 0.6, rgba(mix(cs, cc, 0.5), 0.5), 1, rgba(mix(cs, cc, 0.6), 0)]);
+            c.fillRect(0, 0, W, H * deck);
+            for (var dk = -0.1; dk < 1.1; dk += 0.16) cloud(c, W * (dk + R() * 0.06), H * (0.04 + R() * 0.14), W * (0.3 + R() * 0.12), mix(cc, cs, 0.2), cs, ca, R, lx, ly, true);
+        }
+        for (var k = 0; k < n; k++) ys.push(H * (0.06 + R() * (o > 0.5 ? 0.3 : 0.28)));
+        ys.sort(function (p, q) { return p - q; });                  // far (high) clouds first, near ones over them
+        for (k = 0; k < n; k++) {
+            var near = ys[k] / (H * 0.36), cw2 = W * (0.14 + R() * 0.12) * (0.7 + near * 0.6) * (o > 0.5 ? 1.5 : 1);
+            cloud(c, W * (R() * 1.1 - 0.05), ys[k], cw2, cc, cs, ca, R, lx, ly, o > 0.5 && k % 2 === 0);
+        }
         if (o > 0.6) { c.fillStyle = lin(c, 0, 0, 0, H * 0.4, [0, rgba(cs, 0.55), 1, rgba(cs, 0)]); c.fillRect(0, 0, W, H * 0.4); }
 
         if (s.k === 'storm') bolt(c, W * (0.3 + R() * 0.4), H * 0.18, H * 0.5, R);
@@ -413,6 +503,8 @@ var DynArt = (function () {
         uclfinal: { sky: [[4, 8, 40], [30, 40, 110]], crowd: [[255, 230, 160], [140, 150, 230]], star: true, confetti: true },
         worldcup: { sky: [[30, 8, 22], [96, 30, 50]], crowd: [[255, 220, 120], [255, 120, 100]] },
         afcon: { sky: [[6, 30, 16], [24, 80, 40]], crowd: [[250, 210, 60], [230, 60, 50], [40, 170, 80]] },
+        uclsemi: { sky: [[4, 8, 40], [22, 34, 100]], crowd: [[220, 228, 255], [110, 130, 220]], star: true },
+        cafcl: { sky: [[6, 26, 18], [30, 70, 40]], crowd: [[230, 40, 50], [255, 255, 255], [40, 170, 80], [250, 200, 60]] },
         morocco: { sky: [[40, 6, 10], [110, 20, 30]], crowd: [[230, 40, 50], [20, 140, 70], [255, 255, 255]], confetti: true }
     };
     function stadium(c, W, H, id, R) {

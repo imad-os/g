@@ -122,16 +122,22 @@
   `tsize` / `isize`); warnings (`Weather.alerts`): rain / snow within the chosen hours (`warn`: off / 1 / 2 / 4 / 6 / 8 / 24, default 6) and a
   thunderstorm within 24 h (danger, red), on the widget, beside the app's temperature, and once each as a notification (profile key `wx_told`).
   Animated sky pictures (`Weather.art`, CSS `.wa-*` in css/weather.css: transform / opacity only, stop with the hidden desktop; widget setting `anim`).
-- **Live backgrounds** (owner request 2026-11-05, `js/launcher/dynwall.js` + art `js/launcher/dynwall-art.js` + strings `js/core/i18n-dynwall.js`):
-  Background ids `dyn_weather` (sky from `Weather` data, shared cache, day / dawn / dusk / night, season, temperature), `dyn_astro` (Earth
-  globe over your place with the real day / night line, city lights, Moon phase; NASA public-domain photos in `wallpapers/*.jpg`, read only
-  while drawing) and `dyn_events` (holidays and football, else the season; summer = beach). Drawn ONCE on a canvas (stage size x 1 / 0.75 / 0.5
-  by Perf tier) when what it shows changes (checked every 10 min, events 30 min); no timer while an app / game is open (Desktop.hide),
-  on the game page or in the background. Optional moving rain / snow = one tile slid by CSS transform (profile `dynwall.motion`, off by
-  default); `dynwall.caption` shows the event's name. **Events** (`js/core/events.js`, shared with the Calendar below): Google's public holiday
-  calendar `en.<cc>#holiday@group.v.calendar.google.com` (Calendar API with `Cloud.key` if the owner turned it on, else its .ics, else
-  built-in Moroccan days + Islamic days via Intl `islamic-umalqura`), football from ESPN's public scoreboard (UCL, World Cup, AFCON,
-  Morocco's other matches); cache `arc_dev_events` (holidays 2 days, football 6 h); per profile `events` { country, football }.
+- **Live backgrounds** (owner request 2026-11-05; merged 2026-11-09, `js/launcher/dynwall.js` + art `js/launcher/dynwall-art.js` + strings `js/core/i18n-dynwall.js`):
+  two ids. **`dyn_horizon` "Horizon"** (owner request 2026-11-09: Live weather + Holidays and events merged into one; old ids `dyn_weather` /
+  `dyn_events` map to it, `DynWall.OLD`): a holiday / big football night today (or a holiday tomorrow after 18:00) shows that day, else the sky
+  from `Weather` data (shared cache: day / dawn / dusk / night, season, temperature), else (profile `dynwall.weather` off) the season (summer =
+  beach). Its options in Control Panel > Personalization: Show the weather, Weather place and units (opens Widgets > Weather), Moving rain and
+  snow (`dynwall.motion`, one tile slid by CSS transform, off by default), Holidays of, Football nights, the football rules written out
+  (`dwFootballRules`), Show the event's name (`dynwall.caption`). `dyn_astro` = Earth globe with the real day / night line, city lights, Moon
+  phase (NASA public-domain photos `wallpapers/*.jpg`, read only while drawing). Drawn ONCE on a canvas (stage size x 1 / 0.75 / 0.5 by Perf tier)
+  when what it shows changes (checked every 10 min, 30 on an event day); no timer while an app / game is open (Desktop.hide), on the game page or
+  in the background. While it asks for data the taskbar shows a turning icon next to the clock (`#tray-wp`, at least 1 s). **Football rules
+  (owner rule 2026-11-09)**: UEFA Champions League semi-finals and final only (`uclsemi` / `uclfinal`), World Cup / AFCON / qualifiers /
+  friendlies only Morocco's matches (`morocco`), CAF Champions League only Moroccan clubs (`cafcl`, `MA_CLUBS` in events.js); big events from
+  the site / Manager count only with those ids (admin events always). Change both `fromEspn` and `dwFootballRules` together, bump `FB_V`.
+  **Events** (`js/core/events.js`, shared with the Calendar below): Google's public holiday calendar `en.<cc>#holiday@group.v.calendar.google.com`
+  (Calendar API with `Cloud.key` if the owner turned it on, else its .ics, else built-in Moroccan days + Islamic days via Intl `islamic-umalqura`),
+  football from ESPN's public scoreboard; cache `arc_dev_events` (holidays 2 days, football 6 h); per profile `events` { country, football }.
   Tests: `MYPC_ONLY=wall node tests/run-tests.mjs` (`MYPC_SHOTS=<folder>` for screenshots). Keep `evPrivacy` true.
 - **Calendar** (owner request 2026-11-05: Moroccan calendar, widget + app, reliable free source): one data module with the live backgrounds,
   `js/core/events.js` (`Events.day(ymd, withMine)` / `range` / `list(ymd)` for the app / `next`; own events only with `withMine`, so the wallpaper

@@ -1,5 +1,5 @@
 {
-  "_about": "Big events every My PC's calendar shows (merged into events-ma.json by tools/fetch-events.mjs, read by js/core/events.js). d / e = first / last day (YYYY-MM-DD), id = ucl | uclfinal | afcon | worldcup | morocco | any word (the name comes from the ev_<id> string, else t), time = HH:MM (optional), t = a title for an id without a string. ESPN adds the actual matches 30 days ahead; admins can also add events in the App Store Manager > Settings > Events.",
+  "_about": "Big events every My PC's calendar shows (merged into events-ma.json by tools/fetch-events.mjs, read by js/core/events.js). d / e = first / last day (YYYY-MM-DD), id = ucl | uclsemi | uclfinal | afcon | worldcup | morocco | any word (the name comes from the ev_<id> string, else t), time = HH:MM (optional), t = a title for an id without a string. ESPN adds the actual matches 30 days ahead; admins can also add events in the App Store Manager > Settings > Events.",
   "events": [
     {"d": "2026-11-24", "e": "2026-11-25", "id": "ucl", "time": "21:00"},
     {"d": "2026-12-08", "e": "2026-12-09", "id": "ucl", "time": "21:00"},
@@ -11,8 +11,8 @@
     {"d": "2027-03-16", "e": "2027-03-17", "id": "ucl", "time": "21:00"},
     {"d": "2027-04-06", "e": "2027-04-07", "id": "ucl", "time": "20:00"},
     {"d": "2027-04-13", "e": "2027-04-14", "id": "ucl", "time": "20:00"},
-    {"d": "2027-04-27", "e": "2027-04-28", "id": "ucl", "time": "20:00"},
-    {"d": "2027-05-04", "e": "2027-05-05", "id": "ucl", "time": "20:00"},
+    {"d": "2027-04-27", "e": "2027-04-28", "id": "uclsemi", "time": "20:00"},
+    {"d": "2027-05-04", "e": "2027-05-05", "id": "uclsemi", "time": "20:00"},
     {"d": "2027-06-05", "id": "uclfinal", "time": "20:00"},
     {"d": "2027-06-19", "e": "2027-07-17", "id": "afcon"}
   ]

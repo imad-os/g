@@ -76,14 +76,17 @@
             var cw = Desktop.wallpaper();
             if (window.DynWall && DynWall.is(cw)) {
                 out.push({ kind: 'text', value: t('wp_' + cw) + ': ' + t('dwAbout_' + cw) });
-                if (cw === 'dyn_weather') {
-                    out.push({ kind: 'toggle', label: t('dwMotion'), desc: t('dwMotionDesc'), get: function () { return DynWall.prefs().motion; }, set: function (v) { DynWall.setPref('motion', v); } });
-                } else if (cw === 'dyn_astro') {
+                if (cw === 'dyn_astro') {
                     out.push({ kind: 'toggle', label: t('dwCaptionAstro'), get: function () { return DynWall.prefs().caption; }, set: function (v) { DynWall.setPref('caption', v); } });
                 } else {
+                    // Horizon: weather, then holidays, then football (with its rules written out), then the name on screen
+                    out.push({ kind: 'toggle', label: t('dwWeatherOn'), desc: t('dwWeatherOnDesc'), get: function () { return DynWall.prefs().weather; }, set: function (v) { DynWall.setPref('weather', v); } });
+                    out.push({ kind: 'action', label: t('dwWeatherPlace'), desc: wxPlaceText(), run: function () { showPage('widgets'); sub = 'widget'; widgetId = 'weather'; var f = renderMain(1); if (f) Focus.focus(f); } });   // Control Panel > Widgets > Weather
+                    out.push({ kind: 'toggle', label: t('dwMotion'), desc: t('dwMotionDesc'), get: function () { return DynWall.prefs().motion; }, set: function (v) { DynWall.setPref('motion', v); } });
                     out.push({ kind: 'select', label: t('dwCountry'), value: function () { return t('cc_' + Events.prefs().country); },
                                adjust: function (d) { var l = Events.COUNTRIES, i2 = (l.indexOf(Events.prefs().country) + d + l.length) % l.length; Events.setPrefs({ country: l[i2] }); DynWall.refresh(); } });
                     out.push({ kind: 'toggle', label: t('dwFootball'), desc: t('dwFootballDesc'), get: function () { return Events.prefs().football; }, set: function (v) { Events.setPrefs({ football: v }); DynWall.refresh(); } });
+                    out.push({ kind: 'text', value: t('dwFootballRules') });
                     out.push({ kind: 'toggle', label: t('dwCaption'), get: function () { return DynWall.prefs().caption; }, set: function (v) { DynWall.setPref('caption', v); } });
                 }
             }
@@ -941,6 +944,12 @@
         return c;
     }
 
+    // the Weather widget's place and units (Horizon uses the same ones)
+    function wxPlaceText() {
+        var st = typeof Weather !== 'undefined' ? Weather.settings() : { place: '', units: 'c' }, l = Store.get('weather_loc', null);
+        var where = st.place ? st.place : (l && l.name ? l.name + ' (' + t('wxAuto') + ')' : t('wxAuto'));
+        return where + ' · ' + (st.units === 'f' ? '°F' : '°C');
+    }
     function wallpaperRow(r, idx) {
         var box = el('div', 'set-wps' + (r.live ? ' set-wps-live' : ''));
         box.appendChild(el('div', 'set-row-name', r.label));

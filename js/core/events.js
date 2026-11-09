@@ -270,8 +270,17 @@ var Events = (function () {
 
     /* ---------- football (ESPN) ---------- */
 
-    var LEAGUES = [['uefa.champions', 'ucl'], ['fifa.world', 'worldcup'], ['caf.nations', 'afcon'], ['fifa.friendly', ''], ['fifa.worldq.caf', '']];
+    /* Owner rule 2026-11-09: only the big nights. Champions League: semi-finals and the final only. World Cup, AFCON, qualifiers,
+     * friendlies: only Morocco's matches. CAF Champions League: only the matches of a Moroccan club. Nothing else. (Shown on screen
+     * as dwFootballRules: keep both in step.) */
+    var LEAGUES = [['uefa.champions', 'ucl'], ['caf.champions', 'cafcl'], ['fifa.world', 'worldcup'], ['caf.nations', 'afcon'], ['fifa.friendly', ''], ['fifa.worldq.caf', '']];
+    var FB_V = 2;           // the rules above changed: a football list kept by an older version is asked again
+    function teamName(c) { var t = c && c.team || {}; return String(t.displayName || t.name || '') + ' ' + String(t.shortDisplayName || ''); }
     function isMorocco(c) { var t = c && c.team || {}; return t.abbreviation === 'MAR' || /^morocco$|^maroc$/i.test(t.displayName || t.name || ''); }
+    // the Moroccan clubs that play in Africa (names as ESPN writes them, with the usual other spellings)
+    var MA_CLUBS = /wydad|raja|\bfar\b|far rabat|forces arm|berkane|renaissance sportive|\bfus\b|fath union|maghreb|mas f[eè]s|hassania|olympi(c|que) (de )?safi|ittihad (riadi )?tanger|\birt\b|difa[aâ]|jadida|mouloudia (club )?oujda|union touarga|chabab mohammedia|kawkab|codm|moghreb t[eé]touan/i;
+    function isMaClub(c) { var t = c && c.team || {}; return MA_CLUBS.test(teamName(c)) || /morocco|maroc/i.test(String(t.location || '')); }
+    function bigStage(slug) { return /final/.test(slug) && !/quarter|round|1\/8|eighth/.test(slug); }      // semifinals, final
     function fromEspn(txt, lg) {
         var j = null, out = [];
         try { j = JSON.parse(txt); } catch (e) {}
@@ -280,10 +289,12 @@ var Events = (function () {
             var ev = j.events[i], comp = ev.competitions && ev.competitions[0], cs = comp && comp.competitors || [], at = Date.parse(ev.date);
             if (!at || cs.length < 2) continue;
             var home = cs[0].homeAway === 'away' ? cs[1] : cs[0], away = home === cs[0] ? cs[1] : cs[0], mar = isMorocco(home) || isMorocco(away);
-            if (!lg[1] && !mar) continue;           // friendlies and qualifiers: only Morocco's
-            var slug = String(ev.season && ev.season.slug || (comp.type && comp.type.slug) || ''), d = new Date(at);
-            out.push({ d: ymd(d), at: at, id: mar ? 'morocco' : lg[1] === 'ucl' && /final/.test(slug) && !/semi|quarter/.test(slug) ? 'uclfinal' : lg[1], kind: 'football',
-                       lg: lg[1] || 'friendly', stage: slug, src: 'espn', pub: false,
+            var slug = String(ev.season && ev.season.slug || (comp.type && comp.type.slug) || '').toLowerCase(), id;
+            if (lg[1] === 'ucl') { if (!bigStage(slug)) continue; id = /semi/.test(slug) ? 'uclsemi' : 'uclfinal'; }
+            else if (lg[1] === 'cafcl') { if (!isMaClub(home) && !isMaClub(away)) continue; id = 'cafcl'; }
+            else { if (!mar) continue; id = 'morocco'; }
+            var d = new Date(at);
+            out.push({ d: ymd(d), at: at, id: id, kind: 'football', lg: lg[1] || 'friendly', stage: slug, src: 'espn', pub: false,
                        teams: [String(home.team && (home.team.shortDisplayName || home.team.displayName) || ''), String(away.team && (away.team.shortDisplayName || away.team.displayName) || '')] });
         }
         return out;
@@ -306,7 +317,7 @@ var Events = (function () {
         if (busy) return;
         var p = prefs(), c = cache(), now = Date.now(), left = 0, changed = false;
         var hk = p.country + ':' + new Date().getFullYear(), needHol = !c.hol || c.hol.k !== hk || now - (c.hol.at || 0) > HOL_AGE;
-        var needFb = p.football && (!c.fb || now - (c.fb.at || 0) > FB_AGE || c.fb.day !== today());
+        var needFb = p.football && (!c.fb || c.fb.v !== FB_V || now - (c.fb.at || 0) > FB_AGE || c.fb.day !== today());
         function done() {
             if (--left > 0) return;
             busy = false;
@@ -329,8 +340,8 @@ var Events = (function () {
         if (needFb) {
             left++;
             fetchFootball(function (list) {
-                if (list) c.fb = { at: Date.now(), day: today(), list: list };
-                else c.fb = { at: Date.now() - FB_AGE + 3600000, day: today(), list: c.fb && c.fb.list || [] };
+                if (list) c.fb = { v: FB_V, at: Date.now(), day: today(), list: list };
+                else c.fb = { v: FB_V, at: Date.now() - FB_AGE + 3600000, day: today(), list: c.fb && c.fb.v === FB_V && c.fb.list || [] };
                 changed = true;
                 done();
             });
@@ -338,7 +349,7 @@ var Events = (function () {
     }
 
     var RANK = { eidadha: 100, eidfitr: 99, morocco: 90, throne: 80, greenmarch: 79, independence: 78, unity: 77, revolution: 76, youth: 75,
-                 oued: 74, manifesto: 73, yennayer: 72, newyear: 71, hijri: 70, mawlid: 69, labour: 60, uclfinal: 58, worldcup: 56, afcon: 55,
+                 oued: 74, manifesto: 73, yennayer: 72, newyear: 71, hijri: 70, mawlid: 69, labour: 60, uclfinal: 58, uclsemi: 57, cafcl: 54, worldcup: 56, afcon: 55,
                  christmas: 50, nye: 45, ramadan: 40, ucl: 35 };
     function rank(e) { return e.kind === 'mine' ? 5 : RANK[e.id] || (e.pub ? 30 : 10); }
 
@@ -376,7 +387,7 @@ var Events = (function () {
     function day(s, withMine) {
         s = s || today();
         var out = holidaysOn(s), c = cache(), i, seen = {}, fbIds = {};
-        if (prefs().football && c.fb && c.fb.list) for (i = 0; i < c.fb.list.length; i++) if (c.fb.list[i].d === s) { out.push(c.fb.list[i]); fbIds[c.fb.list[i].id] = 1; }
+        if (prefs().football && c.fb && c.fb.v === FB_V && c.fb.list) for (i = 0; i < c.fb.list.length; i++) if (c.fb.list[i].d === s) { out.push(c.fb.list[i]); fbIds[c.fb.list[i].id] = 1; }
         out = out.concat(bigOn(s, fbIds));
         if (withMine) out = out.concat(mineOn(s));
         // one entry per id (the second day of Eid stays one entry), the most important first

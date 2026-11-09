@@ -70,7 +70,7 @@ svg { display: block; width: 100%; height: 100%; }
           color: #fff; text-shadow: 0 2px 14px rgba(0, 0, 0, 0.7), 0 0 2px rgba(0, 0, 0, 0.5); pointer-events: none; }
 .dw-cap-t { font-size: 48px; font-weight: 300; line-height: 1.2; }
 .dw-cap-s { font-size: 26px; line-height: 1.3; opacity: 0.9; margin-top: 8px; }
-.wp-dyn_weather { background-color: #3b7fd0;
+.wp-dyn_horizon { background-color: #3b7fd0;
     background-image: radial-gradient(9% 16% at 72% 26%, #fff8dc 0%, rgba(255, 240, 190, 0.7) 40%, rgba(255, 240, 190, 0) 100%),
                       radial-gradient(18% 10% at 34% 30%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.7) 55%, rgba(255, 255, 255, 0) 100%),
                       radial-gradient(70% 22% at 50% 100%, #5e9a52 0%, #4c8644 60%, rgba(76, 134, 68, 0) 100%),
@@ -78,11 +78,6 @@ svg { display: block; width: 100%; height: 100%; }
 .wp-dyn_astro { background-color: #03040c;
     background-image: radial-gradient(circle at 50% 50%, #3d7fd6 0%, #1d4a8c 30%, #081a38 41%, rgba(80, 150, 255, 0.35) 42%, rgba(3, 4, 12, 0) 47%),
                       linear-gradient(135deg, #02030a 0%, #070a1c 100%); }
-.wp-dyn_events { background-color: #1a1050;
-    background-image: radial-gradient(12% 20% at 70% 30%, #f4cc70 0%, rgba(244, 204, 112, 0.35) 45%, rgba(244, 204, 112, 0) 100%),
-                      radial-gradient(60% 20% at 30% 100%, #b8212b 0%, rgba(184, 33, 43, 0) 100%),
-                      linear-gradient(180deg, #18124a 0%, #56307c 100%); }
-
 /* ---------- desktop ---------- */
 .desktop { position: absolute; left: 0; top: 0; width: var(--sw); height: var(--sh); overflow: hidden; }
 /* many shortcuts (small screens): the columns scroll sideways (swipe, or the focus moving there) instead of running off the screen */
@@ -120,8 +115,15 @@ svg { display: block; width: 100%; height: 100%; }
 .tray-poll i { display: block; width: 18px; height: 18px; border-radius: 50%; background: #8b949e; box-shadow: 0 0 0 3px rgba(139, 148, 158, 0.25); }
 .tray-poll.fast i { background: #3fb950; box-shadow: 0 0 0 3px rgba(63, 185, 80, 0.3); }
 .tray-poll.slow i { background: #f0883e; box-shadow: 0 0 0 3px rgba(240, 136, 62, 0.3); }
+/* a live background is asking the internet for new data (js/launcher/dynwall.js busy()) */
+.tray-wp { display: block; width: 30px; height: 30px; margin: 0 8px; color: #cfd6de; -webkit-animation: tray-spin 1.1s linear infinite; animation: tray-spin 1.1s linear infinite; }
+.tray-wp[hidden] { display: none; }
+.tray-wp svg { display: block; width: 100%; height: 100%; }
+@-webkit-keyframes tray-spin { to { -webkit-transform: rotate(360deg); } }
+@keyframes tray-spin { to { transform: rotate(360deg); } }
 .tray-poll:focus { background: rgba(255, 255, 255, 0.12); }
 .compact .tray-poll { width: 72px; height: 72px; }
+.compact .tray-wp { width: 44px; height: 44px; }
 .compact .tray-poll i { width: 28px; height: 28px; }
 .tray-clock { height: 76px; padding: 0 18px; margin-left: 8px; border-radius: 12px; text-align: right; font-size: 23px; line-height: 1.35; }
 .tray-clock span { display: block; }
