@@ -43,13 +43,41 @@ var DynWall = (function () {
 
     /* ---------------- life cycle (Desktop.paintWallpaper / show / hide) ---------------- */
 
+    /* The last picture is kept on this device (owner request 2026-11-09: My PC opened on a default sunny sky, then changed a few
+     * seconds later). At start it shows at once under the canvas, with its caption; its state key is taken over, so nothing is drawn
+     * again until what it shows changes. One JPEG of the canvas size, saved 2 s after a paint; TV-wide key, not in the backup. */
+    var LAST = 'arc_dev_dwlast', saveT = 0, capT = '', capS = '';
+    function who() { var p = null; try { p = JSON.parse(localStorage.getItem('arc_profile')); } catch (e) {} return typeof p === 'string' && /^p\d+$/.test(p) ? p : 'p1'; }   // as Store
+    function loadLast(id) {
+        try { var l = JSON.parse(localStorage.getItem(LAST) || 'null'); return l && l.id === id && l.p === who() && /^data:image\//.test(l.img) ? l : null; } catch (e) { return null; }
+    }
+    function saveLast() {
+        clearTimeout(saveT);
+        saveT = setTimeout(function () {
+            saveT = 0;
+            if (!cv || !key || !cv.width) return;
+            var rec = { id: cur, p: who(), k: key, t: capT, s: capS, at: Date.now(), img: '' };
+            try { rec.img = cv.toDataURL('image/jpeg', 0.85); } catch (e) { return; }
+            try { localStorage.setItem(LAST, JSON.stringify(rec)); } catch (e2) { try { localStorage.removeItem(LAST); } catch (e3) {} }   // full: no copy rather than an old one
+        }, 2000);
+    }
     function start(id, wp) {
         if (cur === id && cv && box === wp) { relabel(); return; }
         stop();
         box = wp; cur = id;
         cv = el('canvas', 'dw-cv'); cv.setAttribute('aria-hidden', 'true');
         cap = el('div', 'dw-cap'); cap.hidden = true;
+        var last = loadLast(id);
+        if (last) {
+            var ss = stageSize(), k = scale();
+            cv.width = Math.round(ss.w * k); cv.height = Math.round(ss.h * k);
+            cv.style.backgroundImage = 'url(' + last.img + ')';           // shown under the (still empty) canvas at once
+            cv.style.backgroundSize = '100% 100%';
+            cv.className = 'dw-cv dw-last';
+            if (/\|(\d+)x(\d+)$/.test(last.k) && last.k.slice(-(cv.width + 'x' + cv.height).length) === cv.width + 'x' + cv.height) key = last.k;
+        }
         box.appendChild(cv); box.appendChild(cap);
+        if (last) setCaption(last.t, last.s);
         on = desktopShown();
         schedule(30);
     }
@@ -58,7 +86,8 @@ var DynWall = (function () {
         if (cv) { cv.width = cv.height = 0; if (cv.parentNode) cv.parentNode.removeChild(cv); }
         if (cap && cap.parentNode) cap.parentNode.removeChild(cap);
         setFx('');
-        cv = cap = null; cur = ''; key = ''; capText = ''; on = false;
+        clearTimeout(saveT); saveT = 0;
+        cv = cap = null; cur = ''; key = ''; capText = ''; capT = capS = ''; on = false;
     }
     function pause() { on = false; clearTimeout(timer); timer = 0; if (fx) fx.style.animationPlayState = 'paused'; }
     function resume() {
@@ -90,12 +119,15 @@ var DynWall = (function () {
         k += '|' + cv.width + 'x' + cv.height;
         if (k === key) return false;
         key = k;
+        if (cv.style.backgroundImage) { cv.style.backgroundImage = ''; cv.className = 'dw-cv'; }
+        saveLast();
         try { draw(c, cv.width, cv.height); } catch (e) { try { Reports.add('mypc', { kind: 'error', msg: 'background ' + cur + ': ' + String(e && e.message || e).slice(0, 200), stage: 'wallpaper' }); } catch (x) {} }
         painted = Date.now();
         return true;
     }
     function setCaption(title, sub) {
         if (!cap) return;
+        capT = title || ''; capS = sub || '';
         var txt = prefs().caption && title ? title + '\n' + (sub || '') : '';
         if (txt === capText) return;
         capText = txt;

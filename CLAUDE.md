@@ -131,7 +131,9 @@
   (`dwFootballRules`), Show the event's name (`dynwall.caption`). `dyn_astro` = Earth globe with the real day / night line, city lights, Moon
   phase (NASA public-domain photos `wallpapers/*.jpg`, read only while drawing). Drawn ONCE on a canvas (stage size x 1 / 0.75 / 0.5 by Perf tier)
   when what it shows changes (checked every 10 min, 30 on an event day); no timer while an app / game is open (Desktop.hide), on the game page or
-  in the background. While it asks for data the taskbar shows a turning icon next to the clock (`#tray-wp`, at least 1 s). **Football rules
+  in the background. While it asks for data the taskbar shows a turning icon next to the clock (`#tray-wp`, at least 1 s). The last picture
+  is kept on the device (`arc_dev_dwlast`: id, profile, state key, caption, JPEG; not in the backup; owner request 2026-11-09: it opened on a default
+  sunny sky) and shown at once at the next start under the empty canvas; its state key is taken over, so nothing is drawn again until the state changes. **Football rules
   (owner rule 2026-11-09)**: UEFA Champions League semi-finals and final only (`uclsemi` / `uclfinal`), World Cup / AFCON / qualifiers /
   friendlies only Morocco's matches (`morocco`), CAF Champions League only Moroccan clubs (`cafcl`, `MA_CLUBS` in events.js); big events from
   the site / Manager count only with those ids (admin events always). Change both `fromEspn` and `dwFootballRules` together, bump `FB_V`.

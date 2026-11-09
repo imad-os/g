@@ -5929,6 +5929,32 @@ async function wallTests(browser, base) {
         await page.context().close();
     }
 
+    // the last picture is kept on the TV: the next start shows it at once (no default sky), then checks quietly (owner request 2026-11-09)
+    {
+        const db = {};
+        const page = await at('2026-11-05T20:30:00Z', db, () => { localStorage.setItem('arc_p1_events', JSON.stringify({ country: 'ma', football: false })); });
+        await page.evaluate(() => Desktop.setWallpaper('dyn_horizon'));
+        check(await painted(page, 'e,greenmarch'), 'Horizon drawn: ' + await page.evaluate(() => DynWall._key()));
+        await page.waitForFunction(() => { const l = JSON.parse(localStorage.getItem('arc_dev_dwlast') || 'null'); return l && l.k === DynWall._key(); }, null, { timeout: 6000 }).catch(() => {});
+        const last = await page.evaluate(() => JSON.parse(localStorage.getItem('arc_dev_dwlast') || 'null'));
+        check(last && last.id === 'dyn_horizon' && last.p === 'p1' && /^data:image\/jpeg/.test(last.img) && last.img.length < 600000 && /Green March/.test(last.t),
+              'the picture is kept on the TV (JPEG, ' + (last ? Math.round(last.img.length / 1024) : 0) + ' KB) with its caption');
+        // next start: every service slow (4 s); the kept picture and caption are there at once, and nothing is drawn again for the same state
+        await page.context().route(/(open-meteo|googleapis|calendar\.google|espn|events-ma\.json)/, async (r) => { await new Promise((ok) => setTimeout(ok, 4000)); r.abort(); });
+        await page.reload();
+        await page.waitForSelector('#desk-icons .dicon');
+        const first = await page.evaluate(() => { const c = document.querySelector('#wallpaper .dw-cv'); const t = document.querySelector('#wallpaper .dw-cap');
+            return { last: !!c && c.classList.contains('dw-last') && /^url\("?data:image\/jpeg/.test(c.style.backgroundImage), cap: t && !t.hidden ? t.textContent : '', key: DynWall._key() }; });
+        check(first.last && /Tomorrow: Green March Day/.test(first.cap) && first.key === last.k, 'next start: the kept picture and its caption show at once ' + JSON.stringify({ last: first.last, cap: first.cap }));
+        await shot(page, 'start-kept-picture');
+        await page.waitForTimeout(5000);
+        check(await page.evaluate((k) => DynWall._key() === k && document.querySelector('#wallpaper .dw-cv').classList.contains('dw-last'), last.k), 'same day, same state after the check: not drawn again');
+        // a profile with another background never gets it
+        check(await page.evaluate(() => { const l = JSON.parse(localStorage.getItem('arc_dev_dwlast')); return l.p === 'p1'; }), 'kept for its profile only');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
     // Earth now: the globe with day and night, the Moon in its phase, redrawn every 10 minutes at most
     {
         const page = await at('2026-11-05T17:30:00Z', {});
