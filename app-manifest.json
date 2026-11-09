@@ -1,5 +1,5 @@
 {
-  "build": 141,
+  "build": 142,
   "version": "2.30.1",
   "shell": 1,
   "css": [
@@ -71,6 +71,7 @@
     "js/launcher/themes.js",
     "js/launcher/widgets.js",
     "js/launcher/dynwall-art.js",
+    "js/launcher/dynwall-photos.js",
     "js/launcher/dynwall.js",
     "js/launcher/shortcuts.js",
     "js/launcher/desktop.js",

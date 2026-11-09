@@ -22,7 +22,8 @@ var DynWall = (function () {
     function is(id) { return IDS.indexOf(id) >= 0; }
     function el(tag, cls) { var e = document.createElement(tag); e.className = cls; return e; }
     function prefs() { var p = Store.get('dynwall', null) || {}; return { motion: !!p.motion, caption: p.caption !== false, weather: p.weather !== false, glass: GLASS_LV.indexOf(p.glass) >= 0 ? p.glass : 'medium', style: STYLES.indexOf(p.style) >= 0 ? p.style : 'cartoon' }; }
-    var STYLES = ['cartoon', 'pixel'];                       // Horizon's look (owner request 2026-11-09): drawn, or game style (pixel art)
+    // Horizon's look (owner request 2026-11-09): drawn, realistic (built-in photos), game style (pixel art), custom (the profile's own photos)
+    var STYLES = ['cartoon', 'real', 'pixel', 'custom'], photoSeq = 0;
     var GLASS_LV = ['off', 'low', 'medium', 'high'];        // raindrops on the glass, when it rains (owner request 2026-11-09)
     function setPref(k, v) { var p = prefs(); p[k] = v; Store.set('dynwall', p); refresh(); }
     function base() { return (typeof AppBoot !== 'undefined' && AppBoot.base && AppBoot.base()) || ''; }
@@ -97,7 +98,7 @@ var DynWall = (function () {
         on = true;
         if (fx) fx.style.animationPlayState = '';
         // back from an app: check again soon (the picture may be out of date), but let the desktop draw first
-        schedule(Date.now() - painted > 60000 ? 600 : 60000);
+        schedule(!key ? 300 : Date.now() - painted > 60000 ? 600 : 60000);      // a setting changed meanwhile (key cleared): at once
     }
     function refresh() { key = ''; if (cur && desktopShown()) { on = true; schedule(30); } }
     function schedule(ms) { clearTimeout(timer); timer = 0; if (on && cur) timer = setTimeout(tick, ms); }
@@ -240,10 +241,27 @@ var DynWall = (function () {
         var motion = prefs().motion && /^(rain|showers|drizzle|storm|snow)$/.test(k);
         var s = { k: k, phase: dp.phase, sunT: dp.sunT, temp: temp, season: se, clouds: n ? n.clouds : 20, moon: moon, wind: wind, motion: motion,
                   glass: prefs().glass === 'off' ? '' : prefs().glass, seed: day(Date.now()) };
-        paint(['w', k, s.phase, Math.round(s.sunT * 10), Math.round(temp / 4), se, Math.round((s.clouds || 0) / 20), Math.round(moon * 8), motion, s.glass].join(','),
-              function (c, W, H) { DynArt.weather(c, W, H, s); });
-        setFx(motion ? (k === 'snow' ? 'snow' : k === 'storm' ? 'rain' : k) : '');
-        setCaption(p && p.soon ? t('dwTomorrow').replace('%s', Events.title(p.soon)) : '', '');
+        var sty = prefs().style, my = ++photoSeq;
+        function drawn() {
+            paint(['w', k, s.phase, Math.round(s.sunT * 10), Math.round(temp / 4), se, Math.round((s.clouds || 0) / 20), Math.round(moon * 8), motion, s.glass].join(','),
+                  function (c, W, H) { DynArt.weather(c, W, H, s); });
+        }
+        function after() {
+            setFx(motion ? (k === 'snow' ? 'snow' : k === 'storm' ? 'rain' : k) : '');
+            setCaption(p && p.soon ? t('dwTomorrow').replace('%s', Events.title(p.soon)) : '', '');
+        }
+        if ((sty === 'real' || sty === 'custom') && typeof DynPhotos !== 'undefined') {
+            busy(true);
+            return DynPhotos.get(sty, k, s.phase, function (img, id) {
+                busy(false);
+                if (my !== photoSeq || !cv) return;
+                if (img) paint(['p', id, k, s.phase, motion, s.glass].join(','), function (c, W, H) { DynArt.photo(c, W, H, img, s); });
+                else drawn();                                  // no photo could be read: the drawn sky
+                after();
+            });
+        }
+        drawn();
+        after();
     }
 
     /* ---------------- Earth now ---------------- */

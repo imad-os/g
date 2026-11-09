@@ -81,7 +81,8 @@
                 } else {
                     // Horizon: its look, weather, then holidays, then football (with its rules written out), then the name on screen
                     out.push({ kind: 'select', label: t('dwStyle'), desc: t('dwStyleDesc'), value: function () { return t('dwStyle_' + DynWall.prefs().style); },
-                               adjust: function (d) { var l = DynWall.STYLES, i2 = (l.indexOf(DynWall.prefs().style) + d + l.length) % l.length; DynWall.setPref('style', l[i2]); } });
+                               adjust: function (d) { var l = DynWall.STYLES, i2 = (l.indexOf(DynWall.prefs().style) + d + l.length) % l.length; DynWall.setPref('style', l[i2]); hzStyleRows(true); } });
+                    if (DynWall.prefs().style === 'custom') customRows(out);
                     out.push({ kind: 'toggle', label: t('dwWeatherOn'), desc: t('dwWeatherOnDesc'), get: function () { return DynWall.prefs().weather; }, set: function (v) { DynWall.setPref('weather', v); } });
                     out.push({ kind: 'action', label: t('dwWeatherPlace'), desc: wxPlaceText(), run: function () { showPage('widgets'); sub = 'widget'; widgetId = 'weather'; var f = renderMain(1); if (f) Focus.focus(f); } });   // Control Panel > Widgets > Weather
                     out.push({ kind: 'toggle', label: t('dwMotion'), desc: t('dwMotionDesc'), get: function () { return DynWall.prefs().motion; }, set: function (v) { DynWall.setPref('motion', v); } });
@@ -948,6 +949,45 @@
         return c;
     }
 
+    // Horizon's style changed: its rows change too (Custom adds its own); the focus stays on the Style row
+    function hzStyleRows() {
+        setTimeout(function () {
+            if (page !== 'personal' || sub) return;
+            var c = Focus.current(), idx = c && inMain(c) ? c.getAttribute('data-row') : null, f = renderMain(idx === null ? -1 : +idx);
+            if (idx !== null && f) Focus.focus(f);
+        }, 0);
+    }
+    // Custom style: how to name the pictures, how many this TV has, where to take them from (owner request 2026-11-09)
+    function customRows(out) {
+        var have = Object.keys(DynPhotos.custom()).length;
+        out.push({ kind: 'text', value: t('dwCustomGuide') });
+        out.push({ kind: 'info', label: t('dwCustomHave'), value: have + ' / ' + DynPhotos.NAMES.length });
+        out.push({ kind: 'action', label: t('dwCustomDrive'), desc: t('dwCustomDriveDesc'), primary: !have, run: function () { customLoad('drive', 0); } });
+        if (DynPhotos.folderOk()) out.push({ kind: 'action', label: t('dwCustomFolder'), run: function () { customLoad('folder', 0); } });
+        if (have) out.push({ kind: 'action', label: t('dwCustomClear'), danger: true, run: function () { DynPhotos.clear(function () { DynWall.refresh(); hzStyleRows(); }); } });
+    }
+    function customLoad(src, tries) {
+        Notify.show({ id: 'dwc', kind: 'info', text: t('dwCustomLoading'), timeout: 0 });
+        (src === 'drive' ? DynPhotos.loadDrive : DynPhotos.loadFolder)(function (i, n, name) {
+            Notify.show({ id: 'dwc', kind: 'info', text: t('dwCustomLoading') + '  ' + (i + 1) + ' / ' + n + '  ' + name, timeout: 0, silent: true });
+        }, function (e, n) {
+            if (!e) {
+                Notify.show({ id: 'dwc', kind: 'ok', text: t('dwCustomDone').replace('%n', n) });
+                DynWall.refresh(); hzStyleRows();
+                return;
+            }
+            if ((e.code === 'nouser' || e.code === 'reauth') && !tries && typeof DriveUI !== 'undefined') {
+                Notify.hide('dwc');
+                return DriveUI.signIn(function (err) { if (!err) customLoad(src, 1); });
+            }
+            if (e.code === 'none' && e.limited && !tries && typeof DriveUI !== 'undefined') {
+                Notify.show({ id: 'dwc', kind: 'warn', text: t('dwCustomPick') });
+                return DriveUI.addFiles(function () { customLoad(src, 1); });
+            }
+            if (e.code === 'cancelled') return Notify.hide('dwc');
+            Notify.show({ id: 'dwc', kind: e.code === 'none' ? 'warn' : 'err', text: t(e.code === 'none' ? 'dwCustomNone' : e.code === 'noconfig' ? 'dwCustomNoDrive' : 'dwCustomFail') });
+        });
+    }
     // the Weather widget's place and units (Horizon uses the same ones)
     function wxPlaceText() {
         var st = typeof Weather !== 'undefined' ? Weather.settings() : { place: '', units: 'c' }, l = Store.get('weather_loc', null);

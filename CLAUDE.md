@@ -138,7 +138,9 @@
   from `Weather` data (shared cache: day / dawn / dusk / night, season, temperature), else (profile `dynwall.weather` off) the season (summer =
   beach). Its options in Control Panel > Personalization: Show the weather, Weather place and units (opens Widgets > Weather), Moving rain and
   snow (`dynwall.motion`, one 512 px tile slid by CSS transform, off by default), Style (`dynwall.style`: cartoon = drawn / pixel = game style: the same scene drawn at 1/6 with `DynArt.pixel(true)`, 16 levels per
-  colour, scaled up with hard edges; realistic photos and own pictures are planned), Raindrops on the glass (`dynwall.glass` off / low / medium (default) / high,
+  colour, scaled up with hard edges; real = Realistic: a photo per weather from the built-in pack `wallpapers/real/<name>.jpg` (credits there); custom = My pictures: the
+  profile's own set, same 13 names, taken from Google Drive (or a PC folder) by `js/launcher/dynwall-photos.js` (`DynPhotos`), kept on the device in IndexedDB
+  `mypc-horizon` (not in the backup), a missing one falls back to the built-in photo; photos get the same rain / glass (`DynArt.photo`); holidays stay drawn; guide `dwCustomGuide`), Raindrops on the glass (`dynwall.glass` off / low / medium (default) / high,
   owner request 2026-11-09: lens drops showing the scene flipped, mist, trails, soft scene behind; drawn once with the picture, `DynArt` `glass`), Holidays of, Football nights, the football rules written out
   (`dwFootballRules`), Show the event's name (`dynwall.caption`). `dyn_astro` = Earth globe with the real day / night line, city lights, Moon
   phase (NASA public-domain photos `wallpapers/*.jpg`, read only while drawing). Drawn ONCE on a canvas (stage size x 1 / 0.75 / 0.5 by Perf tier)

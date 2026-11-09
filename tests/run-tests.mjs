@@ -5982,6 +5982,50 @@ async function wallTests(browser, base) {
         await page.context().close();
     }
 
+    // Realistic and My pictures styles (owner request 2026-11-09): a photo per weather (built-in pack, else the profile's own set), with the same rain and glass
+    {
+        const db = {};
+        const svg = (name, c1, c2) => '<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + c1 + '"/><stop offset="1" stop-color="' + c2 + '"/></linearGradient></defs>' +
+            '<rect width="1920" height="1080" fill="url(#g)"/><path d="M0 760 Q480 640 960 720 T1920 700 V1080 H0Z" fill="#35502f"/><text x="960" y="560" font-size="90" text-anchor="middle" fill="#fff" font-family="sans-serif">' + name + '</text></svg>';
+        const page = await at('2026-11-03T12:00:00Z', db, () => { localStorage.setItem('arc_p1_events', JSON.stringify({ country: 'ma', football: false })); });
+        await page.route(/wallpapers\/real\/([a-z-]+)\.jpg/, (r) => { const n = /real\/([a-z-]+)\.jpg/.exec(r.request().url())[1]; (db.photos = db.photos || []).push(n);
+            return r.fulfill({ status: 200, contentType: 'image/svg+xml', body: svg('built-in ' + n, '#5f6b7a', '#9aa6b4') }); });
+        await page.context().route(/api\.open-meteo\.com/, (r) => { const b = forecastBody(14); Object.assign(b.current, { weather_code: 63, is_day: 1, cloud_cover: 95, time: '2026-11-03T12:00' }); return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(b) }); });
+        await page.evaluate(() => { localStorage.removeItem('arc_dev_wxfc'); DynWall.setPref('style', 'real'); Desktop.setWallpaper('dyn_horizon'); });
+        check(await painted(page, 'p,r:rain-day,rain,day'), 'Realistic: the built-in rain photo ' + await page.evaluate(() => DynWall._key()));
+        check((db.photos || []).join() === 'rain-day', 'only that one photo is read ' + (db.photos || []).join());
+        check(await page.evaluate(() => DynPhotos.names('partly', 'night').join() === 'clear-night,cloudy-night,clear-day' && DynPhotos.names('showers', 'dusk')[0] === 'rain-day' &&
+                                        DynPhotos._nameOf('Rain Day.JPG') === 'rain-day' && DynPhotos._nameOf('holiday.jpg') === ''), 'the photo names and their fallbacks');
+        await shot(page, 'style-realistic-rain');
+        // My pictures: two of the 13 found in Google Drive (any case, spaces or _), shrunk to the screen and kept on the TV
+        await page.evaluate((pics) => {
+            GDrive.status = (cb) => setTimeout(() => cb({ ok: true, code: '' }), 0);
+            GDrive.fullAccess = () => true;
+            GDrive.list = (o, cb) => { window.__q = o.q; setTimeout(() => cb(null, { files: [{ id: 'a', name: 'Rain_Day.JPG', mimeType: 'image/svg+xml', size: '900' }, { id: 'b', name: 'clear-day.png', mimeType: 'image/svg+xml', size: '900' }, { id: 'c', name: 'cat.jpg', mimeType: 'image/jpeg', size: '9' }] }), 0); };
+            GDrive.download = (id, o, cb) => setTimeout(() => cb(null, { buf: new TextEncoder().encode(pics[id]).buffer, type: 'image/svg+xml' }), 0);
+        }, { a: svg('my rain', '#30405a', '#7a8aa0'), b: svg('my sun', '#2d7fd6', '#bfe3ff') });
+        await page.evaluate(() => { DynWall.setPref('style', 'custom'); Win.open('settings', 'personal'); });
+        await page.waitForTimeout(300);
+        let txt = await page.textContent('.set-main');
+        check(/My pictures/.test(txt) && /rain-day/.test(txt) && /Take my pictures from Google Drive/.test(txt) && /0 \/ 13/.test(txt), 'My pictures: the guide (file names), the count and where to take them from');
+        await page.evaluate(() => { const m = document.querySelector('.set-main'); m.scrollTop = 0; });
+        await shot(page, 'style-custom-guide');
+        await page.evaluate(() => [...document.querySelectorAll('.set-main .set-row')].find((b) => /^Take my pictures from Google Drive$/.test((b.querySelector('.set-row-name') || {}).textContent)).focus());
+        await page.keyboard.press('Enter');
+        await page.waitForFunction(() => Object.keys(DynPhotos.custom()).length === 2, null, { timeout: 8000 }).catch(() => {});
+        check(await page.evaluate(() => Object.keys(DynPhotos.custom()).sort().join() === 'clear-day,rain-day' && /rain-day/.test(window.__q)), 'two pictures taken in, the others left out: ' + await page.evaluate(() => Object.keys(DynPhotos.custom()).join()));
+        await page.waitForTimeout(400);
+        check(/2 \/ 13/.test(await page.textContent('.set-main')), 'the count says 2 / 13');
+        await page.evaluate(() => Win.close());
+        check(await painted(page, 'p,c:rain-day'), 'My pictures: your rain picture is used ' + await page.evaluate(() => DynWall._key()));
+        await shot(page, 'style-custom-rain');
+        await page.evaluate(() => DynPhotos.clear(() => DynWall.refresh()));
+        check(await painted(page, 'p,r:rain-day'), 'removed: back to the built-in photo');
+        await page.evaluate(() => DynWall.setPref('style', 'cartoon'));
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
     // the last picture is kept on the TV: the next start shows it at once (no default sky), then checks quietly (owner request 2026-11-09)
     {
         const db = {};
