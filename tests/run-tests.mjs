@@ -358,6 +358,7 @@ async function main() {
     if (process.env.MYPC_ONLY === 'drive') { await driveTests(browser, base); await drivePhoneTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'calendar') { await calendarTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'clock') { await clockTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'flow') { await flowTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'music') { await musicTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
 
     console.log('1. hosted newer build runs');
@@ -396,7 +397,7 @@ async function main() {
         await page.waitForFunction(() => window.AppBoot && AppBoot.source() === 'local' && document.querySelector('.dicon'), null, { timeout: 20000 });
         check(await page.evaluate(() => { const b = JSON.parse(localStorage.getItem('boot_bad_build')); const f = AppBoot.lastFail(); return b.b === 9077 && b.n === 1 && f.b === 9077 && /main\.js/.test(f.why); }), 'build 9077 set aside (1st failure) and why is kept for Control Panel > Update');
         check(await playable(page), 'bundled copy is playable after the fallback');
-        await page.reload();
+        await page.goto(base + 'index.html');                    // a real start (a reload of ?from= is a page change: same copy)
         await page.waitForSelector('.dicon', { timeout: 15000 });
         check(await page.evaluate(() => AppBoot.source() === 'local' && AppBoot.reason() === 'bad'), 'the failed build is skipped at the next start (for 30 minutes)');
         // Control Panel > My PC Update says why
@@ -4136,7 +4137,7 @@ async function main() {
         const loop = by('error', /loop error/);
         check(loop && loop.n === 5 && reps.filter((r) => /loop error/.test(r.msg)).length === 1, 'the same error 5 times is one report with n = 5 (' + (loop && loop.n) + ')');
         const one = by('error', /boom/) || {};
-        check(one.appv === '2.0.1' && one.sdk === 14 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
+        check(one.appv === '2.0.1' && one.sdk === 15 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
             'each report has the app version, SDK level, TV id and model, My PC version and build, language, place, address, time and a 30-day expiry (' + JSON.stringify(one) + ')');
         const keys = new Set(reps.flatMap((r) => Object.keys(r)));
         const allowed = ['app', 'kind', 'msg', 'stack', 'src', 'stage', 'appv', 'sdk', 'n', 'at', 'exp', 'tv', 'model', 'ver', 'build', 'lang', 'user', 'where', 'ua', 'url'];
@@ -4786,6 +4787,7 @@ async function main() {
     }
 
     await wallTests(browser, base);
+    await flowTests(browser, base);
 
     await browser.close();
     srv.close();
@@ -6056,4 +6058,140 @@ async function wallTests(browser, base) {
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }
+}
+
+// 45. Opening and quitting (owner's question 2026-11-09): the menu's "Quit", an app under My PC's menu gets no input and is held
+// still, a page change reuses the copy picked at start (no server wait), Quit does not read the store again. MYPC_ONLY=flow.
+// MYPC_SHOTS=<folder> saves screenshots; the switch times with and without the saved pick are printed.
+async function flowTests(browser, base) {
+    console.log('45. Open / Quit: "Quit" in 4 languages, no input to a paused app, it is held still, fast page changes');
+    const shots = process.env.MYPC_SHOTS;
+    const APP = 'https://apps.example.test/flow/';
+    const mkdoc = (id, order, mode) => ({ id, name: 'Flow ' + id, description: 'x', url: APP, entry: APP + 'index.html?mode=' + mode, icon: '', type: 'game', version: '1.0.0', enabled: true, order, config: {} });
+    const db = { apps: { 'flow-good': mkdoc('flow-good', 0, 'good'), 'flow-bare': mkdoc('flow-bare', 1, 'bare') } };
+    // a tiny WAV (1 s of silence) for the <audio> the app plays
+    const wav = (() => { const n = 8000, b = Buffer.alloc(44 + n); b.write('RIFF', 0); b.writeUInt32LE(36 + n, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(8000, 24); b.writeUInt32LE(8000, 28); b.writeUInt16LE(1, 32); b.writeUInt16LE(8, 34); b.write('data', 36); b.writeUInt32LE(n, 40); b.fill(128, 44); return b; })();
+    const APPHTML = `<!doctype html><meta charset=utf-8><body style="background:#246;color:#fff;font:40px sans-serif"><div id=t>app</div><script src="${OLD_HOSTED}sdk/mypc-sdk.js"></script><script>
+        var mode = (/mode=(\\w+)/.exec(location.search) || [])[1]; window.keys = []; window.frames_ = 0; window.inputs = [];
+        document.addEventListener('keydown', function (e) { keys.push(e.keyCode); });
+        window.addEventListener('keydown', function (e) { keys.push('w' + e.keyCode); });
+        var ac = new AudioContext(); window.ac = ac;
+        var au = new Audio('s.wav'); au.loop = true; window.au = au;
+        var stop = false, loop = function () { frames_++; document.getElementById('t').textContent = 'frame ' + frames_; if (!stop) requestAnimationFrame(loop); };
+        var h = { onInit: function () { MyPC.ready(); }, onStart: function () { requestAnimationFrame(loop); au.play(); },
+                  onInput: function (a, p) { inputs.push(a + (p ? '+' : '-')); } };
+        if (mode === 'good') { h.onPause = function () { window.paused = 1; }; h.onResume = function () { window.paused = 0; }; }
+        MyPC.init(h);
+    <\/script>`;
+    const pg = await newPage(browser, base, db);
+    const hostedHits = [];
+    // the hosted copy (a newer build), 250 ms away like a TV on Wi-Fi
+    await pg.route(HOSTED + '**', async (route) => {
+        const rel = route.request().url().slice(HOSTED.length).split('?')[0];
+        if (rel === 'app-manifest.json') hostedHits.push(Date.now());
+        await new Promise((x) => setTimeout(x, 250));
+        if (rel === 'app-manifest.json') {
+            const m = JSON.parse(fs.readFileSync(path.join(ROOT, 'app-manifest.json'), 'utf8'));
+            return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(Object.assign(m, { build: NEXT })) });
+        }
+        const p = path.join(ROOT, rel);
+        if (!fs.existsSync(p) || fs.statSync(p).isDirectory()) return route.fulfill({ status: 404, body: '' });
+        return route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'max-age=600' }, contentType: TYPES[path.extname(p)] || 'application/octet-stream', body: fs.readFileSync(p) });
+    });
+    await pg.route(OLD_HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+    await pg.context().route(APP + '**', (r) => {
+        const rel = r.request().url().slice(APP.length).split('?')[0] || 'index.html';
+        if (rel === 's.wav') return r.fulfill({ status: 200, contentType: 'audio/wav', headers: { 'Access-Control-Allow-Origin': '*' }, body: wav });
+        return r.fulfill({ status: 200, contentType: 'text/html', headers: { 'Access-Control-Allow-Origin': '*' }, body: APPHTML });
+    });
+    // a controller the app reads itself (navigator.getGamepads inside its frame)
+    await pg.context().addInitScript(() => { if (window.top === window) return; const pad = { index: 0, id: 'Test pad', connected: true, mapping: 'standard', buttons: [{ pressed: true, value: 1 }], axes: [0, 0] }; navigator.getGamepads = () => [pad, null, null, null]; });
+    await pg.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'flow-good', at: 1 }, { id: 'flow-bare', at: 1 }])); });
+
+    const t0 = Date.now();
+    await pg.goto(base + 'index.html');
+    await pg.waitForSelector('#desk-icons [data-game="app-flow-good"]', { timeout: 15000 });
+    const startMs = Date.now() - t0;
+    check(hostedHits.length === 1 && await pg.evaluate((n) => AppBoot.build() === n, NEXT), 'a real start asks the server once and runs the newer hosted build');
+    const appsReads = () => pg.fs.log.filter((l) => l === 'GET /apps').length;
+    const reads0 = appsReads();
+
+    const open = async (id, forget) => {
+        if (forget) await pg.evaluate(() => Object.keys(sessionStorage).filter((k) => k === 'boot_pick' || /^arc_(games|sync)_/.test(k)).forEach((k) => sessionStorage.removeItem(k)));   // as before build 135 / package 1.6.2
+        const hits = hostedHits.length, t = Date.now();
+        await pg.focus(`#desk-icons [data-game="app-${id}"]`);
+        await Promise.all([pg.waitForURL(new RegExp('play=app-' + id)), pg.keyboard.press('Enter')]);
+        await pg.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 15000 });
+        const ms = Date.now() - t;
+        const f = pg.frames().find((x) => x.url().indexOf(APP) === 0);
+        await f.waitForFunction(() => window.MyPC && MyPC.info() && window.frames_ > 3);
+        return { f, ms, asked: hostedHits.length - hits };
+    };
+    const quit = async (id, forget) => {
+        if (forget) await pg.evaluate(() => Object.keys(sessionStorage).filter((k) => k === 'boot_pick' || /^arc_(games|sync)_/.test(k)).forEach((k) => sessionStorage.removeItem(k)));
+        const hits = hostedHits.length;
+        await tvBack(pg);
+        await pg.waitForFunction(() => !document.getElementById('pause').hidden);
+        const t = Date.now();
+        await Promise.all([pg.waitForURL(new RegExp('from=app-' + id)), pg.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); })]);
+        await pg.waitForSelector(`#desk-icons [data-game="app-${id}"]`, { timeout: 15000 });
+        await pg.waitForFunction(() => window.Desktop && document.activeElement && document.activeElement.getAttribute('data-game'));
+        if (process.env.FLOW_DEBUG) console.log('       quit breakdown', JSON.stringify(await pg.evaluate(() => { const r = performance.getEntriesByType('resource'); const scripts = r.filter((x) => x.initiatorType === 'script'); return { now: Math.round(performance.now()), files: r.length, lastScriptEnd: Math.round(Math.max(...scripts.map((x) => x.responseEnd))), cached: r.filter((x) => x.transferSize === 0).length }; })));
+        return { ms: Date.now() - t, asked: hostedHits.length - hits };
+    };
+
+    // an app with onPause / onResume
+    let o = await open('flow-good');
+    const f = o.f;
+    check(o.asked === 0 && await pg.evaluate((n) => AppBoot.build() === n, NEXT), `opening an app: no server round trip, same hosted build as the desktop (${o.ms} ms)`);
+    check(await f.evaluate(() => navigator.getGamepads()[0] && navigator.getGamepads()[0].id === 'Test pad' && !au.paused), 'running: the app reads its pad and plays its sound');
+    await f.evaluate(() => document.getElementById('t').click());          // a click puts the focus inside the app's frame (a PC)
+    await tvBack(pg);
+    await pg.waitForFunction(() => !document.getElementById('pause').hidden);
+    const menu = await pg.evaluate(() => [...document.querySelectorAll('#pause-items button')].map((b) => b.textContent));
+    check(menu[menu.length - 1] === 'Quit' && menu.indexOf('Quit to menu') < 0, 'the menu says "Quit" ' + JSON.stringify(menu));
+    if (shots) await pg.screenshot({ path: path.join(shots, 'flow-menu-quit.png') });
+    check(await pg.evaluate(() => { const fr = GameHost.frame(); return fr.hasAttribute('inert') && document.activeElement !== fr; }), 'paused: the app\'s frame is inert and does not have the focus');
+    const k0 = await f.evaluate(() => { inputs.length = 0; return keys.length; });
+    await pg.keyboard.press('ArrowDown');                                   // moves in My PC's menu
+    await f.evaluate(() => { document.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 39, bubbles: true })); window.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 13 })); });
+    const pausedState = await f.evaluate(() => ({ keys: keys.length, inputs: inputs.length, pads: navigator.getGamepads().filter(Boolean).length, au: au.paused, paused: window.paused }));
+    check(pausedState.keys === k0 && pausedState.inputs === 0, 'paused: no key reaches the app\'s own listeners, no action ' + JSON.stringify(pausedState));
+    check(pausedState.pads === 0, 'paused: navigator.getGamepads() shows the app no pad');
+    check(pausedState.au === true && pausedState.paused === 1, 'paused: onPause ran and the app\'s playing <audio> is paused');
+    check(await pg.evaluate(() => document.activeElement && document.activeElement.parentNode.id === 'pause-items' && document.activeElement !== document.querySelector('#pause-items button')), 'the arrow moved in My PC\'s menu instead');
+    await pg.evaluate(() => document.querySelector('#pause-items button').click());       // Resume
+    await pg.waitForFunction(() => GameHost.state() === 'running');
+    await f.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 39, bubbles: true })));
+    await f.waitForFunction(() => !au.paused, null, { timeout: 3000 }).catch(() => {});
+    check(await f.evaluate((n) => keys.length > n && navigator.getGamepads()[0] && !au.paused && window.paused === 0, k0) && await pg.evaluate(() => !GameHost.frame().hasAttribute('inert')), 'Resume: keys, the pad and the sound come back');
+    o = await quit('flow-good');
+    check(o.asked === 0 && appsReads() === reads0, `Quit: back to the desktop without asking the server or reading the store list again (${o.ms} ms)`);
+
+    // an app without onPause (it cannot stop itself): held still under the menu
+    o = await open('flow-bare');
+    const fb = o.f;
+    await fb.evaluate(() => new Promise((r) => setTimeout(r, 300)));
+    await tvBack(pg);
+    await pg.waitForFunction(() => !document.getElementById('pause').hidden);
+    const a = await fb.evaluate(() => new Promise((r) => setTimeout(() => { const n = frames_; setTimeout(() => r({ n, m: frames_, ac: ac.state, au: au.paused }), 500); }, 100)));
+    check(a.n === a.m && a.au, 'no onPause: its frames wait under the menu and its sound stops ' + JSON.stringify(a));
+    if (shots) await pg.screenshot({ path: path.join(shots, 'flow-bare-held.png') });
+    await pg.evaluate(() => document.querySelector('#pause-items button').click());
+    await fb.waitForFunction((n) => frames_ > n + 5, a.m, { timeout: 3000 }).catch(() => {});
+    check(await fb.evaluate((n) => frames_ > n + 5 && !au.paused, a.m), 'Resume: it moves and plays again');
+    const quick = await quit('flow-bare');
+
+    // the same switches the old way (the loader asks the server at every page change): for the numbers
+    const slowOpen = await open('flow-good', true);
+    const slowQuit = await quit('flow-good', true);
+    check(slowOpen.asked === 1 && slowQuit.asked === 1, 'the old way (before build 135 / package 1.6.2) each switch asks the server again');
+    console.log(`       start ${startMs} ms; open ${o.ms} ms / quit ${quick.ms} ms now; ${slowOpen.ms} ms / ${slowQuit.ms} ms the old way (server 250 ms away)`);
+    if (shots) await pg.screenshot({ path: path.join(shots, 'flow-desktop-after-quit.png') });
+
+    // the label in every language
+    const labels = await pg.evaluate(() => ['en', 'fr', 'es', 'ar'].map((l) => { const was = I18n.lang(); I18n.setLang(l); const t = I18n.t('quit'); I18n.setLang(was); return t; }));
+    check(JSON.stringify(labels) === JSON.stringify(['Quit', 'Quitter', 'Salir', 'خروج']), '"Quit" in the 4 languages ' + JSON.stringify(labels));
+    check(pg.errors.length === 0, 'no page errors ' + pg.errors.join('; '));
+    await pg.context().close();
 }

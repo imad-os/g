@@ -40,7 +40,7 @@ its own GitHub Pages URL. The hub only lists them, launches them, and gives them
    - **Launching:** home navigates to `game.html?id=<gameId>&profile=<id>` with
      `location.replace` (no history growth). The browser then discards the whole home document:
      covers, DOM, JS heap.
-   - **Exiting:** "Quit to menu" navigates back to `index.html?from=<gameId>`. The game document
+   - **Exiting:** "Quit" navigates back to `index.html?from=<gameId>`. The game document
      is discarded and home refocuses that tile.
    - **`game.html`** is a small packaged shell:
      - it has the static `$WEBAPIS/webapis/webapis.js` tag, a loading bar, the pause menu, the

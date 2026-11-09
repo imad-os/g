@@ -25,6 +25,7 @@
  * Errors (uncaught, failed files, MyPC.fail, MyPC.report(error, data)) are saved by My PC for the App Store Manager (API 11).
  * Push notifications: MyPC.notify.request() / status(), MyPC.launch (the notification that opened the app) (API 12).
  * Google Drive of the profile (one sign-in in My PC, no token in the app): MyPC.drive (API 14).
+ * Paused under My PC's menu the app gets no key, no gamepad, its media pause (and with no onPause its frames wait) (API 15).
  *   'menu' = gamepad Start or Select pressed alone; only sent to apps that init with { ownMenu: true }.
  *   Only the TV remote's Back, or holding Start + Select together 1 s, opens My PC's menu; Esc / Backspace are 'cancel'.
  * Written in ES5 so it loads anywhere; My PC itself supports Samsung TVs from 2024 (Tizen 8+).
@@ -32,7 +33,7 @@
 var MyPC = (function () {
     'use strict';
 
-    var VERSION = 1, API = 14, HELLO_WAIT = 1200;
+    var VERSION = 1, API = 15, HELLO_WAIT = 1200;
     var handlers = {}, info = null, data = {}, started = false, destroyed = false, isReady = false;
     var hosted = false, hostWin = null, hostOrigin = '*', helloTimer = 0;
     var down = {};                       // action -> number of keys / buttons holding it
@@ -49,6 +50,96 @@ var MyPC = (function () {
     function post(type, d) {
         if (!hosted || !hostWin) return;
         try { hostWin.postMessage({ mypc: VERSION, type: type, data: d === undefined ? null : d }, hostOrigin); } catch (e) {}
+    }
+
+    /* ---------------- freeze: while My PC's menu (or one of its screens) is over the app (API 15) ----------------
+     * The app must not see any button while it is paused (owner rule). Between 'pause' and 'resume':
+     *  - keys pressed inside the frame never reach the app's own listeners (a capture listener on window, added as
+     *    soon as this file runs: include the SDK first); My PC still gets them, so Back resumes;
+     *  - navigator.getGamepads() returns no pads, so a game that reads the pads itself sees none;
+     *  - <audio> / <video> that were playing are paused and played again on resume;
+     *  - an app with NO onPause handler (it cannot stop itself) is held still: its requestAnimationFrame callbacks
+     *    wait and run on resume (like a hidden browser tab), its AudioContexts are suspended and resumed.
+     * Apps with onPause stop their own loop and sound there (required, section 4 of the guide). */
+    var frozen = false, frozenMedia = [], frozenCtx = [], heldRaf = [], media = [], ctxs = [];
+    function freezeKey(e) {
+        if (!frozen) return;
+        e.stopImmediatePropagation();
+        if (e.type !== 'keypress') forwardKey(e, e.type === 'keydown');     // My PC still gets Back, OK, arrows for its menu
+        e.preventDefault();
+    }
+    if (framed()) {
+        try {
+            window.addEventListener('keydown', freezeKey, true);
+            window.addEventListener('keyup', freezeKey, true);
+            window.addEventListener('keypress', freezeKey, true);
+        } catch (e) {}
+        try {
+            var realPads = navigator.getGamepads;
+            if (typeof realPads === 'function') {
+                Object.defineProperty(navigator, 'getGamepads', { configurable: true, writable: true, value: function () {
+                    return frozen ? [null, null, null, null] : realPads.apply(navigator, arguments);
+                } });
+            }
+        } catch (e) {}
+        try {
+            var realRaf = window.requestAnimationFrame, realCaf = window.cancelAnimationFrame;
+            if (typeof realRaf === 'function') {
+                window.requestAnimationFrame = function (cb) {
+                    var id = realRaf.call(window, function (t) {
+                        if (frozen && !handlers.onPause) { heldRaf.push({ id: id, cb: cb }); return; }
+                        cb(t);
+                    });
+                    return id;
+                };
+                window.cancelAnimationFrame = function (id) {
+                    for (var i = heldRaf.length - 1; i >= 0; i--) if (heldRaf[i].id === id) heldRaf.splice(i, 1);
+                    return realCaf.call(window, id);
+                };
+            }
+        } catch (e) {}
+        try {
+            var realPlay = HTMLMediaElement.prototype.play;
+            HTMLMediaElement.prototype.play = function () {
+                if (media.indexOf(this) < 0) {
+                    for (var i = media.length - 1; i >= 0 && media.length >= 32; i--) if (media[i].paused) media.splice(i, 1);   // forget old stopped ones
+                    if (media.length < 64) media.push(this);
+                }
+                return realPlay.apply(this, arguments);
+            };
+        } catch (e) {}
+        try {
+            ['AudioContext', 'webkitAudioContext'].forEach(function (n) {
+                var Real = window[n];
+                if (typeof Real !== 'function' || typeof Reflect === 'undefined') return;
+                var Wrapped = function () {
+                    var p = Object.getPrototypeOf(this), c = Reflect.construct(Real, Array.prototype.slice.call(arguments), p && p.constructor !== Wrapped && typeof p.constructor === 'function' ? p.constructor : Real);
+                    for (var i = ctxs.length - 1; i >= 0; i--) if (ctxs[i].state === 'closed') ctxs.splice(i, 1);
+                    ctxs.push(c);
+                    return c;
+                };
+                Wrapped.prototype = Real.prototype;
+                try { Object.setPrototypeOf(Wrapped, Real); } catch (e) {}
+                window[n] = Wrapped;
+            });
+        } catch (e) {}
+    }
+    function freeze() {
+        if (frozen) return;
+        frozen = true;
+        var i;
+        for (i = 0; i < media.length; i++) if (!media[i].paused && !media[i].ended) { try { media[i].pause(); frozenMedia.push(media[i]); } catch (e) {} }
+        if (!handlers.onPause) for (i = 0; i < ctxs.length; i++) if (ctxs[i].state === 'running') { try { ctxs[i].suspend(); frozenCtx.push(ctxs[i]); } catch (e) {} }
+    }
+    function thaw(after) {
+        if (!frozen) { if (after) after(); return; }
+        frozen = false;
+        if (after) after();                                  // onResume first: the app restarts what it stopped itself
+        var m = frozenMedia, c = frozenCtx, r = heldRaf, i;
+        frozenMedia = []; frozenCtx = []; heldRaf = [];
+        for (i = 0; i < m.length; i++) if (m[i].paused) { try { var p = m[i].play(); if (p && p.catch) p.catch(function () {}); } catch (e) {} }
+        for (i = 0; i < c.length; i++) if (c[i].state === 'suspended') { try { c[i].resume(); } catch (e) {} }
+        for (i = 0; i < r.length; i++) window.requestAnimationFrame(r[i].cb);
     }
 
     /* ---------------- error reports (API 11): My PC saves them for the App Store Manager (Errors page) ----------------
@@ -137,11 +228,11 @@ var MyPC = (function () {
                 text._start();
                 break;
             case 'start': if (!started) { started = true; call('onStart'); } break;
-            case 'pause': releaseAll(); gamepad._release(); call('onPause'); break;
-            case 'resume': call('onResume'); break;
+            case 'pause': releaseAll(); gamepad._release(); call('onPause'); freeze(); break;
+            case 'resume': thaw(function () { call('onResume'); }); break;
             case 'destroy':
                 if (destroyed) return;
-                destroyed = true; releaseAll(); gamepad._stop(); mic._stop();
+                destroyed = true; frozen = false; heldRaf = []; frozenMedia = []; frozenCtx = []; releaseAll(); gamepad._stop(); mic._stop();
                 call('onDestroy');
                 break;
             case 'input': setInput(d.action, !!d.pressed, d.repeat, d.dev); break;

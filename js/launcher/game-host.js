@@ -437,7 +437,7 @@ var GameHost = (function () {
         if (window.Rotation && Rotation.phone() && Rotation.mode() === 'manual') pauseItems.push({ id: '_rotate', label: I18n.t('rotNow') });
         // the music that plays on under the game (js/core/music.js): play or pause it from here
         if (typeof Music !== 'undefined') pauseItems.push({ id: '_music', label: I18n.t(musicOn() ? 'gmMusicPause' : 'gmMusicPlay') });
-        pauseItems.push({ id: '_quit', label: I18n.t('quitToMenu') });
+        pauseItems.push({ id: '_quit', label: I18n.t('quit') });
         var target = null;
         for (var i = 0; i < pauseItems.length; i++) {
             var b = document.createElement('button');
@@ -474,9 +474,19 @@ var GameHost = (function () {
         if (state === 'running' && !runsInBackground()) openPause();
     }
 
+    // While My PC's menu (or any of its screens) is over the app, the app's frame gets no input at all: inert takes it out of
+    // the focus order and the mouse / touch, and the focus leaves it so keys come to My PC. (The SDK also freezes the app's
+    // own key listeners, gamepad reads and sound: sdk/mypc-sdk.js freeze.) Owner rule 2026-11-09: a paused app sees no button.
+    function frameInput(on) {
+        if (!iframe) return;
+        if (on) iframe.removeAttribute('inert'); else iframe.setAttribute('inert', '');
+        if (!on && document.activeElement === iframe) { try { iframe.blur(); } catch (e) {} $('game-layer').focus(); }
+    }
+
     function openPause(focusId) {
         if (state !== 'running') return;
         setState('paused');
+        frameInput(false);
         try { api.pause(); } catch (e) {}
         Input.releaseAll();
         Input.setExternalPoll(false);   // the game loop is stopped: the launcher reads the gamepads
@@ -495,6 +505,7 @@ var GameHost = (function () {
     function hold() {
         if (state !== 'running') return false;
         setState('paused');
+        frameInput(false);
         try { api.pause(); } catch (e) {}
         Input.releaseAll();
         Input.setExternalPoll(false);
@@ -504,6 +515,7 @@ var GameHost = (function () {
     function release(didPause) {
         if (!didPause || state !== 'paused' || !$('pause').hidden) return;       // not ours, or the pause menu is open meanwhile
         setState('running');
+        frameInput(true);
         Input.setExternalPoll(!game.remote);
         screenSaver(false);
         $('game-layer').focus();
@@ -516,6 +528,7 @@ var GameHost = (function () {
         Focus.pop();
         Focus.reset();
         setState('running');
+        frameInput(true);
         Input.setExternalPoll(!game.remote);
         screenSaver(false);
         $('game-layer').focus();

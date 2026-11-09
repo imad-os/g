@@ -9,7 +9,7 @@
      Every package upload needs a higher version. Never change SHELL in js/boot/loader.js or "shell" in
      app-manifest.json: older packages would stop accepting the online builds. -->
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
-        id="https://imad-os.github.io/g/arcade" version="1.6.1" viewmodes="maximized">
+        id="https://imad-os.github.io/g/arcade" version="1.6.2" viewmodes="maximized">
     <tizen:application id="XXXXXXXXXX.arcade" package="XXXXXXXXXX" required_version="4.0"/>
     <name>My PC</name>
     <description>Seven arcade and board games for your TV: a platformer with 3 worlds and 2-player co-op, Parchís for 2 to 4 players with Moroccan rules, plus falling blocks, sky hopping, snake, brick breaking and tile merging. Player profiles keep everyone's progress apart.</description>

@@ -189,6 +189,15 @@ var App = (function () {
         var remote = AppBoot.source() === 'remote';
         var ids = only ? active.games.filter(function (g) { return g === only; }) : active.games, out = [], pending = ids.length;
         if (!pending) return done(out);
+        // a page change inside this start (a game opens or quits): the list read at start, no request per game (2 per game
+        // on the hosted copy) while the player waits. A real start reads them again.
+        var KEY = 'arc_games_' + AppBoot.source() + '_' + AppBoot.build(), kept = null;
+        if (only || param('from')) { try { kept = JSON.parse(sessionStorage.getItem(KEY)); } catch (e) {} }
+        if (kept && kept.length) {
+            var pick = kept.filter(function (g) { return !only || g.id === only; });
+            if (pick.length || !only) return done(pick);
+        }
+        if (!only) { var save = done; done = function (list) { try { sessionStorage.setItem(KEY, JSON.stringify(list)); } catch (e) {} save(list); }; }
 
         function inLocal(id) { for (var i = 0; i < local.games.length; i++) if (local.games[i] === id) return true; return false; }
         function fetchManifest(b, id, cb) {
@@ -229,7 +238,13 @@ var App = (function () {
      * Opening a game loads index.html?play=<id>: the browser throws the whole desktop page away
      * (DOM, images, timers, JS heap) and this page starts only that game. Quitting loads
      * index.html?from=<id>: a fresh desktop, focused on the game's icon. Same packaged index.html
-     * and boot loader, so it needs no new TV package. */
+     * and boot loader, so it needs no new TV package.
+     * Why not one page with the game in a frame over the desktop (reviewed 2026-11-09, owner's question): it would open and
+     * quit faster, but the desktop (pictures, live background canvas, widgets, the whole session's memory) would stay in the
+     * TV's small memory under every game, and a same-origin built-in game left referenced by the desktop would keep its whole
+     * window alive. A page change frees all of it for sure. What made a switch slow is cut instead: the loader reuses the
+     * copy it picked at start (package 1.6.2, js/boot/loader.js), and the desktop does not read the store / settings again
+     * at every Quit (syncDue below). */
     function param(name) {
         var m = new RegExp('[?&]' + name + '=([^&#]*)').exec(location.search);
         return m ? decodeURIComponent(m[1]) : null;
@@ -347,6 +362,18 @@ var App = (function () {
         desktop();
     }
 
+    // Back from a game (?from=) the desktop page starts again: the store catalog, the AI services and the settings of every
+    // My PC were read minutes ago. Read them again only every 30 min (and always at a real start): 3 Firestore reads and the
+    // network less at every Quit (owner: quick and light app switches).
+    var SYNC_EVERY = 30 * 60 * 1000;
+    function syncDue(name) {
+        var k = 'arc_sync_' + name, now = Date.now(), at = 0;
+        try { at = +sessionStorage.getItem(k) || 0; } catch (e) {}
+        if (param('from') && at && now - at < SYNC_EVERY && now >= at) return false;
+        try { sessionStorage.setItem(k, String(now)); } catch (e) {}
+        return true;
+    }
+
     function desktop() {
         // the profile's music: back from a game, it plays on where it was (Music app > Settings)
         Music.init({ resume: !!param('from') });
@@ -356,7 +383,7 @@ var App = (function () {
             ProfilesUI.init(profileChanged);
             Desktop.show();
             // apps installed from the computer: shown from the cache now, updated when Firebase answers
-            Cloud.refresh(function (err, list, changed) {
+            if (syncDue('apps')) Cloud.refresh(function (err, list, changed) {
                 if (err || !changed) return;
                 var keep = Focus.current();
                 Desktop.setInstalled(list);
@@ -388,9 +415,9 @@ var App = (function () {
             Push.start();                                        // push notifications of a signed-in player account (js/launcher/push.js)
             CalRemind.start();                                   // the profile's calendar reminders (js/launcher/cal-remind.js)
             World.flush();
-            Bridges.syncAi();                                    // the AI services set in the App Store Manager
+            if (syncDue('ai')) Bridges.syncAi();                 // the AI services set in the App Store Manager
             GDrive.syncSoon();                                   // the Google client of every My PC (settings/google), twice a day at most
-            GlobalSettings.sync(function (e, changed) { if (changed) Desktop.paintWallpaper(); });   // its Settings (backgrounds, events)
+            if (syncDue('global')) GlobalSettings.sync(function (e, changed) { if (changed) Desktop.paintWallpaper(); });   // its Settings (backgrounds, events)
             // One-time device benchmark while the menu is idle.
             setTimeout(function () {
                 if (!GameHost.active()) benchCancel = Perf.benchmark(function () { benchCancel = null; });
