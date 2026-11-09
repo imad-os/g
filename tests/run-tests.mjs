@@ -5989,14 +5989,20 @@ async function wallTests(browser, base) {
             '<rect width="1920" height="1080" fill="url(#g)"/><path d="M0 760 Q480 640 960 720 T1920 700 V1080 H0Z" fill="#35502f"/><text x="960" y="560" font-size="90" text-anchor="middle" fill="#fff" font-family="sans-serif">' + name + '</text></svg>';
         const page = await at('2026-11-03T12:00:00Z', db, () => { localStorage.setItem('arc_p1_events', JSON.stringify({ country: 'ma', football: false })); });
         await page.route(/wallpapers\/real\/([a-z-]+)\.jpg/, (r) => { const n = /real\/([a-z-]+)\.jpg/.exec(r.request().url())[1]; (db.photos = db.photos || []).push(n);
-            return r.fulfill({ status: 200, contentType: 'image/svg+xml', body: svg('built-in ' + n, '#5f6b7a', '#9aa6b4') }); });
+            return r.continue(); });                                     // the real built-in pack (wallpapers/real)
         await page.context().route(/api\.open-meteo\.com/, (r) => { const b = forecastBody(14); Object.assign(b.current, { weather_code: 63, is_day: 1, cloud_cover: 95, time: '2026-11-03T12:00' }); return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(b) }); });
         await page.evaluate(() => { localStorage.removeItem('arc_dev_wxfc'); DynWall.setPref('style', 'real'); Desktop.setWallpaper('dyn_horizon'); });
         check(await painted(page, 'p,r:rain-day,rain,day'), 'Realistic: the built-in rain photo ' + await page.evaluate(() => DynWall._key()));
         check((db.photos || []).join() === 'rain-day', 'only that one photo is read ' + (db.photos || []).join());
         check(await page.evaluate(() => DynPhotos.names('partly', 'night').join() === 'clear-night,cloudy-night,clear-day' && DynPhotos.names('showers', 'dusk')[0] === 'rain-day' &&
                                         DynPhotos._nameOf('Rain Day.JPG') === 'rain-day' && DynPhotos._nameOf('holiday.jpg') === ''), 'the photo names and their fallbacks');
+        check(await page.evaluate(() => new Promise((ok) => DynPhotos.get('real', 'rain', 'day', (im) => ok(!!im && im.naturalWidth === 1920 && im.naturalHeight === 1080)))), 'the built-in photo is a real 1920x1080 picture');
         await shot(page, 'style-realistic-rain');
+        if (shots) for (const [k, ph] of [['storm', 'day'], ['clear', 'night'], ['snow', 'day'], ['fog', 'day'], ['rain', 'night'], ['clear', 'dusk']]) {
+            await page.evaluate(([k, ph]) => new Promise((ok) => DynPhotos.get('real', k, ph, (im) => { const c = document.querySelector('#wallpaper .dw-cv'), x = c.getContext('2d');
+                DynArt.photo(x, c.width, c.height, im, { k, phase: ph, glass: 'medium', seed: 7 }); ok(); })), [k, ph]);
+            await shot(page, 'style-realistic-' + k + '-' + ph);
+        }
         // My pictures: two of the 13 found in Google Drive (any case, spaces or _), shrunk to the screen and kept on the TV
         await page.evaluate((pics) => {
             GDrive.status = (cb) => setTimeout(() => cb({ ok: true, code: '' }), 0);
