@@ -15,12 +15,12 @@
   reset. World records in `records/<game>`. Users can turn both off (Settings > Privacy & security);
   keep the privacy text in i18n true whenever this changes.
 - Original names and art only (no Nintendo/Tetris look-alikes).
-- **Package id (owner request 2026-11-10, package 1.7.0):** Tizen package `MyPCgeeks1`, app id `MyPCgeeks1.MyPC`, widget id
+- **Package id (owner request 2026-11-10, package 3.0.0):** Tizen package `MyPCgeeks1`, app id `MyPCgeeks1.MyPC`, widget id
   `https://pc.geekspro.us/mypc` (was the placeholder `XXXXXXXXXX.arcade`). Never change them again: a TV treats another id as another
   app (empty storage; profiles come back from the cloud backup). Android applicationId stays `us.geekspro.mypc.controller` until the
   owner asks (planned `us.geekspro.mypc`, also a separate app on the phone). **Icon** = the classic monitor drawn by `tools/make-icons.mjs`
   (every size: icon.png 512x423 24-bit, favicons, web app 192 / 512 / maskable, apple-touch, Seller Office logo, Android adaptive
-  mipmaps); edit the art there and run it, never hand-made PNGs. `UNSIGNED=1 sh tools/build-wgt.sh` = unsigned .wgt for Apps2Samsung.
+  mipmaps); edit the art there and run it, never hand-made PNGs. `UNSIGNED=1 sh tools/build-wgt.sh` = unsigned .wgt for Apps2Samsung; copy it to `downloads/MyPC.wgt` (shared link https://pc.geekspro.us/downloads/MyPC.wgt).
 
 ## Where things are
 - `index.html` + `js/boot/loader.js`: picks the hosted copy (pc.geekspro.us; packages before 1.6.1 ask imad-os.github.io/g, which redirects there) or the bundled

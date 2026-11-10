@@ -10,7 +10,7 @@
      Every package upload needs a higher version. Never change SHELL in js/boot/loader.js or "shell" in
      app-manifest.json: older packages would stop accepting the online builds. -->
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
-        id="https://pc.geekspro.us/mypc" version="1.7.0" viewmodes="maximized">
+        id="https://pc.geekspro.us/mypc" version="3.0.0" viewmodes="maximized">
     <tizen:application id="MyPCgeeks1.MyPC" package="MyPCgeeks1" required_version="4.0"/>
     <name>My PC</name>
     <description>Seven arcade and board games for your TV: a platformer with 3 worlds and 2-player co-op, Parchís for 2 to 4 players with Moroccan rules, plus falling blocks, sky hopping, snake, brick breaking and tile merging. Player profiles keep everyone's progress apart.</description>
