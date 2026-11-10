@@ -1,4 +1,5 @@
 node_modules/
 build/
 *.wgt
+!downloads/MyPC.wgt
 .sign/
