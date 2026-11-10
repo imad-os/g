@@ -6561,6 +6561,16 @@ async function copyTests(browser, base) {
     check((await job(j.id)).state === 'done' && bigUp.length === 1 && sum(bigUp[0].data) === sum(big2) && g.statusAsks >= 1,
         'USB -> Drive cut by a page change: the next page asks Google how much it has and sends only the rest; one file, whole ' + JSON.stringify([bigUp.length, g.statusAsks]));
 
+    // --- paused while a piece is being written: that write still lands, so the next run waits for it (else the file got it twice)
+    await page.evaluate((D) => { window.__usb.slow = 1500; window.__usb.put(D + '/PauseTest/x.txt', new Uint8Array(1)); }, D);
+    j = await start({ dir: 'toUsb', items: ['p1'], dest: D + '/PauseTest' });
+    await page.waitForFunction((D) => window.__usb.tree[D + '/PauseTest/beach.jpg'] !== undefined, D, { timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(300);
+    await page.evaluate((id) => { CopyJobs.pause(id); window.__usb.slow = 0; CopyJobs.resume(id); }, j.id);
+    await waitJob(j.id, ['done', 'failed']);
+    await page.waitForTimeout(1800);
+    check(await page.evaluate((D) => window.__usb.sum(D + '/PauseTest/beach.jpg'), D) === sum(photo), 'paused while a piece was being written, then resumed at once: the file is whole, not written twice');
+
     // --- the USB drive pulled out in the middle: the copy stops with a red card that says so; not enough space: stops before copying
     await page.evaluate(() => { window.__usb.slow = 600; });
     j = await start({ dir: 'toUsb', items: ['m2'], dest: D + '/Backup' });

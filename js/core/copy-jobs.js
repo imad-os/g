@@ -42,6 +42,7 @@ var CopyJobs = (function () {
     var STOP = { gone: 1, perm: 1, full: 1, 'drive-full': 1, reauth: 1, 'signed-out': 1, noconfig: 1, 'too-many': 1, unsupported: 1 };
     var WAIT = { network: 1, timeout: 1, quota: 1 };
 
+    var closing = 0;          // USB files of a stopped run still being closed (their last write lands first): the next run waits
     var jobs = null, run = null, fns = [], quiet = {}, started = false, leaseT = 0, wakeT = 0, cardAt = {}, emitAt = {}, emitT = {};
     var tab = (function () {
         var t = '';
@@ -146,7 +147,7 @@ var CopyJobs = (function () {
     function freeLease() { clearInterval(leaseT); leaseT = 0; try { var l = Store.rawGet(LEASE); if (l && l.t === tab) localStorage.removeItem(LEASE); } catch (e) {} }
     function wake(ms) { clearTimeout(wakeT); wakeT = setTimeout(kick, ms); }
     function kick() {
-        if (!started || run) return;
+        if (!started || run || closing) return;
         var me = profile(), l = load(), j = null;
         for (var i = 0; i < l.length; i++) if (l[i].profile === me && (l[i].state === 'queued' || l[i].state === 'waiting')) { j = l[i]; break; }
         if (!j) return freeLease();
@@ -158,7 +159,7 @@ var CopyJobs = (function () {
     function finish(j, state, e, after) {
         var w = null;
         if (run && run.id === j.id) { var h = run.h; w = run.w; run = null; if (h) try { h.abort(); } catch (x) {} }
-        if (w) w.close(function () { if (after) after(); }); else if (after) later(after);
+        if (w) { closing++; w.close(function () { closing--; if (after) after(); later(kick); }); } else if (after) later(after);
         j.state = state;
         j.error = e ? { code: e.code || 'failed', message: String(e.message || e.code || 'Failed.') } : null;
         if (ended(j)) { j.end = Date.now(); j.cur = null; }
@@ -376,7 +377,10 @@ var CopyJobs = (function () {
                     UsbFs.writer(path, false, function (x2, w) {
                         if (!mine(j)) return;
                         if (x2) return cb(x2);
+                        run.w = w;
                         w.write(new Uint8Array(r.buf), function (x3) {
+                            if (!mine(j)) return;                  // stopped: finish() closes the file
+                            run.w = null;
                             w.close(function () {
                                 if (!mine(j)) return;
                                 if (x3) { UsbFs.remove(path); return cb(x3); }
@@ -585,6 +589,6 @@ var CopyJobs = (function () {
     }
 
     return { init: init, start: start, list: list, pause: pause, resume: resume, cancel: cancel, clear: clear, onChange: onChange, watch: watch,
-             _reset: function () { var h = run && run.h; run = null; if (h) try { h.abort(); } catch (e) {} jobs = null; started = false; } };     // _reset: tests, as if the page changed
+             _reset: function () { var h = run && run.h; run = null; if (h) try { h.abort(); } catch (e) {} jobs = null; started = false; closing = 0; } };     // _reset: tests, as if the page changed
 })();
 if (typeof module !== 'undefined') module.exports = CopyJobs;

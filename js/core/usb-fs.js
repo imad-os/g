@@ -181,20 +181,30 @@ var UsbFs = (function () {
             var fh = null;
             try { fh = fs.openFile(p, append ? 'a' : 'w'); } catch (x) { if (!fs.resolve) return later(function () { cb(tzErr(x)); }); fh = null; }
             if (fh) {
+                // a write still running when the copy is paused / stopped lands anyway: close() waits for it, so the next run
+                // (which goes on from the file's real size) never sees a size that grows behind its back
+                var busy = 0, onIdle = null;
+                var settled = function () { busy--; if (!busy && onIdle) { var f = onIdle; onIdle = null; f(); } };
+                var closeNow = function (done) {
+                    try {
+                        if (fh.closeNonBlocking) return fh.closeNonBlocking(function () { if (done) done(null); }, function (x) { if (done) done(tzErr(x)); });
+                        fh.close();
+                    } catch (x) {}
+                    if (done) later(function () { done(null); });
+                };
                 return later(function () {
                     cb(null, {
                         write: function (u8, done) {
                             try {
-                                if (fh.writeDataNonBlocking) fh.writeDataNonBlocking(u8, function () { written += u8.length; done(null); }, function (x) { done(wErr(x, u8.length)); });
+                                if (fh.writeDataNonBlocking) { busy++; fh.writeDataNonBlocking(u8, function () { written += u8.length; settled(); done(null); }, function (x) { settled(); done(wErr(x, u8.length)); }); }
                                 else { fh.writeData(u8); written += u8.length; later(function () { done(null); }); }
-                            } catch (x) { var e = wErr(x, u8.length); later(function () { done(e); }); }
+                            } catch (x) { if (busy) settled(); var e = wErr(x, u8.length); later(function () { done(e); }); }
                         },
                         close: function (done) {
-                            try {
-                                if (fh.closeNonBlocking) return fh.closeNonBlocking(function () { if (done) done(null); }, function (x) { if (done) done(tzErr(x)); });
-                                fh.close();
-                            } catch (x) {}
-                            if (done) later(function () { done(null); });
+                            if (!busy) return closeNow(done);
+                            // a write that never answers (drive pulled out) must not hold the copies forever
+                            var t = setTimeout(function () { if (onIdle) { onIdle = null; closeNow(done); } }, 20000);
+                            onIdle = function () { clearTimeout(t); closeNow(done); };
                         }
                     });
                 });
