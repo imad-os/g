@@ -26,6 +26,7 @@
  * Push notifications: MyPC.notify.request() / status(), MyPC.launch (the notification that opened the app) (API 12).
  * Google Drive of the profile (one sign-in in My PC, no token in the app): MyPC.drive (API 14).
  * Paused under My PC's menu the app gets no key, no gamepad, its media pause (and with no onPause its frames wait) (API 15).
+ * The TV's USB drives (MyPC.usb) and copies between Google Drive and USB drives done by My PC (MyPC.copy) (API 16, TV only).
  *   'menu' = gamepad Start or Select pressed alone; only sent to apps that init with { ownMenu: true }.
  *   Only the TV remote's Back, or holding Start + Select together 1 s, opens My PC's menu; Esc / Backspace are 'cancel'.
  * Written in ES5 so it loads anywhere; My PC itself supports Samsung TVs from 2024 (Tizen 8+).
@@ -33,7 +34,7 @@
 var MyPC = (function () {
     'use strict';
 
-    var VERSION = 1, API = 15, HELLO_WAIT = 1200;
+    var VERSION = 1, API = 16, HELLO_WAIT = 1200;
     var handlers = {}, info = null, data = {}, started = false, destroyed = false, isReady = false;
     var hosted = false, hostWin = null, hostOrigin = '*', helloTimer = 0;
     var down = {};                       // action -> number of keys / buttons holding it
@@ -250,6 +251,8 @@ var MyPC = (function () {
             case 'launch': if (plainObject(d)) { pub.launch = d; call('onLaunch', d); } break;
             case 'text': text._message(d); break;
             case 'drive': drive._message(d); break;
+            case 'usb': usb._message(d); break;
+            case 'copy': copy._message(d); break;
         }
     }
 
@@ -1998,9 +2001,71 @@ var MyPC = (function () {
         };
     })();
 
+    /* MyPC.usb and MyPC.copy (API 16, on the TV): the USB drives plugged into the TV, and copies between Google Drive and
+     * those drives done by My PC itself (both ways, files and whole folders, 4 MB at a time, they go on after the app is
+     * closed, a restart or a network cut). My PC asks the user once per app ("<app> wants to use your USB drives"); a copy
+     * also needs MyPC.drive's permission. Paths are real paths like /opt/media/USBDriveA1/Photos.
+     *   usb.drives() -> [{ path, name, free, total }]     usb.list(path) -> [{ name, path, dir, size }]
+     *   usb.createFolder(parentPath, name) -> { name, path }    usb.read(path, start, end) -> { buf }    usb.stat(path)
+     *   copy.toUsb(driveFilesOrIds, usbFolderPath, { ifExists: 'skip' | 'replace' | 'keep' }) -> job
+     *   copy.toDrive(usbPaths, driveFolderId, { ifExists }) -> job       copy.jobs() -> [job]
+     *   copy.pause(id) / resume(id) / cancel(id) / clear(id) -> job      copy.onChange(fn(job)) -> off()
+     * job: { id, dir, state (queued scanning copying waiting paused done failed cancelled), dest: { path | id, name }, files,
+     *        bytes, doneFiles, doneBytes, skipped, failed: [{ name, message }], current: { name, size, done }, error, progress }
+     * Standalone (no My PC around): every call fails with code 'unsupported'. Full reference: sdk/GUIDE.md, "USB drives". */
+    function shellOnly(type, ch, op, args) {
+        var p = bridgeReady().then(function () {
+            if (!viaShell()) throw bridgeError({ code: 'unsupported', message: 'USB drives and copies need My PC on a TV.' });
+            if (!info.bridges || !info.bridges[type]) throw bridgeError({ code: 'unsupported', message: info.bridges && info.bridges.drive ? 'This device has no USB drives (only a TV has them).' : 'This My PC is too old. Update My PC (Control Panel > Update).' });
+            return ch.call(op, { args: args || {} });
+        });
+        p.abort = function () {};
+        return p;
+    }
+    var usb = (function () {
+        var ch = channel('usb');
+        function pathOf(f) { return typeof f === 'string' ? f : f && f.path; }
+        return {
+            drives: function () { return shellOnly('usb', ch, 'drives'); },
+            list: function (path) { return shellOnly('usb', ch, 'list', { path: pathOf(path) }); },
+            stat: function (path) { return shellOnly('usb', ch, 'stat', { path: pathOf(path) }); },
+            createFolder: function (parent, name) { return shellOnly('usb', ch, 'mkdir', { path: pathOf(parent), name: name }); },
+            read: function (path, start, end) { return shellOnly('usb', ch, 'read', { path: pathOf(path), start: start, end: end }); },
+            _message: ch._message
+        };
+    })();
+    var copy = (function () {
+        var ch = channel('copy'), fns = [], watching = null;
+        function idOf(f) { return typeof f === 'string' ? f : f && (f.id || f.path); }
+        function start(dir, items, dest, opts) {
+            items = (Array.isArray(items) ? items : [items]).map(idOf);
+            return shellOnly('copy', ch, 'start', { dir: dir, items: items, dest: idOf(dest), ifExists: (opts && opts.ifExists) || 'skip' });
+        }
+        return {
+            toUsb: function (files, folderPath, opts) { return start('toUsb', files, folderPath, opts); },
+            toDrive: function (paths, folderId, opts) { return start('toDrive', paths, folderId || 'root', opts); },
+            jobs: function () { return shellOnly('copy', ch, 'jobs'); },
+            pause: function (id) { return shellOnly('copy', ch, 'pause', { id: idOf(id) }); },
+            resume: function (id) { return shellOnly('copy', ch, 'resume', { id: idOf(id) }); },
+            cancel: function (id) { return shellOnly('copy', ch, 'cancel', { id: idOf(id) }); },
+            clear: function (id) { return shellOnly('copy', ch, 'clear', { id: idOf(id) }); },
+            // fn(job) at every change of this app's copies (about twice a second while one runs); My PC then shows no card of its own
+            onChange: function (fn) {
+                if (typeof fn !== 'function') return function () {};
+                fns.push(fn);
+                if (!watching) { watching = shellOnly('copy', ch, 'watch'); watching.catch(function () { watching = null; }); }
+                return function () { var i = fns.indexOf(fn); if (i >= 0) fns.splice(i, 1); };
+            },
+            _message: function (d) {
+                if (d && d.ev === 'job' && !d.rid) { for (var i = 0; i < fns.length; i++) { try { fns[i](d.job); } catch (e) { try { console.error('[MyPC copy] ' + e); } catch (x) {} } } return true; }
+                return ch._message(d);
+            }
+        };
+    })();
+
     var pub = {
         version: VERSION,
-        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,
@@ -2012,6 +2077,8 @@ var MyPC = (function () {
         notify: notify,
         text: text,
         drive: drive,
+        usb: usb,
+        copy: copy,
         // The notification that opened the app ({ link, app, path, title, text, at }) or null; read it in onInit.
         // A notification chosen while the app runs: MyPC.init({ onLaunch(launch) }) (and MyPC.launch is updated)
         launch: null,

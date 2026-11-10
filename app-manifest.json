@@ -1,5 +1,5 @@
 {
-  "build": 145,
+  "build": 146,
   "version": "3.0.0",
   "shell": 1,
   "css": [
@@ -35,6 +35,8 @@
     "js/core/widget-lib.js",
     "js/core/music-tags.js",
     "js/core/music-src.js",
+    "js/core/usb-fs.js",
+    "js/core/copy-jobs.js",
     "js/core/music.js",
     "js/core/radio.js",
     "js/core/weather.js",
@@ -56,6 +58,7 @@
     "js/core/i18n-radio.js",
     "js/core/i18n-shortcuts.js",
     "js/core/i18n-drive.js",
+    "js/core/i18n-copy.js",
     "js/core/a11y.js",
     "js/core/scores.js",
     "js/core/audio.js",

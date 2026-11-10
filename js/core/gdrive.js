@@ -30,7 +30,7 @@
  *   GDrive.upload(opts, onProgress, cb)  exportFile(id, mime, cb)  thumb(link, size, cb)  about(cb)  appFolder(appId, title, cb)
  *   GDrive.request(req, cb)  an authorized Drive request (My PC only)        GDrive.token(cb)  (My PC only: Music's service worker)
  * Every call returns { abort() }. Errors: { code, message, status }, code one of noconfig signed-out reauth denied expired
- * not-found permission quota range too-big bad-request network timeout cancelled http.
+ * not-found permission quota full (Drive full) range too-big bad-request network timeout cancelled http.
  * Standalone (the SDK in a plain browser) loads this file too: GDrive.setStorage({ load, save }) and setConfig(cfg). */
 var GDrive = (function () {
     'use strict';
@@ -230,6 +230,7 @@ var GDrive = (function () {
     function apiError(r) {
         var b = r.body && typeof r.body === 'object' ? r.body : {}, e = b.error || {}, reason = (e.errors && e.errors[0] && e.errors[0].reason) || '', msg = e.message || ('HTTP ' + r.status);
         if (r.status === 401) return err('reauth', 'Google refused the sign-in. Sign in again.', 401);
+        if (/storageQuotaExceeded|quotaExceeded.*storage/i.test(reason + ' ' + msg)) return err('full', 'Your Google Drive is full.', r.status);
         if (r.status === 403 && /quota|rateLimit|limitExceeded/i.test(reason)) return err('quota', 'Google Drive is busy (quota). Try again in a minute.', 403);
         if (r.status === 403) return err('permission', 'Not allowed with this file: ' + msg, 403);
         if (r.status === 404) return err('not-found', 'This file no longer exists, or My PC cannot see it.', 404);
@@ -540,16 +541,20 @@ var GDrive = (function () {
 
     // opts: { name, data: Blob | ArrayBuffer | typed array | string, type, parent, id (replace that file's content),
     //         description, appProperties }   resumable upload in 4 MB pieces; onProgress(0..1)
+    // My PC only (copies from a USB drive, js/core/copy-jobs.js): source: { size, read(at, len, cb(err, Uint8Array)) } in place
+    // of data, so a big file is never whole in memory; session: the upload address of an earlier try (it goes on from what Google
+    // already has); onSession(url) is told the new address.
     function upload(o, onProgress, cb) {
         o = o || {};
-        var data = o.data, blob;
-        if (typeof Blob !== 'undefined' && data instanceof Blob) blob = data;
+        var data = o.data, blob = null, src = o.source && typeof o.source.read === 'function' ? o.source : null;
+        if (src) { if (!(src.size >= 0)) return bad(cb, 'The source needs its size.'); }
+        else if (typeof Blob !== 'undefined' && data instanceof Blob) blob = data;
         else if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) blob = new Blob([data], { type: o.type || '' });
         else if (typeof data === 'string') blob = new Blob([data], { type: o.type || 'text/plain' });
         else return bad(cb, 'Give the file\'s data: a Blob, an ArrayBuffer or a string.');
         var name = o.id && !o.name ? null : cleanName(o.name || (data && data.name));
         if (!o.id && !name) return bad(cb, 'The file needs a name (255 characters at most).');
-        var type = o.type || blob.type || 'application/octet-stream', size = blob.size;
+        var type = o.type || (blob && blob.type) || 'application/octet-stream', size = src ? Math.floor(src.size) : blob.size;
         var meta = {};
         if (name) meta.name = name;
         if (!o.id) meta.parents = [o.parent || 'root'];
@@ -557,27 +562,63 @@ var GDrive = (function () {
         if (o.appProperties && typeof o.appProperties === 'object') meta.appProperties = o.appProperties;
         if (o.type) meta.mimeType = o.type;
         var h = { cur: null, off: false, abort: function () { if (this.off) return; this.off = true; if (this.cur) this.cur.abort(); cb(err('cancelled', 'Cancelled.')); } };
-        h.cur = request({ url: UPLOAD + (o.id ? '/' + enc(o.id) : '') + '?uploadType=resumable&fields=' + enc(FIELDS), method: o.id ? 'PATCH' : 'POST', responseType: 'json',
-                          headers: { 'X-Upload-Content-Type': type, 'X-Upload-Content-Length': String(size) }, json: meta }, function (e, r) {
-            if (h.off) return;
-            if (e) { h.off = true; return cb(e); }
-            var session = r.headers && r.headers.location;
-            if (!session) { h.off = true; return cb(err('http', 'Google did not open an upload session.')); }
-            var at = 0;
-            (function piece() {
-                var end = Math.min(size, at + CHUNK);
-                h.cur = request({ url: session, method: 'PUT', responseType: 'json', timeout: 120000, ok: function (s) { return s === 308; },
-                                  headers: { 'Content-Range': size ? 'bytes ' + at + '-' + (end - 1) + '/' + size : 'bytes */0' }, body: blob.slice(at, end) }, function (e2, r2) {
-                    if (h.off) return;
-                    if (e2) { h.off = true; return cb(e2); }
-                    if (r2.status === 200 || r2.status === 201) { h.off = true; if (onProgress) try { onProgress(1); } catch (x) {} return cb(null, r2.body); }
-                    var m = /bytes=0-(\d+)/.exec((r2.headers && r2.headers.range) || '');
-                    at = m ? +m[1] + 1 : end;
-                    if (onProgress) try { onProgress(size ? at / size : 1); } catch (x) {}
-                    piece();
+        function fail(e) { if (h.off) return; h.off = true; cb(e); }
+        function done(body) { h.off = true; if (onProgress) try { onProgress(1); } catch (x) {} cb(null, body); }
+        // the bytes [at, end) as a request body
+        function piece(at, end, next) {
+            if (!src) return next(null, blob.slice(at, end));
+            var job = { abort: function () { this.off = true; } };
+            h.cur = job;
+            try {
+                src.read(at, end - at, function (e, u8) {
+                    if (job.off || h.off) return;
+                    if (e) return fail(e && e.code ? e : err('io', String((e && e.message) || e)));
+                    if (!u8 || u8.length !== end - at) return fail(err('io', 'The file changed while it was being copied.'));
+                    next(null, new Blob([u8]));
                 });
-            })();
-        });
+            } catch (x) { fail(err('io', String(x && x.message || x))); }
+        }
+        function send(session, at) {
+            if (h.off) return;
+            if (at >= size && size > 0) return fail(err('http', 'Google did not finish the upload.'));
+            var end = Math.min(size, at + CHUNK);
+            piece(at, end, function (e, body) {
+                if (h.off) return;
+                h.cur = request({ url: session, method: 'PUT', responseType: 'json', timeout: 120000, ok: function (s) { return s === 308; },
+                                  headers: { 'Content-Range': size ? 'bytes ' + at + '-' + (end - 1) + '/' + size : 'bytes */0' }, body: body }, function (e2, r2) {
+                    if (h.off) return;
+                    if (e2) return fail(e2);
+                    if (r2.status === 200 || r2.status === 201) return done(r2.body);
+                    var m = /bytes=0-(\d+)/.exec((r2.headers && r2.headers.range) || '');
+                    var nx = m ? +m[1] + 1 : end;
+                    if (onProgress) try { onProgress(size ? nx / size : 1); } catch (x) {}
+                    send(session, nx);
+                });
+            });
+        }
+        function open() {
+            h.cur = request({ url: UPLOAD + (o.id ? '/' + enc(o.id) : '') + '?uploadType=resumable&fields=' + enc(FIELDS), method: o.id ? 'PATCH' : 'POST', responseType: 'json',
+                              headers: { 'X-Upload-Content-Type': type, 'X-Upload-Content-Length': String(size) }, json: meta }, function (e, r) {
+                if (h.off) return;
+                if (e) return fail(e);
+                var session = r.headers && r.headers.location;
+                if (!session) return fail(err('http', 'Google did not open an upload session.'));
+                if (o.onSession) try { o.onSession(session); } catch (x) {}
+                send(session, 0);
+            });
+        }
+        // an earlier upload of the same file: ask Google how much it has, then go on from there
+        if (typeof o.session === 'string' && o.session.indexOf(UPLOAD) === 0 && size > 0) {
+            h.cur = request({ url: o.session, method: 'PUT', responseType: 'json', timeout: 30000, noRetry: true, ok: function (s) { return s === 308; },
+                              headers: { 'Content-Range': 'bytes */' + size } }, function (e, r) {
+                if (h.off) return;
+                if (e) { if (e.code === 'cancelled') return; if (e.code === 'network' || e.code === 'timeout') return fail(e); return open(); }   // expired / unknown: a new upload
+                if (r.status === 200 || r.status === 201) return done(r.body);
+                var m = /bytes=0-(\d+)/.exec((r.headers && r.headers.range) || ''), at = m ? +m[1] + 1 : 0;
+                if (onProgress && at) try { onProgress(at / size); } catch (x) {}
+                send(o.session, at);
+            });
+        } else open();
         return h;
     }
 

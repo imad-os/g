@@ -297,6 +297,18 @@
   Drive" once per app per profile, key `drive_apps`; `signIn()` from the app counts as yes). SDK `MyPC.drive` (+ `sdk/drive-sw.js`: the
   app's own `sw.js` imports it so `<audio>/<video>` stream by Range; else a blob download); standalone the SDK runs `gdrive.js` in the
   page. Strings `js/core/i18n-drive.js`. Docs: GUIDE.md section 19. Tests: `MYPC_ONLY=drive node tests/run-tests.mjs` (fake Google `fakeGoogle`).
+- **Copies Google Drive <-> USB (API 16, owner request 2026-11-10)**: My PC copies, both ways, files and whole folders; apps (MyDrive)
+  only ask through `MyPC.copy` (`toUsb` / `toDrive` / `jobs` / `pause` / `resume` / `cancel` / `clear` / `onChange`) and browse the drives
+  with `MyPC.usb` (`drives` / `list` / `stat` / `createFolder` / `read`; permission "<app> wants to use your USB drives" once per app, `arc_dev_perm`
+  kind `usb`; a copy also needs the Drive permission). `js/core/usb-fs.js` (`UsbFs`: Tizen filesystem writes, `openFile` 'w' / 'a' +
+  `writeDataNonBlocking`, older File API fallback; only paths inside a plugged drive, `inside()`; FAT-safe names; FAT32 4 GB -> `too-big`),
+  `js/core/copy-jobs.js` (`CopyJobs`: one job at a time, one file at a time, 4 MB pieces; Drive -> USB = `GDrive.read` Range pieces appended,
+  USB -> Drive = `GDrive.upload` with `source` (pieces read on demand) + `session` / `onSession` to go on; Docs / Sheets / Slides / Drawings
+  exported .docx / .xlsx / .pptx / .pdf; same name + same size = already copied; `ifExists` skip (default) / replace / keep ("name (2)");
+  jobs in `arc_dev_copy` (not backed up), resumed by `CopyJobs.init()` on BOTH pages (opening / quitting an app reloads the page), per
+  profile + Google account; a lease `arc_dev_copy_lease` keeps one tab running it; progress card `Notify` id `copy-<job>` (option `quiet`:
+  no sound / Voice Guide per update), none while the job's app listens (`CopyJobs.watch`). Strings `js/core/i18n-copy.js`. Docs: GUIDE.md
+  section 20. Tests: `MYPC_ONLY=copy node tests/run-tests.mjs` (fake USB drive with writes `USB_MOCK`, fake Google with export + upload status).
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /
   start failures and timeouts from `game-host.js` (with why: no SDK answer, no `ready()`, given up), uncaught errors of built-in games, the
   SDK's reports (uncaught, rejections, failed files, handler throws, `MyPC.fail`, `MyPC.report`; sent even before `MyPC.init`), and My PC's

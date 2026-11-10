@@ -160,7 +160,7 @@ still slow down a hidden page by itself. Standalone, outside My PC, the SDK does
 itself. Your app only sees `info.profile` and keeps progress with `MyPC.save` / `MyPC.load`, which are already per
 profile and backed up. **Never** build your own login, accounts, cloud saves, name entry for scores, Firebase or backend.
 
-Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text, 14 drive, 15 no input while paused) and hide the feature
+Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text, 14 drive, 15 no input while paused, 16 usb / copy) and hide the feature
 when it is missing.
 
 ### App config: `MyPC.app_config`
@@ -588,6 +588,7 @@ the World records.
 - [ ] works standalone: open `index.html` in Chrome, play with the arrows + Enter, Esc pauses
 - [ ] requests to other sites through `MyPC.net`, AI through `MyPC.ai`, the microphone through `MyPC.mic` (section 14): no own proxy, AI SDK or `getUserMedia`; each error code handled (`denied`, `no-provider`...)
 - [ ] Google Drive only through `MyPC.drive` (section 19): no Google client, OAuth, token, Drive API call or Picker of your own; `signed-out` / `denied` / `noconfig` handled
+- [ ] USB drives and copies Drive <-> USB only through `MyPC.usb` / `MyPC.copy` (section 20); hidden when `MyPC.info().bridges.usb` is not 1
 - [ ] the SDK `<script>` is the **first** script of the page (so errors of your own scripts are reported, section 15); errors you catch that matter go to `MyPC.report`
 - [ ] text the player types: a real `<input>` / `<textarea>` (or `MyPC.text.open` for a field drawn on a canvas), so a phone in Text mode can type into it (section 17); never required to play
 - [ ] served over https with CORS (GitHub Pages)
@@ -1288,3 +1289,76 @@ copy star trash untrash remove setInfo read download upload export thumb about a
 `drive { rid, result | error }` and `{ rid, ev: 'progress', p }`. My PC side: `js/core/gdrive.js` (Google client from
 Firestore `settings/google`, App Store Manager > Google Drive; accounts per profile, key `gdrive`), `js/launcher/bridges.js`,
 `js/launcher/drive-ui.js`; the phone's sign-in page `drive-signin.html` and picker page `drive-picker.html`.
+
+## 20. USB drives and copies with Google Drive: `MyPC.usb`, `MyPC.copy` (API level 16, TV only)
+
+The USB drives and hard disks plugged into the TV, and **copies between Google Drive and those drives, done by My PC
+itself**: Drive -> USB and USB -> Drive, single files and whole folders (with every sub-folder). An app never reads the
+TV's file system or copies bytes itself: it says what to copy and where, and My PC does the rest. **MUST**: apps reach USB
+drives only through `MyPC.usb`, and copy between Drive and USB only through `MyPC.copy`. Check `MyPC.apiLevel >= 16` and
+`MyPC.info().bridges.usb === 1` (only a TV has USB drives: on a phone or a computer it is `0`) and hide these features
+otherwise. A copy also needs Google Drive (section 19): signed in, and the app allowed.
+
+The first time an app uses USB drives My PC asks once: "*&lt;app&gt;* wants to use your USB drives" (per app, on this TV;
+Control Panel > Privacy & security forgets it). Paths are the TV's real paths, like `/opt/media/USBDriveA1/Photos`; a path
+outside the plugged drives (or with `..`) is refused with `bad-request`.
+
+```js
+if (MyPC.apiLevel >= 16 && MyPC.info().bridges.usb) {
+  const drives = await MyPC.usb.drives();             // [{ path, name: 'USB A1', free, total }]
+  const items = await MyPC.usb.list(drives[0].path);  // [{ name, path, dir, size }], folders first
+  // Drive -> USB: files and folders (Drive file objects or ids) into a folder of the drive
+  const job = await MyPC.copy.toUsb([file, folder], drives[0].path + '/Backup', { ifExists: 'skip' });
+  // USB -> Drive: files and folders (paths or list() items) into a Drive folder ('root' = My Drive)
+  await MyPC.copy.toDrive([items[0]], driveFolder.id, { ifExists: 'keep' });
+  const off = MyPC.copy.onChange((j) => showProgress(j));   // about twice a second while one runs
+}
+```
+
+| Call | Result |
+|---|---|
+| `usb.drives()` | `[{ path, name, free, total }]` the plugged drives (`free` / `total` in bytes, `0` when the TV does not say). Empty: none plugged. |
+| `usb.list(path)` | `[{ name, path, dir, size }]`: folders first, natural order, hidden and system entries left out. |
+| `usb.stat(path)` | `{ exists, dir, size }` |
+| `usb.createFolder(parentPath, name)` | `{ name, path }` (the name is made safe for FAT / exFAT / NTFS; already there is fine) |
+| `usb.read(path, start, end)` | `{ buf: ArrayBuffer }` bytes `start`..`end` (included), 16 MB at most per call: pictures, subtitles, a preview |
+| `copy.toUsb(driveFilesOrIds, usbFolderPath, { ifExists })` | a `job` (it starts at once, in the background) |
+| `copy.toDrive(usbPathsOrItems, driveFolderId, { ifExists })` | a `job` |
+| `copy.jobs()` | this app's copies (running, waiting and the last ended ones) |
+| `copy.pause(id)` `copy.resume(id)` `copy.cancel(id)` | the `job`. Cancel removes the half-written USB file. `resume` also restarts a `failed` copy. |
+| `copy.clear(id)` | forgets an ended copy (`done`, `failed`, `cancelled`) |
+| `copy.onChange(fn)` | `fn(job)` at every change of this app's copies; returns `off()`. While an app listens, My PC shows no card of its own over it. |
+
+`job` = `{ id, dir: 'toUsb' | 'toDrive', state, dest: { path | id, name }, items, files, bytes, doneFiles, doneBytes,
+skipped, failed: [{ name, message }], current: { name, size, done } | null, error: { code, message } | null, progress (0..1),
+ifExists, startedAt, endedAt }`. `state`: `queued` -> `scanning` (listing every file in the folders) -> `copying` ->
+`done`; or `waiting` (no internet: it goes on by itself), `paused`, `failed` (`error` says why), `cancelled`.
+
+What My PC does for you:
+- **One file at a time, 4 MB at a time**, so a 10 GB film needs no more TV memory than a photo. One copy runs at a time; the
+  others wait (`queued`).
+- **It goes on by itself** after the app is closed (opening or quitting an app reloads My PC's page), after a restart of
+  My PC and after a network cut: a half-written USB file goes on from its size, an upload asks Google how much it already
+  has. Meanwhile (and whenever no app listens) My PC shows a progress card bottom right; it says when the copy is done.
+- **Files already there with the same size count as copied** (nothing is read again). Another file with the same name:
+  `ifExists` `'skip'` (default: left alone, counted in `skipped`), `'replace'` (overwritten) or `'keep'` (keep both: the
+  copy is `name (2).ext`). Folders with the same name are merged.
+- **Google Docs, Sheets, Slides, Drawings** are saved on the USB drive as `.docx`, `.xlsx`, `.pptx`, `.pdf` (Google
+  exports about 10 MB at most); Forms, Sites, Maps and shortcuts cannot be downloaded (listed in `failed`).
+- Names Windows / FAT cannot hold (`: * ? " < > |`) get `_`. **FAT32 drives cannot hold a file bigger than 4 GB**: that
+  file fails with `too-big` (exFAT and NTFS can; some TVs cannot write to NTFS at all). Free space is checked before
+  copying when the TV / Google says it (`full` / `drive-full`).
+- Errors (`err.code` of a call, or `job.error.code`): `unsupported` (not a TV, or an older My PC), `denied` (the user said
+  no), `signed-out` / `reauth` / `noconfig` (Google Drive, section 19), `bad-request` (a path outside the drives, a bad
+  id), `not-found`, `gone` (the USB drive was removed: plug it in and `resume`), `perm` (the TV's My PC package is older
+  than 1.6.0), `full` (the USB drive, or Google Drive for `toDrive`), `drive-full`, `too-many` (more than 20,000 files and
+  folders in one copy), `busy` (20 copies waiting already), `not-running`.
+
+**Controls in your copy screens**: A B X Y and **+** as everywhere; everything also with the remote's arrows + OK (pick
+files with OK, a "Copy to USB" / "Copy to Google Drive" action, a folder picker for the destination, a list of copies with
+Pause / Resume / Cancel).
+
+Protocol (for reference): app -> My PC `usb { rid, op, args }` (`op`: drives list stat mkdir read) and `copy { rid, op, args }`
+(`op`: start jobs pause resume cancel clear watch); My PC -> app `{ rid, result | error }` and, after `watch`,
+`copy { rid: 0, ev: 'job', job }`. My PC side: `js/core/usb-fs.js`, `js/core/copy-jobs.js`, `js/launcher/bridges.js`.
+

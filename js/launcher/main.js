@@ -272,6 +272,7 @@ var App = (function () {
             Widgets.background();                      // only the widgets that run in the background (Control Panel > Widgets)
             Push.start();                              // notifications also arrive during a game (small cards, no focus taken)
             CalRemind.start();                         // the profile's calendar reminders, also over a game
+            CopyJobs.init();                           // copies Google Drive <-> USB go on here too (js/core/copy-jobs.js)
             Music.init({ resume: true, lite: true });  // the music goes on under the game (the game menu can pause it)
         };
         if (id.indexOf('app-') === 0) {
@@ -414,6 +415,7 @@ var App = (function () {
             Accounts.start();
             Push.start();                                        // push notifications of a signed-in player account (js/launcher/push.js)
             CalRemind.start();                                   // the profile's calendar reminders (js/launcher/cal-remind.js)
+            CopyJobs.init();                                     // copies Google Drive <-> USB started earlier go on (js/core/copy-jobs.js)
             World.flush();
             if (syncDue('ai')) Bridges.syncAi();                 // the AI services set in the App Store Manager
             GDrive.syncSoon();                                   // the Google client of every My PC (settings/google), twice a day at most

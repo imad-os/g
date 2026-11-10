@@ -4,6 +4,9 @@
  *   'mic'  MyPC.mic    the microphone (js/core/mic.js)
  *   'drive' MyPC.drive Google Drive of the profile (js/core/gdrive.js): one sign-in in Control Panel > Google Drive,
  *                      apps never see a token. Allowed once per app and per profile (profile key drive_apps).
+ *   'usb'  MyPC.usb    the USB drives of the TV (js/core/usb-fs.js): drives, list, new folder, read. Allowed once per app (arc_dev_perm).
+ *   'copy' MyPC.copy   copies between Google Drive and the USB drives, done by My PC (js/core/copy-jobs.js); needs both permissions.
+ *                      The app gets { ev: 'job', job } messages (rid 0) once it called watch.
  * The AI services of this TV and the microphone are used only after the user allowed it, once per app (arc_dev_perm,
  * Settings > Privacy & security forgets it). An app that brings its own AI key needs no permission. A red microphone
  * shows while an app listens.
@@ -50,7 +53,7 @@ var Bridges = (function () {
             q.cb(ok);
             next();
         }
-        App.confirm(I18n.t(q.kind === 'mic' ? 'permMicTitle' : q.kind === 'drive' ? 'permDriveTitle' : 'permAiTitle').replace('%s', ctx.title), q.text, function () { done(true); },
+        App.confirm(I18n.t(q.kind === 'mic' ? 'permMicTitle' : q.kind === 'drive' ? 'permDriveTitle' : q.kind === 'usb' ? 'permUsbTitle' : 'permAiTitle').replace('%s', ctx.title), q.text, function () { done(true); },
                     { yes: I18n.t('permAllow'), no: I18n.t('permDeny'), onNo: function () { done(false); } });
     }
 
@@ -253,11 +256,80 @@ var Bridges = (function () {
             });
         }
 
+        /* ----- MyPC.usb and MyPC.copy (API 16): the TV's USB drives, and copies Drive <-> USB done by My PC ----- */
+        var unwatch = null;
+        function usbAsk(cb) { ask(ctx, 'usb', I18n.t('permUsbText'), cb); }
+        function usbRun(d) {
+            var a = d.args && typeof d.args === 'object' ? d.args : {};
+            function reply(e, r) { send('usb', e ? { rid: d.rid, error: dErr(e) } : { rid: d.rid, result: r === undefined ? null : r }); }
+            if (!alive()) return reply({ code: 'not-running', message: 'The app is not running.' });
+            if (!UsbFs.supported()) return reply({ code: 'unsupported', message: 'This device has no USB drives (only a TV has them).' });
+            usbAsk(function (ok) {
+                if (!ok) return reply({ code: 'denied', message: 'The user did not allow this app to use the USB drives.' });
+                if (ctx.dead) return;
+                UsbFs.drives(function (e, list) {
+                    if (e) return reply(e);
+                    if (d.op === 'drives') return reply(null, list);
+                    var p = String(a.path || '');
+                    if (!UsbFs.inside(p)) return reply({ code: 'bad-request', message: 'Not a path inside a plugged USB drive.' });
+                    switch (d.op) {
+                        case 'list': return UsbFs.list(p, reply);
+                        case 'stat': return UsbFs.stat(p, reply);
+                        case 'mkdir':
+                            var q = UsbFs.join(p, UsbFs.safeName(a.name));
+                            return UsbFs.mkdir(q, function (x) { reply(x, x ? null : { name: UsbFs.base(q), path: q, dir: true, size: 0 }); });
+                        case 'read':
+                            var at = Math.max(0, Math.floor(+a.start || 0)), end = a.end === undefined || a.end === null ? at + 4194303 : Math.floor(+a.end);
+                            if (!(end >= at) || end - at >= 16777216) return reply({ code: 'bad-request', message: 'Read 16 MB at most at a time.' });
+                            return UsbFs.read(p, at, end - at + 1, function (x, u8) {
+                                if (x) return reply(x);
+                                var buf = u8.byteOffset === 0 && u8.byteLength === u8.buffer.byteLength ? u8.buffer : u8.slice().buffer;
+                                reply(null, { buf: buf });
+                            });
+                    }
+                    reply({ code: 'bad-request', message: 'Unknown USB operation ' + d.op + '.' });
+                });
+            });
+        }
+        function copyRun(d) {
+            var a = d.args && typeof d.args === 'object' ? d.args : {}, app = sid(ctx.appId);
+            function reply(e, r) { send('copy', e ? { rid: d.rid, error: dErr(e) } : { rid: d.rid, result: r === undefined ? null : r }); }
+            function own(id) { var l = CopyJobs.list(app); for (var i = 0; i < l.length; i++) if (l[i].id === id) return true; return false; }
+            if (d.op === 'jobs') return reply(null, CopyJobs.list(app));
+            if (d.op === 'watch') {
+                if (!unwatch) {
+                    CopyJobs.watch(app, true);
+                    unwatch = CopyJobs.onChange(function (job) { if (job.app === app && !ctx.dead) send('copy', { rid: 0, ev: 'job', job: job }); });
+                }
+                return reply(null, true);
+            }
+            if (d.op === 'pause' || d.op === 'resume' || d.op === 'cancel' || d.op === 'clear') {
+                var id = String(a.id || '');
+                if (!own(id)) return reply({ code: 'not-found', message: 'No copy of this app has this id.' });
+                return reply(null, CopyJobs[d.op](id));
+            }
+            if (d.op !== 'start') return reply({ code: 'bad-request', message: 'Unknown copy operation ' + d.op + '.' });
+            if (!alive()) return reply({ code: 'not-running', message: 'The app is not running.' });
+            if (!UsbFs.supported()) return reply({ code: 'unsupported', message: 'This device has no USB drives (only a TV has them).' });
+            GDrive.status(function (st) {
+                if (!st.ok) return reply(st.code === 'noconfig' ? { code: 'noconfig', message: 'Google Drive is not set up for My PC yet (App Store Manager > Google Drive).' }
+                    : st.code === 'reauth' ? { code: 'reauth', message: 'Google asks to sign in again. Call MyPC.drive.signIn().' } : { code: 'signed-out', message: 'No Google account on this profile. Call MyPC.drive.signIn().' });
+                driveAsk(function (ok) {
+                    if (!ok) return reply({ code: 'denied', message: 'The user did not allow this app to use Google Drive.' });
+                    usbAsk(function (ok2) {
+                        if (!ok2) return reply({ code: 'denied', message: 'The user did not allow this app to use the USB drives.' });
+                        if (ctx.dead) return;
+                        CopyJobs.start({ dir: a.dir, items: a.items, dest: a.dest, ifExists: a.ifExists, app: app, appTitle: ctx.title }, reply);
+                    });
+                });
+            });
+        }
+
         return {
             handle: function (type, d) {
-                if (type !== 'net' && type !== 'ai' && type !== 'mic' && type !== 'drive') return false;
+                if (type !== 'net' && type !== 'ai' && type !== 'mic' && type !== 'drive' && type !== 'usb' && type !== 'copy') return false;
                 if (!d || typeof d !== 'object' || typeof d.rid !== 'number') return true;
-                if (type === 'net') net(d); else if (type === 'ai') aiRun(d); else if (type === 'drive') driveRun(d); else micRun(d);
+                if (type === 'net') net(d); else if (type === 'ai') aiRun(d); else if (type === 'drive') driveRun(d); else if (type === 'usb') usbRun(d); else if (type === 'copy') copyRun(d); else micRun(d);
                 return true;
             },
             // My PC's menu or another screen covers the app: it stops listening (the app gets 'end' with reason 'paused')
@@ -268,6 +340,7 @@ var Bridges = (function () {
                 Object.keys(ais).forEach(function (k) { try { ais[k].cancel(); } catch (e) {} });
                 Object.keys(drives).forEach(function (k) { try { drives[k].abort(); } catch (e) {} });
                 nets = {}; ais = {}; drives = {};
+                if (unwatch) { unwatch(); unwatch = null; CopyJobs.watch(sid(ctx.appId), false); }
                 if (DriveUI.screenOpen()) DriveUI.close();
                 if (mic) { Mic.cancel(); micEnd(); }
                 queue = queue.filter(function (q) { return q.ctx !== ctx; });

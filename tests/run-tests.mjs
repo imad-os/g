@@ -355,6 +355,7 @@ async function main() {
     const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--autoplay-policy=no-user-gesture-required', '--disable-features=WebRtcHideLocalIpsWithMdns', '--js-flags=--expose-gc', '--enable-precise-memory-info', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
     // MYPC_ONLY=music node tests/run-tests.mjs: only the Music app's checks (quick while working on it)
     if (process.env.MYPC_ONLY === 'wall') { await wallTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'copy') { await copyTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'drive') { await driveTests(browser, base); await drivePhoneTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'calendar') { await calendarTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'clock') { await clockTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
@@ -4146,7 +4147,7 @@ async function main() {
         const loop = by('error', /loop error/);
         check(loop && loop.n === 5 && reps.filter((r) => /loop error/.test(r.msg)).length === 1, 'the same error 5 times is one report with n = 5 (' + (loop && loop.n) + ')');
         const one = by('error', /boom/) || {};
-        check(one.appv === '2.0.1' && one.sdk === 15 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
+        check(one.appv === '2.0.1' && one.sdk === 16 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
             'each report has the app version, SDK level, TV id and model, My PC version and build, language, place, address, time and a 30-day expiry (' + JSON.stringify(one) + ')');
         const keys = new Set(reps.flatMap((r) => Object.keys(r)));
         const allowed = ['app', 'kind', 'msg', 'stack', 'src', 'stage', 'appv', 'sdk', 'n', 'at', 'exp', 'tv', 'model', 'ver', 'build', 'lang', 'user', 'where', 'ua', 'url'];
@@ -4664,6 +4665,7 @@ async function main() {
     }
     await musicTests(browser, base);
     await driveTests(browser, base);
+    await copyTests(browser, base);
     await drivePhoneTests(browser, base);
     await calendarTests(browser, base);
     await clockTests(browser, base);
@@ -4840,6 +4842,14 @@ async function fakeGoogle(ctx, g) {
         // resumable uploads
         if (/^\/upload\/drive\/v3\/files/.test(path) && u.searchParams.get('upload_id')) {
             const up = g.uploads[u.searchParams.get('upload_id')], cr = /bytes (\d+)-(\d+)\/(\d+)/.exec(q.headers()['content-range'] || '');
+            if (!up) return json({ error: { code: 404, message: 'No such upload' } }, 404);
+            const st = /bytes \*\/(\d+)/.exec(q.headers()['content-range'] || '');
+            if (st && +st[1] > 0) {                     // "how much do you have?" (an upload going on after a break)
+                g.statusAsks = (g.statusAsks || 0) + 1;
+                const have = up.parts.reduce((n, b) => n + b.length, 0);
+                return r.fulfill({ status: 308, headers: Object.assign(have ? { Range: 'bytes=0-' + (have - 1) } : {}, cors), body: '' });
+            }
+            if (cr && +cr[1] !== up.parts.reduce((n, b) => n + b.length, 0)) return json({ error: { code: 400, message: 'wrong offset ' + cr[1] } }, 400);
             const chunk = q.postDataBuffer() || Buffer.alloc(0);
             up.parts.push(chunk);
             if (cr && +cr[2] < +cr[3] - 1) return r.fulfill({ status: 308, headers: Object.assign({ Range: 'bytes=0-' + cr[2] }, cors), body: '' });
@@ -4853,7 +4863,7 @@ async function fakeGoogle(ctx, g) {
             return r.fulfill({ status: 200, headers: Object.assign({ Location: 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=' + key }, cors), body: '' });
         }
         const seg = path.replace('/drive/v3/', '').split('/');
-        if (seg[0] === 'about') return json({ user: { displayName: 'Sara', emailAddress: 'sara@example.com' }, storageQuota: { limit: '100', usage: '10' } });
+        if (seg[0] === 'about') return json({ user: { displayName: 'Sara', emailAddress: 'sara@example.com' }, storageQuota: g.quota || { limit: '100', usage: '10' } });
         if (seg[0] === 'files' && seg.length === 1 && m === 'GET') {
             const qs = u.searchParams.get('q') || '';
             let l = Object.values(g.files).filter((f) => !!f.trashed === /trashed = true/.test(qs));
@@ -4872,6 +4882,7 @@ async function fakeGoogle(ctx, g) {
         }
         const f = g.files[seg[1]];
         if (!f) return json({ error: { code: 404, message: 'File not found' } }, 404);
+        if (seg[2] === 'export') { g.exports = (g.exports || 0) + 1; return r.fulfill({ status: 200, contentType: u.searchParams.get('mimeType'), headers: cors, body: Buffer.from('EXPORT ' + f.name + ' as ' + u.searchParams.get('mimeType')) }); }
         if (seg[2] === 'copy') { const id = 'c' + (++g.n); g.files[id] = Object.assign({}, f, { id }, JSON.parse(body || '{}')); return json(meta(g.files[id])); }
         if (m === 'DELETE') { delete g.files[seg[1]]; return r.fulfill({ status: 204, headers: cors, body: '' }); }
         if (m === 'PATCH') {
@@ -6371,5 +6382,266 @@ async function ringTests(browser, base) {
         await page.evaluate(() => Desktop.openStart());
     }
     check(page.errors.length === 0, 'no page errors' + (page.errors.length ? ': ' + page.errors[0] : ''));
+    await page.context().close();
+}
+
+// 48. Copies between Google Drive and the USB drives of the TV (js/core/copy-jobs.js, js/core/usb-fs.js, MyPC.usb / MyPC.copy, API 16):
+// both ways, whole folders, 4 MB pieces, Google Docs exported, same files skipped, keep both / replace, going on after a page
+// change (USB file and Google upload), USB removed, not enough space, the app bridge with its permission. MYPC_ONLY=copy runs only these.
+// A fake USB drive (Tizen filesystem with writes) and a fake Google Drive; MYPC_SHOTS=<folder> saves screenshots.
+const USB_MOCK = (D) => {
+    if (window.top !== window) return;
+    const tree = {};          // path -> Uint8Array | true (folder)
+    const fsErr = (name, m) => { const e = new Error(m || name); e.name = name; return e; };
+    const U = window.__usb = { tree, mounted: true, writes: 0, reads: 0, free: 0, slow: 0 };
+    tree['/opt/media'] = true; tree[D] = true;
+    const kids = (p) => Object.keys(tree).filter((k) => k.indexOf(p + '/') === 0 && k.slice(p.length + 1).indexOf('/') < 0).map((k) => k.slice(p.length + 1));
+    const live = (p) => U.mounted || p.indexOf(D) !== 0;
+    U.put = (p, bytes) => { const parts = p.split('/'); for (let i = 2; i < parts.length; i++) tree[parts.slice(0, i).join('/')] = true; tree[p] = bytes; };
+    // the drive keeps its files across page changes: the test hands the last snapshot to the next page
+    try {
+        const x = new XMLHttpRequest(); x.open('GET', 'https://usb-seed.test/seed', false); x.send();
+        const seed = JSON.parse(x.responseText || '{}');
+        for (const k in seed) tree[k] = seed[k] === true ? true : Uint8Array.from(atob(seed[k]), (c) => c.charCodeAt(0));
+    } catch (e) {}
+    U.dump = () => { const o = {}; for (const k in tree) { const v = tree[k]; if (v === true) o[k] = true; else { let s = ''; for (let i = 0; i < v.length; i += 32768) s += String.fromCharCode.apply(null, v.subarray(i, i + 32768)); o[k] = btoa(s); } } return o; };
+    U.text = (p) => (tree[p] && tree[p] !== true ? new TextDecoder().decode(tree[p]) : null);
+    U.sum = (p) => { const d = tree[p]; if (!d || d === true) return null; let h = 0; for (let i = 0; i < d.length; i++) h = (h * 31 + d[i]) >>> 0; return d.length + ':' + h; };
+    window.tizen.systeminfo.getPropertyValueArray = (name, ok) => setTimeout(() => ok(U.mounted ? [{ type: 'INTERNAL', capacity: 8e9, availableCapacity: 4e9 }, { type: 'USB_HOST', capacity: 32e9, availableCapacity: U.free || 16e9, isRemovable: true }] : [{ type: 'INTERNAL', capacity: 8e9, availableCapacity: 4e9 }]), 2);
+    window.tizen.filesystem = {
+        listStorages: (ok) => setTimeout(() => ok(U.mounted ? [{ label: 'removable_sda1', type: 'EXTERNAL', state: 'MOUNTED' }] : []), 2),
+        resolve: (loc, ok, err) => setTimeout(() => (loc === 'removable_sda1' && U.mounted ? ok({ fullPath: loc, toURI: () => 'file://' + D }) : err(fsErr('NotFoundError'))), 2),
+        listDirectory: (p, ok, err) => setTimeout(() => (tree[p] === true && live(p) ? ok(kids(p), p) : err(fsErr('NotFoundError'))), 2),
+        isDirectory: (p) => { if (!(p in tree) || !live(p)) throw fsErr('NotFoundError'); return tree[p] === true; },
+        isFile: (p) => { if (!(p in tree) || !live(p)) throw fsErr('NotFoundError'); return tree[p] !== true; },
+        toURI: (p) => 'file://' + encodeURI(p),
+        createDirectory: (p, parents, ok, err) => setTimeout(() => { if (!live(p)) return err(fsErr('NotFoundError')); if (p in tree) return err(fsErr('IOError', 'exists')); U.put(p + '/x', 0); delete tree[p + '/x']; ok(p); }, 2),
+        deleteFile: (p, ok, err) => setTimeout(() => { if (tree[p] && tree[p] !== true) { delete tree[p]; ok(); } else err(fsErr('NotFoundError')); }, 2),
+        openFile: (p, mode) => {
+            if (!live(p)) throw fsErr('NotFoundError');
+            const dir = p.slice(0, p.lastIndexOf('/'));
+            if (mode === 'r') { if (!tree[p] || tree[p] === true) throw fsErr('NotFoundError'); }
+            else { if (tree[dir] !== true) throw fsErr('NotFoundError'); if (mode === 'w' || !tree[p]) tree[p] = new Uint8Array(0); }
+            let pos = mode === 'a' ? tree[p].length : 0;
+            return {
+                seek: (o, w) => (pos = w === 'END' ? tree[p].length + o : o),
+                readDataNonBlocking: (ok, e, n) => { U.reads++; const r = tree[p].slice(pos, pos + n); pos += r.length; setTimeout(() => ok(r), 2); },
+                writeDataNonBlocking: (data, ok, e) => setTimeout(() => {
+                    if (!U.mounted) return e(fsErr('IOError', 'Input/output error'));
+                    const old = tree[p], b = new Uint8Array(old.length + data.length); b.set(old); b.set(data, old.length); tree[p] = b; pos = b.length; U.writes++; ok();
+                }, U.slow || 2),
+                close() {}, closeNonBlocking(ok) { setTimeout(() => ok && ok(), 1); }
+            };
+        },
+        addStorageStateChangeListener: () => 1
+    };
+};
+async function copyTests(browser, base) {
+    console.log('48. Copies Google Drive <-> USB (MyPC.copy, API 16): folders both ways, 4 MB pieces, Docs exported, skip / keep both / replace, going on after a page change, USB removed, space, the app bridge');
+    const D = '/opt/media/USBDriveA1', MB = 1024 * 1024;
+    const big = (n, seed) => { const b = Buffer.alloc(n); for (let i = 0; i < n; i++) b[i] = (i * 7 + seed) & 255; return b; };
+    const sum = (b) => { let h = 0; for (let i = 0; i < b.length; i++) h = (h * 31 + b[i]) >>> 0; return b.length + ':' + h; };
+    const APP = 'https://mydrive.example.test/';
+    const APP_HTML = `<!doctype html><meta charset=utf-8><title>MyDrive</title><body style="background:#123;color:#fff;font:40px sans-serif"><p id=t>MyDrive (test)</p>
+<script src="${OLD_HOSTED}sdk/mypc-sdk.js"></script><script>MyPC.init({ onInit() { MyPC.ready(); window.__ok = 1; } });</script>`;
+    const db = { apps: {}, settings: { google: { tvClientId: 'cid.apps.googleusercontent.com', tvClientSecret: 'sec', pickerClientId: 'web.apps.googleusercontent.com', pickerApiKey: 'PKEY', projectNumber: '123' } } };
+    db.apps.mydrive = { id: 'mydrive', name: 'MyDrive', url: APP, entry: APP + 'index.html', icon: '', type: 'app', version: '1.2.0', enabled: true, order: 1, config: {} };
+    const page = await newPage(browser, base, db);
+    const ctx = page.context();
+    const film = big(9 * MB + 12345, 3), photo = big(300000, 9), song = big(5 * MB + 7, 5);
+    const g = { files: {
+        root: { id: 'root', name: 'My Drive', mimeType: 'application/vnd.google-apps.folder', parents: ['none'] },
+        h1: { id: 'h1', name: 'Holiday: 2026', mimeType: 'application/vnd.google-apps.folder', parents: ['root'] },
+        p1: { id: 'p1', name: 'beach.jpg', mimeType: 'image/jpeg', parents: ['h1'], data: photo },
+        v1: { id: 'v1', name: 'Videos', mimeType: 'application/vnd.google-apps.folder', parents: ['h1'] },
+        m1: { id: 'm1', name: 'film.mp4', mimeType: 'video/mp4', parents: ['v1'], data: film },
+        d1: { id: 'd1', name: 'Plan', mimeType: 'application/vnd.google-apps.document', parents: ['h1'] },
+        q1: { id: 'q1', name: 'Survey', mimeType: 'application/vnd.google-apps.form', parents: ['h1'] },
+        e1: { id: 'e1', name: 'empty.txt', mimeType: 'text/plain', parents: ['h1'], data: Buffer.alloc(0) } }, quota: { limit: '16000000000', usage: '1000' } };
+    await fakeGoogle(ctx, g);
+    let usbSeed = {};
+    await ctx.route('https://usb-seed.test/seed', (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(usbSeed) }));
+    const snapshot = async () => { usbSeed = await page.evaluate(() => window.__usb.dump()); };
+    await ctx.addInitScript(USB_MOCK, D);
+    await page.addInitScript((a) => { if (!localStorage.getItem('arc_dev_installed')) { localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'mydrive', at: 1 }])); localStorage.setItem('arc_dev_catalog', JSON.stringify([a])); } }, db.apps.mydrive);
+    await routeHosted(page, { offline: true });
+    const sdkFile = (f) => (r) => r.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(ROOT, 'sdk', f)) });
+    await page.route(OLD_HOSTED + 'sdk/mypc-sdk.js', sdkFile('mypc-sdk.js'));
+    await ctx.route(APP + '**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: APP_HTML }));
+    const shot = async (name) => { if (process.env.MYPC_SHOTS) { await page.waitForTimeout(150); await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'copy-' + name + '.png') }); } };
+    await page.goto(base + 'index.html');
+    await page.waitForSelector('#desk-icons .dicon');
+    const signIn = () => page.evaluate(() => Store.set('gdrive', { accounts: [{ id: 'g7', email: 'sara@example.com', name: 'Sara', refreshToken: 'RT-secret', scope: 'https://www.googleapis.com/auth/drive', cid: 'cid.apps.googleusercontent.com', addedAt: 1 }], active: 'g7' }));
+    await signIn();
+    const waitJob = (id, states, ms) => page.waitForFunction(([id, st]) => { const j = CopyJobs.list().find((x) => x.id === id); return j && st.includes(j.state); }, [id, states], { timeout: ms || 20000 }).catch(() => {});
+    const job = (id) => page.evaluate((id) => CopyJobs.list().find((x) => x.id === id), id);
+    const start = (o) => page.evaluate((o) => new Promise((res) => CopyJobs.start(o, (e, j) => res(e ? { error: e } : j))), o);
+
+    // --- Drive -> USB: a whole folder; its sub-folder, a 9 MB film in 4 MB pieces, a Google Doc saved as .docx, a form left out
+    await page.evaluate((D) => window.__usb.put(D + '/Backup/old.txt', new TextEncoder().encode('old')), D);
+    let j = await start({ dir: 'toUsb', items: ['h1'], dest: D + '/Backup' });
+    check(j && j.id && j.dir === 'toUsb' && j.dest.name === 'USB A1/Backup', 'CopyJobs.start (Drive -> USB) gives a job at once ' + JSON.stringify(j && (j.error || j.dest)));
+    await page.waitForFunction(() => /File \d+ of \d+/.test(document.getElementById('toast').textContent), null, { timeout: 8000 }).catch(() => {});
+    const card1 = await page.evaluate(() => [...document.querySelectorAll('#toast .nt')].map((c) => c.textContent).filter((x) => /Copying/.test(x)).join(' | '));
+    await shot('1-progress-card');
+    await waitJob(j.id, ['done', 'failed']);
+    j = await job(j.id);
+    const H = D + '/Backup/Holiday_ 2026';
+    const usb1 = await page.evaluate(([H]) => ({ film: window.__usb.sum(H + '/Videos/film.mp4'), photo: window.__usb.sum(H + '/beach.jpg'), doc: window.__usb.text(H + '/Plan.docx'),
+        empty: window.__usb.tree[H + '/empty.txt'] instanceof Uint8Array, form: Object.keys(window.__usb.tree).some((k) => /Survey/.test(k)), old: window.__usb.text(window.__usb.tree ? H.replace('/Holiday_ 2026', '/old.txt') : '') }), [H]);
+    const filmReads = g.calls.filter((c) => /files\/m1\?alt=media/.test(c)).map((c) => c.split(' ').pop());
+    check(/Copying to USB A1\/Backup/.test(card1) && /File \d+ of 5/.test(card1), 'a progress card shows while it copies: "Copying to USB A1/Backup · File n of 5 · %" ' + card1);
+    check(j.state === 'done' && j.files === 5 && j.doneFiles === 4 && j.failed.length === 1 && /form/.test(j.failed[0].message) && j.progress === 1, 'the job ends done: 4 of 5 files copied, the form is reported as not copyable ' + JSON.stringify([j.state, j.files, j.doneFiles, j.failed]));
+    check(usb1.film === sum(film) && usb1.photo === sum(photo) && usb1.empty && /EXPORT Plan as application\/vnd.openxmlformats-officedocument.wordprocessingml.document/.test(usb1.doc) && !usb1.form && usb1.old === 'old',
+        'the folder is on the USB drive byte for byte (":" made "_" for FAT), sub-folder included, the Doc as Plan.docx, an empty file, nothing else touched ' + JSON.stringify(usb1));
+    check(filmReads.length === 3 && filmReads[0] === 'bytes=0-4194303' && filmReads[2] === 'bytes=8388608-' + (film.length - 1), 'the 9 MB film is read in 4 MB Range pieces, never whole ' + JSON.stringify(filmReads));
+    await page.waitForFunction(() => /Copy finished/.test((document.querySelector('#toast') || {}).textContent || ''), null, { timeout: 4000 }).catch(() => {});
+    const done1 = await page.evaluate(() => document.getElementById('toast').textContent);
+    await shot('2-done-card');
+    check(/Copy finished/.test(done1) && /4 files copied to USB A1\/Backup/.test(done1) && /1 could not be copied/.test(done1), 'the card then says what was copied ' + done1);
+
+    // --- the same copy again: everything already there is skipped without reading it again (same size); keep both / replace
+    const before = g.calls.length;
+    j = await start({ dir: 'toUsb', items: ['h1'], dest: D + '/Backup' });
+    await waitJob(j.id, ['done', 'failed']);
+    j = await job(j.id);
+    check(j.state === 'done' && j.doneFiles === 4 - 1 && j.skipped === 1 && !g.calls.slice(before).some((c) => /alt=media/.test(c)), 'the same copy again: files already on the USB drive with the same size count as copied, nothing is downloaded again (the Doc, exported, is skipped as already there) ' + JSON.stringify([j.doneFiles, j.skipped]));
+    await page.evaluate((H) => window.__usb.put(H + '/beach.jpg', new TextEncoder().encode('another picture')), H);
+    j = await start({ dir: 'toUsb', items: ['p1'], dest: H, ifExists: 'skip' });
+    await waitJob(j.id, ['done']); j = await job(j.id);
+    const kept0 = await page.evaluate((H) => window.__usb.text(H + '/beach.jpg'), H);
+    check(j.skipped === 1 && kept0 === 'another picture', 'ifExists skip: a different file with the same name is left alone (skipped: 1)');
+    j = await start({ dir: 'toUsb', items: ['p1'], dest: H, ifExists: 'keep' });
+    await waitJob(j.id, ['done']);
+    const kept = await page.evaluate((H) => [window.__usb.text(H + '/beach.jpg'), window.__usb.sum(H + '/beach (2).jpg')], H);
+    check(kept[0] === 'another picture' && kept[1] === sum(photo), 'ifExists keep: the copy is "beach (2).jpg", the other file stays');
+    j = await start({ dir: 'toUsb', items: ['p1'], dest: H, ifExists: 'replace' });
+    await waitJob(j.id, ['done']);
+    check(await page.evaluate((H) => window.__usb.sum(H + '/beach.jpg'), H) === sum(photo), 'ifExists replace: the file is overwritten');
+
+    // --- USB -> Drive: a folder with a sub-folder and a 5 MB song, by the resumable upload in 4 MB pieces
+    await page.evaluate(([D, song, photo]) => { const b = (a) => Uint8Array.from(atob(a), (c) => c.charCodeAt(0)); window.__usb.put(D + '/Music/Album/song.mp3', b(song)); window.__usb.put(D + '/Music/cover.jpg', b(photo)); }, [D, song.toString('base64'), photo.toString('base64')]);
+    const puts0 = g.calls.filter((c) => /^PUT/.test(c)).length;
+    j = await start({ dir: 'toDrive', items: [D + '/Music'], dest: 'root' });
+    check(j && j.dest && j.dest.name === 'My Drive', 'CopyJobs.start (USB -> Drive) into My Drive ' + JSON.stringify(j && (j.error || j.dest)));
+    await waitJob(j.id, ['done', 'failed']);
+    j = await job(j.id);
+    const music = Object.values(g.files).find((f) => f.name === 'Music' && f.mimeType === 'application/vnd.google-apps.folder');
+    const album = music && Object.values(g.files).find((f) => f.name === 'Album' && (f.parents || []).includes(music.id));
+    const up = album && Object.values(g.files).find((f) => f.name === 'song.mp3' && (f.parents || []).includes(album.id));
+    const cov = music && Object.values(g.files).find((f) => f.name === 'cover.jpg' && (f.parents || []).includes(music.id));
+    const puts = g.calls.filter((c) => /^PUT/.test(c)).slice(puts0).map((c) => c.split(' ').pop());
+    check(j.state === 'done' && j.doneFiles === 2 && up && sum(up.data) === sum(song) && cov && sum(cov.data) === sum(photo) && up.mimeType === 'audio/mpeg',
+        'the USB folder is in Google Drive with its sub-folder, byte for byte, with the right file types ' + JSON.stringify([j.state, j.doneFiles, !!up, !!cov, j.error, j.failed]));
+    check(puts.includes('0-4194303/' + song.length) && puts.includes('4194304-' + (song.length - 1) + '/' + song.length), 'the 5 MB song went up in 4 MB pieces ' + JSON.stringify(puts));
+    j = await start({ dir: 'toDrive', items: [D + '/Music'], dest: 'root' });
+    await waitJob(j.id, ['done']); j = await job(j.id);
+    check(j.doneFiles === 2 && Object.values(g.files).filter((f) => f.name === 'song.mp3').length === 1, 'the same copy again: Drive already has them (same size), nothing is uploaded twice');
+
+    // --- going on after a page change (opening / quitting an app reloads the page): a USB file from its size, an upload from what Google has
+    const film2 = big(12 * MB + 99, 7);
+    g.files.m2 = { id: 'm2', name: 'long.mkv', mimeType: 'video/x-matroska', parents: ['root'], data: film2 };
+    await page.evaluate(() => { window.__usb.slow = 150; });
+    j = await start({ dir: 'toUsb', items: ['m2'], dest: D });
+    await page.waitForFunction((D) => (window.__usb.tree[D + '/long.mkv'] || {}).length >= 4194304, D, { timeout: 15000 }).catch(() => {});
+    await page.evaluate(() => { CopyJobs._reset(); CopyJobs.init(); window.__usb.slow = 0; });       // the page is gone; the next one starts
+    await waitJob(j.id, ['done', 'failed'], 30000);
+    const m2Reads = g.calls.filter((c) => /files\/m2\?alt=media/.test(c)).map((c) => c.split(' ').pop());
+    check((await job(j.id)).state === 'done' && await page.evaluate((D) => window.__usb.sum(D + '/long.mkv'), D) === sum(film2) && m2Reads.filter((r) => r === 'bytes=0-4194303').length === 1,
+        'Drive -> USB cut by a page change: the next page goes on from the file\'s size (the first 4 MB are not read again), the file is whole ' + JSON.stringify(m2Reads));
+    const big2 = big(10 * MB + 1, 11);
+    await page.evaluate(([D, b]) => window.__usb.put(D + '/big.bin', Uint8Array.from(atob(b), (c) => c.charCodeAt(0))), [D, big2.toString('base64')]);
+    await page.route('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=**', async (r) => { await new Promise((ok) => setTimeout(ok, 400)); r.fallback(); });
+    j = await start({ dir: 'toDrive', items: [D + '/big.bin'], dest: 'root' });
+    await page.waitForFunction((id) => { const x = CopyJobs.list().find((y) => y.id === id); return x && x.current && x.current.done >= 4194304; }, j.id, { timeout: 20000 }).catch(() => {});
+    await page.evaluate(() => { CopyJobs._reset(); CopyJobs.init(); });
+    await waitJob(j.id, ['done', 'failed'], 30000);
+    await page.unroute('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=**');
+    const bigUp = Object.values(g.files).filter((f) => f.name === 'big.bin');
+    check((await job(j.id)).state === 'done' && bigUp.length === 1 && sum(bigUp[0].data) === sum(big2) && g.statusAsks >= 1,
+        'USB -> Drive cut by a page change: the next page asks Google how much it has and sends only the rest; one file, whole ' + JSON.stringify([bigUp.length, g.statusAsks]));
+
+    // --- the USB drive pulled out in the middle: the copy stops with a red card that says so; not enough space: stops before copying
+    await page.evaluate(() => { window.__usb.slow = 600; });
+    j = await start({ dir: 'toUsb', items: ['m2'], dest: D + '/Backup' });
+    await page.waitForFunction((D) => (window.__usb.tree[D + '/Backup/long.mkv'] || {}).length > 0, D, { timeout: 15000 }).catch(() => {});
+    await page.evaluate(() => { window.__usb.mounted = false; });
+    await waitJob(j.id, ['failed', 'done']);
+    const gone = await job(j.id);
+    await page.waitForFunction(() => /Copy stopped/.test(document.getElementById('toast').textContent), null, { timeout: 4000 }).catch(() => {});
+    const goneCard = await page.evaluate(() => document.getElementById('toast').textContent);
+    await shot('3-usb-removed');
+    check(gone.state === 'failed' && gone.error.code === 'gone' && /The USB drive was removed/.test(goneCard), 'USB drive removed while copying: the job fails with gone and a red card ' + JSON.stringify(gone.error));
+    await page.evaluate(() => { window.__usb.mounted = true; window.__usb.slow = 0; window.__usb.free = 1000; });
+    j = await start({ dir: 'toUsb', items: ['m2'], dest: D });
+    await waitJob(j.id, ['failed', 'done']);
+    const full = await job(j.id);
+    check(full.state === 'failed' && full.error.code === 'full' && /Not enough space/.test(full.error.message), 'not enough free space on the drive: it stops before copying anything ' + JSON.stringify(full.error));
+    await page.evaluate(() => { window.__usb.free = 0; });
+    const bad = await start({ dir: 'toUsb', items: ['m2'], dest: '/opt/media/USBDriveA1/../../etc' });
+    const bad2 = await start({ dir: 'toDrive', items: ['/etc/passwd'], dest: 'root' });
+    check(bad.error && bad.error.code === 'bad-request' && bad2.error && bad2.error.code === 'bad-request', 'paths outside the plugged USB drives are refused (no "..", no /etc)');
+    await page.evaluate(() => { Notify.clear(); for (const k of Object.keys(window.__usb.tree)) if (/long\.mkv|big\.bin|film\.mp4|song\.mp3/.test(k)) delete window.__usb.tree[k]; });
+    await snapshot();
+
+    // --- the app bridge: MyPC.usb with its permission, MyPC.copy with job news; no My PC card while the app shows its own
+    await page.waitForFunction(() => Desktop.games().some((x) => x.id === 'app-mydrive'), null, { timeout: 10000 });
+    await Promise.all([page.waitForURL(/play=app-mydrive/), page.evaluate(() => Desktop.play(Desktop.games().find((x) => x.id === 'app-mydrive')))]);
+    await page.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 10000 });
+    const app = page.frames().find((x) => x.url().indexOf(APP) === 0);
+    await app.waitForFunction(() => window.__ok === 1 && MyPC.info() && MyPC.info().bridges);
+    const b0 = await app.evaluate(() => ({ api: MyPC.apiLevel, usb: MyPC.info().bridges.usb, copy: MyPC.info().bridges.copy }));
+    check(b0.api >= 16 && b0.usb === 1 && b0.copy === 1, 'MyPC.usb / MyPC.copy (API 16) are offered on a TV ' + JSON.stringify(b0));
+    await page.evaluate(() => Store.set('drive_apps', { mydrive: 1 }));
+    const pDrives = app.evaluate(() => MyPC.usb.drives().then((d) => d, (e) => 'err ' + e.code));
+    await page.waitForFunction(() => App.dialogOpen(), null, { timeout: 4000 }).catch(() => {});
+    const askUsb = await page.evaluate(() => document.getElementById('dialog-title').textContent + ' | ' + document.getElementById('dialog-text').textContent);
+    await shot('4-usb-permission');
+    await page.evaluate(() => document.getElementById('dialog-yes').click());
+    const drives = await pDrives;
+    check(/MyDrive wants to use your USB drives/.test(askUsb) && Array.isArray(drives) && drives[0].path === D && drives[0].name === 'USB A1' && drives[0].free > 0, 'MyPC.usb.drives(): asked once ("MyDrive wants to use your USB drives"), then the drives with their free space ' + askUsb + JSON.stringify(drives));
+    const appRes = await app.evaluate(async (D) => {
+        const out = {};
+        out.list = (await MyPC.usb.list(D)).map((f) => (f.dir ? '[' + f.name + ']' : f.name + ' ' + f.size)).join(', ');
+        out.mk = (await MyPC.usb.createFolder(D, 'From Drive')).path;
+        out.rd = new TextDecoder().decode((await MyPC.usb.read(D + '/Backup/old.txt', 0, 99)).buf);
+        out.out = await MyPC.usb.list('/etc').then(() => 'ok', (e) => e.code);
+        const news = [];
+        MyPC.copy.onChange((job) => news.push(job.state + ' ' + job.doneFiles + '/' + job.files));
+        const job = await MyPC.copy.toUsb([{ id: 'p1', name: 'beach.jpg' }, 'v1'], out.mk, { ifExists: 'keep' });
+        out.job = job.dir + ' ' + job.state + ' ' + job.app;
+        await new Promise((ok) => { const t = setInterval(() => { if (news.some((n) => /^done/.test(n))) { clearInterval(t); ok(); } }, 50); setTimeout(ok, 20000); });
+        out.news = news;
+        out.jobs = (await MyPC.copy.jobs()).map((x) => x.state + ' ' + x.dest.name);
+        out.cleared = !!(await MyPC.copy.clear(job.id));
+        out.after = (await MyPC.copy.jobs()).length;
+        out.other = await MyPC.copy.cancel('nope').then(() => 'ok', (e) => e.code);
+        return out;
+    }, D);
+    const cardWhileApp = await page.evaluate(() => [...document.querySelectorAll('#toast .nt')].map((c) => c.textContent).join(' | '));
+    const fromDrive = await page.evaluate((D) => [window.__usb.sum(D + '/From Drive/beach.jpg'), window.__usb.sum(D + '/From Drive/Videos/film.mp4')], D);
+    check(/\[Backup\]/.test(appRes.list) && /\[Music\]/.test(appRes.list) && /^\[/.test(appRes.list) && appRes.mk === D + '/From Drive' && appRes.rd === 'old' && appRes.out === 'bad-request',
+        'the app lists a USB folder (folders first, sizes), makes a folder, reads a file; a path outside the drives is refused ' + JSON.stringify([appRes.list, appRes.mk, appRes.rd, appRes.out]));
+    check(appRes.job === 'toUsb queued mydrive' && appRes.news.some((n) => /^copying/.test(n)) && appRes.news.some((n) => n === 'done 2/2') && fromDrive[0] === sum(photo) && fromDrive[1] === sum(film),
+        'MyPC.copy.toUsb(): a job of the app, news while it runs (copying ... done 2/2), the files on the drive ' + JSON.stringify(appRes.news.slice(-3)));
+    check(!/Copying to|Copy finished/.test(cardWhileApp), 'while the app shows its own progress (onChange) My PC adds no card over it ' + cardWhileApp);
+    check(appRes.jobs.length >= 1 && /^done USB A1\/From Drive/.test(appRes.jobs[appRes.jobs.length - 1]) && appRes.cleared && appRes.other === 'not-found', 'copy.jobs() lists only this app\'s copies; clear() forgets an ended one; another id is not-found ' + JSON.stringify(appRes.jobs));
+    // a copy started in the app goes on after the app is closed, and My PC's card shows it on the desktop
+    await page.evaluate(() => { window.__usb.slow = 100; });
+    const j3 = await app.evaluate(() => MyPC.copy.toUsb(['m2'], '/opt/media/USBDriveA1/From Drive').then((x) => x.id));
+    await page.waitForFunction((id) => { const x = CopyJobs.list().find((y) => y.id === id); return x && x.state === 'copying' && x.doneBytes > 0; }, j3, { timeout: 15000 }).catch(() => {});
+    await page.evaluate(() => { for (const k of Object.keys(window.__usb.tree)) if (/film\.mp4/.test(k)) delete window.__usb.tree[k]; });
+    await snapshot();                // what the drive holds now goes with it to the next page (the copy keeps writing meanwhile)
+    await tvBack(page);
+    await Promise.all([page.waitForURL(/from=app-mydrive/), page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); })]);
+    await page.waitForSelector('#desk-icons .dicon');
+    await page.evaluate(() => { window.__usb.slow = 0; });
+    await page.waitForFunction(() => /Copying to USB A1\/From Drive/.test(document.getElementById('toast').textContent), null, { timeout: 8000 }).catch(() => {});
+    const deskCard = await page.evaluate(() => document.getElementById('toast').textContent);
+    await shot('5-desktop-after-quit');
+    await page.waitForFunction((id) => { const x = CopyJobs.list().find((y) => y.id === id); return x && x.state === 'done'; }, j3, { timeout: 30000 }).catch(() => {});
+    check(/Copying to USB A1\/From Drive/.test(deskCard) && (await job(j3)).state === 'done' && await page.evaluate((D) => window.__usb.sum(D + '/From Drive/long.mkv'), D) === sum(film2),
+        'quitting the app does not stop its copy: the desktop page goes on with it, with My PC\'s card ' + deskCard);
+    check(!page.errors.length, 'no page errors ' + page.errors.join(' | '));
     await page.context().close();
 }
