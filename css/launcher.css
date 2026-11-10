@@ -592,6 +592,8 @@ svg { display: block; width: 100%; height: 100%; }
 
 /* ---------- game layer ---------- */
 .game-layer { position: absolute; left: 0; top: 0; width: var(--sw); height: var(--sh); background: #000; outline: none; z-index: 40; }
+/* MyPC.video (js/launcher/app-video.js): the TV draws the picture on its own plane behind the page; My PC's layers let it through */
+html.av-video, html.av-video body, html.av-video .stage, html.av-video .game-layer, html.av-video .game-frame-box { background: transparent !important; }
 .game-frame-box, .game-frame-box iframe { position: absolute; left: 0; top: 0; width: var(--sw); height: var(--sh); border: 0; }
 /* app start screen: the app's icon, its name, a thin progress bar and a status line, like opening an app on a PC */
 .game-loading { position: absolute; left: 0; top: 0; width: var(--sw); height: var(--sh); text-align: center; background: #202020;

@@ -178,6 +178,20 @@ var GameHost = (function () {
         var storeId = id.replace(/^app-/, '');
         var pushCtx = { appId: storeId, title: title(), hold: hold, release: release };
         var br = Bridges.attach({ appId: id, title: title(), config: game.remote.config || {}, send: send, hold: hold, release: release, state: function () { return state; } });
+        // MyPC.video (API 17): the TV's own player (AVPlay) behind the app's transparent page (js/launcher/app-video.js)
+        var vid = AppVideo.attach({ appId: id, title: title(), send: send, frame: function () { return iframe; }, state: function () { return state; } });
+        // MyPC.text.keyboard (API 17): My PC's on-screen keyboard over the app, for typing with the remote alone
+        var kbRid = 0;
+        function keyboard(d) {
+            if (typeof Keyboard === 'undefined' || Keyboard.isOpen() || state !== 'running') { send('kb', { rid: d.rid, error: { code: 'busy', message: 'The keyboard cannot open now.' } }); return; }
+            var kinds = { password: 'password', url: 'url', email: 'code', number: 'code', user: 'user', name: 'name' };
+            var paused = hold(), rid = d.rid;
+            kbRid = rid;
+            function done(v) { if (kbRid !== rid) return; kbRid = 0; release(paused); send('kb', { rid: rid, result: v }); }
+            Keyboard.open({ title: String(d.label || '').slice(0, 60), text: String(d.value || '').slice(0, 500), max: Math.max(1, Math.min(500, +d.max || 200)),
+                            mode: kinds[d.kind] || 'title', placeholder: String(d.placeholder || '').slice(0, 60), ok: d.ok ? String(d.ok).slice(0, 20) : undefined },
+                          function (v) { done(String(v)); }, function () { done(null); });
+        }
         function bleAllowed() { return id === 'hr-monitor' || !!(game.remote.config && game.remote.config.heartRate === true); }
         // heart-rate sensors over Bluetooth LE (js/core/hr-ble.js), only for apps allowed to use them (bleAllowed)
         var ble = HrBle.create(function (kind, m) { send('ble-event', m); });
@@ -205,11 +219,16 @@ var GameHost = (function () {
             if (!m || m.mypc !== 1 || typeof m.type !== 'string') return;
             d = m.data || {};
             if (e.origin === origin && br.handle(m.type, d)) return;
+            if (m.type === 'video') { if (e.origin === origin && typeof d.rid === 'number') vid.handle(d); return; }
+            if (m.type === 'kb') { if (e.origin === origin && typeof d.rid === 'number') keyboard(d); return; }
+            if (m.type === 'back') { remote.ownBack = !!d.on; return; }
             switch (m.type) {
                 case 'hello':
                     win = e.source;
                     said.hello = Date.now(); said.sdk = +d.sdkApi || +d.sdk || 0;
                     remote.ownMenu = !!d.ownMenu;          // the app has its own menu on gamepad Start
+                    // MyPC.init({ keys: ['channel', 'media'] }) (API 17): CH + / CH - (and L / R) and the remote's media keys go to the app
+                    remote.keys = { channel: !!(d.keys && d.keys.indexOf && d.keys.indexOf('channel') >= 0), media: !!(d.keys && d.keys.indexOf && d.keys.indexOf('media') >= 0) };
                     if (typeof TouchPad !== 'undefined') { TouchPad.app(d.pad); TouchPad.relay(function (m) { send('pad', m); }); }      // MyPC.init({ pad }); presses of the app's own pad go back to it
                     send('init', {
                         lang: I18n.lang(), rtl: I18n.rtl(), quality: { tier: Perf.profile().tier },
@@ -218,7 +237,7 @@ var GameHost = (function () {
                         data: Store.get('game_' + id + '_data', {}), app: { id: id },
                         config: game.remote.config || {},
                         mp: typeof Multiplayer !== 'undefined' && typeof Rooms !== 'undefined' && NetLink.supported() ? 1 : 0,   // MyPC.multiplayer is supported
-                        bridges: { net: 1, ai: 1, mic: Mic.supported() || Mic.phone() ? 1 : 0, drive: 1, usb: UsbFs.supported() ? 1 : 0, copy: UsbFs.supported() ? 1 : 0 },     // MyPC.net / ai / mic (API 10), MyPC.drive (API 14), MyPC.usb / copy (API 16, TV only) go through My PC
+                        bridges: { net: 1, ai: 1, mic: Mic.supported() || Mic.phone() ? 1 : 0, drive: 1, usb: UsbFs.supported() ? 1 : 0, copy: UsbFs.supported() ? 1 : 0, video: AppVideo.supported() ? 1 : 0, keyboard: 1, back: 1 },     // MyPC.net / ai / mic (API 10), MyPC.drive (API 14), MyPC.usb / copy (API 16, TV only) go through My PC
                         notify: 1, launch: Push.takeLaunch(id)        // MyPC.notify, MyPC.launch: push notifications (API 12, js/launcher/push.js)
                     });
                     padsSent = ''; padsChanged();
@@ -299,13 +318,16 @@ var GameHost = (function () {
         AudioPrefs.onChange(volume);
         var remote = {
             ownMenu: false,
+            ownBack: false,          // MyPC.back(true): the remote's Back goes to the app as 'cancel' (it has a screen to close)
+            keys: { channel: false, media: false },
+            video: function () { return vid.active(); },
             init: function () {},
             start: function () { send('start'); },
-            pause: function () { br.pause(); send('pause'); },
-            resume: function () { send('resume'); },
+            pause: function () { br.pause(); vid.pause(); send('pause'); },
+            resume: function () { send('resume'); vid.resume(); },
             // a push notification's deep link for this app while it runs (MyPC.init({ onLaunch }))
             launch: function (d) { send('launch', d); },
-            destroy: function () { pushCtx.dead = true; br.destroy(); if (typeof TextIn !== 'undefined') TextIn.app(null, textSend); Input.onPadRaw(null); Input.offDevices(padsChanged); ble.destroy(); if (mp) { mp.destroy(); mp = null; } send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
+            destroy: function () { pushCtx.dead = true; br.destroy(); vid.destroy(); if (kbRid) { kbRid = 0; if (Keyboard.isOpen()) Keyboard.close(); } if (typeof TextIn !== 'undefined') TextIn.app(null, textSend); Input.onPadRaw(null); Input.offDevices(padsChanged); ble.destroy(); if (mp) { mp.destroy(); mp = null; } send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
             menuItems: function () { return items; },
             onMenu: function (mid) { send('menu', { id: String(mid).slice(4) }); },
             onAction: function (a, pressed, repeat, dev) { send('input', { action: a, pressed: pressed, repeat: repeat, dev: dev }); }
@@ -632,11 +654,17 @@ var GameHost = (function () {
         if (state === 'running') {
             // Guide = the Start key of this PC: opens the pause menu. Page keys and Tab belong to the desktop, not to games.
             if (action === 'guide') { if (pressed && !repeat) openPause(); return; }
+            var k = api && api.keys;
+            // apps that asked for them (API 17): CH + / CH - (and a pad's L / R) and the remote's media keys
+            if ((action === 'pageUp' || action === 'pageDown') && k && k.channel) { if (api.onAction) { try { api.onAction(action, pressed, repeat, dev); } catch (e0) {} } return; }
+            if (/^media/.test(action) && k && k.media) { if (api.onAction) { try { api.onAction(action, pressed, repeat, dev); } catch (e1) {} } return; }
+            if (action === 'pause' && k && k.media && String(dev).slice(0, 3) !== 'pad') { if (api.onAction) { try { api.onAction('playPause', pressed, repeat, dev); } catch (e2) {} } return; }
             if (action === 'pageUp' || action === 'pageDown' || action === 'tab' || action === 'tabBack' || action === 'record' || /^media/.test(action)) return;
             if (action === 'pause') { if (pressed && !repeat) openPause(); return; }
-            // My PC's menu: only the TV remote's Back. A keyboard's Esc / Backspace go to the game as its Back ('cancel').
+            // My PC's menu: only the TV remote's Back, unless the app said it has a screen to close (MyPC.back(true), API 17).
+            // A keyboard's Esc / Backspace go to the game as its Back ('cancel').
             if (action === 'back') {
-                if (Input.tvBack()) { if (pressed && !repeat) openPause(); return; }
+                if (Input.tvBack() && !(api && api.ownBack)) { if (pressed && !repeat) openPause(); return; }
                 action = 'cancel';
             }
             // gamepad Start or Select: the game's own menu when it has one, else nothing (holding both opens My PC's
@@ -675,6 +703,8 @@ var GameHost = (function () {
         init: init, launch: launch, exit: exit, onAction: onAction, openPause: openPause, background: background, hold: hold, release: release,
         active: function () { return state !== 'idle'; },
         // a notification for the app that is open: its deep link goes to it (MyPC.launch + onLaunch); true when delivered
+        // the running app asked for the remote's media keys (MyPC.init({ keys: ['media'] })): shortcuts leave them to it
+        wantsMedia: function () { return state === 'running' && !!(api && api.keys && api.keys.media); },
         deepLink: function (gameId, launch) { if (!game || game.id !== gameId || !api || !api.launch) return false; api.launch(launch); return true; },
         state: function () { return state; },
         id: function () { return game ? game.id : null; },

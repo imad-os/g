@@ -102,6 +102,7 @@
     "js/launcher/controllers.js",
     "js/launcher/touchpad.js",
     "js/launcher/bridges.js",
+    "js/launcher/app-video.js",
     "js/launcher/welcome.js",
     "js/launcher/game-host.js",
     "js/launcher/main.js"

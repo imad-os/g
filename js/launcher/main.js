@@ -143,6 +143,8 @@ var App = (function () {
         // multiplayer screens (host / join / waiting / "wants to join") sit over the running game
         if (Multiplayer.screenOpen()) { Multiplayer.action(action, pressed, repeat); return; }
 
+        // My PC's on-screen keyboard opened for the app (MyPC.text.keyboard, API 17) sits over it
+        if (GameHost.active() && Keyboard.isOpen()) { if (pressed) Keyboard.action(action, repeat); return; }
         if (GameHost.active()) return GameHost.onAction(action, pressed, repeat, dev);
 
         if (action === 'padLost') { toast(I18n.t('padOff').split('.')[0], { id: 'pad', kind: 'err' }); return; }

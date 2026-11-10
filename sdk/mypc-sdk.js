@@ -27,6 +27,8 @@
  * Google Drive of the profile (one sign-in in My PC, no token in the app): MyPC.drive (API 14).
  * Paused under My PC's menu the app gets no key, no gamepad, its media pause (and with no onPause its frames wait) (API 15).
  * The TV's USB drives (MyPC.usb) and copies between Google Drive and USB drives done by My PC (MyPC.copy) (API 16, TV only).
+ * The TV's own video player (MyPC.video), the remote's Back for the app's own screens (MyPC.back), CH + / CH - and the
+ *   media keys (MyPC.init({ keys: ['channel', 'media'] })), My PC's on-screen keyboard (MyPC.text.keyboard) (API 17).
  *   'menu' = gamepad Start or Select pressed alone; only sent to apps that init with { ownMenu: true }.
  *   Only the TV remote's Back, or holding Start + Select together 1 s, opens My PC's menu; Esc / Backspace are 'cancel'.
  * Written in ES5 so it loads anywhere; My PC itself supports Samsung TVs from 2024 (Tizen 8+).
@@ -34,12 +36,12 @@
 var MyPC = (function () {
     'use strict';
 
-    var VERSION = 1, API = 16, HELLO_WAIT = 1200;
+    var VERSION = 1, API = 17, HELLO_WAIT = 1200;
     var handlers = {}, info = null, data = {}, started = false, destroyed = false, isReady = false;
     var hosted = false, hostWin = null, hostOrigin = '*', helloTimer = 0;
     var down = {};                       // action -> number of keys / buttons holding it
     var menuItems = [];
-    var standalonePaused = false, uiBlock = false;
+    var standalonePaused = false, uiBlock = false, ownBack = false;
 
     function call(name) {
         var f = handlers[name];
@@ -253,6 +255,8 @@ var MyPC = (function () {
             case 'drive': drive._message(d); break;
             case 'usb': usb._message(d); break;
             case 'copy': copy._message(d); break;
+            case 'video': video._message(d); break;
+            case 'kb': kb._message(d); break;
         }
     }
 
@@ -270,7 +274,9 @@ var MyPC = (function () {
         var acts = KEYS[e.keyCode];
         if (!acts) return;
         e.preventDefault();
+        if (isDown && e.keyCode === 27 && ownBack && !standalonePaused && !e.repeat) { setInput('cancel', true, false, 'keys'); setInput('cancel', false, false, 'keys'); return; }   // MyPC.back(true)
         if (isDown && (e.keyCode === 27 || e.keyCode === 80) && !e.repeat) { togglePause(); return; }
+        if (e.keyCode === 27) return;
         if (standalonePaused) return;
         if (isDown && held[e.keyCode]) { for (var i = 0; i < acts.length; i++) if (/left|right|up|down/.test(acts[i])) setInput(acts[i], true, true, 'keys'); return; }
         if (!isDown && !held[e.keyCode]) return;
@@ -311,7 +317,8 @@ var MyPC = (function () {
             // in a frame: say hello to My PC (it answers with "init"); keys pressed while the frame
             // has focus (mouse click on a PC) are forwarded so the host still gets Back, arrows...
             hosted = true; hostWin = window.parent;
-            post('hello', { sdk: VERSION, sdkApi: API, title: document.title, ownMenu: handlers.ownMenu === true, pad: handlers.pad === undefined ? null : handlers.pad });
+            var keys = Array.isArray(handlers.keys) ? handlers.keys.filter(function (k) { return k === 'channel' || k === 'media'; }) : [];
+            post('hello', { sdk: VERSION, sdkApi: API, title: document.title, ownMenu: handlers.ownMenu === true, pad: handlers.pad === undefined ? null : handlers.pad, keys: keys });
             document.addEventListener('keydown', function (e) { forwardKey(e, true); });
             document.addEventListener('keyup', function (e) { forwardKey(e, false); });
             helloTimer = setTimeout(goStandalone, HELLO_WAIT);   // framed by something that is not My PC
@@ -2063,9 +2070,87 @@ var MyPC = (function () {
         };
     })();
 
+    /* MyPC.video (API 17, on the TV): the TV's own video player (Samsung AVPlay), played by My PC for the app. The picture is
+     * drawn BEHIND the web page: keep your page transparent where it must show (the whole screen, or a box for a preview).
+     * http streams play too (no mixed-content block), and USB paths once MyPC.usb is allowed. One video at a time.
+     *   video.supported()                          true on a TV (else use your own <video>)
+     *   video.open(url, { start, live, rect, fit, ua }) -> { duration, live, tracks }     start in seconds; rect: an element or { x, y, w, h }
+     *   video.play() pause() stop() seek(seconds) rect(elementOr{x,y,w,h} | null = whole screen) fit('fit' | 'fill' | 'auto')
+     *   video.tracks() -> { audio: [{ index, lang, codec, channels }], text: [{ index, lang }], video: { w, h }, cur: { audio, text } }
+     *   video.track('audio' | 'text', index)   video.subtitles(on)   video.speed(rate)   video.state() -> { state, t, d }
+     *   video.on('state' | 'time' | 'buffer' | 'sub' | 'error' | 'info', fn) -> off()
+     *     state: { state: 'buffering' | 'playing' | 'paused' | 'ended' | 'idle' }  time: { t, d }  buffer: { p }  sub: { text, dur }
+     *     error: { code: 'network' | 'format' | 'not-found' | 'drm' | 'player' | 'restore' }   info: { w, h }
+     * Under My PC's menu the video waits and plays again on Resume. Full reference: sdk/GUIDE.md, "Video". */
+    var video = (function () {
+        var ch = channel('video'), fns = {};
+        function rectOf(r) {
+            if (!r) return { full: 1 };
+            if (r.getBoundingClientRect) { var b = r.getBoundingClientRect(); r = { x: b.left, y: b.top, w: b.width, h: b.height }; }
+            return { x: +r.x || 0, y: +r.y || 0, w: +r.w || 0, h: +r.h || 0, vw: window.innerWidth, vh: window.innerHeight };
+        }
+        function call(op, args) {
+            var p = bridgeReady().then(function () {
+                if (!viaShell() || !info.bridges || !info.bridges.video) throw bridgeError({ code: 'unsupported', message: 'The TV player needs My PC on a TV: use a <video> element.' });
+                return ch.call(op, { args: args || {} });
+            });
+            p.catch(function () {});
+            return p;
+        }
+        return {
+            supported: function () { return !!(viaShell() && info.bridges && info.bridges.video); },
+            open: function (url, o) {
+                o = o || {};
+                return call('open', { url: String(url || ''), start: +o.start || 0, live: !!o.live, rect: o.rect ? rectOf(o.rect) : null, fit: o.fit || 'fit', ua: o.ua || '' });
+            },
+            play: function () { return call('play'); },
+            pause: function () { return call('pause'); },
+            stop: function () { return call('stop'); },
+            seek: function (t) { return call('seek', { t: +t || 0 }); },
+            rect: function (r) { return call('rect', rectOf(r)); },
+            fit: function (mode) { return call('fit', { mode: mode }); },
+            tracks: function () { return call('tracks'); },
+            track: function (kind, index) { return call('track', { kind: kind === 'text' ? 'text' : 'audio', index: +index || 0 }); },
+            subtitles: function (on) { return call('subs', { on: !!on }); },
+            speed: function (rate) { return call('speed', { rate: +rate || 1 }); },
+            state: function () { return call('state'); },
+            on: function (name, fn) {
+                if (typeof fn !== 'function') return function () {};
+                (fns[name] = fns[name] || []).push(fn);
+                return function () { var l = fns[name] || [], i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); };
+            },
+            _message: function (d) {
+                if (d && d.ev && !d.rid) {
+                    var l = (fns[d.ev] || []).slice();
+                    for (var i = 0; i < l.length; i++) { try { l[i](d); } catch (e) { report(e, { where: 'MyPC.video ' + d.ev }); } }
+                    return true;
+                }
+                return ch._message(d);
+            }
+        };
+    })();
+
+    /* MyPC.text.keyboard(opts) (API 17): My PC's on-screen keyboard over the app, so the remote alone can type (a search, an
+     * address, a password). opts: { value, kind: 'text' | 'search' | 'url' | 'password' | 'email' | 'number' | 'user' | 'name',
+     * label, placeholder, ok (the OK key's label), max }. Resolves with the text, or null when the player went Back. Standalone: the browser's prompt(). */
+    var kb = (function () {
+        var ch = channel('kb');
+        return {
+            open: function (o) {
+                o = o || {};
+                if (!viaShell() || !info.bridges || !info.bridges.keyboard) {
+                    return new Promise(function (res) { var v = null; try { v = window.prompt(String(o.label || ''), String(o.value == null ? '' : o.value)); } catch (e) {} res(v === undefined ? null : v); });
+                }
+                return ch.call('open', { value: String(o.value == null ? '' : o.value), kind: String(o.kind || 'text'), label: String(o.label || ''), placeholder: String(o.placeholder || ''), ok: String(o.ok || ''), max: +o.max || 200 });
+            },
+            _message: ch._message
+        };
+    })();
+    text.keyboard = kb.open;
+
     var pub = {
         version: VERSION,
-        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy, 17 MyPC.video + MyPC.back + init keys + MyPC.text.keyboard (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,
@@ -2079,6 +2164,10 @@ var MyPC = (function () {
         drive: drive,
         usb: usb,
         copy: copy,
+        video: video,
+        // MyPC.back(true): the app has a screen of its own to close, the remote's Back comes to it as 'cancel' (API 17).
+        // MyPC.back(false) on the app's first screen: Back opens My PC's menu again (Quit). Standalone: Esc is 'cancel' meanwhile.
+        back: function (on) { on = !!on; if (on === ownBack) return; ownBack = on; if (hosted) post('back', { on: on }); },
         // The notification that opened the app ({ link, app, path, title, text, at }) or null; read it in onInit.
         // A notification chosen while the app runs: MyPC.init({ onLaunch(launch) }) (and MyPC.launch is updated)
         launch: null,

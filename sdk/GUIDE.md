@@ -160,7 +160,7 @@ still slow down a hidden page by itself. Standalone, outside My PC, the SDK does
 itself. Your app only sees `info.profile` and keeps progress with `MyPC.save` / `MyPC.load`, which are already per
 profile and backed up. **Never** build your own login, accounts, cloud saves, name entry for scores, Firebase or backend.
 
-Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text, 14 drive, 15 no input while paused, 16 usb / copy) and hide the feature
+Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text, 14 drive, 15 no input while paused, 16 usb / copy, 17 video / back / keys / keyboard) and hide the feature
 when it is missing.
 
 ### App config: `MyPC.app_config`
@@ -398,8 +398,9 @@ button does what, and keep the defaults on the standard indices.
 Actions: `left right up down` (directions), `jump` and `confirm` (OK / Enter / Space / gamepad A),
 `run` (gamepad B/X, Shift, X: also "fire"), `cancel`, `pause`.
 
-- My PC keeps some keys for itself and **never sends them to apps**: Channel Up / Down and PageUp /
-  PageDown (`pageUp`, `pageDown`), Guide / F6 (`guide`, which opens the pause menu), Tab.
+- My PC keeps some keys for itself: Channel Up / Down and PageUp / PageDown (`pageUp`, `pageDown`), the remote's media
+  keys, Guide / F6 (`guide`, which opens the pause menu), Tab. An app that pages through long lists or zaps channels asks
+  for them with `MyPC.init({ keys: ['channel', 'media'] })` (API level 17, section 21).
 - On the TV remote, **OK** sends `confirm` **and** `jump`. Use `confirm` in menus, `jump` in play.
 - `repeat` is `true` for auto-repeat of a held direction: use it for menus, ignore it in play.
 - `dev` is the device: `'keys'` (remote or arrows), `'keys2'` (second keyboard player: W A S D, F, G)
@@ -409,8 +410,11 @@ Actions: `left right up down` (directions), `jump` and `confirm` (OK / Enter / S
 - **Text fields are typing, not actions.** While one of your `<input>` / `<textarea>` / contenteditable has the focus,
   its keys stay in it (Backspace deletes, letters are letters: no `cancel`, no pause), on My PC and standalone; Esc and
   the TV's Back still leave. A phone in the Game controller's **Text mode** types into it (section 17).
-- The TV remote's Back always belongs to My PC (pause menu); you never receive it. A keyboard's Esc and
-  Backspace reach you as `cancel` (use it as your own "back": close a sub-menu, leave a screen).
+- The TV remote's Back belongs to My PC (pause menu) while your app is on its first screen. A keyboard's Esc and
+  Backspace reach you as `cancel` (use it as your own "back": close a sub-menu, leave a screen). **An app with screens of
+  its own** (a list, then details, then a player) calls `MyPC.back(true)` while it has something to close: the remote's
+  Back then reaches it as `cancel` too; `MyPC.back(false)` back on the first screen, so Back opens My PC's menu (Quit)
+  again (API level 17, section 21).
 - **Shortcuts belong to the player.** Each My PC user maps buttons to actions (Control Panel > Shortcuts): any remote or
   keyboard key and any controller button except the arrows / D-pad, OK / B, Back / A (by default only Play / Pause = My
   PC's music and Guide = switch user). A mapped button runs its shortcut, also during your app, and never reaches you
@@ -577,7 +581,7 @@ the World records.
       and closes the `AudioContext`
 - [ ] **game controller first**: every button, trigger and both sticks used through `MyPC.gamepad`, controls shown on screen, up to 4 pads by `dev`
 - [ ] input only through the SDK (`onInput` / `MyPC.isDown` / `MyPC.gamepad`), still playable with arrows + OK only
-- [ ] no `keydown` listeners of your own (Esc reaches you as `cancel`; the remote's Back is never yours)
+- [ ] no `keydown` listeners of your own (Esc reaches you as `cancel`; the remote's Back only with `MyPC.back(true)`)
 - [ ] fills the window at any 16:9 size, readable text, obvious focus
 - [ ] runs on Chromium 108 (Tizen 8, 2024 TVs): no CSS nesting, nothing newer than Chrome 108; no allocation in the game loop
 - [ ] saves through `MyPC.save/load`; scores through `MyPC.submitScore` (games with points)
@@ -590,6 +594,7 @@ the World records.
 - [ ] Google Drive only through `MyPC.drive` (section 19): no Google client, OAuth, token, Drive API call or Picker of your own; `signed-out` / `denied` / `noconfig` handled
 - [ ] USB drives and copies Drive <-> USB only through `MyPC.usb` / `MyPC.copy` (section 20); hidden when `MyPC.info().bridges.usb` is not 1
 - [ ] the SDK `<script>` is the **first** script of the page (so errors of your own scripts are reported, section 15); errors you catch that matter go to `MyPC.report`
+- [ ] video through `MyPC.video` on the TV (section 21), with your own `<video>` when `MyPC.video.supported()` is false; screens of your own close with the remote's Back (`MyPC.back`)
 - [ ] text the player types: a real `<input>` / `<textarea>` (or `MyPC.text.open` for a field drawn on a canvas), so a phone in Text mode can type into it (section 17); never required to play
 - [ ] served over https with CORS (GitHub Pages)
 - [ ] every own script, stylesheet and asset is loaded with `?v=<version>`, the same as `version` in `mypc-app.json` (bumped for every release)
@@ -1362,3 +1367,76 @@ Protocol (for reference): app -> My PC `usb { rid, op, args }` (`op`: drives lis
 (`op`: start jobs pause resume cancel clear watch); My PC -> app `{ rid, result | error }` and, after `watch`,
 `copy { rid: 0, ev: 'job', job }`. My PC side: `js/core/usb-fs.js`, `js/core/copy-jobs.js`, `js/launcher/bridges.js`.
 
+## 21. Video on the TV, Back, channel keys, the on-screen keyboard (API level 17)
+
+For video apps (IPTV, films, a USB film library): the **TV's own player** (Samsung AVPlay, the chip that decodes 4K HEVC,
+AC3 / EAC3, MKV, TS...), the remote's **Back** for the app's own screens, **CH + / CH −** and the **media keys**, and
+**My PC's on-screen keyboard** so the remote alone can type. Check `MyPC.apiLevel >= 17` and `MyPC.info().bridges`
+(`video`, `back`, `keyboard`).
+
+### `MyPC.video`: the TV's player
+
+An app is a sandboxed page: it cannot reach `webapis.avplay`, and an `http://` stream is blocked in an https page. My PC
+plays the video for the app. **The picture is drawn behind the web page**, on the TV's video plane: keep your page
+**transparent** wherever it must show (`html, body { background: transparent }` while playing; a "hole" for a small
+preview, everything else of the page drawn as usual). Your controls and subtitles are your own HTML over it.
+
+```js
+if (MyPC.video.supported()) {                                  // a TV (else: your own <video>, hls.js for .m3u8)
+  const info = await MyPC.video.open('http://server/movie/u/p/1.mkv', { start: 754, rect: null, fit: 'fit' });
+  // info = { duration (s, 0 when live), live, tracks }
+  MyPC.video.on('time', (e) => bar(e.t, e.d));                 // twice a second
+  MyPC.video.on('state', (e) => show(e.state));                // buffering playing paused ended idle
+  MyPC.video.on('error', (e) => retry(e.code));                // network format not-found drm player restore
+  MyPC.video.on('sub', (e) => showSub(e.text));                // subtitles inside the file, when turned on
+  await MyPC.video.rect(previewBox);                           // an element (or { x, y, w, h } in your CSS pixels); null = whole screen
+}
+```
+
+| Call | Result |
+|---|---|
+| `open(url, { start, live, rect, fit, ua })` | `{ duration, live, tracks }`. `start` in seconds; `live` for a channel (no seek); `ua` a User-Agent some IPTV servers want. Opening another video closes the first (one player on the TV; My PC's music stops). |
+| `play()` `pause()` `stop()` | |
+| `seek(seconds)` | refused for a live stream (`live`) |
+| `rect(el \| {x,y,w,h} \| null)` | where the picture is (null = whole screen) |
+| `fit('fit' \| 'fill' \| 'auto')` | letterbox / fill the box / the file's own |
+| `tracks()` | `{ audio: [{ index, lang, codec, channels }], text: [{ index, lang }], video: { w, h }, cur: { audio, text } }` |
+| `track('audio' \| 'text', index)` `subtitles(on)` `speed(rate)` | |
+| `state()` | `{ state, t, d }` |
+| `on(name, fn)` | `state`, `time`, `buffer` (`{ p }` 0..100), `sub` (`{ text, dur }`), `error` (`{ code }`), `info` (`{ w, h }`); returns `off()` |
+
+- **USB files**: a path from `MyPC.usb` (`/opt/media/USBDriveA1/Films/a.mkv`) plays once the app may use the USB drives
+  (section 20); subtitle files next to it are read with `MyPC.usb.read` and drawn by the app.
+- **Under My PC's menu** (Back on the first screen, Guide) the video pauses and plays again on Resume; leaving My PC
+  (another TV app) stops it and opens it again where it was. Quitting the app closes it.
+- Errors: `unsupported` (not a TV: use a `<video>`), `bad-request` (no url, not an http(s) / rtsp / rtmp / udp address
+  or a USB path), `denied` (USB not allowed), `live` (seek / speed on a live stream), `not-open`, `network`, `format`,
+  `not-found`, `drm`, `player`, `timeout` (no answer in 30 s). `speed` takes whole rates (1, 2, 4... and -2, -4...).
+
+### `MyPC.back(on)`: the remote's Back for your screens
+
+`MyPC.back(true)` while your app has a screen, menu or dialog of its own to close: the TV remote's Back then reaches you
+as `cancel`. Call `MyPC.back(false)` when you are back on your first screen: Back opens My PC's menu again (Quit). Without
+it, Back always opens My PC's menu. Standalone, Esc behaves the same way.
+
+### `MyPC.init({ keys })`: CH + / CH − and the media keys
+
+`keys: ['channel']`: CH + / CH − (and PageUp / PageDown, a pad's L / R are yours already through `MyPC.gamepad`) reach
+your `onInput` as `pageUp` / `pageDown` (page a long list, zap channels). `keys: ['media']`: the remote's media keys reach
+you as `playPause`, `mediaFf`, `mediaRew`, `mediaNext`, `mediaPrev`, `mediaStop` (the player's own shortcuts on those
+buttons wait meanwhile). Ask only for what you use.
+
+### `MyPC.text.keyboard(opts)`: My PC's on-screen keyboard
+
+```js
+const q = await MyPC.text.keyboard({ value: '', kind: 'search', label: 'Search films', ok: 'Search' });
+if (q !== null) search(q);          // null: the player went Back
+```
+
+`kind`: `text search url password email number user name`; `label`, `placeholder`, `ok` (the OK key's label), `max`.
+Your app waits under it (no input). A phone in Text mode types into it too (section 17). Standalone: the browser's
+`prompt()`. Use it for every text the remote must be able to type (an address, a user name, a search).
+
+Protocol (for reference): app -> My PC `video { rid, op, args }` (`op`: open play pause stop seek rect fit tracks track
+subs speed state), `kb { rid, value, kind, label, placeholder, ok, max }`, `back { on }`, `hello { keys }`; My PC -> app
+`{ rid, result | error }` and `video { rid: 0, ev, ... }`. My PC side: `js/launcher/app-video.js`, `js/launcher/game-host.js`.
