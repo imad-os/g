@@ -9,7 +9,7 @@ is mapped to what Arcade does.
 | Requirement | Arcade |
 |---|---|
 | `config.xml` `<name>` is **identical** to the default-language title in Seller Office | `Arcade`. Enter exactly this, or change both. If "Arcade" is already taken in the store, pick a unique title (e.g. "Arcade Pocket Games") and update `<name>` |
-| Tizen ID / package ID unique, never changes between versions; no special characters | replace `XXXXXXXXXX` in `config.xml` with the ID from Seller Office |
+| Tizen ID / package ID unique, never changes between versions; no special characters | `MyPCgeeks1` (app id `MyPCgeeks1.MyPC`) in `config.xml`; register the same id in Seller Office |
 | Version `[0-255].[0-255].[0-65535]`, higher on every upload | `1.0.0`. Bump for every `.wgt` |
 | Screen size declared in a `<feature>` | `http://tizen.org/feature/screen.size.all` |
 | Only the privileges you use; no partner or unavailable privileges (`keymanager`, `systemmanager`, `websetting`) | `internet`, `tv.inputdevice`, `network.public` (network popup) |

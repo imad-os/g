@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- My PC's own maskable icon (icon-maskable-512.png at the repository root) -->
+<!-- My PC's icon (the classic monitor, tools/make-icons.mjs): navy gradient + the monitor in the 66 dp safe zone -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/icon_bg" />
-    <foreground android:drawable="@drawable/ic_mypc" />
+    <background android:drawable="@drawable/ic_launcher_bg" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_stat_mypc" />
 </adaptive-icon>

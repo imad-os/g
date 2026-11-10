@@ -4,13 +4,14 @@
      - version [0-255].[0-255].[0-65535]; every new upload needs a higher version.
      - <icon>: 512x423 PNG (24-bit) under 300 KB, in the package root.
      - screen size declared with a <feature>; only the privileges actually used.
-     - XXXXXXXXXX = the 10-character package ID from Seller Office / Certificate Manager. The
-       tizen:application id is "<package>.<name>" and must never change between versions.
+     - package ID MyPCgeeks1 (10 letters / digits, chosen 2026-11-10; was the placeholder XXXXXXXXXX.arcade). The
+       tizen:application id is "<package>.<name>" = MyPCgeeks1.MyPC and must never change between versions: a TV
+       treats another id as another app (its own storage; profiles come back from the cloud backup).
      Every package upload needs a higher version. Never change SHELL in js/boot/loader.js or "shell" in
      app-manifest.json: older packages would stop accepting the online builds. -->
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
-        id="https://imad-os.github.io/g/arcade" version="1.6.2" viewmodes="maximized">
-    <tizen:application id="XXXXXXXXXX.arcade" package="XXXXXXXXXX" required_version="4.0"/>
+        id="https://pc.geekspro.us/mypc" version="1.7.0" viewmodes="maximized">
+    <tizen:application id="MyPCgeeks1.MyPC" package="MyPCgeeks1" required_version="4.0"/>
     <name>My PC</name>
     <description>Seven arcade and board games for your TV: a platformer with 3 worlds and 2-player co-op, Parchís for 2 to 4 players with Moroccan rules, plus falling blocks, sky hopping, snake, brick breaking and tile merging. Player profiles keep everyone's progress apart.</description>
     <icon src="icon.png" width="512" height="423"/>

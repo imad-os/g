@@ -36,7 +36,7 @@ public final class LinkService extends Service {
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification n = new Notification.Builder(this, CHANNEL)
-                .setSmallIcon(R.drawable.ic_launcher_fg)
+                .setSmallIcon(R.drawable.ic_stat_mypc)
                 .setContentTitle(getString(R.string.app_name))
                 .setContentText(getString(R.string.link_running))
                 .setContentIntent(open)

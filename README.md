@@ -219,10 +219,12 @@ repository.
 
 ## Store assets and Samsung rules
 
-`node tools/make-store-assets.mjs http://localhost:8080/` regenerates these from the game art:
-- the 512×423 app icon (`icon.png`);
-- the browser favicons (`favicon.ico`, `icon-32.png`, `icon-192.png`, `apple-touch-icon.png`);
-- the Seller Office logo, background and 4 screenshots in `store/`.
+`node tools/make-icons.mjs` draws the icon (a classic PC monitor) in every size:
+- the 512×423 app icon (`icon.png`, 24-bit, in the .wgt and for Seller Office) and the Seller Office logo (`store/logo_1920x1080.png`);
+- the browser and web app icons (`favicon.ico`, `icon-32.png`, `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png`);
+- the Android adaptive icon (`android-controller/app/src/main/res/mipmap-*/ic_launcher_foreground.png`).
+
+`node tools/make-store-assets.mjs http://localhost:8080/` makes the Seller Office background and 4 screenshots in `store/`.
 
 `privacy.html` is the privacy policy URL to give Seller Office.
 **Read `docs/samsung-store-guide.md` before submitting.** It has the full checklist, the usual
@@ -233,8 +235,8 @@ rejection reasons mapped to how the app handles them, and the App UI Description
 1. Install Tizen Studio with the TV extensions.
 2. In Certificate Manager, create a **Samsung** certificate profile (author + distributor). You
    need it to run on retail TVs and to submit.
-3. Put your Seller Office application id and package id into `config.xml`
-   (`XXXXXXXXXX.arcade`), plus a unique widget `id`.
+3. `config.xml` already has the package id `MyPCgeeks1`, application id `MyPCgeeks1.MyPC` and widget id
+   `https://pc.geekspro.us/mypc`. Never change them: a TV treats another id as another app.
 4. `TIZEN_PROFILE=<profile> sh tools/build-wgt.sh` validates the levels, copies only runtime
    files to `build/wgt/` and runs `tizen package -t wgt`.
 5. Test on a TV:
