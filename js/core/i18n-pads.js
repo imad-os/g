@@ -4,6 +4,7 @@
     'use strict';
     I18n.add({
         en: {
+            padSwap: 'Swap A ↔ B and X ↔ Y', padSwapDesc: 'Samsung TVs and Android send a Nintendo pad’s A B X Y by letter; Automatic puts them back.', padOrd_auto: 'Automatic (%s)', padOrd_swap: 'Swap', padOrd_keep: 'Don\'t swap', padSwapped: 'A ↔ B and X ↔ Y swapped back',
             padSection: 'Your controllers', padNone: 'No controller connected. Plug one in (USB or Bluetooth), then press a button.',
             padBrand: 'Brand', padModel: 'Model', padUnknown: 'Unknown', padIds: 'USB id', padMap: 'Button order',
             padMapStd: 'standard (by place on the pad)', padMapRaw: 'not standard: the controller’s own order',
@@ -18,6 +19,7 @@
             padHelpMap: '%ok: OK · %back: Back · %l / %r: scroll a page · %home: Start menu · %menu: menu'
         },
         fr: {
+            padSwap: 'Inverser A ↔ B et X ↔ Y', padSwapDesc: 'Les TV Samsung et Android envoient A B X Y d’une manette Nintendo par lettre ; Automatique les remet en place.', padOrd_auto: 'Automatique (%s)', padOrd_swap: 'Inverser', padOrd_keep: 'Ne pas inverser', padSwapped: 'A ↔ B et X ↔ Y remis en place',
             padSection: 'Vos manettes', padNone: 'Aucune manette connectée. Branchez-en une (USB ou Bluetooth), puis appuyez sur un bouton.',
             padBrand: 'Marque', padModel: 'Modèle', padUnknown: 'Inconnu', padIds: 'Identifiant USB', padMap: 'Ordre des boutons',
             padMapStd: 'standard (selon la place sur la manette)', padMapRaw: 'pas standard : l’ordre propre à la manette',
@@ -32,6 +34,7 @@
             padHelpMap: '%ok : OK · %back : Retour · %l / %r : défiler une page · %home : menu Démarrer · %menu : menu'
         },
         es: {
+            padSwap: 'Intercambiar A ↔ B y X ↔ Y', padSwapDesc: 'Las TV Samsung y Android envían A B X Y de un mando Nintendo por letra; Automático los pone en su sitio.', padOrd_auto: 'Automático (%s)', padOrd_swap: 'Intercambiar', padOrd_keep: 'No intercambiar', padSwapped: 'A ↔ B y X ↔ Y puestos en su sitio',
             padSection: 'Tus mandos', padNone: 'Ningún mando conectado. Conecta uno (USB o Bluetooth) y pulsa un botón.',
             padBrand: 'Marca', padModel: 'Modelo', padUnknown: 'Desconocido', padIds: 'Id USB', padMap: 'Orden de los botones',
             padMapStd: 'estándar (por su lugar en el mando)', padMapRaw: 'no estándar: el orden propio del mando',
@@ -46,6 +49,7 @@
             padHelpMap: '%ok: OK · %back: Atrás · %l / %r: desplazar una página · %home: menú Inicio · %menu: menú'
         },
         ar: {
+            padSwap: 'تبديل A ↔ B و X ↔ Y', padSwapDesc: 'تلفاز Samsung وAndroid يرسلان A B X Y لوحدة Nintendo حسب الحرف؛ التلقائي يعيدها إلى مكانها.', padOrd_auto: 'تلقائي (%s)', padOrd_swap: 'تبديل', padOrd_keep: 'بدون تبديل', padSwapped: 'أُعيد A ↔ B و X ↔ Y إلى مكانهما',
             padSection: 'وحدات التحكم', padNone: 'لا توجد وحدة تحكم متصلة. وصّل واحدة (USB أو بلوتوث) ثم اضغط زرًا.',
             padBrand: 'العلامة', padModel: 'الطراز', padUnknown: 'غير معروف', padIds: 'معرّف USB', padMap: 'ترتيب الأزرار',
             padMapStd: 'قياسي (حسب مكان الزر في الوحدة)', padMapRaw: 'غير قياسي: ترتيب الوحدة الخاص',

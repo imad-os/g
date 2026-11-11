@@ -1984,14 +1984,16 @@ async function main() {
         check(await page.evaluate(() => !document.querySelector('.set-padtest') && /Test controller buttons/.test(document.querySelector('.set-main').textContent)), 'Back on the test page returns to the Devices list');
         await page.evaluate(() => Win.close());
         check(await page.evaluate(() => document.querySelectorAll('.set-padtest').length === 0), 'closing Settings stops the test');
-        // games never get the desktop keys; Guide opens their pause menu
+        // games never get the desktop keys; only a controller's Home (and the remote's Back) opens their pause menu
         await page.focus('[data-game="snake"]');
         await Promise.all([page.waitForURL(/play=snake/), page.keyboard.press('Enter')]);
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 15000 });
         await key('Tab', 'PageDown');
         check(await page.evaluate(() => window.GameHost.state()) === 'running', 'Tab and PageDown do nothing in a game');
         await key('F6');
-        check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'Guide opens the pause menu of a game');
+        check(await page.evaluate(() => window.GameHost.state()) === 'running', 'Guide (F6 / the remote\'s Guide key) does not open My PC\'s menu over a game (owner rule 2026-11-11)');
+        await page.evaluate(() => GameHost.onAction('guide', true, false, 'pad0'));
+        check(await page.evaluate(() => window.GameHost.state()) === 'paused', 'a controller\'s Home opens the pause menu of a game');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }
@@ -3131,7 +3133,8 @@ async function main() {
             window.__held = (dev) => ['jump', 'confirm', 'run', 'cancel'].filter((a) => Input.isDownDev(dev, a)).join();
         });
         const real = {};
-        for (const [name, idx] of [['A', 1], ['B', 0], ['X', 3], ['Y', 2]]) {      // standard mapping: 0 bottom, 1 right, 2 left, 3 top
+        // a Switch Pro on a TV comes by LETTER (A = 0, B = 1, X = 2, Y = 3, imad's TV 2026-11-11); My PC puts them back in place
+        for (const [name, idx] of [['A', 0], ['B', 1], ['X', 2], ['Y', 3]]) {
             await tv.evaluate((i) => { __gp.buttons[i] = { pressed: true, value: 1 }; }, idx);
             await tv.waitForFunction(() => __held('pad0') !== '', null, { timeout: 3000 });
             real[name] = await tv.evaluate(() => __held('pad0'));
@@ -6313,6 +6316,17 @@ async function flowTests(browser, base) {
     await f.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { keyCode: 39, bubbles: true })));
     await f.waitForFunction(() => !au.paused, null, { timeout: 3000 }).catch(() => {});
     check(await f.evaluate((n) => keys.length > n && navigator.getGamepads()[0] && !au.paused && window.paused === 0, k0) && await pg.evaluate(() => !GameHost.frame().hasAttribute('inert')), 'Resume: keys, the pad and the sound come back');
+    // owner rule 2026-11-11: only the remote's Back and the controller's Home open My PC's menu. The remote's Guide key (458, between CH + and
+    // CH − on a Samsung remote) and F6 leave the app alone; a pad's Home does open it
+    await pg.evaluate(() => { for (const c of [458, 117]) { Input.onKey({ keyCode: c, repeat: false, preventDefault() {} }, true); Input.onKey({ keyCode: c, repeat: false, preventDefault() {} }, false); } });
+    await pg.waitForTimeout(200);
+    const afterGuide = await pg.evaluate(() => GameHost.state());
+    await pg.evaluate(() => GameHost.onAction('guide', true, false, 'pad0'));
+    await pg.waitForTimeout(200);
+    const afterHome = await pg.evaluate(() => GameHost.state());
+    check(afterGuide === 'running' && afterHome === 'paused', 'the remote\'s Guide key (between CH + and CH −) and F6 do not open My PC\'s menu over an app; a controller\'s Home does (' + afterGuide + ', ' + afterHome + ')');
+    await pg.evaluate(() => document.querySelector('#pause-items button').click());
+    await pg.waitForFunction(() => GameHost.state() === 'running');
     o = await quit('flow-good');
     check(o.asked === 0 && appsReads() === reads0, `Quit: back to the desktop without asking the server or reading the store list again (${o.ms} ms)`);
 
@@ -6413,26 +6427,38 @@ async function padTests(browser, base) {
     await page.evaluate(() => Win.open('settings', 'gaming'));
     await page.waitForSelector('.set-row', { timeout: 5000 });
     const txt = await page.evaluate(() => document.querySelector('#win, body').innerText);
-    check(/Nintendo Switch Pro Controller/.test(txt) && /Nintendo · Switch Pro Controller/.test(txt) && /B bottom, A right/.test(txt) && /057e:2009/.test(txt) && /standard \(by place/.test(txt),
-        'Control Panel > Gaming shows the controller: Nintendo Switch Pro Controller, its button names, USB id 057e:2009, standard order');
+    check(/Nintendo Switch Pro Controller/.test(txt) && /Nintendo · Switch Pro Controller/.test(txt) && /B bottom, A right/.test(txt) && /057e:2009/.test(txt) && /A ↔ B and X ↔ Y swapped back/.test(txt) && /Swap A ↔ B and X ↔ Y/.test(txt) && /Automatic \(On\)/.test(txt),
+        'Control Panel > Gaming shows the controller: Nintendo Switch Pro Controller, its button names, USB id 057e:2009, A / B swap Automatic (On) on a TV');
     if (shots) await page.screenshot({ path: path.join(shots, 'pads-1-gaming-switch-pro.png') });
-    // the button test: press the Switch Pro's A (the right button = standard button 1)
+    // on a TV the Switch Pro sends its buttons by LETTER (A = 0, B = 1, X = 2, Y = 3): My PC puts them back in place
+    const held = () => page.evaluate(() => ['jump', 'confirm', 'run', 'cancel'].filter((a) => Input.isDownDev('pad0', a)).sort().join());
+    const acts = {};
+    for (const [n, i] of [['A', 0], ['B', 1], ['X', 2], ['Y', 3]]) { await btn(i, true); await page.waitForTimeout(80); acts[n] = await held(); await btn(i, false); await page.waitForTimeout(80); }
+    check(acts.A === 'cancel,run' && acts.B === 'confirm,jump' && acts.X === 'run' && acts.Y === 'run', 'TV, Switch Pro by letter: A = Back / run, B = OK / jump, X and Y = run (' + JSON.stringify(acts) + ')');
+    // the button test: press the Switch Pro's A (button 0 on this TV)
     await page.evaluate(() => { const b = [...document.querySelectorAll('[data-row]')].find((e) => /Test the buttons/.test(e.textContent)); b.focus(); b.click(); });
     await page.waitForSelector('.set-padtest .pt-b', { timeout: 5000 });
     const names = await page.evaluate(() => [...document.querySelectorAll('.pt-b .pt-l')].map((e) => e.textContent));
     check(names.slice(0, 4).join() === 'B,A,Y,X' && names[4] === 'L' && names[7] === 'ZR' && names[9] === '+' && names[16] === 'Home' && names[17] === 'Capture',
         'the test names the Switch Pro\'s buttons B A Y X, L R ZL ZR, − +, Home, Capture (' + names.join(' ') + ')');
-    await btn(1, true);
-    await page.waitForFunction(() => /^A \(button 1\)/.test(document.querySelector('.pt-last').textContent), null, { timeout: 3000 }).catch(() => {});
-    const lit = await page.evaluate(() => ({ on: [...document.querySelectorAll('.pt-b.on .pt-l')].map((e) => e.textContent).join(), last: document.querySelector('.pt-last').textContent }));
-    check(lit.on === 'A' && /^A \(button 1\): Back, run$/.test(lit.last), 'pressing the Switch Pro\'s A lights "A" and says it is Back / run in My PC (' + JSON.stringify(lit) + ')');
-    if (shots) await page.screenshot({ path: path.join(shots, 'pads-2-test-switch-pro-A.png') });
-    await btn(1, false);
-    await btn(0, true);
-    await page.waitForFunction(() => /^B \(button 0\)/.test(document.querySelector('.pt-last').textContent), null, { timeout: 3000 }).catch(() => {});
-    check(await page.evaluate(() => document.querySelector('.pt-last').textContent) === 'B (button 0): OK, jump', 'the Switch Pro\'s B (bottom) = OK / jump');
-    await btn(0, false);
+    const lights = async (i) => {
+        await btn(i, true);
+        await page.waitForFunction(() => document.querySelectorAll('.pt-b.on').length === 1, null, { timeout: 3000 }).catch(() => {});
+        const r = await page.evaluate(() => ({ on: [...document.querySelectorAll('.pt-b.on .pt-l')].map((e) => e.textContent).join(), last: document.querySelector('.pt-last').textContent }));
+        await btn(i, false); await page.waitForTimeout(80);
+        return r;
+    };
+    const la = await lights(0), lb = await lights(1), lx = await lights(2), ly = await lights(3);
+    check(la.on === 'A' && /^A \(button 1\): Back, run$/.test(la.last) && lb.on === 'B' && /^B \(button 0\): OK, jump$/.test(lb.last) && lx.on === 'X' && ly.on === 'Y',
+        'pressing A lights "A" (Back), B lights "B" (OK), X lights "X", Y lights "Y" (' + JSON.stringify([la, lb, lx, ly]) + ')');
+    if (shots) { await btn(0, true); await page.waitForTimeout(150); await page.screenshot({ path: path.join(shots, 'pads-2-test-switch-pro-A.png') }); await btn(0, false); }
     check(await page.evaluate(() => Win.current() === 'settings' && !!document.querySelector('.set-padtest')), 'the controller\'s buttons only test (A / B do not close the page)');
+    // the player can turn it off: "Don't swap" -> button 0 is the bottom one again (B)
+    await page.evaluate(() => Input.setPadOrder('057e:2009', 'keep'));
+    await page.waitForTimeout(100);
+    const kb = await lights(0);
+    check(kb.on === 'B' && await page.evaluate(() => JSON.parse(localStorage.getItem('arc_dev_padorder'))['057e:2009'] === 'keep'), 'Don\'t swap: button 0 lights B again, kept for that controller model (' + JSON.stringify(kb) + ')');
+    await page.evaluate(() => Input.setPadOrder('057e:2009', 'auto'));
     // an Xbox pad: A is the bottom button (0)
     await page.evaluate(() => { navigator.getGamepads = () => [null, null, null, null]; window.dispatchEvent(new Event('gamepaddisconnected')); });
     await plug('Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)');
@@ -6450,6 +6476,17 @@ async function padTests(browser, base) {
         'Control Panel > Devices: the controller\'s brand / model and its own button names in the help');
     check(page.errors.length === 0, 'no page errors' + (page.errors.length ? ': ' + page.errors[0] : ''));
     await page.context().close();
+    // Chrome on a computer reads a Switch Pro itself, by place (A = button 1): nothing swapped there
+    const pc = await newPage(browser, base, {}, { desktop: true });
+    await pc.goto(base + 'index.html');
+    await pc.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
+    await pc.evaluate(() => { window.__gp = { index: 0, id: 'Pro Controller (STANDARD GAMEPAD Vendor: 057e Product: 2009)', connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons: Array.from({ length: 18 }, () => ({ pressed: false, value: 0 })) };
+        navigator.getGamepads = () => [window.__gp, null, null, null]; window.dispatchEvent(new Event('gamepadconnected')); });
+    await pc.evaluate(() => { __gp.buttons[1] = { pressed: true, value: 1 }; });
+    await pc.waitForTimeout(150);
+    const pcA = await pc.evaluate(() => ({ acts: ['jump', 'confirm', 'run', 'cancel'].filter((a) => Input.isDownDev('pad0', a)).sort().join(), swap: Input.pads()[0].order.swap }));
+    check(pcA.acts === 'cancel,run' && pcA.swap === false, 'Chrome on a computer: the Switch Pro\'s A is button 1 (by place), Back / run, nothing swapped (' + JSON.stringify(pcA) + ')');
+    await pc.context().close();
 }
 
 // 48. Copies between Google Drive and the USB drives of the TV (js/core/copy-jobs.js, js/core/usb-fs.js, MyPC.usb / MyPC.copy, API 16):

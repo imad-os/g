@@ -387,7 +387,9 @@ Pro, Joy-Con, Xbox 360 / One / Series / Elite, DualShock 3 / 4, DualSense, 8BitD
 phone controller...) and each pad in `pads()` says `brand`, `model` and `layout` (`'nintendo'`, `'xbox'`, `'playstation'` or
 `'other'`). An unknown controller gets My PC's own names (A B X Y in the Nintendo places, `+` for the menu). Keep the
 controls by POSITION (button 0 = jump / OK, 1 = back / run on every controller); only the names on screen change. Players
-see all of it in Control Panel > Gaming (brand, model, USB id, button order, and a button test).
+see all of it in Control Panel > Gaming (brand, model, USB id, button order, and a button test). Some systems (Samsung TVs, Android) send a
+Nintendo pad's A B X Y by letter instead of by place; My PC puts them back in the standard order before your app sees them,
+so never swap them yourself.
 
 Button indices follow the W3C **standard** layout (by position, whatever is printed on the pad):
 

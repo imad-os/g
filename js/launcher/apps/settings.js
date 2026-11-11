@@ -322,8 +322,17 @@
             out.push({ kind: 'info', label: t('devController') + ' ' + (i + 1) + (pl.length > 1 && p.index === a ? ' (' + t('padActive') + ')' : ''), value: padTitle(p) });
             out.push({ kind: 'info', label: t('padBrand') + ' \u00B7 ' + t('padModel'), value: (p.brand || t('padUnknown')) + ' \u00B7 ' + (p.known ? p.model : t('padUnknown') + ' (' + p.name + ')') });
             out.push({ kind: 'info', label: t('padLayout'), value: t('padLay_' + p.layout) });
-            out.push({ kind: 'info', label: t('padMap'), value: t(p.standard ? 'padMapStd' : 'padMapRaw') + ' \u00B7 ' + p.buttons + ' / ' + p.axes });
+            out.push({ kind: 'info', label: t('padMap'), value: (p.order && p.order.swap ? t('padSwapped') : t(p.standard ? 'padMapStd' : 'padMapRaw')) + ' \u00B7 ' + p.buttons + ' / ' + p.axes });
             if (p.vendor) out.push({ kind: 'info', label: t('padIds'), value: p.vendor + ':' + p.product });
+            // A B X Y by letter or by place (Input.setPadOrder): Automatic / Swap / Don't swap, per controller model, TV-wide
+            if (p.order) (function (o) {
+                var ORD = ['auto', 'swap', 'keep'];
+                out.push({ kind: 'select', label: t('padSwap'), desc: t('padSwapDesc'),
+                           value: function () { var c = Input.pads().filter(function (q) { return q.order && q.order.key === o.key; })[0], cur = c ? c.order : o;
+                                                return cur.set === 'auto' ? t('padOrd_auto').replace('%s', t(cur.auto ? 'on' : 'off')) : t('padOrd_' + cur.set); },
+                           adjust: function (d) { var c = Input.pads().filter(function (q) { return q.order && q.order.key === o.key; })[0], cur = (c ? c.order : o).set;
+                                                  Input.setPadOrder(o.key, ORD[(ORD.indexOf(cur) + d + ORD.length) % ORD.length]); } });
+            })(p.order);
         }
         out.push({ kind: 'action', label: t('padTest'), desc: pl.length ? t('padTestDesc') : t('devNoPad'), run: function () { sub = 'padtest'; var f = renderMain(0); if (f) Focus.focus(f); } });
         out.push({ kind: 'text', value: t('padWhy') });
@@ -792,7 +801,7 @@
         card.setAttribute('aria-label', t('devTest'));
         if (p) {
             card.appendChild(el('div', 'pt-name', padTitle(p)));
-            card.appendChild(el('div', 'set-row-desc', t('padLay_' + p.layout) + (p.vendor ? ' \u00B7 ' + p.vendor + ':' + p.product : '')));
+            card.appendChild(el('div', 'set-row-desc', t('padLay_' + p.layout) + (p.vendor ? ' \u00B7 ' + p.vendor + ':' + p.product : '') + (p.order && p.order.swap ? ' \u00B7 ' + t('padSwapped') : '')));
         }
         for (i = 0; i < padN; i++) {
             b = el('span', 'pt-b');
@@ -815,9 +824,10 @@
     function tickPad() {
         padRaf = requestAnimationFrame(tickPad);
         if (!padCard) return;
-        var p = Input.pad(padIdx), i, mask = '', hit = -1;
+        var p = Input.pad(padIdx), i, mask = '', hit = -1, mp, b;
         if (!p) return;
-        for (i = 0; i < padN; i++) mask += p.buttons[i] && (p.buttons[i].pressed || p.buttons[i].value > 0.5) ? '1' : '0';
+        mp = Input.padMap(padIdx);                  // A B X Y read by letter on this system: back in place (Input.faceMap)
+        for (i = 0; i < padN; i++) { b = p.buttons[mp ? mp[i] : i]; mask += b && (b.pressed || b.value > 0.5) ? '1' : '0'; }
         for (i = 0; i < 4; i++) mask += '|' + Math.round((p.axes[i] || 0) * 10);
         if (mask === padMask) return;               // nothing changed: touch nothing
         for (i = 0; i < padN; i++) if (mask.charAt(i) === '1' && padMask.charAt(i) !== '1') { hit = i; break; }

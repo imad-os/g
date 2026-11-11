@@ -278,6 +278,11 @@
   Unknown pads get My PC's Nintendo-place names. `Input.pads()` carries brand / model / layout / vendor / product; Control Panel > Gaming lists
   them + the button test (name, number, what My PC does); Shortcuts names pad buttons the same way; SDK `MyPC.gamepad.label(i, dev)` + pad
   fields. The SDK has an identical copy between `PADINFO-BEGIN` / `END` (unit test 10 keeps them equal). Tests: `MYPC_ONLY=pads`.
+  **A B X Y by letter (imad's TV, 2026-11-11, build 157: "A detected as B, X as Y")**: Samsung TVs / Android send a Nintendo pad's face buttons
+  in LETTER order (A = 0, B = 1, X = 2, Y = 3); only Chrome on a computer reads a Switch Pro by place. `Input` (`faceMap`) swaps 0 <-> 1 and
+  2 <-> 3 for Nintendo-layout real pads everywhere but desktop Chrome, before actions, shortcuts, the test and `MyPC.gamepad` (apps always get
+  the standard order). Per controller model in Control Panel > Gaming "Swap A <-> B and X <-> Y": Automatic / Swap / Don't swap (TV-wide
+  `arc_dev_padorder`, `Input.setPadOrder(key, v)`). Phone pads (index 100+) are never swapped.
 - **Heart-rate sensors (TV)**: `js/core/hr-ble.js` (any BLE Heart Rate Service device: Garmin watches broadcasting, Polar, Garmin HRM, Decathlon),
   created per app by `game-host.js` for `hr-monitor` or apps with `"heartRate": true` in their config; SDK `MyPC.bluetooth`.
   Needs the `bluetooth` privileges in `config.xml` (package 1.4.0+), so a new .wgt on the TV. Unit tests: `node tests/unit-tests.mjs` (part of `npm test`).
@@ -326,7 +331,7 @@
   Gaming, on by default): installed apps get every key incl. the remote's Back (as `cancel`) and Pause; shortcuts wait (`GameHost.ownsKeys`). My PC's
   menu = Back twice within 450 ms, or Back when the app has nothing to close: SDK posts `unhandled` when `onInput` returns `false` for `cancel` (or has
   no onInput), or the app called `MyPC.back(false)` after `true` (`backSaid`); the controller's Home (`guide`) stays My PC's. Built-in games (no
-  cancel use) keep Back = menu. A Back within 600 ms of the menu opening does not close it. Card "Press Back twice quickly..." once per app (`back_hint`).
+  cancel use) keep Back = menu. **Owner rule (2026-11-11, build 157)**: over any app or game only the remote's Back and a controller's Home (`guide` from a `pad*` / `touch` device) open My PC's menu; the remote's Guide key (458, between CH + and CH −) and F6 do nothing there (`game-host.js onAction`). A Back within 600 ms of the menu opening does not close it. Card "Press Back twice quickly..." once per app (`back_hint`).
   **Player fixes (imad 2026-11-11, build 150: "buttons and loader stay on, freezes, My PC closes", USB)**: a "buffering" AVPlay never ends is followed by
   `playing` once the time moves (`app-video.js`); `UsbFs.list` asks the drive about entries in ~12 ms slices and skips the folder question for
   names with a file extension (a 300-file folder on a slow drive stopped My PC 2.4 s, now 24 ms); the bridge reuses the drive list for 5 s.

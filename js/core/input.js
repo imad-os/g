@@ -301,10 +301,11 @@ var Input = (function () {
             if (!p || !p.connected) continue;
             var dev = 'pad' + p.index, now = {}, any = false;
             var prev = padNow[dev] || (padNow[dev] = {}), rep = padRepeatAt[dev] || (padRepeatAt[dev] = {});
-            var taken = padHook ? padEdges(dev, p) : null;
-            if (rawFn) rawPad(dev, p, taken);
+            var mp = faceMap(p);
+            var taken = padHook ? padEdges(dev, p, mp) : null;
+            if (rawFn) rawPad(dev, p, taken, mp);
             for (j = 0; j < PAD_BUTTONS.length; j++) {
-                b = p.buttons[PAD_BUTTONS[j][0]];
+                b = p.buttons[mp ? mp[PAD_BUTTONS[j][0]] : PAD_BUTTONS[j][0]];
                 if (b && (b.pressed || b.value > 0.5) && !(taken && taken[PAD_BUTTONS[j][0]])) {
                     acts = PAD_BUTTONS[j][1];
                     for (var k = 0; k < acts.length; k++) now[acts[k]] = true;
@@ -345,14 +346,47 @@ var Input = (function () {
         }
     }
 
+    // Nintendo pads whose A B X Y come by LETTER, not by place (owner report 2026-11-11, imad's Switch Pro on the TV: A came as button 0,
+    // B as 1, X as 2, Y as 3, so every face button was the wrong one). Only Chrome on a computer reads a Switch Pro itself, by place (A = 1);
+    // a TV / Android system driver gives the letter order. faceMap(p) -> null, or [1, 0, 3, 2, 4, 5...]: My PC reads p.buttons[map[i]] for
+    // standard button i, so actions, shortcuts, the button test and apps (MyPC.gamepad) all see the standard order. Per controller the player
+    // can force it in Control Panel > Gaming (TV-wide arc_dev_padorder { 'vendor:product': 'swap' | 'keep' }).
+    var SWAP = new Uint8Array(32), faceCache = {}, padOrder = null;
+    (function () { for (var i = 0; i < 32; i++) SWAP[i] = i; SWAP[0] = 1; SWAP[1] = 0; SWAP[2] = 3; SWAP[3] = 2; })();
+    var DESKTOP_CHROME = !window.tizen && !/Android|Tizen|Web0S|SMART-TV|SmartTV/i.test(navigator.userAgent || '');
+    function orders() {
+        if (padOrder) return padOrder;
+        try { padOrder = JSON.parse(localStorage.getItem('arc_dev_padorder') || '{}') || {}; } catch (e) { padOrder = {}; }
+        return padOrder;
+    }
+    function padKey(inf) { return inf.vendor ? inf.vendor + ':' + inf.product : 'name:' + inf.name; }
+    function faceInfo(p) {
+        var c = faceCache['pad' + p.index];
+        if (c && c.id === p.id) return c;
+        var inf = window.PadInfo ? PadInfo.detect(p.id, p.mapping) : null;
+        var auto = !!inf && p.index < 100 && inf.vendor !== '0000' && inf.layout === 'nintendo' && !DESKTOP_CHROME;
+        var key = inf ? padKey(inf) : '', set = key && orders()[key];
+        c = faceCache['pad' + p.index] = { id: p.id, key: key, auto: auto, set: set || 'auto', swap: set === 'swap' || (set !== 'keep' && auto) };
+        return c;
+    }
+    function faceMap(p) { return p.index < 100 && faceInfo(p).swap ? SWAP : null; }
+    function setPadOrder(key, v) {
+        var o = orders();
+        if (v === 'swap' || v === 'keep') o[key] = v; else delete o[key];
+        try { localStorage.setItem('arc_dev_padorder', JSON.stringify(o)); } catch (e) {}
+        faceCache = {};
+        releaseAll();
+        for (var i = 0; i < padListeners.length; i++) padListeners[i]();
+    }
+
     // The profile's shortcuts on controller buttons (js/launcher/shortcuts.js): padHook(index, down, dev) is told of every
     // button press / release; a button it takes (true on press) gives no action and no raw report until it is let go.
     var padHook = null, padPrev = {}, padTaken = {};       // 'padN' -> Uint8Array
-    function padEdges(dev, p) {
+    function padEdges(dev, p, mp) {
         var nb = p.buttons.length, pv = padPrev[dev], tk = padTaken[dev], j, b, on;
         if (!pv || pv.length < nb) { pv = padPrev[dev] = new Uint8Array(Math.max(nb, 18)); tk = padTaken[dev] = new Uint8Array(Math.max(nb, 18)); }
         for (j = 0; j < nb; j++) {
-            b = p.buttons[j];
+            b = p.buttons[mp ? mp[j] : j];
             on = b && (b.pressed || b.value > 0.5) ? 1 : 0;
             if (on === pv[j]) continue;
             pv[j] = on;
@@ -365,11 +399,11 @@ var Input = (function () {
     // Every button and axis of every pad, unmapped, for installed apps (MyPC.gamepad): only changes are reported.
     // rawFn('b', dev, index, pressed, value) | rawFn('a', dev, axes) | rawFn('lost', dev). No allocation once a pad is known.
     var rawFn = null, rawPrev = {};         // 'padN' -> { v: Float32Array (button values), p: Uint8Array (pressed), a: Float32Array (axes) }
-    function rawPad(dev, p, taken) {
+    function rawPad(dev, p, taken, mp) {
         var nb = p.buttons.length, na = p.axes.length, r = rawPrev[dev], j, b, v, pr, moved = false;
         if (!r || r.v.length < nb || r.a.length < na) r = rawPrev[dev] = { v: new Float32Array(Math.max(nb, 17)), p: new Uint8Array(Math.max(nb, 17)), a: new Float32Array(Math.max(na, 4)) };
         for (j = 0; j < nb; j++) {
-            b = p.buttons[j];
+            b = p.buttons[mp ? mp[j] : j];
             if (!b) continue;
             v = b.value || (b.pressed ? 1 : 0); pr = b.pressed || v > 0.5 ? 1 : 0;
             if (taken && taken[j]) { v = 0; pr = 0; }       // a shortcut's button: the app does not see it
@@ -429,7 +463,8 @@ var Input = (function () {
             // brand, model and button layout (js/core/pad-info.js): the labels printed on THIS controller (a Switch Pro's A is button 1)
             var inf = window.PadInfo ? PadInfo.detect(p.id, p.mapping) : { brand: '', model: padName(p.id), layout: 'other', vendor: '', product: '', known: false, standard: p.mapping === 'standard' };
             out.push({ index: p.index, name: padName(p.id), id: p.id, standard: p.mapping === 'standard', buttons: p.buttons ? p.buttons.length : 0, axes: p.axes ? p.axes.length : 0,
-                       brand: inf.brand, model: inf.model, layout: inf.layout, vendor: inf.vendor, product: inf.product, known: inf.known, info: inf, active: p.index === activePad });
+                       brand: inf.brand, model: inf.model, layout: inf.layout, vendor: inf.vendor, product: inf.product, known: inf.known, info: inf, active: p.index === activePad,
+                       order: p.index < 100 ? faceInfo(p) : null });   // { key, auto, set: 'auto' | 'swap' | 'keep', swap }: A B X Y read by letter -> put back in place
         }
         return out;
     }
@@ -522,6 +557,8 @@ var Input = (function () {
         padCount: function () { return pads; },
         pads: padList,                       // [{ index, name, id, standard, buttons, axes, brand, model, layout, vendor, product, known, info, active }]
         activePad: function () { return activePad; },
+        padMap: function (index) { var p = this.pad(index); return p ? faceMap(p) : null; },   // null or the standard -> real button index map
+        setPadOrder: setPadOrder,            // (key, 'auto' | 'swap' | 'keep'): Control Panel > Gaming
         pad: function (index) { var l = getPads(); for (var i = 0; i < l.length; i++) if (l[i] && l[i].index === index) return l[i]; return null; },   // its live state (the test page)     // the index of the last pad used (-1: none yet)
         onPadRaw: function (fn) { rawFn = fn || null; rawPrev = {}; },      // every button / axis change (installed apps' MyPC.gamepad)
         seen: function () { return { remote: !!window.tizen, keyboard: seen.keyboard, mouse: seen.mouse }; },

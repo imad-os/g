@@ -680,7 +680,10 @@ var GameHost = (function () {
     function onAction(action, pressed, repeat, dev) {
         if (state === 'running') {
             // Guide = the Start key of this PC: opens the pause menu. Page keys and Tab belong to the desktop, not to games.
-            if (action === 'guide') { if (pressed && !repeat) openPause(); return; }
+            // Owner rule (2026-11-11): only the remote's Back and the controller's Home open My PC's menu over an app or game. A pad's Home
+            // (and the touch pad's / phone's Home) = 'guide' from a pad / touch device; the remote's Guide key (458, the button between
+            // CH + and CH − on a Samsung remote) and F6 do nothing here.
+            if (action === 'guide') { if (pressed && !repeat && /^(pad|touch)/.test(String(dev))) openPause(); return; }
             var k = api && api.keys;
             // apps that asked for them (API 17): CH + / CH - (and a pad's L / R) and the remote's media keys
             if ((action === 'pageUp' || action === 'pageDown') && k && k.channel) { if (api.onAction) { try { api.onAction(action, pressed, repeat, dev); } catch (e0) {} } return; }
