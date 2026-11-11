@@ -1395,7 +1395,8 @@ if (MyPC.video.supported()) {                                  // a TV (else: yo
                                                                // (a "buffering" the TV never ends is followed by "playing" once the time moves;
                                                                //  hide your loader on "playing", and your controls a few seconds after it)
   MyPC.video.on('error', (e) => retry(e.code));                // network format not-found drm player restore
-  MyPC.video.on('sub', (e) => showSub(e.text));                // subtitles inside the file, when turned on
+  MyPC.video.on('sub', (e) => showSub(e.text));                // subtitles inside the file: off (silent) after every open until
+                                                               //  you call MyPC.video.subtitles(true) (build 152)
   await MyPC.video.rect(previewBox);                           // an element (or { x, y, w, h } in your CSS pixels); null = whole screen
 }
 ```

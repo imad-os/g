@@ -51,7 +51,7 @@ var AppVideo = (function () {
         var sum = 'after ' + secs + ' s, player ' + (t.st || '?') + ' at ' + Math.round((t.t || 0) / 1000) + ' s' + (m.free >= 0 ? ', free memory ' + m.free + ' MB (lowest ' + t.low + ' of ' + m.total + ')' : '') + (m.heap ? ', My PC ' + m.heap + ' MB' : '');
         try { Reports.add(t.app || 'mypc', { kind: 'report', msg: 'My PC closed while a video played: ' + sum, stack: JSON.stringify({ url: t.url, ev: t.ev, log: t.log, mem: m, low: t.low }), stage: 'video' }); } catch (e3) {}
         setTimeout(function () {
-            try { Notify.show({ id: 'avcrash', kind: 'warn', title: I18n.t('avCrash'), text: sum + '. Last: ' + (t.log || []).slice(-4).join(' · '), timeout: 30000 }); } catch (e4) {}
+            try { Notify.show({ id: 'avcrash', kind: 'warn', title: I18n.t('avCrash'), text: sum + '. Last: ' + (t.log || []).slice(-4).join(' · ') + ' · ' + JSON.stringify(t.ev || {}).replace(/["{}]/g, ''), timeout: 30000 }); } catch (e4) {}
         }, 2500);
     }
     setTimeout(lastCrash, 1500);
@@ -82,7 +82,7 @@ var AppVideo = (function () {
 
     function attach(ctx) {
         var a = api(), open = false, playing = false, wasPlaying = false, suspended = false, live = false;
-        var dur = 0, lastTimeAt = 0, lastBuf = -1, seq = 0, rect = null, fit = 'fit', prepTimer = 0, buffering = false, bufMs = -1;
+        var subsOn = false, dur = 0, lastTimeAt = 0, lastBuf = -1, seq = 0, rect = null, fit = 'fit', prepTimer = 0, buffering = false, bufMs = -1;
 
         function ev(d) { d.rid = 0; ctx.send('video', d); }
         function alive() { return ctx.state() === 'running' || ctx.state() === 'paused'; }
@@ -200,7 +200,7 @@ var AppVideo = (function () {
                         if (my !== seq) return;
                         if (/RESOLUTION_CHANGED|BITRATE_CHANGE|STREAM_INFO_READY/.test(String(type))) { var tr = tracks(); ev({ ev: 'info', w: tr.video.w || 0, h: tr.video.h || 0, data: String(data || '').slice(0, 200) }); }
                     },
-                    onsubtitlechange: function (d, text) { tEv('sub'); if (my === seq) ev({ ev: 'sub', text: String(text || '').slice(0, 2000), dur: +d || 0 }); },
+                    onsubtitlechange: function (d, text) { tEv('sub'); if (my === seq && subsOn) ev({ ev: 'sub', text: String(text || '').slice(0, 2000), dur: +d || 0 }); },
                     ondrmevent: function () {}
                 });
                 if (typeof o.ua === 'string' && o.ua) { try { a.setStreamingProperty('USER_AGENT', o.ua.slice(0, 300)); } catch (x3) {} }
@@ -214,6 +214,10 @@ var AppVideo = (function () {
                     place();
                     dur = duration();
                     var start = +o.start || 0;
+                    // the subtitles inside the file (MKV) stay off until the app asks for them (imad 2026-11-11: USB MKV films closed
+                    // My PC a few seconds in, about when a first subtitle line comes)
+                    subsOn = false;
+                    try { a.setSilentSubtitle(true); } catch (e6) {}
                     function go() {
                         if (my !== seq) return;
                         // My PC's menu opened meanwhile: stays paused until Resume
@@ -269,6 +273,7 @@ var AppVideo = (function () {
                     try { a.setSelectTrack(o.kind === 'text' ? 'TEXT' : 'AUDIO', Math.floor(+o.index || 0)); } catch (e4) { return reply(err('player', String(e4))); }
                     return reply(null, tracks());
                 case 'subs':
+                    subsOn = !!o.on;
                     try { a.setSilentSubtitle(!o.on); } catch (e5) {}
                     return reply(null, !!o.on);
                 case 'speed':

@@ -6739,6 +6739,12 @@ MyPC.init({ keys: ['channel', 'media'], onInit() { MyPC.ready(); window.__ok = 1
         'an http stream goes to the TV\'s player (no mixed-content block), with the user agent and letter box ' + st1.log);
     check(st1.rect === [640 * k, 180 * k, 640 * k, 360 * k].map(Math.round).join(','), 'the preview box is placed on the TV\'s 1920x1080 video plane ' + st1.rect);
     check(st1.cls && /rgba\(0, 0, 0, 0\)|transparent/.test(st1.bg) && /rgba\(0, 0, 0, 0\)|transparent/.test(st1.layer), 'My PC\'s layers turn transparent so the picture shows through ' + st1.bg + ' ' + st1.layer);
+    // the file's own subtitles start silent (imad 2026-11-11: USB MKV films closed My PC a few seconds in): nothing reaches the app until it asks
+    await page.evaluate(() => window.__av.l.onsubtitlechange(1500, 'Not asked for'));
+    await page.waitForTimeout(80);
+    const sub0 = await app.evaluate(() => window.__ev.join(' '));
+    check(/silent true \| play/.test(st1.log) && !/Not asked for/.test(sub0), 'the subtitles inside the file are off until the app turns them on ' + st1.log);
+    await app.evaluate(() => MyPC.video.subtitles(true));
     await page.evaluate(() => { const l = window.__av.l; l.oncurrentplaytime(1000); l.oncurrentplaytime(1200); l.onsubtitlechange(2000, 'Hello there'); l.onbufferingstart(); l.onbufferingprogress(50); l.onbufferingcomplete(); });
     await page.waitForTimeout(100);
     const ev1 = await app.evaluate(() => window.__ev.join(' '));

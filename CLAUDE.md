@@ -328,6 +328,8 @@
   **Video black box (build 151; imad: still "plays ~5 s then My PC closes")**: while a video is open `app-video.js` writes localStorage
   `arc_dev_av_trace` once a second (player state, time, event counts, last ops, `tizen.systeminfo` free memory, JS heap; not in the backup);
   a clean close clears it; one left over at the next start = My PC died during a video: `Reports.add` (Manager > Errors) + Notify card `avcrash`.
+  Build 152 (imad: USB MKV only, crash ~5 s in): the file's own subtitles are `setSilentSubtitle(true)` after every open, events reach the app
+  only after `subtitles(true)`. Unconfirmed cause: wait for imad's black-box card before more guesses.
   Docs GUIDE.md section 21. Tests: `MYPC_ONLY=video node tests/run-tests.mjs`; Speedy itself inside My PC (fake AVPlay + USB drive, the
   checkout `../g_iptv` or `SPEEDY_DIR`, skipped when missing): `MYPC_ONLY=speedy` (its browser tests: `node tests/run.mjs` in g_iptv).
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /
