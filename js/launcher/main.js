@@ -311,6 +311,11 @@ var App = (function () {
         if (Perf.profile().tier !== 'low') document.documentElement.className += ' hi';
         Input.init();
         Input.setHandler(route);
+        // MyPC.buttons (API 19): an app that maps the remote's buttons itself gets them by name, unless one of My PC's screens is over it
+        Input.setRawHook(function (n, down, repeat) {
+            if (!GameHost.active() || dialogOpen || Welcome.open() || DriveUI.screenOpen() || Multiplayer.screenOpen() || Keyboard.isOpen()) return false;
+            return GameHost.rawButton(n, down, repeat);
+        });
         Shortcuts.init();                       // this profile's remote shortcuts (Control Panel > Shortcuts)
         Input.onDevice(updateIndicator);
         updateIndicator();

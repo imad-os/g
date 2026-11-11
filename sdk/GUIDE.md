@@ -161,7 +161,7 @@ still slow down a hidden page by itself. Standalone, outside My PC, the SDK does
 itself. Your app only sees `info.profile` and keeps progress with `MyPC.save` / `MyPC.load`, which are already per
 profile and backed up. **Never** build your own login, accounts, cloud saves, name entry for scores, Firebase or backend.
 
-Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text, 14 drive, 15 no input while paused, 16 usb / copy, 17 video / back / keys / keyboard, 18 every button to the app: Back as `cancel`, `onInput` returns `false` = nothing to close) and hide the feature
+Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text, 14 drive, 15 no input while paused, 16 usb / copy, 17 video / back / keys / keyboard, 18 every button to the app: Back as `cancel`, `onInput` returns `false` = nothing to close, 19 `MyPC.buttons`) and hide the feature
 when it is missing.
 
 ### App config: `MyPC.app_config`
@@ -1438,6 +1438,19 @@ way for every app: `onInput` returns `false` for `cancel` when nothing was close
 your `onInput` as `pageUp` / `pageDown` (page a long list, zap channels). `keys: ['media']`: the remote's media keys reach
 you as `playPause`, `mediaFf`, `mediaRew`, `mediaNext`, `mediaPrev`, `mediaStop` (the player's own shortcuts on those
 buttons wait meanwhile). Ask only for what you use.
+
+### `MyPC.buttons` (API 19): every remote button by name, for apps that let the player map them
+
+`MyPC.init({ keys: ['buttons'] })`, then `MyPC.buttons.on((name, pressed, repeat) => ...)` (returns `off()`). My PC registers the
+remote's other keys too (colour keys, digits, Info, Channel list, Tools...), and while your app runs those buttons reach **only** this
+listener, not `onInput`: `ok up down left right red green yellow blue 0`..`9 chUp chDown info chList tools prevCh caption mts teletext
+pictureSize extra minus play pause playPause ff rew next prev stop record` (a keyboard adds `space pageUp pageDown`). So your app maps
+every one of them itself, OK and the arrows included (keep OK = OK and the arrows = moving: a remote has nothing else for them).
+Back stays `cancel` in `onInput` (with My PC's double Back), Guide and Tab stay My PC's; controllers still come through `onInput` /
+`MyPC.gamepad`. Under My PC's own screens (menu, keyboard, a question) nothing is sent; a press always gets its release. The player can
+turn it off with Control Panel > Gaming > "Every button goes to the app": then the remote's keys come as plain actions again, so
+keep `onInput` working. Standalone nothing is sent (read your own keys). Samsung's Smart Remote shows the colour keys and digits
+on screen with its 123 / colour button.
 
 ### `MyPC.text.keyboard(opts)`: My PC's on-screen keyboard
 

@@ -58,7 +58,25 @@ var Input = (function () {
     var startBtn = {};              // 'padN' -> { at: first pressed, both: both held since, combo: both were held, fired: hold sent, sup: released by releaseAll }
     var backTv = false;             // the last Back came from the TV remote (keyCode 10009), not from a keyboard
 
-    var handler = null, keyHook = null;
+    var handler = null, keyHook = null, rawHook = null, rawHeld = {};
+    // every remote / keyboard button an app can map itself (MyPC.buttons, API 19): keyCode -> name. Back (10009, Esc, Backspace),
+    // Guide / F6 and Tab are never given away (My PC's menu, the desktop).
+    var BUTTONS = { 37: 'left', 38: 'up', 39: 'right', 40: 'down', 13: 'ok', 32: 'space', 427: 'chUp', 428: 'chDown', 33: 'pageUp', 34: 'pageDown',
+        415: 'play', 19: 'pause', 10252: 'playPause', 417: 'ff', 412: 'rew', 10233: 'next', 10232: 'prev', 413: 'stop', 416: 'record',
+        403: 'red', 404: 'green', 405: 'yellow', 406: 'blue', 457: 'info', 10073: 'chList', 10135: 'tools', 10190: 'prevCh', 10221: 'caption',
+        10195: 'mts', 10200: 'teletext', 10140: 'pictureSize', 10253: 'extra', 189: 'minus', 176: 'next', 177: 'prev', 178: 'stop', 179: 'playPause' };
+    for (var dg = 0; dg <= 9; dg++) BUTTONS[48 + dg] = String(dg);
+    // the TV keys apps' buttons need registered (only once an app asks for them)
+    var EXTRA_TV_KEYS = ['ColorF1Green', 'ColorF2Yellow', 'ColorF3Blue', 'Info', 'ChannelList', 'Tools', 'PreviousChannel', 'Caption', 'MTS',
+        'Teletext', 'PictureSize', 'Extra', 'Minus', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    var extraDone = false;
+    function registerExtraKeys() {
+        if (extraDone) return;
+        extraDone = true;
+        var tvi = window.tizen && tizen.tvinputdevice;
+        if (!tvi) return;
+        for (var i = 0; i < EXTRA_TV_KEYS.length; i++) { try { tvi.registerKey(EXTRA_TV_KEYS[i]); } catch (e) {} }
+    }
     var keyHeld = {};               // keyCode -> true
     var count = {};                 // device -> { action -> number of keys/buttons holding it }
     var padNow = {};                // 'padN' -> { action -> bool }
@@ -121,6 +139,13 @@ var Input = (function () {
         if (typing(e, down)) return;
         // the profile's remote shortcuts (js/launcher/shortcuts.js) go first: a mapped button does only its shortcut
         if (keyHook && keyHook(code, down, e)) { if (code >= 400 || code === 19) setDevice('remote'); if (e.preventDefault) e.preventDefault(); return; }
+        // an app that maps the buttons itself (MyPC.buttons): its keys go only to it, by name (a release follows its own press)
+        if (rawHook && BUTTONS[code] && (down ? rawHook(BUTTONS[code], true, !!rawHeld[code]) : rawHeld[code])) {
+            if (down) rawHeld[code] = true; else { rawHeld[code] = false; rawHook(BUTTONS[code], false, false); }
+            if (code >= 400 || code === 19) setDevice('remote');
+            if (e.preventDefault) e.preventDefault();
+            return;
+        }
         if (down && isKeyboardKey(code)) { used('keyboard'); setDevice('keyboard'); }
         if (!acts) return;
         if (code === 9 && e.shiftKey) acts = ['tabBack'];
@@ -220,6 +245,7 @@ var Input = (function () {
     // Releases everything for the receiver (pause menu opens, window loses focus) without letting a
     // key or button that is still physically held count as a new press afterwards.
     function releaseAll() {
+        for (var rc in rawHeld) if (rawHeld[rc]) { rawHeld[rc] = false; if (rawHook) rawHook(BUTTONS[rc], false, false); }
         for (var c in keyHeld) {
             if (keyHeld[c] !== true) continue;
             var acts = KEYMAP[c], dev = KEYS2[c] ? 'keys2' : 'keys';
@@ -476,7 +502,9 @@ var Input = (function () {
         touch: touch,                        // the touch pad's actions (left right up down ok run cancel menu pause)
         systemBack: systemBack,              // the phone's Back button in the Android app: like the TV remote's Back
         setHandler: function (fn) { handler = fn; },
-        setKeyHook: function (fn) { keyHook = fn || null; },     // fn(keyCode, down, event) -> true when it used the key
+        setKeyHook: function (fn) { keyHook = fn || null; },
+        setRawHook: function (fn) { rawHook = fn || null; },   // fn(name, down, repeat) -> true when the app takes the button (MyPC.buttons)
+        registerExtraKeys: registerExtraKeys, BUTTONS: BUTTONS,     // fn(keyCode, down, event) -> true when it used the key
         setPadHook: function (fn) { padHook = fn || null; },     // fn(buttonIndex, down, dev) -> true when it takes the button
         TV_KEYS: TV_KEYS,
         isDown: isDown,

@@ -334,6 +334,9 @@
   called from inside its own callbacks (setTimeout 0), and a USB file's tracks are read only on `tracks()` (open returns `tracks.later`).
   Build 154 (imad: Subtitles button on the same MKV = crash, card "5.1s tracks"): `getTotalTrackInfo` hangs too, so a USB file's tracks are
   NEVER read (`tracks()` = empty lists + `file: true`, `track()` = `unsupported`); Speedy shows Off + the subtitle files next to it.
+  **Remote buttons by name (API 19, owner request 2026-11-11, for Speedy's Settings > Remote buttons)**: `MyPC.init({ keys: ['buttons'] })` ->
+  `Input.registerExtraKeys()` (colours, digits, Info, Channel list, Tools...) and `Input.setRawHook` (set in main.js, off under My PC's own screens)
+  sends every named key (`Input.BUTTONS`; never Back / Guide / Tab) ONLY to the app as `btn` -> `MyPC.buttons.on(name, pressed, repeat)`; needs `app_keys` on.
   Docs GUIDE.md section 21. Tests: `MYPC_ONLY=video node tests/run-tests.mjs`; Speedy itself inside My PC (fake AVPlay + USB drive, the
   checkout `../g_iptv` or `SPEEDY_DIR`, skipped when missing): `MYPC_ONLY=speedy` (its browser tests: `node tests/run.mjs` in g_iptv).
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /

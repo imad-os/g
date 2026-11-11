@@ -229,7 +229,9 @@ var GameHost = (function () {
                     said.hello = Date.now(); said.sdk = +d.sdkApi || +d.sdk || 0;
                     remote.ownMenu = !!d.ownMenu;          // the app has its own menu on gamepad Start
                     // MyPC.init({ keys: ['channel', 'media'] }) (API 17): CH + / CH - (and L / R) and the remote's media keys go to the app
-                    remote.keys = { channel: !!(d.keys && d.keys.indexOf && d.keys.indexOf('channel') >= 0), media: !!(d.keys && d.keys.indexOf && d.keys.indexOf('media') >= 0) };
+                    remote.keys = { channel: !!(d.keys && d.keys.indexOf && d.keys.indexOf('channel') >= 0), media: !!(d.keys && d.keys.indexOf && d.keys.indexOf('media') >= 0), buttons: !!(d.keys && d.keys.indexOf && d.keys.indexOf('buttons') >= 0) };
+                    // MyPC.init({ keys: ['buttons'] }) (API 19): every remote button by name, the app maps them itself
+                    if (remote.keys.buttons) Input.registerExtraKeys();
                     if (typeof TouchPad !== 'undefined') { TouchPad.app(d.pad); TouchPad.relay(function (m) { send('pad', m); }); }      // MyPC.init({ pad }); presses of the app's own pad go back to it
                     send('init', {
                         lang: I18n.lang(), rtl: I18n.rtl(), quality: { tier: Perf.profile().tier },
@@ -333,7 +335,8 @@ var GameHost = (function () {
             destroy: function () { pushCtx.dead = true; br.destroy(); vid.destroy(); if (kbRid) { kbRid = 0; if (Keyboard.isOpen()) Keyboard.close(); } if (typeof TextIn !== 'undefined') TextIn.app(null, textSend); Input.onPadRaw(null); Input.offDevices(padsChanged); ble.destroy(); if (mp) { mp.destroy(); mp = null; } send('destroy'); window.removeEventListener('message', onMsg); AudioPrefs.offChange(volume); win = null; },
             menuItems: function () { return items; },
             onMenu: function (mid) { send('menu', { id: String(mid).slice(4) }); },
-            onAction: function (a, pressed, repeat, dev) { send('input', { action: a, pressed: pressed, repeat: repeat, dev: dev }); }
+            onAction: function (a, pressed, repeat, dev) { send('input', { action: a, pressed: pressed, repeat: repeat, dev: dev }); },
+            button: function (n, down, repeat) { send('btn', { n: n, d: down ? 1 : 0, r: repeat ? 1 : 0 }); }
         };
         return remote;
     }
@@ -739,6 +742,12 @@ var GameHost = (function () {
         active: function () { return state !== 'idle'; },
         // a notification for the app that is open: its deep link goes to it (MyPC.launch + onLaunch); true when delivered
         // the running app asked for the remote's media keys (MyPC.init({ keys: ['media'] })): shortcuts leave them to it
+        // MyPC.buttons (API 19): a remote button for the running app that asked for them (keys: ['buttons']), by name
+        rawButton: function (n, down, repeat) {
+            if (!(state === 'running' && api && api.keys && api.keys.buttons && api.button && ownsKeys())) return false;
+            api.button(n, down, repeat);
+            return true;
+        },
         wantsMedia: function () { return state === 'running' && !!(api && api.keys && api.keys.media); },
         deepLink: function (gameId, launch) { if (!game || game.id !== gameId || !api || !api.launch) return false; api.launch(launch); return true; },
         state: function () { return state; },

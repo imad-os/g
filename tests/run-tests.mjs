@@ -4154,7 +4154,7 @@ async function main() {
         const loop = by('error', /loop error/);
         check(loop && loop.n === 5 && reps.filter((r) => /loop error/.test(r.msg)).length === 1, 'the same error 5 times is one report with n = 5 (' + (loop && loop.n) + ')');
         const one = by('error', /boom/) || {};
-        check(one.appv === '2.0.1' && one.sdk === 18 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
+        check(one.appv === '2.0.1' && one.sdk === 19 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
             'each report has the app version, SDK level, TV id and model, My PC version and build, language, place, address, time and a 30-day expiry (' + JSON.stringify(one) + ')');
         const keys = new Set(reps.flatMap((r) => Object.keys(r)));
         const allowed = ['app', 'kind', 'msg', 'stack', 'src', 'stage', 'appv', 'sdk', 'n', 'at', 'exp', 'tv', 'model', 'ver', 'build', 'lang', 'user', 'where', 'ua', 'url'];
@@ -6722,7 +6722,7 @@ MyPC.init({ keys: ['channel', 'media'], onInit() { MyPC.ready(); window.__ok = 1
     const app = page.frames().find((x) => x.url().indexOf(APP) === 0);
     await app.waitForFunction(() => window.__ok === 1 && MyPC.info() && MyPC.info().bridges);
     const b0 = await app.evaluate(() => ({ api: MyPC.apiLevel, video: MyPC.info().bridges.video, kb: MyPC.info().bridges.keyboard, sup: MyPC.video.supported() }));
-    check(b0.api === 18 && b0.video === 1 && b0.kb === 1 && b0.sup === true, 'API 18 on a TV: MyPC.video and the keyboard are offered ' + JSON.stringify(b0));
+    check(b0.api >= 18 && b0.video === 1 && b0.kb === 1 && b0.sup === true, 'API 18+ on a TV: MyPC.video and the keyboard are offered ' + JSON.stringify(b0));
 
     // open a live stream in a small box (a preview): the TV's player gets the address and the box scaled to its 1920x1080 plane
     const r1 = await app.evaluate(() => MyPC.video.open('http://iptv.example:8080/live/u/p/1.ts', { live: true, rect: { x: 640, y: 180, w: 640, h: 360 }, ua: 'SpeedyTest' }).then((r) => r, (e) => 'err ' + e.code));
@@ -7071,6 +7071,14 @@ async function speedyTests(browser, base) {
     check(sm.title === 'Subtitles' && sm.items[0] === 'Off' && sm.items.filter((x) => /\.srt$|English|Arabic/i.test(x)).length === 2 && tt1 === tt0 && !(await app.evaluate(() => document.querySelector('.pl-msg') && document.querySelector('.pl-msg').textContent)),
         'Subtitles on a USB film: Off + its 2 subtitle files, and the TV\'s player is never asked for the file\'s tracks (it hung on an MKV) ' + JSON.stringify(sm) + ' ' + [tt0, tt1]);
     await tvBack(page); await page.waitForTimeout(700); // (two Backs within 450 ms = My PC's menu)
+    // Remote buttons (API 19, MyPC.buttons): the yellow key opens the subtitles, the blue one the player's options, by default
+    await key(405); await app.waitForTimeout(400);
+    const yb = await app.evaluate(() => (document.querySelector('.menu h2') || {}).textContent || '');
+    await tvBack(page); await page.waitForTimeout(700);
+    await key(406); await app.waitForTimeout(400);
+    const bb = await app.evaluate(() => (document.querySelector('.menu h2') || {}).textContent || '');
+    await tvBack(page); await page.waitForTimeout(700);
+    check(yb === 'Subtitles' && bb === 'Movie Name' && await page.evaluate(() => GameHost.state()) === 'running', 'in the player the remote\'s yellow key opens Subtitles, the blue one the player\'s options (Settings > Remote buttons defaults) ' + JSON.stringify([yb, bb]));
     await page.evaluate(() => clearInterval(window.__tk));
     for (let i = 0; i < 4 && await top() !== 'UsbScreen'; i++) { await tvBack(page); await page.waitForTimeout(500); }
     // a show: its page, the first episode, then the next one by itself at the end (with its own subtitle file)
@@ -7118,6 +7126,20 @@ async function speedyTests(browser, base) {
     const pic = await app.evaluate((D) => new Promise((res) => { Usb.forget(); Usb.picture({ dir: D + '/Big', name: 'Film 7 (2020).mkv' }, (u) => { if (!u) return res('none'); const im = new Image(); im.onload = () => res(im.naturalWidth + 'x' + im.naturalHeight); im.src = u; }); }), D);
     const pic2 = await app.evaluate((D) => new Promise((res) => Usb.picture({ dir: D + '/Big', name: 'Film 8 (2020).mkv' }, (u) => res(u || 'none'))), D);
     check(pic === '320x480' && pic2 === 'none', 'a USB poster is shown 320 px wide (read once, one at a time), and only beside its own film ' + pic + ' / ' + pic2);
+    // Settings > Remote buttons: Favorite gets the 2 key by "Press the button"; the 2 key then adds a favourite, CH + still pages
+    await app.evaluate(() => UI.push(Buttons.screen()));
+    await app.waitForTimeout(300);
+    await key(DOWN, 2); await key(OK); await app.waitForTimeout(300); await key(OK); await app.waitForTimeout(300);
+    await key(50); await app.waitForTimeout(400);
+    const bm = await app.evaluate(() => ({ fav: Buttons.map().fav, two: Buttons.actionFor('2', false), red: Buttons.actionFor('red', false), row: document.querySelector('.screen.on .lb .vi.f .val') && document.querySelector('.screen.on .lb .vi.f .val').textContent }));
+    await shot('10-remote-buttons');
+    const before = await app.evaluate(() => { window.__acts.length = 0; return 0; });
+    await key(50); await key(427); await app.waitForTimeout(300);
+    const got = await app.evaluate((n) => window.__acts.slice(n), before);
+    check(bm.fav === '2' && bm.two === 'fav' && bm.red === '' && /Number 2/.test(bm.row) && got.indexOf('fav') >= 0 && got.indexOf('pageUp') >= 0,
+        'Settings > Remote buttons: "Press the button" gives Favorite the 2 key (it reaches Speedy by name), CH + still pages ' + JSON.stringify({ bm, got }));
+    await app.evaluate(() => Store.setPref('btns', {}));
+    await tvBack(page); await page.waitForTimeout(700);
     check(stats.live >= 0, 'requests: ' + JSON.stringify({ api: stats.api, film: stats.film }));
     check(!page.errors.length, 'no page errors ' + page.errors.join(' | '));
     await page.context().close();

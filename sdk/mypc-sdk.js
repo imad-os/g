@@ -36,7 +36,7 @@
 var MyPC = (function () {
     'use strict';
 
-    var VERSION = 1, API = 18, HELLO_WAIT = 1200;
+    var VERSION = 1, API = 19, HELLO_WAIT = 1200;
     var handlers = {}, info = null, data = {}, started = false, destroyed = false, isReady = false;
     var hosted = false, hostWin = null, hostOrigin = '*', helloTimer = 0;
     var down = {};                       // action -> number of keys / buttons holding it
@@ -249,6 +249,7 @@ var MyPC = (function () {
             case 'ble-event': bluetooth._message(d); break;
             case 'sensors': sensors._message(d); break;
             case 'gp': gamepad._message(d); break;
+            case 'btn': if (d && typeof d.n === 'string') buttons._emit(d.n, !!d.d, !!d.r); break;
             case 'net': net._message(d); break;
             case 'ai': ai._message(d); break;
             case 'mic': mic._message(d); break;
@@ -320,7 +321,7 @@ var MyPC = (function () {
             // in a frame: say hello to My PC (it answers with "init"); keys pressed while the frame
             // has focus (mouse click on a PC) are forwarded so the host still gets Back, arrows...
             hosted = true; hostWin = window.parent;
-            var keys = Array.isArray(handlers.keys) ? handlers.keys.filter(function (k) { return k === 'channel' || k === 'media'; }) : [];
+            var keys = Array.isArray(handlers.keys) ? handlers.keys.filter(function (k) { return k === 'channel' || k === 'media' || k === 'buttons'; }) : [];
             post('hello', { sdk: VERSION, sdkApi: API, title: document.title, ownMenu: handlers.ownMenu === true, pad: handlers.pad === undefined ? null : handlers.pad, keys: keys });
             document.addEventListener('keydown', function (e) { forwardKey(e, true); });
             document.addEventListener('keyup', function (e) { forwardKey(e, false); });
@@ -1405,6 +1406,20 @@ var MyPC = (function () {
      * dev is 'pad0'..'pad3' (the same as onInput's dev); without it: any pad (pressed), the highest value, the last pad used (axis).
      * Inside My PC the shell reads the pads and sends only changes, and nothing while its own menus are open. Standalone the SDK
      * reads navigator.getGamepads() itself (and maps the standard buttons to actions too, like My PC does). */
+    /* ---------------- MyPC.buttons: the remote's buttons by name, for apps that map them themselves (API level 19) ----------------
+     *   MyPC.init({ keys: ['buttons'] });  MyPC.buttons.on(function (name, pressed, repeat) {})   // returns off()
+     * Inside My PC those buttons then reach ONLY this listener (not onInput): ok, up, down, left, right, red, green, yellow, blue,
+     * 0..9, chUp, chDown, info, chList, tools, prevCh, caption, mts, teletext, pictureSize, extra, minus, play, pause, playPause,
+     * ff, rew, next, prev, stop, record (+ a keyboard's space, pageUp, pageDown). Back, Guide and Tab stay as before (onInput's
+     * 'cancel', My PC's menu). Controllers still come through onInput / MyPC.gamepad. Standalone: nothing (use your own keys). */
+    var buttons = (function () {
+        var ls = [];
+        return {
+            on: function (fn) { if (typeof fn === 'function') ls.push(fn); return function () { var i = ls.indexOf(fn); if (i >= 0) ls.splice(i, 1); }; },
+            _emit: function (n, p, r) { if (frozen) return; for (var i = 0; i < ls.length; i++) { try { ls[i](n, p, r); } catch (x) { try { console.error('[MyPC buttons] ' + x); } catch (y) {} } } }
+        };
+    })();
+
     var gamepad = (function () {
         var NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'Select', 'Start', 'L3', 'R3', 'Up', 'Down', 'Left', 'Right', 'Home'];
         var st = {}, list = [], last = '', listeners = { button: [], axes: [], pads: [] }, raf = 0, startAt = {};
@@ -2153,12 +2168,13 @@ var MyPC = (function () {
 
     var pub = {
         version: VERSION,
-        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy, 17 MyPC.video + MyPC.back + init keys + MyPC.text.keyboard, 18 every button to the app: onInput returning false for 'cancel' = nothing to close (My PC's menu) (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy, 17 MyPC.video + MyPC.back + init keys + MyPC.text.keyboard, 18 every button to the app: onInput returning false for 'cancel' = nothing to close (My PC's menu), 19 MyPC.buttons (init keys 'buttons': the remote's buttons by name) (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,
         sensors: sensors,
         gamepad: gamepad,
+        buttons: buttons,
         net: net,
         ai: ai,
         mic: mic,
