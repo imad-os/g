@@ -20,6 +20,8 @@ var UsbFs = (function () {
 
     var SKIP = /^(\.|\$recycle\.bin$|system volume information$|lost\+found$|found\.\d+$)/i;
     var FAT_MAX = 4294967295;
+    // names that are files for sure (no "is it a folder?" call for them): video, sound, pictures, subtitles, documents, archives
+    var FILE_EXT = /\.(mp4|m4v|mkv|avi|mov|wmv|asf|ts|m2ts|mts|mpg|mpeg|vob|flv|webm|3gp|divx|ogv|rmvb|tp|trp|mp3|m4a|aac|flac|wav|ogg|opus|wma|jpe?g|png|gif|webp|bmp|heic|srt|vtt|ass|ssa|sub|idx|nfo|txt|pdf|docx?|xlsx?|pptx?|zip|rar|7z|apk|exe|iso)$/i;
     var known = [];          // the drive paths of the last drives() answer
 
     function err(code, message) { return { code: code, message: message || code }; }
@@ -110,16 +112,22 @@ var UsbFs = (function () {
             } catch (e) { cb(e0 || tzErr(e)); }
         }
         if (!fs.listDirectory) return old();
+        // each entry costs calls that wait for the drive (is it a folder? how big?): a few at a time, then the TV breathes, so a folder of
+        // 500 films never stops My PC (and the film playing from the same drive) for seconds; a name with a file extension is a file
         try {
             fs.listDirectory(p, function (names) {
-                var out = [];
-                for (var i = 0; i < names.length; i++) {
-                    if (SKIP.test(names[i])) continue;
-                    var q = join(p, names[i]), dir = false;
-                    try { dir = fs.isDirectory(q); } catch (x) { continue; }
-                    out.push({ name: names[i], path: q, dir: dir, size: dir ? 0 : Math.max(0, sizeOf(fs, q)) });
-                }
-                cb(null, out.sort(byName));
+                var out = [], i = 0;
+                (function slice() {
+                    var t0 = Date.now();
+                    for (; i < names.length; i++) {
+                        if (Date.now() - t0 > 12) return setTimeout(slice, 4);
+                        if (SKIP.test(names[i])) continue;
+                        var q = join(p, names[i]), dir = false;
+                        if (!FILE_EXT.test(names[i])) { try { dir = fs.isDirectory(q); } catch (x) { continue; } }
+                        out.push({ name: names[i], path: q, dir: !!dir, size: dir ? 0 : Math.max(0, sizeOf(fs, q)) });
+                    }
+                    cb(null, out.sort(byName));
+                })();
             }, function (e) { old(tzErr(e)); });
         } catch (e) { old(tzErr(e)); }
     }

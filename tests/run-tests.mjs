@@ -6401,7 +6401,9 @@ const USB_MOCK = (D) => {
     if (window.top !== window) return;
     const tree = {};          // path -> Uint8Array | true (folder)
     const fsErr = (name, m) => { const e = new Error(m || name); e.name = name; return e; };
-    const U = window.__usb = { tree, mounted: true, writes: 0, reads: 0, free: 0, slow: 0 };
+    const U = window.__usb = { tree, mounted: true, writes: 0, reads: 0, free: 0, slow: 0, cost: 0 };
+    // a slow drive (U.cost ms): the Tizen calls that wait for the drive on the page's own thread
+    const wait = () => { if (U.cost) { const t = performance.now() + U.cost; while (performance.now() < t) {} } };
     tree['/opt/media'] = true; tree[D] = true;
     const kids = (p) => Object.keys(tree).filter((k) => k.indexOf(p + '/') === 0 && k.slice(p.length + 1).indexOf('/') < 0).map((k) => k.slice(p.length + 1));
     const live = (p) => U.mounted || p.indexOf(D) !== 0;
@@ -6420,12 +6422,13 @@ const USB_MOCK = (D) => {
         listStorages: (ok) => setTimeout(() => ok(U.mounted ? [{ label: 'removable_sda1', type: 'EXTERNAL', state: 'MOUNTED' }] : []), 2),
         resolve: (loc, ok, err) => setTimeout(() => (loc === 'removable_sda1' && U.mounted ? ok({ fullPath: loc, toURI: () => 'file://' + D }) : err(fsErr('NotFoundError'))), 2),
         listDirectory: (p, ok, err) => setTimeout(() => (tree[p] === true && live(p) ? ok(kids(p), p) : err(fsErr('NotFoundError'))), 2),
-        isDirectory: (p) => { if (!(p in tree) || !live(p)) throw fsErr('NotFoundError'); return tree[p] === true; },
+        isDirectory: (p) => { wait(); if (!(p in tree) || !live(p)) throw fsErr('NotFoundError'); return tree[p] === true; },
         isFile: (p) => { if (!(p in tree) || !live(p)) throw fsErr('NotFoundError'); return tree[p] !== true; },
         toURI: (p) => 'file://' + encodeURI(p),
         createDirectory: (p, parents, ok, err) => setTimeout(() => { if (!live(p)) return err(fsErr('NotFoundError')); if (p in tree) return err(fsErr('IOError', 'exists')); U.put(p + '/x', 0); delete tree[p + '/x']; ok(p); }, 2),
         deleteFile: (p, ok, err) => setTimeout(() => { if (tree[p] && tree[p] !== true) { delete tree[p]; ok(); } else err(fsErr('NotFoundError')); }, 2),
         openFile: (p, mode) => {
+            wait();
             if (!live(p)) throw fsErr('NotFoundError');
             const dir = p.slice(0, p.lastIndexOf('/'));
             if (mode === 'r') { if (!tree[p] || tree[p] === true) throw fsErr('NotFoundError'); }
@@ -6957,6 +6960,10 @@ async function speedyTests(browser, base) {
     await page.waitForTimeout(300);
     const fm = await page.evaluate(() => window.__av.url);
     check(/^http:\/\/iptv\.test:8080\/movie\/demo\/pass\/\d+\.(mkv|mp4)$/.test(fm), 'a film plays on the TV\'s player from the server\'s own file ' + fm);
+    await app.waitForFunction(() => !Player.state().ui, null, { timeout: 8000 }).catch(() => {});
+    const fu = await app.evaluate(() => ({ ui: Player.state().ui, spin: !!document.querySelector('#player .pl-center .spin'), playing: Player.state().playing }));
+    check(fu.ui === false && !fu.spin && fu.playing, 'an online film: the controls and the loader go away by themselves once it plays ' + JSON.stringify(fu));
+    await shot('6a-film-clean');
     await page.evaluate(() => { window.__av.log = []; });
     await key(415);
     await page.waitForTimeout(250);
@@ -6994,6 +7001,19 @@ async function speedyTests(browser, base) {
         'its subtitle files (English, Arabic) are found; the English one is read from the drive and shown in time with the TV\'s player ' + JSON.stringify(subs));
     await page.waitForTimeout(400);
     await shot('8-usb-film');
+    // imad 2026-11-11: the controls and the loader stayed on over a USB film. The TV says "buffering" late (after it already plays) and
+    // never "done": the moving time clears the loader; the controls hide by themselves 5 s after it plays
+    await page.evaluate(() => { const l = window.__av.l; l.onbufferingstart(); window.__tk = setInterval(() => l.oncurrentplaytime(window.webapis.avplay.getCurrentTime()), 100); });
+    await app.waitForTimeout(300);
+    const ld0 = await app.evaluate(() => !!document.querySelector('#player .pl-center .spin'));
+    await app.waitForTimeout(1500);
+    const ld1 = await app.evaluate(() => ({ spin: !!document.querySelector('#player .pl-center .spin'), st: Player.state() }));
+    await app.waitForFunction(() => !Player.state().ui, null, { timeout: 8000 }).catch(() => {});
+    const ld2 = await app.evaluate(() => ({ ui: Player.state().ui, top: getComputedStyle(document.querySelector('#player .pl-top')).display, bot: getComputedStyle(document.querySelector('#player .pl-bot')).display, playing: Player.state().playing }));
+    check(!ld1.spin && !ld1.st.buffering && ld1.st.playing, 'a late "buffering" report with no end: once the time moves the loader goes away (it plays) ' + JSON.stringify({ before: ld0, after: ld1.spin, buffering: ld1.st.buffering }));
+    check(ld2.ui === false && ld2.top === 'none' && ld2.bot === 'none' && ld2.playing, 'the player\'s controls hide by themselves a few seconds after the film plays ' + JSON.stringify(ld2));
+    await shot('8b-usb-film-clean');
+    await page.evaluate(() => clearInterval(window.__tk));
     for (let i = 0; i < 4 && await top() !== 'UsbScreen'; i++) { await tvBack(page); await page.waitForTimeout(500); }
     // a show: its page, the first episode, then the next one by itself at the end (with its own subtitle file)
     if (await app.evaluate(() => UI.top().zone) === 'grid') await tvBack(page);
@@ -7022,6 +7042,20 @@ async function speedyTests(browser, base) {
     check(/open file:.*S01E02\.mkv/.test(rs), 'OK on the show in Continue watching goes on with its last episode ' + rs);
     for (let i = 0; i < 4 && await top() !== 'HomeScreen'; i++) { await tvBack(page); await page.waitForTimeout(500); }
 
+    // imad 2026-11-11: "it freezes for seconds and closes the whole My PC" with USB films. A folder read asked the drive about every
+    // entry in one go on My PC's own thread (a slow drive: seconds without an answer). Now a few at a time: My PC never stops long
+    await page.evaluate((D) => { for (let i = 0; i < 300; i++) window.__usb.put(D + '/Big/Film ' + i + ' (2020).mkv', new Uint8Array(10)); window.__usb.cost = 4; }, D);
+    await page.evaluate(() => { window.__gap = 0; let last = performance.now(); window.__probe = setInterval(() => { const n = performance.now(); window.__gap = Math.max(window.__gap, n - last); last = n; }, 5); });
+    const t0 = Date.now();
+    const bigL = await app.evaluate((D) => MyPC.usb.list(D + '/Big').then((l) => l.length + ' ' + l[0].size, (e) => 'err ' + e.code), D);
+    const gap = await page.evaluate(() => { clearInterval(window.__probe); window.__usb.cost = 0; return Math.round(window.__gap); });
+    check(/^300 10$/.test(bigL) && gap < 120, 'a folder of 300 films on a slow drive is read in small pieces: My PC never stops more than ' + gap + ' ms (' + bigL + ', ' + (Date.now() - t0) + ' ms in all)');
+    // a big poster next to a film (2000x3000) is made small before it is shown: a screen of them never fills the TV's memory
+    await page.evaluate(async (D) => { const c = new OffscreenCanvas(2000, 3000), g = c.getContext('2d'); g.fillStyle = '#c33'; g.fillRect(0, 0, 2000, 3000); const b = await c.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
+        window.__usb.put(D + '/Big/Film 7 (2020).jpg', new Uint8Array(await b.arrayBuffer())); }, D);
+    const pic = await app.evaluate((D) => new Promise((res) => { Usb.forget(); Usb.picture({ dir: D + '/Big', name: 'Film 7 (2020).mkv' }, (u) => { if (!u) return res('none'); const im = new Image(); im.onload = () => res(im.naturalWidth + 'x' + im.naturalHeight); im.src = u; }); }), D);
+    const pic2 = await app.evaluate((D) => new Promise((res) => Usb.picture({ dir: D + '/Big', name: 'Film 8 (2020).mkv' }, (u) => res(u || 'none'))), D);
+    check(pic === '320x480' && pic2 === 'none', 'a USB poster is shown 320 px wide (read once, one at a time), and only beside its own film ' + pic + ' / ' + pic2);
     check(stats.live >= 0, 'requests: ' + JSON.stringify({ api: stats.api, film: stats.film }));
     check(!page.errors.length, 'no page errors ' + page.errors.join(' | '));
     await page.context().close();

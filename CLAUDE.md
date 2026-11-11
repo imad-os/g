@@ -321,6 +321,10 @@
   menu = Back twice within 450 ms, or Back when the app has nothing to close: SDK posts `unhandled` when `onInput` returns `false` for `cancel` (or has
   no onInput), or the app called `MyPC.back(false)` after `true` (`backSaid`); the controller's Home (`guide`) stays My PC's. Built-in games (no
   cancel use) keep Back = menu. A Back within 600 ms of the menu opening does not close it. Card "Press Back twice quickly..." once per app (`back_hint`).
+  **Player fixes (imad 2026-11-11, build 150: "buttons and loader stay on, freezes, My PC closes", USB)**: a "buffering" AVPlay never ends is followed by
+  `playing` once the time moves (`app-video.js`); `UsbFs.list` asks the drive about entries in ~12 ms slices and skips the folder question for
+  names with a file extension (a 300-file folder on a slow drive stopped My PC 2.4 s, now 24 ms); the bridge reuses the drive list for 5 s.
+  Speedy: controls hide 5 s after it plays, folder reads cached, posters 320 px wide one at a time, no drive reads while a film is full screen.
   Docs GUIDE.md section 21. Tests: `MYPC_ONLY=video node tests/run-tests.mjs`; Speedy itself inside My PC (fake AVPlay + USB drive, the
   checkout `../g_iptv` or `SPEEDY_DIR`, skipped when missing): `MYPC_ONLY=speedy` (its browser tests: `node tests/run.mjs` in g_iptv).
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /

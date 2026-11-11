@@ -47,7 +47,7 @@ var AppVideo = (function () {
 
     function attach(ctx) {
         var a = api(), open = false, playing = false, wasPlaying = false, suspended = false, live = false;
-        var dur = 0, lastTimeAt = 0, lastBuf = -1, seq = 0, rect = null, fit = 'fit', prepTimer = 0;
+        var dur = 0, lastTimeAt = 0, lastBuf = -1, seq = 0, rect = null, fit = 'fit', prepTimer = 0, buffering = false, bufMs = -1;
 
         function ev(d) { d.rid = 0; ctx.send('video', d); }
         function alive() { return ctx.state() === 'running' || ctx.state() === 'paused'; }
@@ -97,7 +97,7 @@ var AppVideo = (function () {
                 try { a.setDisplayRect(0, 0, 0, 0); } catch (e1) {}
                 try { a.close(); } catch (e2) {}
             }
-            open = playing = wasPlaying = suspended = false;
+            open = playing = wasPlaying = suspended = buffering = false;
             transparent(false);
         }
         function onVis() {
@@ -139,11 +139,16 @@ var AppVideo = (function () {
                 a.open(url);
                 open = true;
                 a.setListener({
-                    onbufferingstart: function () { if (my === seq) ev({ ev: 'state', state: 'buffering' }); },
+                    onbufferingstart: function () { if (my === seq) { buffering = true; bufMs = -1; ev({ ev: 'state', state: 'buffering' }); } },
                     onbufferingprogress: function (p) { p = Math.round(+p || 0); if (my === seq && Math.abs(p - lastBuf) >= 5) { lastBuf = p; ev({ ev: 'buffer', p: p }); } },
-                    onbufferingcomplete: function () { lastBuf = -1; if (my === seq) ev({ ev: 'state', state: playing ? 'playing' : 'paused' }); },
+                    onbufferingcomplete: function () { lastBuf = -1; if (my === seq) { buffering = false; ev({ ev: 'state', state: playing ? 'playing' : 'paused' }); } },
                     oncurrentplaytime: function (ms) {
                         if (my !== seq) return;
+                        // the time moves while "buffering": the TV never said it was done (USB files, a late report): it plays
+                        if (buffering && playing) {
+                            if (bufMs < 0) bufMs = +ms || 0;
+                            else if (Math.abs((+ms || 0) - bufMs) > 300) { buffering = false; lastBuf = -1; ev({ ev: 'state', state: 'playing' }); }
+                        }
                         var t = Date.now();
                         if (t - lastTimeAt < 500) return;
                         lastTimeAt = t;

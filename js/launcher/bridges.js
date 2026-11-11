@@ -258,6 +258,7 @@ var Bridges = (function () {
 
         /* ----- MyPC.usb and MyPC.copy (API 16): the TV's USB drives, and copies Drive <-> USB done by My PC ----- */
         var unwatch = null;
+        var usbDrivesL = [], usbDrivesAt = 0;
         function usbAsk(cb) { ask(ctx, 'usb', I18n.t('permUsbText'), cb); }
         function usbRun(d) {
             var a = d.args && typeof d.args === 'object' ? d.args : {};
@@ -267,7 +268,9 @@ var Bridges = (function () {
             usbAsk(function (ok) {
                 if (!ok) return reply({ code: 'denied', message: 'The user did not allow this app to use the USB drives.' });
                 if (ctx.dead) return;
-                UsbFs.drives(function (e, list) {
+                // the drives are asked once in a while, not before every folder read (a library walk reads hundreds of folders)
+                (d.op === 'drives' || Date.now() - usbDrivesAt > 5000 ? UsbFs.drives : function (cb) { setTimeout(function () { cb(null, usbDrivesL); }, 0); })(function (e, list) {
+                    if (!e) { usbDrivesL = list; usbDrivesAt = Date.now(); }
                     if (e) return reply(e);
                     if (d.op === 'drives') return reply(null, list);
                     var p = String(a.path || '');
