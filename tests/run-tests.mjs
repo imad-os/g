@@ -42,6 +42,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -6883,10 +6884,18 @@ async function speedyTests(browser, base) {
     await ctx.addInitScript(USB_MOCK, D);
     await ctx.addInitScript(() => { if (location.hostname === 'speedy.example.test') window.__speedyHold = 4000; });
     const b64 = (x) => Buffer.from(x).toString('base64');
+    // a real little film (VP9, 6 s, a test picture) for "a picture taken from the film" (Speedy, when no poster is next to it)
+    let clip = null;
+    try {
+        const { spawnSync } = await import('node:child_process');
+        const out = path.join(os.tmpdir(), 'speedy-clip-' + process.pid + '.mp4');
+        const r = spawnSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=size=640x360:rate=25', '-t', '6', '-c:v', 'libvpx-vp9', '-b:v', '300k', '-deadline', 'realtime', '-movflags', '+faststart', out]);
+        if (r.status === 0) { clip = fs.readFileSync(out); fs.unlinkSync(out); }
+    } catch (e) { clip = null; }
     const seed = {};
     for (const [p, v] of Object.entries({
         'Films/Movie.Name.2020.1080p.BluRay.x264.mkv': 'film', 'Films/Movie.Name.2020.1080p.BluRay.x264.srt': fx.SRT_EN, 'Films/Movie.Name.2020.1080p.BluRay.x264.ar.srt': fx.srtArabic1256(),
-        'Films/Other Film (2018).mp4': 'film2', 'Films/notes.txt': 'x', 'Films/Movie.Name.2020-sample.mkv': 's',
+        'Films/Other Film (2018).mp4': clip || 'film2', 'Films/notes.txt': 'x', 'Films/Movie.Name.2020-sample.mkv': 's',
         'TV/My Show/Season 1/My.Show.S01E01.mkv': 'e1', 'TV/My Show/Season 1/My.Show.S01E02.mkv': 'e2', 'TV/My Show/Season 1/My.Show.S01E02.srt': fx.SRT_EN })) {
         const full = D + '/' + p, parts = full.split('/');
         for (let i = 2; i < parts.length; i++) seed[parts.slice(0, i).join('/')] = true;
@@ -7011,6 +7020,17 @@ async function speedyTests(browser, base) {
     await app.waitForFunction(() => UI.top().constructor.name === 'UsbScreen' && UI.top().lib, null, { timeout: 15000 });
     const lib = await app.evaluate(() => ({ tabs: UI.top().tabs.map((t) => t.name + ':' + t.n), movies: UI.top().lib.movies.map((m) => m.title + '|' + m.year), shows: UI.top().lib.shows.map((s) => s.name + ':' + s.eps.length) }));
     check(lib.movies.join(',') === 'Movie Name|2020,Other Film|2018' && lib.shows.join(',') === 'My Show:2', 'the USB drive: 2 films (clean names, years; the release sample and a text file left out) and a show with 2 episodes ' + JSON.stringify(lib));
+    // no poster next to "Other Film": a picture taken from the film itself (kept on the device); "Movie Name" (not a real video) gets none, quietly
+    if (clip) {
+        await app.waitForFunction(() => [...document.querySelectorAll('.usb .grid *')].some((e) => /blob:/.test(e.style.backgroundImage)), null, { timeout: 20000 }).catch(() => {});
+        const fr = await app.evaluate(async () => {
+            const cells = [...document.querySelectorAll('.usb .grid *')].filter((e) => /blob:/.test(e.style.backgroundImage));
+            const d = await new Promise((res) => { const r = indexedDB.open('speedy-frames', 1); r.onsuccess = () => res(r.result); r.onerror = () => res(null); });
+            const keys = d ? await new Promise((res) => { const q = d.transaction('f').objectStore('f').getAllKeys(); q.onsuccess = () => res(q.result.map((k) => k.replace(/^.*\//, ''))); q.onerror = () => res([]); }) : [];
+            return { cells: cells.length, keys, tryLeft: localStorage.getItem('speedy_frame_try') };
+        });
+        check(fr.cells >= 1 && fr.keys.some((k) => /^Other Film \(2018\)\.mp4\|/.test(k)) && !fr.tryLeft, 'a USB film with no poster file shows a picture taken from the film, kept on the device ' + JSON.stringify(fr));
+    } else console.log('  skip the picture-from-the-film check (no ffmpeg)');
     await shot('7-usb-movies');
     await app.waitForFunction(() => UI.top().items.length > 0 && UI.top().view, null, { timeout: 5000 }).catch(() => {});
     const view = await app.evaluate(() => ({ view: UI.top().view, first: UI.top().items[0] && (UI.top().items[0].title || UI.top().items[0].name) }));
