@@ -309,7 +309,7 @@
   profile + Google account; a lease `arc_dev_copy_lease` keeps one tab running it; progress card `Notify` id `copy-<job>` (option `quiet`:
   no sound / Voice Guide per update), none while the job's app listens (`CopyJobs.watch`). Strings `js/core/i18n-copy.js`. Docs: GUIDE.md
   section 20. Tests: `MYPC_ONLY=copy node tests/run-tests.mjs` (fake USB drive with writes `USB_MOCK`, fake Google with export + upload status).
-- **Video apps (API 17, owner request 2026-11-10, for the Speedy IPTV app `imad-os/speedy` folder `mypc/`)**: `MyPC.video` = the TV's
+- **Video apps (API 17, owner request 2026-11-10, for the Speedy IPTV app, repo `imad-os/g_iptv` (moved from `imad-os/speedy` `mypc/` 2026-11-11))**: `MyPC.video` = the TV's
   AVPlay played by My PC for an installed app (`js/launcher/app-video.js`, `AppVideo.attach` in `game-host.js`): the picture is on the
   video plane BEHIND the page, `html.av-video` makes My PC's layers transparent, the app keeps its page transparent where it shows
   (rect from the app's CSS px -> 1920x1080 plane); http streams and USB paths (needs the usb permission, `file://` via `toURI`); one
@@ -317,7 +317,7 @@
   `cancel` (`remote.ownBack`); `MyPC.init({ keys: ['channel', 'media'] })` = CH + / CH − (`pageUp` / `pageDown`) and media keys
   (`playPause`, `media*`; shortcuts on media keys wait, `GameHost.wantsMedia`); `MyPC.text.keyboard` = My PC's `Keyboard` over the app
   (`kb` message; `main.js` routes keys to it). Docs GUIDE.md section 21. Tests: `MYPC_ONLY=video node tests/run-tests.mjs`; Speedy itself inside My PC (fake AVPlay + USB drive, the
-  checkout `../speedy/mypc` or `SPEEDY_DIR`, skipped when missing): `MYPC_ONLY=speedy` (its browser tests: `node mypc/tests/run.mjs` in speedy).
+  checkout `../g_iptv` or `SPEEDY_DIR`, skipped when missing): `MYPC_ONLY=speedy` (its browser tests: `node tests/run.mjs` in g_iptv).
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /
   start failures and timeouts from `game-host.js` (with why: no SDK answer, no `ready()`, given up), uncaught errors of built-in games, the
   SDK's reports (uncaught, rejections, failed files, handler throws, `MyPC.fail`, `MyPC.report`; sent even before `MyPC.init`), and My PC's

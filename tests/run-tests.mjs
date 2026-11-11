@@ -6803,11 +6803,11 @@ MyPC.init({ keys: ['channel', 'media'], onInit() { MyPC.ready(); window.__ok = 1
     await page.context().close();
 }
 
-// 50. Speedy IPTV (github.com/imad-os/speedy, folder mypc/) installed in My PC: the TV's player for live channels, films and USB files,
+// 50. Speedy IPTV (github.com/imad-os/g_iptv) installed in My PC: the TV's player for live channels, films and USB files,
 // the remote's Back / CH + / CH − / media keys, My PC's keyboard for its forms, USB films and shows with their subtitle files.
-// Skipped when the Speedy checkout is not next to this one (SPEEDY_DIR = its mypc/ folder). MYPC_ONLY=speedy runs only these.
+// Skipped when the g_iptv checkout is not next to this one (or SPEEDY_DIR). MYPC_ONLY=speedy runs only these.
 async function speedyTests(browser, base) {
-    const DIR = path.resolve(process.env.SPEEDY_DIR || path.join(ROOT, '..', 'speedy', 'mypc'));
+    const DIR = path.resolve(process.env.SPEEDY_DIR || path.join(ROOT, '..', 'g_iptv'));
     if (!fs.existsSync(path.join(DIR, 'tests', 'fixtures.mjs'))) { console.log('50. Speedy IPTV: skipped (no checkout at ' + DIR + ')'); return; }
     console.log('50. Speedy IPTV in My PC: the TV\'s player, Back, CH + / CH −, media keys, the keyboard, USB films and shows with subtitles');
     const fx = await import(new URL('file://' + path.join(DIR, 'tests', 'fixtures.mjs')).href);
