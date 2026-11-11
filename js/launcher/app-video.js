@@ -82,7 +82,7 @@ var AppVideo = (function () {
     }
 
     function attach(ctx) {
-        var a = api(), open = false, playing = false, wasPlaying = false, suspended = false, live = false;
+        var a = api(), open = false, playing = false, wasPlaying = false, suspended = false, live = false, isFile = false;
         var subsOn = false, dur = 0, lastTimeAt = 0, lastBuf = -1, seq = 0, rect = null, fit = 'fit', prepTimer = 0, buffering = false, bufMs = -1;
 
         function ev(d) { d.rid = 0; ctx.send('video', d); }
@@ -163,6 +163,7 @@ var AppVideo = (function () {
             ensureObj();
             transparent(true);
             var my = ++seq, done = false, durAsk = false, fileUrl = /^file:/.test(url);
+            isFile = fileUrl;
             tStart(ctx.appId, url); tNote('open ' + (/^file:/.test(url) ? 'usb' : 'web'));
             live = !!o.live; dur = 0; lastBuf = -1; lastTimeAt = 0;
             rect = o.rect && typeof o.rect === 'object' ? o.rect : null;
@@ -280,8 +281,13 @@ var AppVideo = (function () {
                     fit = /^(fit|fill|auto)$/.test(o.mode) ? o.mode : 'fit';
                     method(); place();
                     return reply(null, fit);
-                case 'tracks': tNote('tracks'); var tk = tracks(); tNote('tracks ok'); return reply(null, tk);
+                case 'tracks':
+                    // a USB file: the TV's player hangs in getTotalTrackInfo() on some MKVs and the TV closes My PC
+                    // (imad's TV, build 153: Subtitles button -> "5.1s tracks", then dead); never asked for files
+                    if (isFile) return reply(null, { audio: [], text: [], video: {}, cur: { audio: -1, text: -1 }, file: true });
+                    tNote('tracks'); var tk = tracks(); tNote('tracks ok'); return reply(null, tk);
                 case 'track':
+                    if (isFile) return reply(err('unsupported', 'The tracks of a USB file are not read.'));
                     try { a.setSelectTrack(o.kind === 'text' ? 'TEXT' : 'AUDIO', Math.floor(+o.index || 0)); } catch (e4) { return reply(err('player', String(e4))); }
                     return reply(null, tracks());
                 case 'subs':

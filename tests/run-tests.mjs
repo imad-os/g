@@ -6683,9 +6683,9 @@ const FAKE_AVPLAY = () => {
             seekTo: (ms, ok) => { av.cur = ms; av.t = Date.now(); av.log.push('seek ' + ms); if (ok) setTimeout(ok, 1); },
             getCurrentTime: () => av.state === 'PLAYING' ? av.cur + Date.now() - av.t : av.cur,
             getDuration: () => /live/.test(av.url) ? 0 : 5400000, getState: () => av.state,
-            getTotalTrackInfo: () => [{ type: 'VIDEO', index: 0, extra_info: '{"Width":1920,"Height":1080,"fourCC":"H264"}' },
+            getTotalTrackInfo: () => (av.log.push('totalTracks'), [{ type: 'VIDEO', index: 0, extra_info: '{"Width":1920,"Height":1080,"fourCC":"H264"}' },
                 { type: 'AUDIO', index: 1, extra_info: '{"language":"ara","channels":2,"fourCC":"AAC"}' }, { type: 'AUDIO', index: 2, extra_info: '{"language":"fra","channels":6}' },
-                { type: 'TEXT', index: 3, extra_info: '{"track_lang":"eng","subtitle_type":"srt"}' }],
+                { type: 'TEXT', index: 3, extra_info: '{"track_lang":"eng","subtitle_type":"srt"}' }]),
             getCurrentStreamInfo: () => [{ type: 'AUDIO', index: av.audio || 1 }, { type: 'TEXT', index: 3 }],
             setSelectTrack: (k, i) => { av.log.push('track ' + k + ' ' + i); if (k === 'AUDIO') av.audio = i; },
             setSilentSubtitle: (b) => av.log.push('silent ' + b), setSpeed: (r) => av.log.push('speed ' + r)
@@ -6735,7 +6735,7 @@ MyPC.init({ keys: ['channel', 'media'], onInit() { MyPC.ready(); window.__ok = 1
     const tr = await page.evaluate(() => JSON.parse(localStorage.getItem('arc_dev_av_trace') || 'null'));
     check(tr && tr.app === 'app-vtest' && /\/live\/\*\/\*\/1\.ts$/.test(tr.url) && tr.st === 'PLAYING' && tr.log.some((x) => /open/.test(x)) && tr.log.some((x) => /ready/.test(x)),
         'while a video plays My PC keeps a small black box of it (no user name / password from the address) ' + JSON.stringify(tr && { url: tr.url, st: tr.st, log: tr.log }));
-    check(/open http:\/\/iptv\.example:8080\/live\/u\/p\/1\.ts/.test(st1.log) && /prop USER_AGENT/.test(st1.log) && /LETTER_BOX/.test(st1.log) && /play$/.test(st1.log),
+    check(/open http:\/\/iptv\.example:8080\/live\/u\/p\/1\.ts/.test(st1.log) && /prop USER_AGENT/.test(st1.log) && /LETTER_BOX/.test(st1.log) && /play( \| totalTracks)?$/.test(st1.log),
         'an http stream goes to the TV\'s player (no mixed-content block), with the user agent and letter box ' + st1.log);
     check(st1.rect === [640 * k, 180 * k, 640 * k, 360 * k].map(Math.round).join(','), 'the preview box is placed on the TV\'s 1920x1080 video plane ' + st1.rect);
     check(st1.cls && /rgba\(0, 0, 0, 0\)|transparent/.test(st1.bg) && /rgba\(0, 0, 0, 0\)|transparent/.test(st1.layer), 'My PC\'s layers turn transparent so the picture shows through ' + st1.bg + ' ' + st1.layer);
@@ -6837,6 +6837,11 @@ MyPC.init({ keys: ['channel', 'media'], onInit() { MyPC.ready(); window.__ok = 1
     const u1 = await app.evaluate(() => MyPC.video.open('/opt/media/USBDriveA1/Films/Movie (2020).mkv').then(() => 'ok', (e) => e.code));
     await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('arc_dev_perm') || '{}'); p['app-vtest'] = { usb: 1 }; localStorage.setItem('arc_dev_perm', JSON.stringify(p)); });
     const u2 = await app.evaluate(() => MyPC.video.open('/opt/media/USBDriveA1/Films/Movie (2020).mkv').then(() => 'ok', (e) => e.code));
+    // imad's TV (build 153): asking the TV's player for a USB MKV's tracks (Subtitles button) froze My PC; a file's tracks are never read
+    const ulog1 = await page.evaluate(() => window.__av.log.filter((x) => /totalTracks|^track /.test(x)).length);
+    const ut = await app.evaluate(async () => { const t = await MyPC.video.tracks(); const k = await MyPC.video.track('text', 3).then(() => 'ok', (e) => e.code); return { t, k }; });
+    const ulog2 = await page.evaluate(() => window.__av.log.filter((x) => /totalTracks|^track /.test(x)).length);
+    check(ut.t.file === true && !ut.t.text.length && !ut.t.audio.length && ut.k === 'unsupported' && ulog2 === ulog1, 'a USB file\'s tracks are never asked from the TV\'s player (it hangs on some MKVs): empty lists, track() refused ' + JSON.stringify(ut) + ' ' + ulog2);
     const u3 = await app.evaluate(() => MyPC.video.open('/opt/media/USBDriveA1/../../etc/passwd').then(() => 'ok', (e) => e.code));
     const ulog = await page.evaluate(() => window.__av.log.filter((x) => /^open file/.test(x)).join(' | '));
     check(u1 === 'denied' && u2 === 'ok' && u3 === 'bad-request' && /open file:\/\/\/opt\/media\/USBDriveA1\/Films\/Movie%20\(2020\)\.mkv/.test(ulog), 'a USB film plays from its file path once USB drives are allowed; paths outside a drive are refused ' + [u1, u2, u3, ulog]);
@@ -7022,6 +7027,7 @@ async function speedyTests(browser, base) {
         'its subtitle files (English, Arabic) are found; the English one is read from the drive and shown in time with the TV\'s player ' + JSON.stringify(subs));
     await page.waitForTimeout(400);
     await shot('8-usb-film');
+    check(/TV player/.test(await app.evaluate(() => document.querySelector('#player .pl-tags').textContent)), 'the player says it is the TV player (Settings > Player = Auto)');
     // imad 2026-11-11: the controls and the loader stayed on over a USB film. The TV says "buffering" late (after it already plays) and
     // never "done": the moving time clears the loader; the controls hide by themselves 5 s after it plays
     await page.evaluate(() => { const l = window.__av.l; l.onbufferingstart(); window.__tk = setInterval(() => l.oncurrentplaytime(window.webapis.avplay.getCurrentTime()), 100); });
@@ -7034,6 +7040,17 @@ async function speedyTests(browser, base) {
     check(!ld1.spin && !ld1.st.buffering && ld1.st.playing, 'a late "buffering" report with no end: once the time moves the loader goes away (it plays) ' + JSON.stringify({ before: ld0, after: ld1.spin, buffering: ld1.st.buffering }));
     check(ld2.ui === false && ld2.top === 'none' && ld2.bot === 'none' && ld2.playing, 'the player\'s controls hide by themselves a few seconds after the film plays ' + JSON.stringify(ld2));
     await shot('8b-usb-film-clean');
+    // imad 2026-11-11 (build 153): Subtitles on a USB MKV froze My PC (the TV's player asked for the file's tracks). Now: Off, the files next to it
+    const tt0 = await page.evaluate(() => window.__av.log.filter((x) => x === 'totalTracks').length);
+    await key(OK); await page.waitForTimeout(200); await key(RIGHT, 4); await key(OK);
+    await app.waitForFunction(() => !!document.querySelector('.menu'), null, { timeout: 4000 }).catch(() => {});
+    await app.waitForTimeout(300);
+    const sm = await app.evaluate(() => ({ title: (document.querySelector('.menu h2') || {}).textContent, items: [...document.querySelectorAll('.menu .li .nm')].map((x) => x.firstChild.textContent) }));
+    const tt1 = await page.evaluate(() => window.__av.log.filter((x) => x === 'totalTracks').length);
+    await shot('8c-usb-subtitles-menu');
+    check(sm.title === 'Subtitles' && sm.items[0] === 'Off' && sm.items.filter((x) => /\.srt$|English|Arabic/i.test(x)).length === 2 && tt1 === tt0 && !(await app.evaluate(() => document.querySelector('.pl-msg') && document.querySelector('.pl-msg').textContent)),
+        'Subtitles on a USB film: Off + its 2 subtitle files, and the TV\'s player is never asked for the file\'s tracks (it hung on an MKV) ' + JSON.stringify(sm) + ' ' + [tt0, tt1]);
+    await tvBack(page); await page.waitForTimeout(700); // (two Backs within 450 ms = My PC's menu)
     await page.evaluate(() => clearInterval(window.__tk));
     for (let i = 0; i < 4 && await top() !== 'UsbScreen'; i++) { await tvBack(page); await page.waitForTimeout(500); }
     // a show: its page, the first episode, then the next one by itself at the end (with its own subtitle file)
@@ -7057,8 +7074,12 @@ async function speedyTests(browser, base) {
     check(uh.join(',') === 'My Show (show),Movie Name', 'Continue watching keeps the USB show once (not each episode) and the film ' + JSON.stringify(uh));
     await app.evaluate(() => { const h = UI.top(); h.zone = h.zones.indexOf('row'); h.row.setCount(h.rec.length, h.rec.findIndex((r) => r.key[1] === '#')); h.paint(); });
     await page.evaluate(() => { window.__av.log = []; });
+    await app.evaluate(() => Store.setPref('engine', 'web'));      // Settings > Player = Web: a USB file still needs the TV's player
     await key(OK);
     await page.waitForFunction(() => /S01E02\.mkv$/.test(window.__av.url) && window.__av.state === 'PLAYING', null, { timeout: 8000 }).catch(() => {});
+    const wu = await app.evaluate(() => ({ eng: Player.state().engine, tag: document.querySelector('#player .pl-tags').textContent }));
+    await app.evaluate(() => Store.setPref('engine', 'auto'));
+    check(wu.eng === 'tv' && /TV player/.test(wu.tag), 'with Settings > Player = Web player a USB file still plays on the TV player (only it reads the drive), and says so ' + JSON.stringify(wu));
     const rs = await page.evaluate(() => window.__av.log.filter((x) => /^(open|seek)/.test(x)).join(' | '));
     check(/open file:.*S01E02\.mkv/.test(rs), 'OK on the show in Continue watching goes on with its last episode ' + rs);
     for (let i = 0; i < 4 && await top() !== 'HomeScreen'; i++) { await tvBack(page); await page.waitForTimeout(500); }

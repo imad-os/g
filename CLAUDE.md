@@ -332,6 +332,8 @@
   only after `subtitles(true)`. Build 153: imad's card said "after 0 s, player NONE, free 400 MB of 1384" = My PC's thread froze right
   after open (MKV on USB only; MP4 fine). Each black-box note is now written at once (the last one = the step that froze), AVPlay is never
   called from inside its own callbacks (setTimeout 0), and a USB file's tracks are read only on `tracks()` (open returns `tracks.later`).
+  Build 154 (imad: Subtitles button on the same MKV = crash, card "5.1s tracks"): `getTotalTrackInfo` hangs too, so a USB file's tracks are
+  NEVER read (`tracks()` = empty lists + `file: true`, `track()` = `unsupported`); Speedy shows Off + the subtitle files next to it.
   Docs GUIDE.md section 21. Tests: `MYPC_ONLY=video node tests/run-tests.mjs`; Speedy itself inside My PC (fake AVPlay + USB drive, the
   checkout `../g_iptv` or `SPEEDY_DIR`, skipped when missing): `MYPC_ONLY=speedy` (its browser tests: `node tests/run.mjs` in g_iptv).
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /

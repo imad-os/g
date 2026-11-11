@@ -1389,7 +1389,7 @@ preview, everything else of the page drawn as usual). Your controls and subtitle
 ```js
 if (MyPC.video.supported()) {                                  // a TV (else: your own <video>, hls.js for .m3u8)
   const info = await MyPC.video.open('http://server/movie/u/p/1.mkv', { start: 754, rect: null, fit: 'fit' });
-  // info = { duration (s, 0 when live), live, tracks }  (a USB file: tracks.later = true, ask MyPC.video.tracks() when needed)
+  // info = { duration (s, 0 when live), live, tracks }  (a USB file: no tracks, see below)
   MyPC.video.on('time', (e) => bar(e.t, e.d));                 // twice a second
   MyPC.video.on('state', (e) => show(e.state));                // buffering playing paused ended idle
                                                                // (a "buffering" the TV never ends is followed by "playing" once the time moves;
@@ -1415,6 +1415,9 @@ if (MyPC.video.supported()) {                                  // a TV (else: yo
 
 - **USB files**: a path from `MyPC.usb` (`/opt/media/USBDriveA1/Films/a.mkv`) plays once the app may use the USB drives
   (section 20); subtitle files next to it are read with `MyPC.usb.read` and drawn by the app.
+  **The tracks of a USB file are never read** (build 154): the TV's player hangs on some MKV files when asked and the TV
+  closes My PC. `tracks()` answers empty lists with `file: true`, `track()` answers `unsupported`; the file plays its default
+  audio. Offer the subtitle files next to it (and online subtitles) instead.
 - **Under My PC's menu** (Back on the first screen, Guide) the video pauses and plays again on Resume; leaving My PC
   (another TV app) stops it and opens it again where it was. Quitting the app closes it.
 - Errors: `unsupported` (not a TV: use a `<video>`), `bad-request` (no url, not an http(s) / rtsp / rtmp / udp address
