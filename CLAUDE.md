@@ -325,6 +325,9 @@
   `playing` once the time moves (`app-video.js`); `UsbFs.list` asks the drive about entries in ~12 ms slices and skips the folder question for
   names with a file extension (a 300-file folder on a slow drive stopped My PC 2.4 s, now 24 ms); the bridge reuses the drive list for 5 s.
   Speedy: controls hide 5 s after it plays, folder reads cached, posters 320 px wide one at a time, no drive reads while a film is full screen.
+  **Video black box (build 151; imad: still "plays ~5 s then My PC closes")**: while a video is open `app-video.js` writes localStorage
+  `arc_dev_av_trace` once a second (player state, time, event counts, last ops, `tizen.systeminfo` free memory, JS heap; not in the backup);
+  a clean close clears it; one left over at the next start = My PC died during a video: `Reports.add` (Manager > Errors) + Notify card `avcrash`.
   Docs GUIDE.md section 21. Tests: `MYPC_ONLY=video node tests/run-tests.mjs`; Speedy itself inside My PC (fake AVPlay + USB drive, the
   checkout `../g_iptv` or `SPEEDY_DIR`, skipped when missing): `MYPC_ONLY=speedy` (its browser tests: `node tests/run.mjs` in g_iptv).
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /

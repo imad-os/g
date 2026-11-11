@@ -6730,6 +6730,11 @@ MyPC.init({ keys: ['channel', 'media'], onInit() { MyPC.ready(); window.__ok = 1
     const k = 1920 / await app.evaluate(() => innerWidth);      // the app's own pixels (its frame is scaled with My PC's 1920 wide stage)
     check(r1 && r1.live === true && r1.tracks && r1.tracks.audio.length === 2 && r1.tracks.text[0].lang === 'eng' && r1.tracks.video.w === 1920 && r1.tracks.cur.audio === 1,
         'MyPC.video.open() plays the stream and gives its tracks (audio, subtitles, video size) ' + JSON.stringify(r1));
+    // the black box: while a video is open, once a second, what the player and memory look like (cleared on a clean close)
+    await page.waitForTimeout(1200);
+    const tr = await page.evaluate(() => JSON.parse(localStorage.getItem('arc_dev_av_trace') || 'null'));
+    check(tr && tr.app === 'app-vtest' && /\/live\/\*\/\*\/1\.ts$/.test(tr.url) && tr.st === 'PLAYING' && tr.log.some((x) => /open/.test(x)) && tr.log.some((x) => /ready/.test(x)),
+        'while a video plays My PC keeps a small black box of it (no user name / password from the address) ' + JSON.stringify(tr && { url: tr.url, st: tr.st, log: tr.log }));
     check(/open http:\/\/iptv\.example:8080\/live\/u\/p\/1\.ts/.test(st1.log) && /prop USER_AGENT/.test(st1.log) && /LETTER_BOX/.test(st1.log) && /play$/.test(st1.log),
         'an http stream goes to the TV\'s player (no mixed-content block), with the user agent and letter box ' + st1.log);
     check(st1.rect === [640 * k, 180 * k, 640 * k, 360 * k].map(Math.round).join(','), 'the preview box is placed on the TV\'s 1920x1080 video plane ' + st1.rect);
@@ -6836,6 +6841,16 @@ MyPC.init({ keys: ['channel', 'media'], onInit() { MyPC.ready(); window.__ok = 1
     await Promise.all([page.waitForURL(/from=app-vtest/), page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); })]);
     await page.waitForSelector('#desk-icons .dicon');
     check(!(await page.evaluate(() => document.documentElement.classList.contains('av-video'))), 'after Quit the desktop is drawn normally again');
+    check(await page.evaluate(() => localStorage.getItem('arc_dev_av_trace')) === null, 'a clean Quit leaves no black box behind');
+    // My PC closed while a video played (the TV killed it: no time to clean up): the next start says so and sends a report
+    await page.evaluate(() => localStorage.setItem('arc_dev_av_trace', JSON.stringify({ app: 'app-vtest', url: 'http://x/movie/*/*/1.mkv', from: Date.now() - 6000, at: Date.now() - 500, st: 'PLAYING', t: 5200,
+        ev: { time: 50 }, log: ['0s open', '0.4s ready', '0.5s play'], mem: { free: 12, total: 2500, heap: 80 }, low: 12 })));
+    await page.reload();
+    await page.waitForSelector('#desk-icons .dicon');
+    await page.waitForFunction(() => /closed while a video played/.test(document.getElementById('toast').textContent), null, { timeout: 8000 }).catch(() => {});
+    const crash = await page.evaluate(() => ({ card: document.getElementById('toast').textContent, left: localStorage.getItem('arc_dev_av_trace') }));
+    await shot('crash-card');
+    check(/after 6 s, player PLAYING at 5 s, free memory 12 MB/.test(crash.card) && crash.left === null, 'after a crash during a video the next start shows what was seen (time, player, memory) and reports it ' + crash.card.slice(0, 160));
     check(!page.errors.length, 'no page errors ' + page.errors.join(' | '));
     await page.context().close();
 }

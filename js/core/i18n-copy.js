@@ -4,6 +4,7 @@
     'use strict';
     I18n.add({
         en: {
+            avCrash: 'My PC closed while a video played', 
             cpToUsb: 'Copying to %s', cpToDrive: 'Copying to Google Drive: %s', cpMyDrive: 'My Drive',
             cpScanning: 'Getting the list of files…', cpProgress: 'File %1 of %2 · %3%', cpWaiting: 'Waiting for the internet…', cpPaused: 'Paused',
             cpDoneTitle: 'Copy finished', cpDone: '%1 files copied to %2.', cpDone1: '1 file copied to %2.', cpSkipped: '%s were already there or skipped.', cpFailedN: '%s could not be copied.',
@@ -15,6 +16,7 @@
             permUsbText: 'It can see the files and folders on the USB drives plugged into this TV, open them, and add new ones there.'
         },
         fr: {
+            avCrash: 'My PC s’est fermé pendant une vidéo', 
             cpToUsb: 'Copie vers %s', cpToDrive: 'Copie vers Google Drive : %s', cpMyDrive: 'Mon Drive',
             cpScanning: 'Liste des fichiers…', cpProgress: 'Fichier %1 sur %2 · %3 %', cpWaiting: 'En attente d’Internet…', cpPaused: 'En pause',
             cpDoneTitle: 'Copie terminée', cpDone: '%1 fichiers copiés vers %2.', cpDone1: '1 fichier copié vers %2.', cpSkipped: '%s étaient déjà là ou ont été ignorés.', cpFailedN: '%s n’ont pas pu être copiés.',
@@ -26,6 +28,7 @@
             permUsbText: 'Elle peut voir les fichiers et dossiers des clés USB branchées sur ce téléviseur, les ouvrir et en ajouter.'
         },
         es: {
+            avCrash: 'My PC se cerró mientras se reproducía un vídeo', 
             cpToUsb: 'Copiando a %s', cpToDrive: 'Copiando a Google Drive: %s', cpMyDrive: 'Mi unidad',
             cpScanning: 'Obteniendo la lista de archivos…', cpProgress: 'Archivo %1 de %2 · %3 %', cpWaiting: 'Esperando a Internet…', cpPaused: 'En pausa',
             cpDoneTitle: 'Copia terminada', cpDone: '%1 archivos copiados a %2.', cpDone1: '1 archivo copiado a %2.', cpSkipped: '%s ya estaban o se omitieron.', cpFailedN: '%s no se pudieron copiar.',
@@ -37,6 +40,7 @@
             permUsbText: 'Puede ver los archivos y carpetas de las memorias USB conectadas a este televisor, abrirlos y añadir otros nuevos.'
         },
         ar: {
+            avCrash: 'أُغلق My PC أثناء تشغيل فيديو', 
             cpToUsb: 'جارٍ النسخ إلى %s', cpToDrive: 'جارٍ النسخ إلى Google Drive: %s', cpMyDrive: 'ملفاتي',
             cpScanning: 'جارٍ جلب قائمة الملفات…', cpProgress: 'الملف %1 من %2 · %3%', cpWaiting: 'في انتظار الإنترنت…', cpPaused: 'متوقف مؤقتًا',
             cpDoneTitle: 'انتهى النسخ', cpDone: 'تم نسخ %1 ملفات إلى %2.', cpDone1: 'تم نسخ ملف واحد إلى %2.', cpSkipped: '%s كانت موجودة أو تم تخطيها.', cpFailedN: 'تعذر نسخ %s.',

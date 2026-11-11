@@ -21,6 +21,41 @@ var AppVideo = (function () {
 
     var obj = null;
 
+    /* A black box (imad 2026-11-11: "the video plays 5 s, then My PC closes"): while a video is open, once a second, what the TV's player
+     * and memory look like goes to localStorage arc_dev_av_trace (straight, not through Store: no backup / sync for it; a crash leaves no time for anything else). A clean close clears it; when the next
+     * My PC page finds one left over, My PC closed while a video played: an error report goes out and a card says what was seen. */
+    var TRACE = 'arc_dev_av_trace', trace = null, traceT = 0;
+    function mem() {
+        var m = {};
+        try { if (typeof tizen !== 'undefined' && tizen.systeminfo) { m.free = Math.round(tizen.systeminfo.getAvailableMemory() / 1048576); m.total = Math.round(tizen.systeminfo.getTotalMemory() / 1048576); } } catch (e) {}
+        try { if (performance.memory) m.heap = Math.round(performance.memory.usedJSHeapSize / 1048576); } catch (e2) {}
+        return m;
+    }
+    function tWrite() { if (!trace) return; trace.at = Date.now(); try { trace.st = String(webapis.avplay.getState()); } catch (e0) {} trace.mem = mem(); if (trace.low === undefined || (trace.mem.free >= 0 && trace.mem.free < trace.low)) trace.low = trace.mem.free; try { localStorage.setItem(TRACE, JSON.stringify(trace)); } catch (e) {} }
+    function tStart(appId, url) {
+        trace = { app: appId, url: String(url).replace(/\/\/[^\/@]*@/, '//').replace(/(\/(live|movie|series)\/)[^\/]+\/[^\/]+\//, '$1*/*/').slice(-120), from: Date.now(), ev: {}, log: [], st: '', t: 0 };
+        clearInterval(traceT); traceT = setInterval(tWrite, 1000); tWrite();
+    }
+    function tNote(what) { if (!trace) return; trace.log.push(Math.round((Date.now() - trace.from) / 100) / 10 + 's ' + what); if (trace.log.length > 14) trace.log.shift(); }
+    function tEv(k) { if (trace) trace.ev[k] = (trace.ev[k] || 0) + 1; }
+    function tEnd() { clearInterval(traceT); traceT = 0; trace = null; try { localStorage.removeItem(TRACE); } catch (e) {} }
+    try { window.addEventListener('pagehide', function () { if (trace) tEnd(); }); } catch (e) {}
+    // left over from the last page: it closed while a video played
+    function lastCrash() {
+        var t = null;
+        try { t = JSON.parse(localStorage.getItem(TRACE) || 'null'); } catch (e) {}
+        if (!t || !t.from) return;
+        try { localStorage.removeItem(TRACE); } catch (e2) {}
+        if (Date.now() - (t.at || 0) > 6 * 3600000) return;
+        var secs = Math.round(((t.at || t.from) - t.from) / 1000), m = t.mem || {};
+        var sum = 'after ' + secs + ' s, player ' + (t.st || '?') + ' at ' + Math.round((t.t || 0) / 1000) + ' s' + (m.free >= 0 ? ', free memory ' + m.free + ' MB (lowest ' + t.low + ' of ' + m.total + ')' : '') + (m.heap ? ', My PC ' + m.heap + ' MB' : '');
+        try { Reports.add(t.app || 'mypc', { kind: 'report', msg: 'My PC closed while a video played: ' + sum, stack: JSON.stringify({ url: t.url, ev: t.ev, log: t.log, mem: m, low: t.low }), stage: 'video' }); } catch (e3) {}
+        setTimeout(function () {
+            try { Notify.show({ id: 'avcrash', kind: 'warn', title: I18n.t('avCrash'), text: sum + '. Last: ' + (t.log || []).slice(-4).join(' · '), timeout: 30000 }); } catch (e4) {}
+        }, 2500);
+    }
+    setTimeout(lastCrash, 1500);
+
     function api() { return typeof webapis !== 'undefined' && webapis.avplay ? webapis.avplay : null; }
     function supported() { return !!api(); }
 
@@ -98,6 +133,7 @@ var AppVideo = (function () {
                 try { a.close(); } catch (e2) {}
             }
             open = playing = wasPlaying = suspended = buffering = false;
+            tNote('closed'); tEnd();
             transparent(false);
         }
         function onVis() {
@@ -126,6 +162,7 @@ var AppVideo = (function () {
             ensureObj();
             transparent(true);
             var my = ++seq, done = false;
+            tStart(ctx.appId, url); tNote('open');
             live = !!o.live; dur = 0; lastBuf = -1; lastTimeAt = 0;
             rect = o.rect && typeof o.rect === 'object' ? o.rect : null;
             fit = /^(fit|fill|auto)$/.test(o.fit) ? o.fit : 'fit';
@@ -139,10 +176,11 @@ var AppVideo = (function () {
                 a.open(url);
                 open = true;
                 a.setListener({
-                    onbufferingstart: function () { if (my === seq) { buffering = true; bufMs = -1; ev({ ev: 'state', state: 'buffering' }); } },
+                    onbufferingstart: function () { tEv('bufStart'); if (my === seq) { buffering = true; bufMs = -1; ev({ ev: 'state', state: 'buffering' }); } },
                     onbufferingprogress: function (p) { p = Math.round(+p || 0); if (my === seq && Math.abs(p - lastBuf) >= 5) { lastBuf = p; ev({ ev: 'buffer', p: p }); } },
-                    onbufferingcomplete: function () { lastBuf = -1; if (my === seq) { buffering = false; ev({ ev: 'state', state: playing ? 'playing' : 'paused' }); } },
+                    onbufferingcomplete: function () { tEv('bufDone'); lastBuf = -1; if (my === seq) { buffering = false; ev({ ev: 'state', state: playing ? 'playing' : 'paused' }); } },
                     oncurrentplaytime: function (ms) {
+                        tEv('time'); if (trace) trace.t = +ms || 0;
                         if (my !== seq) return;
                         // the time moves while "buffering": the TV never said it was done (USB files, a late report): it plays
                         if (buffering && playing) {
@@ -155,13 +193,14 @@ var AppVideo = (function () {
                         if (!dur) dur = duration();
                         ev({ ev: 'time', t: (+ms || 0) / 1000, d: dur });
                     },
-                    onstreamcompleted: function () { if (my !== seq) return; playing = false; ev({ ev: 'state', state: 'ended' }); },
-                    onerror: function (e) { if (!done) return fail(e); if (my === seq) { playing = false; ev({ ev: 'error', code: avCode(e), message: String(e) }); } },
+                    onstreamcompleted: function () { tNote('ended'); if (my !== seq) return; playing = false; ev({ ev: 'state', state: 'ended' }); },
+                    onerror: function (e) { tNote('error ' + String(e && (e.name || e) || '').slice(0, 60)); if (!done) return fail(e); if (my === seq) { playing = false; ev({ ev: 'error', code: avCode(e), message: String(e) }); } },
                     onevent: function (type, data) {
+                        tEv('event'); tNote('event ' + String(type).replace(/^PLAYER_MSG_/, '').slice(0, 40));
                         if (my !== seq) return;
                         if (/RESOLUTION_CHANGED|BITRATE_CHANGE|STREAM_INFO_READY/.test(String(type))) { var tr = tracks(); ev({ ev: 'info', w: tr.video.w || 0, h: tr.video.h || 0, data: String(data || '').slice(0, 200) }); }
                     },
-                    onsubtitlechange: function (d, text) { if (my === seq) ev({ ev: 'sub', text: String(text || '').slice(0, 2000), dur: +d || 0 }); },
+                    onsubtitlechange: function (d, text) { tEv('sub'); if (my === seq) ev({ ev: 'sub', text: String(text || '').slice(0, 2000), dur: +d || 0 }); },
                     ondrmevent: function () {}
                 });
                 if (typeof o.ua === 'string' && o.ua) { try { a.setStreamingProperty('USER_AGENT', o.ua.slice(0, 300)); } catch (x3) {} }
@@ -169,6 +208,7 @@ var AppVideo = (function () {
                 method();
                 prepTimer = setTimeout(function () { fail('timeout'); }, 30000);
                 a.prepareAsync(function () {
+                    tNote('ready');
                     if (done || my !== seq) return;
                     done = true; clearTimeout(prepTimer);
                     place();
@@ -190,6 +230,7 @@ var AppVideo = (function () {
 
         function handle(d) {
             var o = d.args && typeof d.args === 'object' ? d.args : {};
+            if (d.op !== 'state' && d.op !== 'tracks') tNote(d.op + (d.op === 'seek' ? ' ' + Math.round(+o.t || 0) : ''));
             function reply(e, r) { ctx.send('video', e ? { rid: d.rid, error: e } : { rid: d.rid, result: r === undefined ? null : r }); }
             if (d.op === 'open') {
                 if (!alive()) return reply(err('not-running', 'The app is not running.'));
