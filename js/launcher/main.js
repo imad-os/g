@@ -121,7 +121,12 @@ var App = (function () {
     /* ---------- router ---------- */
     function route(action, pressed, repeat, dev) {
         if (Welcome.open()) { Welcome.action(action, pressed); return; }
-        if (action === 'padConnected') { toast(I18n.t('padOn'), { id: 'pad', kind: 'ok' }); return; }
+        if (action === 'padConnected') {
+            // the controller's brand and model (js/core/pad-info.js) as the card's title
+            var pl = Input.pads(), lp = pl[pl.length - 1], nm = lp ? (lp.brand && (lp.model || '').toLowerCase().indexOf(lp.brand.toLowerCase()) !== 0 ? lp.brand + ' ' + lp.model : lp.model || lp.name) : '';
+            toast(I18n.t('padOn'), { id: 'pad', kind: 'ok', title: nm || undefined });
+            return;
+        }
 
         if (dialogOpen) {
             if (!pressed) return;

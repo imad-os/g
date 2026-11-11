@@ -205,7 +205,8 @@ var GameHost = (function () {
         }
         function padsChanged() {
             var list = Input.pads(), out = [], k;
-            for (k = 0; k < list.length; k++) out.push({ d: 'pad' + list[k].index, name: list[k].name, standard: list[k].standard, buttons: list[k].buttons, axes: list[k].axes });
+            for (k = 0; k < list.length; k++) out.push({ d: 'pad' + list[k].index, name: list[k].name, standard: list[k].standard, buttons: list[k].buttons, axes: list[k].axes,
+                                                     brand: list[k].brand, model: list[k].model, layout: list[k].layout, vendor: list[k].vendor, product: list[k].product });
             var j = JSON.stringify(out);
             if (j !== padsSent) { padsSent = j; send('gp', { e: 'pads', list: out }); }
         }

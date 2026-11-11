@@ -29,6 +29,7 @@
  * The TV's USB drives (MyPC.usb) and copies between Google Drive and USB drives done by My PC (MyPC.copy) (API 16, TV only).
  * The TV's own video player (MyPC.video), the remote's Back for the app's own screens (MyPC.back), CH + / CH - and the
  *   media keys (MyPC.init({ keys: ['channel', 'media'] })), My PC's on-screen keyboard (MyPC.text.keyboard) (API 17).
+ * Which controller each pad is (brand, model, layout) and the name printed on each of its buttons: MyPC.gamepad.label(i, dev) (API 20).
  *   'menu' = gamepad Start or Select pressed alone; only sent to apps that init with { ownMenu: true }.
  *   Only the TV remote's Back, or holding Start + Select together 1 s, opens My PC's menu; Esc / Backspace are 'cancel'.
  * Written in ES5 so it loads anywhere; My PC itself supports Samsung TVs from 2024 (Tizen 8+).
@@ -36,7 +37,7 @@
 var MyPC = (function () {
     'use strict';
 
-    var VERSION = 1, API = 19, HELLO_WAIT = 1200;
+    var VERSION = 1, API = 20, HELLO_WAIT = 1200;
     var handlers = {}, info = null, data = {}, started = false, destroyed = false, isReady = false;
     var hosted = false, hostWin = null, hostOrigin = '*', helloTimer = 0;
     var down = {};                       // action -> number of keys / buttons holding it
@@ -1401,8 +1402,10 @@ var MyPC = (function () {
      * Game controllers come first in My PC: read ALL their buttons here, not only the mapped actions.
      *   MyPC.gamepad.on('button', function (index, pressed, value, dev, name) {})   // every change of every button (triggers: value 0..1)
      *   MyPC.gamepad.on('axes', function (axes, dev) {})                             // sticks moved (axes: the SDK's own array, read it now, don't keep it)
-     *   MyPC.gamepad.on('pads', function (list) {})                                  // [{ dev: 'pad0', name, standard, buttons, axes }] connected / gone
-     *   MyPC.gamepad.pressed(i, dev?)  value(i, dev?)  axis(i, dev?)  pads()  name(i, dev?)
+     *   MyPC.gamepad.on('pads', function (list) {})     // [{ dev: 'pad0', name, standard, buttons, axes, brand, model, layout, vendor, product }] connected / gone
+     *   MyPC.gamepad.pressed(i, dev?)  value(i, dev?)  axis(i, dev?)  pads()  name(i, dev?)  label(i, dev?)
+     * name(i) = the standard position name ('A' = bottom); label(i) = what is printed on THAT controller (API 20: a Switch
+     * Pro's bottom button 0 is 'B', its right button 1 is 'A'; layout 'nintendo' | 'xbox' | 'playstation' | 'other').
      * dev is 'pad0'..'pad3' (the same as onInput's dev); without it: any pad (pressed), the highest value, the last pad used (axis).
      * Inside My PC the shell reads the pads and sends only changes, and nothing while its own menus are open. Standalone the SDK
      * reads navigator.getGamepads() itself (and maps the standard buttons to actions too, like My PC does). */
@@ -1423,9 +1426,82 @@ var MyPC = (function () {
     var gamepad = (function () {
         var NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'Select', 'Start', 'L3', 'R3', 'Up', 'Down', 'Left', 'Right', 'Home'];
         var st = {}, list = [], last = '', listeners = { button: [], axes: [], pads: [] }, raf = 0, startAt = {};
-        function pad(dev) {
-            return st[dev] || (st[dev] = { v: new Float32Array(32), p: new Uint8Array(32), a: new Float32Array(8), standard: true });
+        // which controller it is and the names printed on its buttons (API 20): the same code as My PC's js/core/pad-info.js
+        /* PADINFO-BEGIN (copied as is into sdk/mypc-sdk.js) */
+        // labels by standard index: 4 face buttons, shoulders, triggers, the two small middle buttons, stick clicks, D-pad, home, extra
+        var LABELS = {
+            nintendo: ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L3', 'R3', '▲', '▼', '◀', '▶', 'Home', 'Capture'],
+            xbox: ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Menu', 'LS', 'RS', '▲', '▼', '◀', '▶', 'Xbox', 'Share'],
+            playstation: ['✕', '○', '□', '△', 'L1', 'R1', 'L2', 'R2', 'Share', 'Options', 'L3', 'R3', '▲', '▼', '◀', '▶', 'PS', 'Touchpad'],
+            // a controller we do not know: My PC's own names (A B X Y in the Nintendo places, the + for the menu)
+            other: ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L3', 'R3', '▲', '▼', '◀', '▶', 'Home', 'Capture']
+        };
+        // a Nintendo pad the browser does not map ("standard: false"): its own HID order (DirectInput), the D-pad is an axis
+        var NINTENDO_RAW = ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L3', 'R3', 'Home', 'Capture'];
+        var BRANDS = {      // USB vendor id -> [brand, layout when the model is not known ('' = from the name)]
+            '057e': ['Nintendo', 'nintendo'], '045e': ['Microsoft', 'xbox'], '054c': ['Sony', 'playstation'], '046d': ['Logitech', 'xbox'],
+            '0f0d': ['Hori', ''], '20d6': ['PowerA', ''], '24c6': ['PowerA', 'xbox'], '0e6f': ['PDP', ''], '2dc8': ['8BitDo', 'nintendo'],
+            '1532': ['Razer', 'xbox'], '0738': ['Mad Catz', 'xbox'], '18d1': ['Google', 'xbox'], '1949': ['Amazon', 'xbox'],
+            '0955': ['NVIDIA', 'xbox'], '1038': ['SteelSeries', 'xbox'], '04e8': ['Samsung', 'xbox'], '0079': ['DragonRise', ''], '2563': ['ShanWan', '']
+        };
+        var MODELS = {      // 'vendor:product' -> [model, layout, label overrides { index: label }]
+            '057e:2009': ['Switch Pro Controller', 'nintendo'], '057e:2069': ['Switch 2 Pro Controller', 'nintendo'],
+            '057e:2006': ['Joy-Con (L)', 'nintendo'], '057e:2007': ['Joy-Con (R)', 'nintendo'], '057e:200e': ['Joy-Con pair', 'nintendo'],
+            '057e:2017': ['SNES Controller', 'nintendo'], '057e:2019': ['N64 Controller', 'nintendo'],
+            '045e:028e': ['Xbox 360 Controller', 'xbox'], '045e:028f': ['Xbox 360 Wireless Controller', 'xbox'], '045e:0719': ['Xbox 360 Wireless Controller', 'xbox'],
+            '045e:02d1': ['Xbox One Controller', 'xbox'], '045e:02dd': ['Xbox One Controller', 'xbox'], '045e:02e3': ['Xbox One Elite Controller', 'xbox'],
+            '045e:02ea': ['Xbox One S Controller', 'xbox'], '045e:02e0': ['Xbox One S Controller', 'xbox'], '045e:02fd': ['Xbox One S Controller', 'xbox'],
+            '045e:0b00': ['Xbox Elite Series 2', 'xbox'], '045e:0b05': ['Xbox Elite Series 2', 'xbox'], '045e:0b22': ['Xbox Elite Series 2', 'xbox'],
+            '045e:0b12': ['Xbox Series X|S Controller', 'xbox'], '045e:0b13': ['Xbox Series X|S Controller', 'xbox'], '045e:0b20': ['Xbox Wireless Controller', 'xbox'],
+            '054c:0268': ['DualShock 3', 'playstation', { 8: 'Select', 9: 'Start' }], '054c:05c4': ['DualShock 4', 'playstation'],
+            '054c:09cc': ['DualShock 4', 'playstation'], '054c:0ba0': ['DualShock 4', 'playstation'],
+            '054c:0ce6': ['DualSense', 'playstation', { 8: 'Create' }], '054c:0df2': ['DualSense Edge', 'playstation', { 8: 'Create' }],
+            '046d:c21d': ['Gamepad F310', 'xbox'], '046d:c21e': ['Gamepad F510', 'xbox'], '046d:c21f': ['Gamepad F710', 'xbox'],
+            '18d1:9400': ['Stadia Controller', 'xbox', { 8: 'Options', 9: 'Menu', 16: 'Stadia', 17: 'Capture' }],
+            '1949:0419': ['Luna Controller', 'xbox', { 16: 'Luna', 17: 'Mic' }], '0955:7214': ['SHIELD Controller', 'xbox', { 16: 'NVIDIA' }],
+            '0000:0000': ['Phone controller', 'nintendo']       // My PC's own: a phone in Buttons / Keyboard mode (Input.virtualPad)
+        };
+        function hex4(s) { s = String(s || '').toLowerCase(); while (s.length < 4) s = '0' + s; return s.slice(-4); }
+        // "Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)" -> "Xbox Wireless Controller"
+        function cleanName(id) {
+            var n = String(id || '').replace(/^[0-9a-f]{1,4}-[0-9a-f]{1,4}-/i, '').replace(/\s*\([^()]*(?:vendor|product|standard gamepad|xinput)[^()]*\)\s*/ig, ' ').replace(/\s+/g, ' ').trim();
+            return n || 'Gamepad';
         }
+        function layoutFromName(n) {
+            if (/pro controller|joy-?con|nintendo|switch|8bitdo|snes|n64/i.test(n)) return 'nintendo';
+            if (/dualsense|dualshock|playstation|\bps[345]\b|sony/i.test(n)) return 'playstation';
+            if (/xbox|x-box|xinput|microsoft/i.test(n)) return 'xbox';
+            return '';
+        }
+        function detect(id, mapping) {
+            id = String(id || '');
+            var m = /vendor:\s*([0-9a-f]{1,4})\s*product:\s*([0-9a-f]{1,4})/i.exec(id) || /^([0-9a-f]{1,4})-([0-9a-f]{1,4})-/i.exec(id);
+            var vendor = m ? hex4(m[1]) : '', product = m ? hex4(m[2]) : '', name = cleanName(id);
+            var mod = m && MODELS[vendor + ':' + product], br = vendor && BRANDS[vendor];
+            var layout = mod ? mod[1] : (br && br[1]) || layoutFromName(name) || 'other';
+            if (/\bxinput\b/i.test(id) && !mod) layout = 'xbox';
+            return {
+                vendor: vendor, product: product,
+                brand: vendor === '0000' ? 'My PC' : br ? br[0] : '',
+                model: mod ? mod[0] : name, name: name, layout: layout, known: !!mod,
+                standard: mapping === undefined ? true : mapping === 'standard', fix: mod && mod[2] || null
+            };
+        }
+        function label(info, i) {
+            var lay = typeof info === 'string' ? info : info && info.layout;
+            if (info && typeof info === 'object') {
+                if (info.fix && info.fix[i]) return info.fix[i];
+                if (info.standard === false) return lay === 'nintendo' && NINTENDO_RAW[i] ? NINTENDO_RAW[i] : '#' + i;
+            }
+            var l = LABELS[lay] || LABELS.other;
+            return l[i] || '#' + i;
+        }
+        /* PADINFO-END */
+        function pad(dev) {
+            return st[dev] || (st[dev] = { v: new Float32Array(32), p: new Uint8Array(32), a: new Float32Array(8), standard: true, info: null });
+        }
+        // the name printed on button i of this controller (Switch Pro: 1 = 'A'; Xbox: 0 = 'A'; PlayStation: 0 = '\u2715')
+        function labelOf(i, dev) { var s = st[dev || last]; return label(s && s.info ? s.info : 'other', i); }
         function emit(name, a, b, c, d, e) {
             var l = listeners[name];
             for (var i = 0; i < l.length; i++) { try { l[i](a, b, c, d, e); } catch (x) { try { console.error('[MyPC gamepad] ' + x); } catch (y) {} } }
@@ -1448,7 +1524,14 @@ var MyPC = (function () {
         }
         function setPads(l) {
             list = []; var keep = {};
-            for (var i = 0; l && i < l.length; i++) { var o = l[i]; list.push({ dev: o.d, name: o.name, standard: !!o.standard, buttons: o.buttons, axes: o.axes }); pad(o.d).standard = !!o.standard; keep[o.d] = 1; }
+            for (var i = 0; l && i < l.length; i++) {
+                var o = l[i], inf = o.layout ? { vendor: o.vendor || '', product: o.product || '', brand: o.brand || '', model: o.model || o.name, layout: o.layout, standard: !!o.standard }
+                                             : detect(o.id || o.name, o.standard ? 'standard' : '');
+                inf.standard = !!o.standard;
+                if (inf.vendor && MODELS[inf.vendor + ':' + inf.product]) inf.fix = MODELS[inf.vendor + ':' + inf.product][2] || null;
+                list.push({ dev: o.d, name: o.name, standard: !!o.standard, buttons: o.buttons, axes: o.axes, brand: inf.brand, model: inf.model, layout: inf.layout, vendor: inf.vendor, product: inf.product });
+                pad(o.d).standard = !!o.standard; pad(o.d).info = inf; keep[o.d] = 1;
+            }
             for (var d in st) if (!keep[d]) delete st[d];
             emit('pads', list.slice());
         }
@@ -1488,7 +1571,7 @@ var MyPC = (function () {
         function standalonePads() {
             var ps; try { ps = navigator.getGamepads ? navigator.getGamepads() : []; } catch (e) { ps = []; }
             var l = [];
-            for (var i = 0; i < ps.length; i++) if (ps[i] && ps[i].connected) l.push({ d: 'pad' + ps[i].index, name: ps[i].id, standard: ps[i].mapping === 'standard', buttons: ps[i].buttons.length, axes: ps[i].axes.length });
+            for (var i = 0; i < ps.length; i++) if (ps[i] && ps[i].connected) l.push({ d: 'pad' + ps[i].index, name: cleanName(ps[i].id), id: ps[i].id, standard: ps[i].mapping === 'standard', buttons: ps[i].buttons.length, axes: ps[i].axes.length });
             setPads(l);
             if (!raf && l.length && !destroyed) raf = requestAnimationFrame(poll);
         }
@@ -1504,6 +1587,7 @@ var MyPC = (function () {
             axis: function (i, dev) { var s = st[dev || last]; return s ? s.a[i] || 0 : 0; },
             pads: function () { return list.slice(); },
             name: nameOf,
+            label: labelOf,
             _message: function (d) {
                 if (!d) return;
                 if (d.e === 'b') button(String(d.d), +d.i, !!d.p, +d.v || 0);

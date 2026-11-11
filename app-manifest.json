@@ -1,5 +1,5 @@
 {
-  "build": 155,
+  "build": 156,
   "version": "3.0.0",
   "shell": 1,
   "css": [
@@ -49,6 +49,7 @@
     "js/core/world.js",
     "js/core/i18n.js",
     "js/core/i18n-users.js",
+    "js/core/i18n-pads.js",
     "js/core/i18n-widgets.js",
     "js/core/i18n-playtime.js",
     "js/core/i18n-weather.js",
@@ -63,6 +64,7 @@
     "js/core/scores.js",
     "js/core/audio.js",
     "js/core/perf.js",
+    "js/core/pad-info.js",
     "js/core/input.js",
     "js/core/focus.js",
     "js/launcher/icons.js",

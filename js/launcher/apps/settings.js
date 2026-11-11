@@ -53,9 +53,9 @@
         if (id === 'shortcuts') { scRows(out); return out; }
         if (sub === 'users' && id === 'accounts') { usersRows(out); return out; }
         if (sub === 'user' && id === 'accounts') { userRows(out); return out; }
-        if (sub === 'padtest' && id === 'devices') {
-            var pl = Input.pads();
-            if (pl.length) out.push({ kind: 'padtest', pad: pl[0].index }); else out.push({ kind: 'text', value: t('devNoPad') });
+        if (sub === 'padtest' && (id === 'devices' || id === 'gaming')) {
+            var tp = testPad();
+            if (tp) out.push({ kind: 'padtest', pad: tp.index }); else out.push({ kind: 'text', value: t('devNoPad') });
             out.push({ kind: 'action', label: t('back'), primary: true, run: function () { leaveSub(); } });
             return out;
         }
@@ -154,6 +154,7 @@
             var now = new Date();
             out.push({ kind: 'info', label: t('dateTime'), value: Desktop.timeText(now) + ', ' + Desktop.dateText(now, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) });
         } else if (id === 'gaming') {
+            padRows(out);
             out.push({ kind: 'toggle', label: t('allKeys'), desc: t('allKeysDesc'), get: function () { return Store.get('app_keys', true) !== false; }, set: function (v) { Store.set('app_keys', !!v); } });
             lines = t('controlsText');
             for (i = 0; i < lines.length; i++) out.push({ kind: 'text', value: lines[i] });
@@ -288,9 +289,46 @@
 
     /* ---------- Devices: what is connected, and a live test of the controller buttons ---------- */
 
-    var PAD_BUTTONS = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', '\u29C9', '\u2630', 'L3', 'R3', '\u25B2', '\u25BC', '\u25C0', '\u25B6', '\u24D6'];
     var sub = null;                 // 'padtest': the controller test page (opened by its button, Back returns)
-    var padRaf = 0, padCard = null, padIdx = 0, padMask = '';
+    var padRaf = 0, padCard = null, padIdx = 0, padMask = '', padInfo = null, padN = 0;
+
+    // Which controller it is (js/core/pad-info.js): the names printed on ITS buttons. The standard mapping numbers buttons by
+    // place (0 = bottom), so a Switch Pro's A (right) is button 1 and an Xbox pad's A (bottom) is button 0 (owner report 2026-11-11:
+    // the test showed Xbox names for every controller, A on a Switch Pro lit "B").
+    function testPad() {
+        var pl = Input.pads(), a = Input.activePad(), i;
+        for (i = 0; i < pl.length; i++) if (pl[i].index === a) return pl[i];
+        return pl[0] || null;
+    }
+    function padTitle(p) {
+        var m = p.model || p.name;
+        return p.brand && m.toLowerCase().indexOf(p.brand.toLowerCase()) !== 0 ? p.brand + ' ' + m : m;
+    }
+    function padLabel(p, i) { return PadInfo.label(p ? p.info || p.layout : 'other', i); }
+    // what My PC does with a button, by its place (Input's PAD_BUTTONS)
+    var PAD_DO = { 0: 'ok', 1: 'back', 2: 'run', 3: 'run', 4: 'page', 5: 'page', 8: 'menu', 9: 'menu', 12: 'dir', 13: 'dir', 14: 'dir', 15: 'dir', 16: 'home' };
+    function padDoes(i) { return PAD_DO[i] ? t('padDo_' + PAD_DO[i]) : t('padNoAct'); }
+    function padHelp(p) {
+        return t('padHelpMap').replace('%ok', padLabel(p, 0)).replace('%back', padLabel(p, 1)).replace('%l', padLabel(p, 4)).replace('%r', padLabel(p, 5))
+            .replace('%home', padLabel(p, 16)).replace('%menu', padLabel(p, 8) + ' / ' + padLabel(p, 9));
+    }
+    // Control Panel > Gaming: every controller, its brand / model / button names, why A and B are where they are, the test
+    function padRows(out) {
+        var pl = Input.pads(), i, p, a = Input.activePad();
+        out.push({ kind: 'text', value: t('padSection') });
+        if (!pl.length) out.push({ kind: 'info', label: t('devControllers'), value: t('padNone') });
+        for (i = 0; i < pl.length; i++) {
+            p = pl[i];
+            out.push({ kind: 'info', label: t('devController') + ' ' + (i + 1) + (pl.length > 1 && p.index === a ? ' (' + t('padActive') + ')' : ''), value: padTitle(p) });
+            out.push({ kind: 'info', label: t('padBrand') + ' \u00B7 ' + t('padModel'), value: (p.brand || t('padUnknown')) + ' \u00B7 ' + (p.known ? p.model : t('padUnknown') + ' (' + p.name + ')') });
+            out.push({ kind: 'info', label: t('padLayout'), value: t('padLay_' + p.layout) });
+            out.push({ kind: 'info', label: t('padMap'), value: t(p.standard ? 'padMapStd' : 'padMapRaw') + ' \u00B7 ' + p.buttons + ' / ' + p.axes });
+            if (p.vendor) out.push({ kind: 'info', label: t('padIds'), value: p.vendor + ':' + p.product });
+        }
+        out.push({ kind: 'action', label: t('padTest'), desc: pl.length ? t('padTestDesc') : t('devNoPad'), run: function () { sub = 'padtest'; var f = renderMain(0); if (f) Focus.focus(f); } });
+        out.push({ kind: 'text', value: t('padWhy') });
+        if (pl.length) out.push({ kind: 'text', value: padHelp(testPad()) });
+    }
 
     function devicesRows(out) {
         var seen = Input.seen(), pads = Input.pads(), i;
@@ -298,9 +336,9 @@
         out.push({ kind: 'info', label: t('devKeyboard'), value: seen.keyboard ? t('devDetected') : t('devPressKey') });
         out.push({ kind: 'info', label: t('devMouse'), value: seen.mouse ? t('devDetected') : t('devMoveMouse') });
         if (!pads.length) out.push({ kind: 'info', label: t('devControllers'), value: t('devNoPad') });
-        for (i = 0; i < pads.length; i++) out.push({ kind: 'info', label: t('devController') + ' ' + (i + 1), value: pads[i].name + (pads[i].standard ? '' : ' \u00B7 ' + t('devGeneric')) });
-        out.push({ kind: 'action', label: t('devTestOpen'), desc: pads.length ? t('devTest') : t('devNoPad'), run: function () { sub = 'padtest'; var f = renderMain(0); if (f) Focus.focus(f); } });
-        out.push({ kind: 'text', value: t('devMapHelp') });
+        for (i = 0; i < pads.length; i++) out.push({ kind: 'info', label: t('devController') + ' ' + (i + 1), value: padTitle(pads[i]) + ' \u00B7 ' + t('padLay_' + pads[i].layout).split(':')[0] + (pads[i].standard ? '' : ' \u00B7 ' + t('devGeneric')) });
+        out.push({ kind: 'action', label: t('devTestOpen'), desc: pads.length ? t('padTestDesc') : t('devNoPad'), run: function () { sub = 'padtest'; var f = renderMain(0); if (f) Focus.focus(f); } });
+        out.push({ kind: 'text', value: padHelp(testPad()) });
         // this phone itself (js/core/haptics.js): the same settings as the Game controller's (screen rotation: Display)
         if (Haptics.phone()) {
             out.push({ kind: 'slider', label: t('gcVib'), desc: t('gcVibDesc'), max: Haptics.MAX, value: function () { return Haptics.level(); }, adjust: function (d) { Haptics.set('vib', Haptics.level() + d); } });
@@ -747,27 +785,42 @@
     function stopPadTest() { if (padRaf) cancelAnimationFrame(padRaf); padRaf = 0; padCard = null; }
 
     function padTestCard(r) {
-        var card = el('div', 'set-padtest'), grid = el('div', 'pt-grid'), i;
+        var card = el('div', 'set-padtest'), grid = el('div', 'pt-grid'), i, b;
+        var p = null, pl = Input.pads(), live = Input.pad(r.pad);
+        for (i = 0; i < pl.length; i++) if (pl[i].index === r.pad) p = pl[i];
+        padN = Math.max(1, Math.min(18, live && live.buttons ? live.buttons.length : 17));
         card.setAttribute('aria-label', t('devTest'));
-        card.appendChild(el('div', 'set-row-desc', t('devTest')));
-        for (i = 0; i < PAD_BUTTONS.length; i++) grid.appendChild(el('span', 'pt-b', PAD_BUTTONS[i]));
+        if (p) {
+            card.appendChild(el('div', 'pt-name', padTitle(p)));
+            card.appendChild(el('div', 'set-row-desc', t('padLay_' + p.layout) + (p.vendor ? ' \u00B7 ' + p.vendor + ':' + p.product : '')));
+        }
+        for (i = 0; i < padN; i++) {
+            b = el('span', 'pt-b');
+            b.appendChild(el('span', 'pt-l', padLabel(p, i)));
+            b.appendChild(el('span', 'pt-i', String(i)));
+            grid.appendChild(b);
+        }
         card.appendChild(grid);
         var sticks = el('div', 'pt-sticks');
         for (i = 0; i < 2; i++) { var box = el('span', 'pt-stick'); box.appendChild(el('span', 'pt-dot')); sticks.appendChild(box); }
         card.appendChild(sticks);
-        padCard = card; padIdx = r.pad; padMask = '';
+        var last = el('div', 'pt-last', t('padPress'));
+        last.setAttribute('aria-live', 'polite');
+        card.appendChild(last);
+        padCard = card; padIdx = r.pad; padMask = ''; padInfo = p;
         if (!padRaf) padRaf = requestAnimationFrame(tickPad);
         return card;
     }
 
     function tickPad() {
         padRaf = requestAnimationFrame(tickPad);
-        if (!padCard || !navigator.getGamepads) return;
-        var list = navigator.getGamepads() || [], p = list[padIdx], i, mask = '';
+        if (!padCard) return;
+        var p = Input.pad(padIdx), i, mask = '', hit = -1;
         if (!p) return;
-        for (i = 0; i < PAD_BUTTONS.length; i++) mask += p.buttons[i] && (p.buttons[i].pressed || p.buttons[i].value > 0.5) ? '1' : '0';
+        for (i = 0; i < padN; i++) mask += p.buttons[i] && (p.buttons[i].pressed || p.buttons[i].value > 0.5) ? '1' : '0';
         for (i = 0; i < 4; i++) mask += '|' + Math.round((p.axes[i] || 0) * 10);
         if (mask === padMask) return;               // nothing changed: touch nothing
+        for (i = 0; i < padN; i++) if (mask.charAt(i) === '1' && padMask.charAt(i) !== '1') { hit = i; break; }
         padMask = mask;
         var bs = padCard.querySelectorAll('.pt-b'), dots = padCard.querySelectorAll('.pt-dot');
         for (i = 0; i < bs.length; i++) bs[i].className = 'pt-b' + (mask.charAt(i) === '1' ? ' on' : '');
@@ -775,10 +828,14 @@
             dots[i].style.left = (50 + (p.axes[i * 2] || 0) * 40) + '%';
             dots[i].style.top = (50 + (p.axes[i * 2 + 1] || 0) * 40) + '%';
         }
+        if (hit >= 0) {
+            var line = padCard.querySelector('.pt-last');
+            if (line) line.textContent = t('padLast').replace('%b', padLabel(padInfo, hit)).replace('%i', hit).replace('%a', padDoes(hit));
+        }
     }
 
     // a controller came or went, or a keyboard / mouse was used: redraw the Devices page
-    function onDevices() { if (main && page === 'devices') rerender(); }
+    function onDevices() { if (main && (page === 'devices' || page === 'gaming')) rerender(); }
 
     // the Updater changed (progress, result): redraw the page
     function onUpdater() { if (main && page === 'update') rerender(); }
@@ -867,6 +924,7 @@
 
     function renderMain(focusIdx) {
         if (!page) return null;
+        stopPadTest();                              // the test card (if still shown) is built again below
         main.innerHTML = '';
         var lbl = '';
         for (var i = 0; i < PAGES.length; i++) if (PAGES[i].id === page) lbl = t(PAGES[i].label);

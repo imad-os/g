@@ -368,15 +368,26 @@ MyPC.gamepad.on('button', function (i, pressed, value, dev, name) {
 });
 // sticks moved: axes[0], axes[1] = left stick x / y, axes[2], axes[3] = right stick x / y (-1..1)
 MyPC.gamepad.on('axes', function (axes, dev) {});       // `axes` is the SDK's own array: read it now, don't keep it
-MyPC.gamepad.on('pads', function (list) {});            // [{ dev: 'pad0', name: 'Xbox Wireless Controller', standard: true, buttons: 17, axes: 4 }]
+MyPC.gamepad.on('pads', function (list) {});            // [{ dev: 'pad0', name: 'Pro Controller', standard: true, buttons: 18, axes: 4,
+                                                        //    brand: 'Nintendo', model: 'Switch Pro Controller', layout: 'nintendo', vendor: '057e', product: '2009' }]
 
 // or read the state in your fixed-step update (no allocation):
 MyPC.gamepad.pressed(2, 'pad0');   // X held on the first pad (without dev: on any pad)
 MyPC.gamepad.value(7);             // RT, 0..1 (the highest value of all pads)
 MyPC.gamepad.axis(2, 'pad0');      // right stick x; apply your own dead zone (about 0.15)
-MyPC.gamepad.name(3);              // 'Y'
+MyPC.gamepad.name(3);              // 'Y' (the standard position name: 3 = top)
+MyPC.gamepad.label(1, 'pad0');     // 'A' on a Switch Pro controller, 'B' on an Xbox pad: the name PRINTED on that pad (API 20)
 MyPC.gamepad.pads();               // the connected controllers
 ```
+
+**Show the names printed on the player's controller** (API level 20): `name(i)` is the standard position name (`A` = the
+bottom button), but a Nintendo pad prints **B** at the bottom and **A** on the right. For on-screen hints use
+`MyPC.gamepad.label(i, dev)`: My PC knows the controller from its USB vendor / product id (Nintendo Switch Pro and Switch 2
+Pro, Joy-Con, Xbox 360 / One / Series / Elite, DualShock 3 / 4, DualSense, 8BitDo, Logitech, Stadia, Luna, SHIELD, the
+phone controller...) and each pad in `pads()` says `brand`, `model` and `layout` (`'nintendo'`, `'xbox'`, `'playstation'` or
+`'other'`). An unknown controller gets My PC's own names (A B X Y in the Nintendo places, `+` for the menu). Keep the
+controls by POSITION (button 0 = jump / OK, 1 = back / run on every controller); only the names on screen change. Players
+see all of it in Control Panel > Gaming (brand, model, USB id, button order, and a button test).
 
 Button indices follow the W3C **standard** layout (by position, whatever is printed on the pad):
 

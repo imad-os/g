@@ -425,7 +425,11 @@ var Input = (function () {
         var list = getPads(), out = [];
         for (var i = 0; i < list.length; i++) {
             var p = list[i];
-            if (p && p.connected) out.push({ index: p.index, name: padName(p.id), id: p.id, standard: p.mapping === 'standard', buttons: p.buttons ? p.buttons.length : 0, axes: p.axes ? p.axes.length : 0 });
+            if (!p || !p.connected) continue;
+            // brand, model and button layout (js/core/pad-info.js): the labels printed on THIS controller (a Switch Pro's A is button 1)
+            var inf = window.PadInfo ? PadInfo.detect(p.id, p.mapping) : { brand: '', model: padName(p.id), layout: 'other', vendor: '', product: '', known: false, standard: p.mapping === 'standard' };
+            out.push({ index: p.index, name: padName(p.id), id: p.id, standard: p.mapping === 'standard', buttons: p.buttons ? p.buttons.length : 0, axes: p.axes ? p.axes.length : 0,
+                       brand: inf.brand, model: inf.model, layout: inf.layout, vendor: inf.vendor, product: inf.product, known: inf.known, info: inf, active: p.index === activePad });
         }
         return out;
     }
@@ -516,7 +520,9 @@ var Input = (function () {
         releaseAll: releaseAll,
         device: function () { return device; },
         padCount: function () { return pads; },
-        pads: padList,
+        pads: padList,                       // [{ index, name, id, standard, buttons, axes, brand, model, layout, vendor, product, known, info, active }]
+        activePad: function () { return activePad; },
+        pad: function (index) { var l = getPads(); for (var i = 0; i < l.length; i++) if (l[i] && l[i].index === index) return l[i]; return null; },   // its live state (the test page)     // the index of the last pad used (-1: none yet)
         onPadRaw: function (fn) { rawFn = fn || null; rawPrev = {}; },      // every button / axis change (installed apps' MyPC.gamepad)
         seen: function () { return { remote: !!window.tizen, keyboard: seen.keyboard, mouse: seen.mouse }; },
         onDevice: function (fn) { deviceListeners.push(fn); },

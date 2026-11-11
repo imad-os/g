@@ -366,6 +366,7 @@ async function main() {
     if (process.env.MYPC_ONLY === 'drive') { await driveTests(browser, base); await drivePhoneTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'calendar') { await calendarTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'clock') { await clockTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'pads') { await padTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'ring') { await ringTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'flow') { await flowTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'music') { await musicTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
@@ -1512,9 +1513,9 @@ async function main() {
         check(rows.some((t) => /Star Catcher.*Not in store/.test(t)) && rows.some((t) => /Old Game.*In store/.test(t)) && rows.some((t) => /g_broken.*not a My PC app/.test(t)),
             'each app shows its status: not in the store, in the store, or not a My PC app');
         check(/App Store Manager/.test(await page.title()) && /App Store Manager/.test(await page.textContent('.brand')), 'the installer is now the App Store Manager');
-        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,AI services,Google Drive,Services,Widgets,Settings,Devices,World records,Errors'
+        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,AI services,Google Drive,Services,Widgets,Settings,Devices,World records,Errors,Stream lists'
             && document.querySelector('.nav a.on').dataset.page === 'add' && !document.querySelector('[data-view="add"]').hidden && document.querySelector('[data-view="overview"]').hidden),
-            'a menu with one page each: Overview, Apps, Add apps, AI services, Google Drive, Services, Widgets, Settings, Devices, World records, Errors');
+            'a menu with one page each: Overview, Apps, Add apps, AI services, Google Drive, Services, Widgets, Settings, Devices, World records, Errors (+ the Stream lists link)');
         check(await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].find((r) => /Old Game/.test(r.textContent)).querySelector('input').disabled), 'installed apps cannot be selected again');
         await page.check('#sel-all');
         await page.click('#btn-install-sel');
@@ -1969,15 +1970,15 @@ async function main() {
         const text = () => page.evaluate(() => document.querySelector('.set-main').textContent);
         check(/Keyboard.*Detected/.test(await text()) && /Mouse \/ pointer.*Detected/.test(await text()) && /None connected/.test(await text()), 'Devices lists the keyboard and mouse that were used, and no controller yet');
         await page.evaluate(() => window.__plug());
-        await page.waitForFunction(() => /Controller 1.*Xbox Wireless Controller/.test(document.querySelector('.set-main').textContent), null, { timeout: 4000 });
+        await page.waitForFunction(() => /Controller 1.*Microsoft Xbox One S Controller · Xbox/.test(document.querySelector('.set-main').textContent), null, { timeout: 4000 });
         check(!/STANDARD|Vendor/.test(await text()), 'a controller that is plugged in shows up at once, with a clean name');
         check(await page.evaluate(() => !document.querySelector('.set-padtest')), 'the button test is not on the Devices list');
         await page.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Test controller buttons/.test(r.textContent)).click());
         await page.waitForFunction(() => !!document.querySelector('.set-padtest'), null, { timeout: 3000 });
         check(true, '"Test controller buttons" opens the test on its own page');
         await page.evaluate(() => window.__pad(1, true));       // B
-        await page.waitForFunction(() => document.querySelectorAll('.pt-b.on').length === 1 && document.querySelector('.pt-b.on').textContent === 'B', null, { timeout: 3000 });
-        check(true, 'the live test lights up the button that is pressed');
+        await page.waitForFunction(() => document.querySelectorAll('.pt-b.on').length === 1 && document.querySelector('.pt-b.on .pt-l').textContent === 'B', null, { timeout: 3000 });
+        check(true, 'the live test lights up the button that is pressed (an Xbox pad: button 1 is its B)');
         await page.evaluate(() => window.__pad(1, false));
         await page.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /Back/.test(r.textContent)).click());
         check(await page.evaluate(() => !document.querySelector('.set-padtest') && /Test controller buttons/.test(document.querySelector('.set-main').textContent)), 'Back on the test page returns to the Devices list');
@@ -4154,7 +4155,7 @@ async function main() {
         const loop = by('error', /loop error/);
         check(loop && loop.n === 5 && reps.filter((r) => /loop error/.test(r.msg)).length === 1, 'the same error 5 times is one report with n = 5 (' + (loop && loop.n) + ')');
         const one = by('error', /boom/) || {};
-        check(one.appv === '2.0.1' && one.sdk === 19 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
+        check(one.appv === '2.0.1' && one.sdk === 20 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
             'each report has the app version, SDK level, TV id and model, My PC version and build, language, place, address, time and a 30-day expiry (' + JSON.stringify(one) + ')');
         const keys = new Set(reps.flatMap((r) => Object.keys(r)));
         const allowed = ['app', 'kind', 'msg', 'stack', 'src', 'stage', 'appv', 'sdk', 'n', 'at', 'exp', 'tv', 'model', 'ver', 'build', 'lang', 'user', 'where', 'ua', 'url'];
@@ -6390,6 +6391,63 @@ async function ringTests(browser, base) {
         if (shots && (id === 'win7' || id === 'xp')) await page.screenshot({ path: path.join(shots, 'ring-desktop-' + id + '.png') });
         await page.evaluate(() => Desktop.openStart());
     }
+    check(page.errors.length === 0, 'no page errors' + (page.errors.length ? ': ' + page.errors[0] : ''));
+    await page.context().close();
+}
+
+// 49. Which controller it is (js/core/pad-info.js): Control Panel > Gaming shows its brand / model / button names, and the button
+// test lights the name printed on THAT controller (owner report 2026-11-11: a Switch Pro's A lit "B"). MYPC_ONLY=pads.
+async function padTests(browser, base) {
+    console.log('49. Controllers: brand, model and the names printed on their buttons (Switch Pro, Xbox)');
+    const shots = process.env.MYPC_SHOTS;
+    const page = await newPage(browser, base, {});
+    await page.goto(base + 'index.html');
+    await page.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
+    const plug = (id) => page.evaluate((id) => {
+        window.__gp = { index: 0, id, connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons: Array.from({ length: 18 }, () => ({ pressed: false, value: 0 })) };
+        navigator.getGamepads = () => [window.__gp, null, null, null];
+        window.dispatchEvent(new Event('gamepadconnected'));
+    }, id);
+    const btn = (i, on) => page.evaluate(([i, on]) => { __gp.buttons[i] = { pressed: on, value: on ? 1 : 0 }; }, [i, on]);
+    await plug('Pro Controller (STANDARD GAMEPAD Vendor: 057e Product: 2009)');
+    await page.evaluate(() => Win.open('settings', 'gaming'));
+    await page.waitForSelector('.set-row', { timeout: 5000 });
+    const txt = await page.evaluate(() => document.querySelector('#win, body').innerText);
+    check(/Nintendo Switch Pro Controller/.test(txt) && /Nintendo · Switch Pro Controller/.test(txt) && /B bottom, A right/.test(txt) && /057e:2009/.test(txt) && /standard \(by place/.test(txt),
+        'Control Panel > Gaming shows the controller: Nintendo Switch Pro Controller, its button names, USB id 057e:2009, standard order');
+    if (shots) await page.screenshot({ path: path.join(shots, 'pads-1-gaming-switch-pro.png') });
+    // the button test: press the Switch Pro's A (the right button = standard button 1)
+    await page.evaluate(() => { const b = [...document.querySelectorAll('[data-row]')].find((e) => /Test the buttons/.test(e.textContent)); b.focus(); b.click(); });
+    await page.waitForSelector('.set-padtest .pt-b', { timeout: 5000 });
+    const names = await page.evaluate(() => [...document.querySelectorAll('.pt-b .pt-l')].map((e) => e.textContent));
+    check(names.slice(0, 4).join() === 'B,A,Y,X' && names[4] === 'L' && names[7] === 'ZR' && names[9] === '+' && names[16] === 'Home' && names[17] === 'Capture',
+        'the test names the Switch Pro\'s buttons B A Y X, L R ZL ZR, − +, Home, Capture (' + names.join(' ') + ')');
+    await btn(1, true);
+    await page.waitForFunction(() => /^A \(button 1\)/.test(document.querySelector('.pt-last').textContent), null, { timeout: 3000 }).catch(() => {});
+    const lit = await page.evaluate(() => ({ on: [...document.querySelectorAll('.pt-b.on .pt-l')].map((e) => e.textContent).join(), last: document.querySelector('.pt-last').textContent }));
+    check(lit.on === 'A' && /^A \(button 1\): Back, run$/.test(lit.last), 'pressing the Switch Pro\'s A lights "A" and says it is Back / run in My PC (' + JSON.stringify(lit) + ')');
+    if (shots) await page.screenshot({ path: path.join(shots, 'pads-2-test-switch-pro-A.png') });
+    await btn(1, false);
+    await btn(0, true);
+    await page.waitForFunction(() => /^B \(button 0\)/.test(document.querySelector('.pt-last').textContent), null, { timeout: 3000 }).catch(() => {});
+    check(await page.evaluate(() => document.querySelector('.pt-last').textContent) === 'B (button 0): OK, jump', 'the Switch Pro\'s B (bottom) = OK / jump');
+    await btn(0, false);
+    check(await page.evaluate(() => Win.current() === 'settings' && !!document.querySelector('.set-padtest')), 'the controller\'s buttons only test (A / B do not close the page)');
+    // an Xbox pad: A is the bottom button (0)
+    await page.evaluate(() => { navigator.getGamepads = () => [null, null, null, null]; window.dispatchEvent(new Event('gamepaddisconnected')); });
+    await plug('Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)');
+    await page.waitForFunction(() => { const l = document.querySelector('.pt-b .pt-l'); return l && l.textContent === 'A'; }, null, { timeout: 3000 }).catch(() => {});
+    await btn(0, true);
+    await page.waitForFunction(() => /^A \(button 0\)/.test(document.querySelector('.pt-last').textContent), null, { timeout: 3000 }).catch(() => {});
+    const xb = await page.evaluate(() => ({ names: [...document.querySelectorAll('.pt-b .pt-l')].slice(0, 6).map((e) => e.textContent).join(), last: document.querySelector('.pt-last').textContent, title: document.querySelector('.pt-name').textContent }));
+    check(xb.title === 'Microsoft Xbox Series X|S Controller' && xb.names === 'A,B,X,Y,LB,RB' && xb.last === 'A (button 0): OK, jump', 'an Xbox pad: A B X Y LB RB, its A (bottom) = OK (' + JSON.stringify(xb) + ')');
+    if (shots) await page.screenshot({ path: path.join(shots, 'pads-3-test-xbox-A.png') });
+    await btn(0, false);
+    // Control Panel > Devices names it too; French strings
+    await page.evaluate(() => Win.open('settings', 'devices'));
+    await page.waitForTimeout(300);
+    check(/Microsoft Xbox Series X\|S Controller · Xbox/.test(await page.evaluate(() => document.body.innerText)) && /A: OK · B: Back · LB \/ RB/.test(await page.evaluate(() => document.body.innerText)),
+        'Control Panel > Devices: the controller\'s brand / model and its own button names in the help');
     check(page.errors.length === 0, 'no page errors' + (page.errors.length ? ': ' + page.errors[0] : ''));
     await page.context().close();
 }

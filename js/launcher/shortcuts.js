@@ -71,6 +71,12 @@ var Shortcuts = (function () {
     var PAD_RESERVED = { 0: 1, 1: 1, 12: 1, 13: 1, 14: 1, 15: 1 };
     // standard layout -> the Nintendo names (B bottom, A right, Y left, X top)
     var PAD_NAMES = ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '\u2212', '+', 'L3', 'R3', '\u25B2', '\u25BC', '\u25C0', '\u25B6', 'Home', 'Capture'];
+    // the name printed on the button of the controller in use (js/core/pad-info.js: Xbox A = button 0, Switch A = button 1)
+    function padLabel(i) {
+        var pl = window.PadInfo && Input.pads ? Input.pads() : [], a = Input.activePad ? Input.activePad() : -1, p = pl[0], k;
+        for (k = 0; k < pl.length; k++) if (pl[k].index === a) p = pl[k];
+        return p ? PadInfo.label(p.info || p.layout, i) : PAD_NAMES[i] || String(i);
+    }
     var generic = {};
     function button(id) {
         for (var i = 0; i < BUTTONS.length; i++) if (BUTTONS[i].id === id) return BUTTONS[i];
@@ -258,7 +264,7 @@ var Shortcuts = (function () {
         var b = button(id);
         if (!b) return id;
         if (b.num !== undefined) return t('scb_num').replace('%s', b.num);
-        if (b.pad !== undefined) return t('scb_pad').replace('%s', PAD_NAMES[b.pad] || String(b.pad));
+        if (b.pad !== undefined) return t('scb_pad').replace('%s', padLabel(b.pad));
         if (b.key !== undefined) return b.tv ? t('scb_remote').replace('%s', b.tv.replace(/^(Media|Color)F?\d?/, '').replace(/([a-z])([A-Z])/g, '$1 $2') || b.tv) : t('scb_key').replace('%s', keyLabel(b.key));
         return t(b.label);
     }

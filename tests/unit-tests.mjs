@@ -11,6 +11,7 @@
 //      Music (placeholder player) and Playtime
 //   9. Calendar (js/core/events.js): Google's holiday calendar (.ics, the site copy), the Moroccan Hijri date, built-in dates;
 //      the App Store Manager's event lines (GlobalSettings)
+//  10. PadInfo (js/core/pad-info.js): brand / model / button names from a gamepad id (Switch Pro A = button 1); the SDK's copy is identical
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -615,6 +616,40 @@ console.log('9. Calendar: Google holidays (.ics, the site copy), Hijri date as i
     check(a.end === '2027-07-17' && a.tag === 'afcon' && a.title === 'AFCON 2027' && b.time === '21:00' && b.tag === 'ucl' && !G.parseEventLine('next friday party') && !G.parseEventLine('2026-13-40 x'),
         'Manager event lines: ranges, times, tags; bad lines refused');
     check(G.eventLine(a) === '2027-06-19..2027-07-17 AFCON 2027 #afcon' && G.clean({ events: [a, { date: 'x', title: 'y' }] }).events.length === 1, 'event lines round trip; settings/mypc events cleaned');
+}
+/* ---------------- 10. PadInfo ---------------- */
+console.log('10. PadInfo (which controller, the names printed on its buttons)');
+{
+    const ctx = load('js/core/pad-info.js', vm.createContext({ window: {} }));
+    const P = vm.runInContext('PadInfo', ctx);
+    const pro = P.detect('Pro Controller (STANDARD GAMEPAD Vendor: 057e Product: 2009)', 'standard');
+    check(pro.brand === 'Nintendo' && pro.model === 'Switch Pro Controller' && pro.layout === 'nintendo' && pro.known && pro.vendor === '057e' && pro.product === '2009',
+        'Chrome id of a Switch Pro controller -> Nintendo, Switch Pro Controller, Nintendo layout');
+    check(P.label(pro, 0) === 'B' && P.label(pro, 1) === 'A' && P.label(pro, 2) === 'Y' && P.label(pro, 3) === 'X' && P.label(pro, 8) === '−' && P.label(pro, 9) === '+' && P.label(pro, 16) === 'Home' && P.label(pro, 17) === 'Capture',
+        'Switch Pro: the right button (1) is A, the bottom one (0) is B, − + Home Capture');
+    const ff = P.detect('57e-2009-Pro Controller', 'standard');
+    check(ff.model === 'Switch Pro Controller' && ff.vendor === '057e', 'Firefox id ("57e-2009-...") read too');
+    const xb = P.detect('Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)', 'standard');
+    check(xb.brand === 'Microsoft' && xb.layout === 'xbox' && P.label(xb, 0) === 'A' && P.label(xb, 1) === 'B' && P.label(xb, 4) === 'LB', 'Xbox Series pad: A is the bottom button (0)');
+    const xi = P.detect('Xbox 360 Controller (XInput STANDARD GAMEPAD)', 'standard');
+    check(xi.layout === 'xbox' && xi.vendor === '' && xi.brand === '', 'XInput pad without ids: Xbox layout from its name');
+    const ds = P.detect('DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)', 'standard');
+    check(ds.brand === 'Sony' && ds.model === 'DualSense' && P.label(ds, 0) === '✕' && P.label(ds, 1) === '○' && P.label(ds, 8) === 'Create', 'DualSense: ✕ bottom, ○ right, Create');
+    const d4 = P.detect('Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 05c4)', 'standard');
+    check(d4.model === 'DualShock 4' && P.label(d4, 8) === 'Share', 'DualShock 4 ("Wireless Controller") known by its ids');
+    const bd = P.detect('8BitDo SN30 Pro (Vendor: 2dc8 Product: 6101)', 'standard');
+    check(bd.brand === '8BitDo' && bd.layout === 'nintendo' && !bd.known && bd.model === '8BitDo SN30 Pro', 'unknown model of a known brand: brand + its own name, the brand\'s layout');
+    const un = P.detect('USB Gamepad (Vendor: 1234 Product: 5678)', 'standard');
+    check(un.layout === 'other' && un.brand === '' && P.label(un, 0) === 'B' && P.label(un, 1) === 'A', 'unknown pad: My PC\'s names (B bottom, A right)');
+    const raw = P.detect('Pro Controller (Vendor: 057e Product: 2009)', '');
+    check(!raw.standard && P.label(raw, 12) === 'Home' && P.label(raw, 13) === 'Capture', 'a Switch Pro the browser does not map: its own HID order (12 Home, 13 Capture)');
+    check(P.label(P.detect('Generic (Vendor: 1234 Product: 5678)', ''), 3) === '#3', 'any other unmapped pad: button numbers');
+    const ph = P.detect('Phone (STANDARD GAMEPAD Vendor: 0000 Product: 0000)', 'standard');
+    check(ph.brand === 'My PC' && ph.model === 'Phone controller' && P.label(ph, 1) === 'A', 'a phone in Buttons mode: My PC\'s phone controller, Nintendo names');
+    // the SDK carries the same code (standalone apps)
+    const strip = (t) => t.slice(t.indexOf('/* PADINFO-BEGIN'), t.indexOf('/* PADINFO-END */')).split('\n').map((l) => l.trim()).join('\n');
+    const a = strip(fs.readFileSync(path.join(ROOT, 'js/core/pad-info.js'), 'utf8')), b = strip(fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js'), 'utf8'));
+    check(a.length > 500 && a === b, 'sdk/mypc-sdk.js has the same PadInfo code as js/core/pad-info.js');
 }
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall unit checks passed');
 process.exit(failures ? 1 : 0);
