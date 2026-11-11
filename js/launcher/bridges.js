@@ -267,6 +267,7 @@ var Bridges = (function () {
             if (!UsbFs.supported()) return reply({ code: 'unsupported', message: 'This device has no USB drives (only a TV has them).' });
             usbAsk(function (ok) {
                 if (!ok) return reply({ code: 'denied', message: 'The user did not allow this app to use the USB drives.' });
+                if (typeof AppVideo !== 'undefined') AppVideo.note('usb ' + d.op + ' ' + String(a.path || '').replace(/^.*\//, '').slice(-24));
                 if (ctx.dead) return;
                 // the drives are asked once in a while, not before every folder read (a library walk reads hundreds of folders)
                 (d.op === 'drives' || Date.now() - usbDrivesAt > 5000 ? UsbFs.drives : function (cb) { setTimeout(function () { cb(null, usbDrivesL); }, 0); })(function (e, list) {

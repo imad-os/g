@@ -1389,7 +1389,7 @@ preview, everything else of the page drawn as usual). Your controls and subtitle
 ```js
 if (MyPC.video.supported()) {                                  // a TV (else: your own <video>, hls.js for .m3u8)
   const info = await MyPC.video.open('http://server/movie/u/p/1.mkv', { start: 754, rect: null, fit: 'fit' });
-  // info = { duration (s, 0 when live), live, tracks }
+  // info = { duration (s, 0 when live), live, tracks }  (a USB file: tracks.later = true, ask MyPC.video.tracks() when needed)
   MyPC.video.on('time', (e) => bar(e.t, e.d));                 // twice a second
   MyPC.video.on('state', (e) => show(e.state));                // buffering playing paused ended idle
                                                                // (a "buffering" the TV never ends is followed by "playing" once the time moves;

@@ -36,7 +36,8 @@ var AppVideo = (function () {
         trace = { app: appId, url: String(url).replace(/\/\/[^\/@]*@/, '//').replace(/(\/(live|movie|series)\/)[^\/]+\/[^\/]+\//, '$1*/*/').slice(-120), from: Date.now(), ev: {}, log: [], st: '', t: 0 };
         clearInterval(traceT); traceT = setInterval(tWrite, 1000); tWrite();
     }
-    function tNote(what) { if (!trace) return; trace.log.push(Math.round((Date.now() - trace.from) / 100) / 10 + 's ' + what); if (trace.log.length > 14) trace.log.shift(); }
+    // each note is written at once: when the page freezes, the last note names the step it froze in
+    function tNote(what) { if (!trace) return; trace.log.push(Math.round((Date.now() - trace.from) / 100) / 10 + 's ' + what); if (trace.log.length > 16) trace.log.shift(); tWrite(); }
     function tEv(k) { if (trace) trace.ev[k] = (trace.ev[k] || 0) + 1; }
     function tEnd() { clearInterval(traceT); traceT = 0; trace = null; try { localStorage.removeItem(TRACE); } catch (e) {} }
     try { window.addEventListener('pagehide', function () { if (trace) tEnd(); }); } catch (e) {}
@@ -161,8 +162,8 @@ var AppVideo = (function () {
             try { if (typeof Music !== 'undefined' && Music.state && Music.state().playing) Music.stop(); } catch (x2) {}
             ensureObj();
             transparent(true);
-            var my = ++seq, done = false;
-            tStart(ctx.appId, url); tNote('open');
+            var my = ++seq, done = false, durAsk = false, fileUrl = /^file:/.test(url);
+            tStart(ctx.appId, url); tNote('open ' + (/^file:/.test(url) ? 'usb' : 'web'));
             live = !!o.live; dur = 0; lastBuf = -1; lastTimeAt = 0;
             rect = o.rect && typeof o.rect === 'object' ? o.rect : null;
             fit = /^(fit|fill|auto)$/.test(o.fit) ? o.fit : 'fit';
@@ -175,6 +176,7 @@ var AppVideo = (function () {
             try {
                 a.open(url);
                 open = true;
+                tNote('opened');
                 a.setListener({
                     onbufferingstart: function () { tEv('bufStart'); if (my === seq) { buffering = true; bufMs = -1; ev({ ev: 'state', state: 'buffering' }); } },
                     onbufferingprogress: function (p) { p = Math.round(+p || 0); if (my === seq && Math.abs(p - lastBuf) >= 5) { lastBuf = p; ev({ ev: 'buffer', p: p }); } },
@@ -190,7 +192,7 @@ var AppVideo = (function () {
                         var t = Date.now();
                         if (t - lastTimeAt < 500) return;
                         lastTimeAt = t;
-                        if (!dur) dur = duration();
+                        if (!dur && !live && !durAsk) { durAsk = true; setTimeout(function () { if (my === seq) dur = duration(); }, 0); }
                         ev({ ev: 'time', t: (+ms || 0) / 1000, d: dur });
                     },
                     onstreamcompleted: function () { tNote('ended'); if (my !== seq) return; playing = false; ev({ ev: 'state', state: 'ended' }); },
@@ -198,7 +200,9 @@ var AppVideo = (function () {
                     onevent: function (type, data) {
                         tEv('event'); tNote('event ' + String(type).replace(/^PLAYER_MSG_/, '').slice(0, 40));
                         if (my !== seq) return;
-                        if (/RESOLUTION_CHANGED|BITRATE_CHANGE|STREAM_INFO_READY/.test(String(type))) { var tr = tracks(); ev({ ev: 'info', w: tr.video.w || 0, h: tr.video.h || 0, data: String(data || '').slice(0, 200) }); }
+                        if (!fileUrl && /RESOLUTION_CHANGED|BITRATE_CHANGE|STREAM_INFO_READY/.test(String(type))) {
+                            setTimeout(function () { if (my !== seq) return; var tr = tracks(); ev({ ev: 'info', w: tr.video.w || 0, h: tr.video.h || 0, data: String(data || '').slice(0, 200) }); }, 0);
+                        }
                     },
                     onsubtitlechange: function (d, text) { tEv('sub'); if (my === seq && subsOn) ev({ ev: 'sub', text: String(text || '').slice(0, 2000), dur: +d || 0 }); },
                     ondrmevent: function () {}
@@ -206,29 +210,37 @@ var AppVideo = (function () {
                 if (typeof o.ua === 'string' && o.ua) { try { a.setStreamingProperty('USER_AGENT', o.ua.slice(0, 300)); } catch (x3) {} }
                 place();
                 method();
+                tNote('prepare');
                 prepTimer = setTimeout(function () { fail('timeout'); }, 30000);
-                a.prepareAsync(function () {
-                    tNote('ready');
+                // never call the TV's player from inside one of its own callbacks (a firmware can wait on itself): next turn
+                a.prepareAsync(function () { tNote('ready'); setTimeout(prepared, 0); }, function (e) { setTimeout(function () { fail(e); }, 0); });
+                var prepared = function () {
                     if (done || my !== seq) return;
                     done = true; clearTimeout(prepTimer);
                     place();
                     dur = duration();
+                    tNote('dur ' + Math.round(dur));
                     var start = +o.start || 0;
                     // the subtitles inside the file (MKV) stay off until the app asks for them (imad 2026-11-11: USB MKV films closed
                     // My PC a few seconds in, about when a first subtitle line comes)
                     subsOn = false;
                     try { a.setSilentSubtitle(true); } catch (e6) {}
+                    var went = false;
                     function go() {
-                        if (my !== seq) return;
+                        if (my !== seq || went) return;
+                        went = true;
                         // My PC's menu opened meanwhile: stays paused until Resume
                         if (ctx.state() === 'paused') { wasPlaying = true; playing = false; }
-                        else { try { a.play(); playing = true; } catch (e5) {} }
-                        reply(null, { duration: dur, live: live, tracks: tracks() });
+                        else { tNote('play'); try { a.play(); playing = true; } catch (e5) {} }
+                        // a USB file (MKV: imad's TV froze right after the start): its tracks are read only when the app asks (MyPC.video.tracks())
+                        var tr = fileUrl ? { audio: [], text: [], video: {}, cur: { audio: -1, text: -1 }, later: true } : (tNote('tracks'), tracks());
+                        tNote('playing');
+                        reply(null, { duration: dur, live: live, tracks: tr });
                         ev({ ev: 'state', state: playing ? 'playing' : 'paused' });
                     }
-                    if (start > 1 && !live) { try { a.seekTo(Math.floor(start * 1000), go, go); } catch (e4) { go(); } }
+                    if (start > 1 && !live) { tNote('seek ' + Math.round(start)); try { a.seekTo(Math.floor(start * 1000), function () { setTimeout(go, 0); }, function () { setTimeout(go, 0); }); } catch (e4) { go(); } }
                     else go();
-                }, fail);
+                };
             } catch (e) { fail(e); }
         }
 
@@ -268,7 +280,7 @@ var AppVideo = (function () {
                     fit = /^(fit|fill|auto)$/.test(o.mode) ? o.mode : 'fit';
                     method(); place();
                     return reply(null, fit);
-                case 'tracks': return reply(null, tracks());
+                case 'tracks': tNote('tracks'); var tk = tracks(); tNote('tracks ok'); return reply(null, tk);
                 case 'track':
                     try { a.setSelectTrack(o.kind === 'text' ? 'TEXT' : 'AUDIO', Math.floor(+o.index || 0)); } catch (e4) { return reply(err('player', String(e4))); }
                     return reply(null, tracks());
@@ -308,5 +320,5 @@ var AppVideo = (function () {
         };
     }
 
-    return { attach: attach, supported: supported };
+    return { attach: attach, supported: supported, note: function (t) { tNote(String(t).slice(0, 60)); } };
 })();
