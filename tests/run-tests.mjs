@@ -355,6 +355,7 @@ async function main() {
     const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--autoplay-policy=no-user-gesture-required', '--disable-features=WebRtcHideLocalIpsWithMdns', '--js-flags=--expose-gc', '--enable-precise-memory-info', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
     // MYPC_ONLY=music node tests/run-tests.mjs: only the Music app's checks (quick while working on it)
     if (process.env.MYPC_ONLY === 'wall') { await wallTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'speedy') { await speedyTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'video') { await videoTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'copy') { await copyTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'drive') { await driveTests(browser, base); await drivePhoneTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
@@ -4802,6 +4803,7 @@ async function main() {
     await flowTests(browser, base);
     await ringTests(browser, base);
     await videoTests(browser, base);
+    await speedyTests(browser, base);
 
     await browser.close();
     srv.close();
@@ -6658,22 +6660,8 @@ async function copyTests(browser, base) {
     await page.context().close();
 }
 
-// 49. API 17 for installed apps: MyPC.video (the TV's own player, AVPlay, behind the app), MyPC.back (the remote's Back for the
-// app's own screens), keys: ['channel', 'media'] (CH + / CH - and the media keys go to the app), MyPC.text.keyboard (My PC's
-// on-screen keyboard over the app). MYPC_ONLY=video runs only these.
-async function videoTests(browser, base) {
-    console.log('49. Video player, Back, channel / media keys and the keyboard for apps (API 17)');
-    const APP = 'https://vtest.example.test/';
-    const APP_HTML = `<!doctype html><meta charset=utf-8><title>VTest</title><body style="background:transparent;color:#fff;font:40px sans-serif"><p id=t style="background:#123;margin:0;padding:20px">VTest</p>
-<script src="${OLD_HOSTED}sdk/mypc-sdk.js"></script><script>window.__in = []; window.__ev = []; window.__life = [];
-MyPC.init({ keys: ['channel', 'media'], onInit() { MyPC.ready(); window.__ok = 1; }, onPause() { __life.push('pause'); }, onResume() { __life.push('resume'); },
-  onInput(a, p, r) { if (p) __in.push(a); } });
-['state', 'time', 'sub', 'error', 'buffer', 'info'].forEach((n) => MyPC.video.on(n, (d) => __ev.push(n + ':' + (d.state || d.text || d.code || (d.t !== undefined ? Math.round(d.t) : '') || d.p || ''))));</script>`;
-    const db = { apps: {} };
-    db.apps.vtest = { id: 'vtest', name: 'VTest', url: APP, entry: APP + 'index.html', icon: '', type: 'app', version: '1.0.0', enabled: true, order: 1, config: {} };
-    const page = await newPage(browser, base, db);
-    const ctx = page.context();
-    await ctx.addInitScript(() => {
+// the TV's AVPlay, faked: window.__av = { log, rects, l (the listener), url, state }; '/broken' fails to connect, '/live' has no length
+const FAKE_AVPLAY = () => {
         const av = { log: [], state: 'NONE', cur: 0, t: 0, l: null, url: '', rects: [] };
         window.__av = av;
         window.webapis.avplay = {
@@ -6695,7 +6683,23 @@ MyPC.init({ keys: ['channel', 'media'], onInit() { MyPC.ready(); window.__ok = 1
             setSelectTrack: (k, i) => { av.log.push('track ' + k + ' ' + i); if (k === 'AUDIO') av.audio = i; },
             setSilentSubtitle: (b) => av.log.push('silent ' + b), setSpeed: (r) => av.log.push('speed ' + r)
         };
-    });
+};
+// 49. API 17 for installed apps: MyPC.video (the TV's own player, AVPlay, behind the app), MyPC.back (the remote's Back for the
+// app's own screens), keys: ['channel', 'media'] (CH + / CH - and the media keys go to the app), MyPC.text.keyboard (My PC's
+// on-screen keyboard over the app). MYPC_ONLY=video runs only these.
+async function videoTests(browser, base) {
+    console.log('49. Video player, Back, channel / media keys and the keyboard for apps (API 17)');
+    const APP = 'https://vtest.example.test/';
+    const APP_HTML = `<!doctype html><meta charset=utf-8><title>VTest</title><body style="background:transparent;color:#fff;font:40px sans-serif"><p id=t style="background:#123;margin:0;padding:20px">VTest</p>
+<script src="${OLD_HOSTED}sdk/mypc-sdk.js"></script><script>window.__in = []; window.__ev = []; window.__life = [];
+MyPC.init({ keys: ['channel', 'media'], onInit() { MyPC.ready(); window.__ok = 1; }, onPause() { __life.push('pause'); }, onResume() { __life.push('resume'); },
+  onInput(a, p, r) { if (p) __in.push(a); } });
+['state', 'time', 'sub', 'error', 'buffer', 'info'].forEach((n) => MyPC.video.on(n, (d) => __ev.push(n + ':' + (d.state || d.text || d.code || (d.t !== undefined ? Math.round(d.t) : '') || d.p || ''))));</script>`;
+    const db = { apps: {} };
+    db.apps.vtest = { id: 'vtest', name: 'VTest', url: APP, entry: APP + 'index.html', icon: '', type: 'app', version: '1.0.0', enabled: true, order: 1, config: {} };
+    const page = await newPage(browser, base, db);
+    const ctx = page.context();
+    await ctx.addInitScript(FAKE_AVPLAY);
     await page.addInitScript((a) => { if (!localStorage.getItem('arc_dev_installed')) { localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'vtest', at: 1 }])); localStorage.setItem('arc_dev_catalog', JSON.stringify([a])); } }, db.apps.vtest);
     await routeHosted(page, { offline: true });
     await page.route(OLD_HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(ROOT, 'sdk', 'mypc-sdk.js')) }));
@@ -6795,6 +6799,195 @@ MyPC.init({ keys: ['channel', 'media'], onInit() { MyPC.ready(); window.__ok = 1
     await Promise.all([page.waitForURL(/from=app-vtest/), page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); })]);
     await page.waitForSelector('#desk-icons .dicon');
     check(!(await page.evaluate(() => document.documentElement.classList.contains('av-video'))), 'after Quit the desktop is drawn normally again');
+    check(!page.errors.length, 'no page errors ' + page.errors.join(' | '));
+    await page.context().close();
+}
+
+// 50. Speedy IPTV (github.com/imad-os/speedy, folder mypc/) installed in My PC: the TV's player for live channels, films and USB files,
+// the remote's Back / CH + / CH − / media keys, My PC's keyboard for its forms, USB films and shows with their subtitle files.
+// Skipped when the Speedy checkout is not next to this one (SPEEDY_DIR = its mypc/ folder). MYPC_ONLY=speedy runs only these.
+async function speedyTests(browser, base) {
+    const DIR = path.resolve(process.env.SPEEDY_DIR || path.join(ROOT, '..', 'speedy', 'mypc'));
+    if (!fs.existsSync(path.join(DIR, 'tests', 'fixtures.mjs'))) { console.log('50. Speedy IPTV: skipped (no checkout at ' + DIR + ')'); return; }
+    console.log('50. Speedy IPTV in My PC: the TV\'s player, Back, CH + / CH −, media keys, the keyboard, USB films and shows with subtitles');
+    const fx = await import(new URL('file://' + path.join(DIR, 'tests', 'fixtures.mjs')).href);
+    const APP = 'https://speedy.example.test/', D = '/opt/media/USBDriveA1';
+    const db = { apps: {} };
+    db.apps.speedy = { id: 'speedy', name: 'Speedy IPTV', url: APP, entry: APP + 'index.html', icon: '', type: 'app', version: '1.0.0', enabled: true, order: 1, config: { orientation: 'landscape' } };
+    const page = await newPage(browser, base, db);
+    const ctx = page.context();
+    await ctx.addInitScript(FAKE_AVPLAY);
+    await ctx.addInitScript(USB_MOCK, D);
+    await ctx.addInitScript(() => { if (location.hostname === 'speedy.example.test') window.__speedyHold = 4000; });
+    const b64 = (x) => Buffer.from(x).toString('base64');
+    const seed = {};
+    for (const [p, v] of Object.entries({
+        'Films/Movie.Name.2020.1080p.BluRay.x264.mkv': 'film', 'Films/Movie.Name.2020.1080p.BluRay.x264.srt': fx.SRT_EN, 'Films/Movie.Name.2020.1080p.BluRay.x264.ar.srt': fx.srtArabic1256(),
+        'Films/Other Film (2018).mp4': 'film2', 'Films/notes.txt': 'x', 'Films/Movie.Name.2020-sample.mkv': 's',
+        'TV/My Show/Season 1/My.Show.S01E01.mkv': 'e1', 'TV/My Show/Season 1/My.Show.S01E02.mkv': 'e2', 'TV/My Show/Season 1/My.Show.S01E02.srt': fx.SRT_EN })) {
+        const full = D + '/' + p, parts = full.split('/');
+        for (let i = 2; i < parts.length; i++) seed[parts.slice(0, i).join('/')] = true;
+        seed[full] = b64(v);
+    }
+    await ctx.route('https://usb-seed.test/seed', (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(seed) }));
+    await page.addInitScript((a) => { if (!localStorage.getItem('arc_dev_installed')) { localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'speedy', at: 1 }])); localStorage.setItem('arc_dev_catalog', JSON.stringify([a])); localStorage.setItem('arc_dev_perm', JSON.stringify({ 'app-speedy': { usb: 1 } })); } }, db.apps.speedy);
+    await routeHosted(page, { offline: true });
+    const stats = await fx.routeAll(ctx, { appBase: APP, sdk: path.join(ROOT, 'sdk', 'mypc-sdk.js') });
+    await page.route(OLD_HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(ROOT, 'sdk', 'mypc-sdk.js')) }));
+    const shot = async (name) => { if (process.env.MYPC_SHOTS) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'speedy-' + name + '.png') }); } };
+    const key = async (code, n) => { for (let i = 0; i < (n || 1); i++) { for (const d of [true, false]) await page.evaluate(([c, d]) => Input.onKey({ keyCode: c, repeat: false, preventDefault() {} }, d), [code, d]); await page.waitForTimeout(40); } };
+    const OK = 13, UP = 38, DOWN = 40, RIGHT = 39;
+    const typeIn = async (text) => { await page.waitForFunction(() => Keyboard.isOpen(), null, { timeout: 5000 }); await page.evaluate((t) => { Keyboard.setText(t); Keyboard.submit(); }, text); await page.waitForTimeout(150); };
+    await page.goto(base + 'index.html');
+    await page.waitForSelector('#desk-icons .dicon');
+    await page.waitForFunction(() => Desktop.games().some((x) => x.id === 'app-speedy'), null, { timeout: 10000 });
+    await Promise.all([page.waitForURL(/play=app-speedy/), page.evaluate(() => Desktop.play(Desktop.games().find((x) => x.id === 'app-speedy')))]);
+    await page.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 15000 });
+    const app = page.frames().find((x) => x.url().indexOf(APP) === 0);
+    await app.waitForFunction(() => typeof UI !== 'undefined' && UI.top() && UI.top().constructor.name === 'HomeScreen', null, { timeout: 15000 });
+    const top = () => app.evaluate(() => UI.top().constructor.name);
+    const b0 = await app.evaluate(() => ({ hosted: MyPC.isHosted(), api: MyPC.apiLevel, video: MyPC.video.supported(), usb: Usb.available() }));
+    check(b0.hosted && b0.api >= 17 && b0.video && b0.usb, 'Speedy runs inside My PC with the TV\'s player and USB drives ' + JSON.stringify(b0));
+    await shot('1-welcome');
+
+    // a playlist typed with My PC's keyboard (the remote alone): server, user, password, name, Save
+    await key(OK);
+    await app.waitForSelector('.form .field');
+    await page.waitForTimeout(200);
+    for (const v of [fx.XT, 'demo', 'pass', 'My TV server']) { await key(OK); await typeIn(v); }
+    await key(OK);
+    await app.waitForSelector('.home .home-tiles .tile', { timeout: 20000 });
+    const tiles = await app.evaluate(() => [...document.querySelectorAll('.home .tile .tt')].map((x) => x.textContent).join(','));
+    check(tiles === 'Live TV,Movies,Series,USB', 'the playlist is saved through My PC\'s keyboard (server answered through MyPC.net); the home screen has a USB tile on the TV ' + tiles);
+    await app.waitForFunction(() => /Active/.test(document.querySelector('.acct').textContent), null, { timeout: 10000 }).catch(() => {});
+    await shot('2-home');
+
+    // Back on the home screen: My PC's menu (the app has nothing to close); Back again: Resume
+    await tvBack(page); await page.waitForTimeout(150);
+    const m1 = await page.evaluate(() => GameHost.state());
+    await shot('3-mypc-menu');
+    await tvBack(page); await page.waitForTimeout(150);
+    check(m1 === 'paused' && await page.evaluate(() => GameHost.state()) === 'running', 'Back on Speedy\'s home screen opens My PC\'s menu, Back again goes on ' + m1);
+
+    // Live TV: a channel in the box plays on the TV's video plane (the page is transparent there), full screen, CH + zaps
+    await key(OK);
+    await app.waitForFunction(() => UI.top().constructor.name === 'LiveScreen' && UI.top().items.length > 0, null, { timeout: 30000 });
+    const bi = await app.evaluate(() => UI.top().cats.findIndex((c) => c.name === 'Big list'));
+    await key(DOWN, bi); await page.waitForTimeout(350); await key(OK);
+    await app.waitForFunction(() => UI.top().zone === 'ch' && UI.top().items.length === 4000, null, { timeout: 10000 });
+    await key(DOWN, 5); await key(OK);
+    await page.waitForFunction(() => window.__av.state === 'PLAYING', null, { timeout: 10000 });
+    await page.waitForTimeout(300);
+    const pv = await page.evaluate(() => ({ url: window.__av.url, rect: window.__av.rects[window.__av.rects.length - 1], av: document.documentElement.classList.contains('av-video'), log: window.__av.log.join(' | ') }));
+    const box = await app.evaluate(() => { const b = document.querySelector('.pv-box').getBoundingClientRect(); return { b: [b.x, b.y, b.width, b.height], w: innerWidth, video: document.documentElement.classList.contains('video'), vid: document.getElementById('vid') ? getComputedStyle(document.getElementById('vid')).display : 'none', bg: getComputedStyle(document.querySelector('.pv-box')).backgroundColor, mode: Player.mode() }; });
+    const k = 1920 / box.w, want = box.b.map((x) => Math.round(x * k)).join(',');
+    check(/^http:\/\/iptv\.test:8080\/live\/demo\/pass\/6\.ts$/.test(pv.url) && box.mode === 'preview' && pv.av && box.video && box.vid === 'none', 'OK on a channel: the TV\'s player plays its .ts stream (no hls.js, no <video>) ' + JSON.stringify([pv.url, box.mode, box.vid]));
+    check(pv.rect === want, 'the picture is placed exactly in the preview box on the 1920x1080 plane ' + pv.rect + ' = ' + want);
+    check(/rgba\(0, 0, 0, 0\)|transparent/.test(box.bg), 'the preview box is see-through so the video plane shows ' + box.bg);
+    await shot('4-live-preview');
+    await key(OK);
+    await app.waitForFunction(() => Player.mode() === 'full', null, { timeout: 5000 });
+    await page.waitForTimeout(200);
+    const full = await page.evaluate(() => window.__av.rects[window.__av.rects.length - 1]);
+    check(full === '0,0,1920,1080', 'OK again: full screen on the whole plane ' + full);
+    await key(427);
+    await app.waitForFunction(() => /\/7\.ts$/.test(Player.current().url), null, { timeout: 5000 }).catch(() => {});
+    await page.waitForFunction(() => /\/7\.ts$/.test(window.__av.url), null, { timeout: 5000 }).catch(() => {});
+    const z = await page.evaluate(() => window.__av.url);
+    await shot('5-live-zap');
+    await key(428); await key(428);
+    await page.waitForFunction(() => /\/5\.ts$/.test(window.__av.url), null, { timeout: 5000 }).catch(() => {});
+    const z2 = await page.evaluate(() => window.__av.url);
+    check(/\/7\.ts$/.test(z) && /\/5\.ts$/.test(z2), 'CH + zaps up, CH − twice zaps down (one open after the keys stop) ' + z + ' ' + z2);
+    // Back closes Speedy's own layers, never My PC's menu
+    await tvBack(page); await page.waitForTimeout(200);
+    await tvBack(page); await page.waitForTimeout(200);
+    const lb = await app.evaluate(() => ({ mode: Player.mode(), top: UI.top().constructor.name }));
+    check(lb.mode === 'preview' && lb.top === 'LiveScreen' && await page.evaluate(() => GameHost.state()) === 'running', 'Back from full screen: the picture goes back into the box, inside the app (My PC\'s menu stays shut) ' + JSON.stringify(lb));
+    await page.waitForTimeout(200);
+    const backRect = await page.evaluate(() => window.__av.rects[window.__av.rects.length - 1]);
+    check(backRect !== '0,0,1920,1080', 'the plane shrinks back to the box ' + backRect);
+    for (let i = 0; i < 4 && await top() !== 'HomeScreen'; i++) { await tvBack(page); await page.waitForTimeout(200); }
+    const off = await page.evaluate(() => ({ log: window.__av.log.slice(-3).join(' | '), av: document.documentElement.classList.contains('av-video') }));
+    check(await top() === 'HomeScreen' && /close/.test(off.log) && !off.av, 'leaving Live TV closes the TV\'s player and My PC draws its layers again ' + JSON.stringify(off));
+
+    // a film: plays from its resume point on the TV's player; Play / Pause and ⏩ from the remote
+    await key(RIGHT); await key(OK);
+    await app.waitForFunction(() => UI.top().constructor.name === 'BrowseScreen' && UI.top().items.length > 0, null, { timeout: 60000 });
+    await key(RIGHT); await page.waitForTimeout(300); await key(OK);
+    await app.waitForFunction(() => UI.top().constructor.name === 'MovieScreen', null, { timeout: 10000 });
+    await app.waitForTimeout(500);
+    await key(OK);
+    await page.waitForFunction(() => window.__av.state === 'PLAYING' && /\/movie\//.test(window.__av.url), null, { timeout: 10000 });
+    await page.waitForTimeout(300);
+    const fm = await page.evaluate(() => window.__av.url);
+    check(/^http:\/\/iptv\.test:8080\/movie\/demo\/pass\/\d+\.(mkv|mp4)$/.test(fm), 'a film plays on the TV\'s player from the server\'s own file ' + fm);
+    await page.evaluate(() => { window.__av.log = []; });
+    await key(415);
+    await page.waitForTimeout(250);
+    const p1 = await page.evaluate(() => window.__av.log.join(' | '));
+    await shot('6-film-paused');
+    await key(415);
+    await page.waitForTimeout(150);
+    await key(417);
+    await page.waitForTimeout(1200);
+    const p2 = await page.evaluate(() => window.__av.log.join(' | '));
+    check(/pause/.test(p1) && /play/.test(p2) && /seek \d+/.test(p2), 'the remote\'s Play / Pause pauses and plays; ⏩ seeks forward ' + p1 + ' / ' + p2);
+    for (let i = 0; i < 5 && await top() !== 'HomeScreen'; i++) { await tvBack(page); await page.waitForTimeout(250); }
+    const saved = await app.evaluate(() => Store.recent(null, ['vod']).length);
+    check(saved >= 1, 'the film is in Continue watching after Back');
+
+    // USB: films and shows found on the drive, a film plays from its file with the subtitle files next to it
+    await app.evaluate(() => { const h = UI.top(); h.zone = 0; h.ti = h.tiles.findIndex((t) => t.id === 'usb'); h.paint(); });
+    await key(OK);
+    await app.waitForFunction(() => UI.top().constructor.name === 'UsbScreen' && UI.top().lib, null, { timeout: 15000 });
+    const lib = await app.evaluate(() => ({ tabs: UI.top().tabs.map((t) => t.name + ':' + t.n), movies: UI.top().lib.movies.map((m) => m.title + '|' + m.year), shows: UI.top().lib.shows.map((s) => s.name + ':' + s.eps.length) }));
+    check(lib.movies.join(',') === 'Movie Name|2020,Other Film|2018' && lib.shows.join(',') === 'My Show:2', 'the USB drive: 2 films (clean names, years; the release sample and a text file left out) and a show with 2 episodes ' + JSON.stringify(lib));
+    await shot('7-usb-movies');
+    await app.waitForFunction(() => UI.top().items.length > 0 && UI.top().view, null, { timeout: 5000 }).catch(() => {});
+    const view = await app.evaluate(() => ({ view: UI.top().view, first: UI.top().items[0] && (UI.top().items[0].title || UI.top().items[0].name) }));
+    await key(RIGHT); await page.waitForTimeout(200);
+    await key(OK);
+    await page.waitForFunction(() => /^file:/.test(window.__av.url) && window.__av.state === 'PLAYING', null, { timeout: 10000 }).catch(() => {});
+    const uf = await page.evaluate(() => window.__av.url);
+    check(/^file:\/\/\/opt\/media\/USBDriveA1\/Films\/Movie\.Name\.2020\.1080p\.BluRay\.x264\.mkv$/.test(uf), 'OK on a USB film: the TV\'s player opens the file itself ' + uf + ' ' + JSON.stringify(view));
+    await app.waitForFunction(() => Player.state().cues > 0, null, { timeout: 5000 }).catch(() => {});
+    await page.evaluate(() => { const l = window.__av.l; l.oncurrentplaytime(2000); l.oncurrentplaytime(2500); });
+    await app.waitForFunction(() => /Hello from the subtitle file/.test(Player.state().sub), null, { timeout: 3000 }).catch(() => {});
+    const subs = await app.evaluate(() => ({ files: (Player.current().files || []).map((x) => x.label + ':' + x.lang), cues: Player.state().cues, text: Player.state().sub }));
+    check(subs.files.length === 2 && subs.files.some((x) => /:ar$/.test(x)) && subs.cues === 2 && /Hello from the subtitle file/.test(subs.text),
+        'its subtitle files (English, Arabic) are found; the English one is read from the drive and shown in time with the TV\'s player ' + JSON.stringify(subs));
+    await page.waitForTimeout(400);
+    await shot('8-usb-film');
+    for (let i = 0; i < 4 && await top() !== 'UsbScreen'; i++) { await tvBack(page); await page.waitForTimeout(250); }
+    // a show: its page, the first episode, then the next one by itself at the end (with its own subtitle file)
+    if (await app.evaluate(() => UI.top().zone) === 'grid') await tvBack(page);
+    await key(DOWN); await page.waitForTimeout(500); await key(RIGHT); await key(OK);
+    await app.waitForFunction(() => UI.top().constructor.name === 'SeriesScreen', null, { timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(400);
+    await shot('9-usb-show');
+    const sh = await app.evaluate(() => ({ top: UI.top().constructor.name, title: (document.querySelector('.screen.on h1') || {}).textContent }));
+    await key(OK);
+    await page.waitForFunction(() => /S01E01\.mkv$/.test(window.__av.url) && window.__av.state === 'PLAYING', null, { timeout: 8000 }).catch(() => {});
+    const e1 = await page.evaluate(() => window.__av.url);
+    check(sh.top === 'SeriesScreen' && /\/TV\/My%20Show\/Season%201\/My\.Show\.S01E01\.mkv$/.test(e1), 'a USB show opens its page; OK plays the first episode from the drive ' + JSON.stringify(sh) + ' ' + e1);
+    await page.evaluate(() => { const l = window.__av.l; l.oncurrentplaytime(5399000); l.onstreamcompleted(); });
+    await page.waitForFunction(() => /S01E02\.mkv$/.test(window.__av.url) && window.__av.state === 'PLAYING', null, { timeout: 15000 }).catch(() => {});
+    await app.waitForFunction(() => Player.state().cues > 0, null, { timeout: 5000 }).catch(() => {});
+    const e2 = await page.evaluate(() => window.__av.url), e2s = await app.evaluate(() => ({ cur: Player.current().sub, files: (Player.current().files || []).length, cues: Player.state().cues }));
+    check(/S01E02\.mkv$/.test(e2) && e2s.files === 1 && e2s.cues === 2, 'at the end of an episode the next one plays by itself, with its subtitle file ' + e2 + ' ' + JSON.stringify(e2s));
+    for (let i = 0; i < 6 && await top() !== 'HomeScreen'; i++) { await tvBack(page); await page.waitForTimeout(250); }
+    const uh = await app.evaluate(() => UI.top().rec.filter((r) => r.kind === 'usb').map((r) => r.name + (r.key[1] === '#' ? ' (show)' : '')));
+    check(uh.join(',') === 'My Show (show),Movie Name', 'Continue watching keeps the USB show once (not each episode) and the film ' + JSON.stringify(uh));
+    await app.evaluate(() => { const h = UI.top(); h.zone = h.zones.indexOf('row'); h.row.setCount(h.rec.length, h.rec.findIndex((r) => r.key[1] === '#')); h.paint(); });
+    await page.evaluate(() => { window.__av.log = []; });
+    await key(OK);
+    await page.waitForFunction(() => /S01E02\.mkv$/.test(window.__av.url) && window.__av.state === 'PLAYING', null, { timeout: 8000 }).catch(() => {});
+    const rs = await page.evaluate(() => window.__av.log.filter((x) => /^(open|seek)/.test(x)).join(' | '));
+    check(/open file:.*S01E02\.mkv/.test(rs), 'OK on the show in Continue watching goes on with its last episode ' + rs);
+    for (let i = 0; i < 4 && await top() !== 'HomeScreen'; i++) { await tvBack(page); await page.waitForTimeout(250); }
+
+    check(stats.live >= 0, 'requests: ' + JSON.stringify({ api: stats.api, film: stats.film }));
     check(!page.errors.length, 'no page errors ' + page.errors.join(' | '));
     await page.context().close();
 }
