@@ -339,7 +339,8 @@
   for sensors). `docs/ai-build-prompt.md` is the short prompt the owner gives an AI by URL; it only links to the guide, so
   keep facts out of it (change it only when its links or the steps change).
 - **Stream lists** (owner request 2026-11-11): the Manager's nav ends with an external link to the IPTV Xtream admin
-  `https://iptv-8b60c.web.app/admin.html` (Firebase project iptv-8b60c, code in imad's folder `D:\frb\fb`, repo imad-os/fb; its README.md documents it).
+  `https://imad-os.github.io/fb/` (the Cloudflare version: Worker https://iptv-lists.mypc-app.workers.dev + D1, code in `cloudflare/` of repo
+  imad-os/fb, imad's folder `D:\frb\fb`; owner request 2026-11-11, was the Firebase admin https://iptv-8b60c.web.app/admin.html).
 - `installer/`: the App Store Manager, a desktop-browser page (Firebase JS SDK from gstatic is OK
   there, never in the TV app). Also shows TV statistics and world records.
 - `firebase/`: rules and owner setup steps (`SETUP.md`). After a rules change the owner must publish
