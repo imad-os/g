@@ -221,7 +221,8 @@ var GameHost = (function () {
             if (e.origin === origin && br.handle(m.type, d)) return;
             if (m.type === 'video') { if (e.origin === origin && typeof d.rid === 'number') vid.handle(d); return; }
             if (m.type === 'kb') { if (e.origin === origin && typeof d.rid === 'number') keyboard(d); return; }
-            if (m.type === 'back') { remote.ownBack = !!d.on; return; }
+            if (m.type === 'back') { remote.ownBack = !!d.on; remote.backSaid = true; return; }
+            if (m.type === 'unhandled') { if (d.action === 'cancel') backUnhandled(); return; }
             switch (m.type) {
                 case 'hello':
                     win = e.source;
@@ -318,7 +319,9 @@ var GameHost = (function () {
         AudioPrefs.onChange(volume);
         var remote = {
             ownMenu: false,
+            sdk: true,               // an installed app (SDK): with "every button to the app" the remote's Back is its 'cancel'
             ownBack: false,          // MyPC.back(true): the remote's Back goes to the app as 'cancel' (it has a screen to close)
+            backSaid: false,         // the app has called MyPC.back(): ownBack false then means "nothing to close" (My PC's menu at once)
             keys: { channel: false, media: false },
             video: function () { return vid.active(); },
             init: function () {},
@@ -505,6 +508,26 @@ var GameHost = (function () {
         if (!on && document.activeElement === iframe) { try { iframe.blur(); } catch (e) {} $('game-layer').focus(); }
     }
 
+    // "Every button goes to the app" (Control Panel > Gaming, per profile, on by default): installed apps get every key and
+    // button; My PC's menu = Back twice quickly, Back on the app's first screen, or the controller's Home button
+    var DOUBLE_BACK = 450, lastBack = 0, pausedAt = 0;
+    function allKeys() { return Store.get('app_keys', true) !== false; }
+    function ownsKeys() { return !!(api && api.sdk && allKeys()); }
+    function backUnhandled() { if (state === 'running' && lastBack && Date.now() - lastBack < 1500) { lastBack = 0; pausedAt = Date.now(); openPause(); } }
+    // the first time an app gets Back: how to reach My PC's menu (once per app per profile)
+    function backHint() {
+        var id = game && game.id, seen = Store.get('back_hint', []);
+        if (!id || seen.indexOf(id) >= 0) return;
+        setTimeout(function () {
+            if (state !== 'running') return;
+            seen = Store.get('back_hint', []);
+            if (seen.indexOf(id) >= 0) return;
+            seen.push(id); if (seen.length > 200) seen.shift();
+            Store.set('back_hint', seen);
+            App.toast(I18n.t('backTwice'), { kind: 'info', id: 'backhint' });
+        }, 700);
+    }
+
     function openPause(focusId) {
         if (state !== 'running') return;
         setState('paused');
@@ -660,11 +683,22 @@ var GameHost = (function () {
             if (/^media/.test(action) && k && k.media) { if (api.onAction) { try { api.onAction(action, pressed, repeat, dev); } catch (e1) {} } return; }
             if (action === 'pause' && k && k.media && String(dev).slice(0, 3) !== 'pad') { if (api.onAction) { try { api.onAction('playPause', pressed, repeat, dev); } catch (e2) {} } return; }
             if (action === 'pageUp' || action === 'pageDown' || action === 'tab' || action === 'tabBack' || action === 'record' || /^media/.test(action)) return;
-            if (action === 'pause') { if (pressed && !repeat) openPause(); return; }
-            // My PC's menu: only the TV remote's Back, unless the app said it has a screen to close (MyPC.back(true), API 17).
-            // A keyboard's Esc / Backspace go to the game as its Back ('cancel').
+            var own = ownsKeys();
+            if (action === 'pause' && !own) { if (pressed && !repeat) openPause(); return; }
+            // The TV remote's Back. Built-in games, and every app when "Every button goes to the app" is off: My PC's menu, unless the
+            // app said it has a screen to close (MyPC.back(true), API 17). Installed apps with it on (default, API 18): the app's 'cancel';
+            // two quick presses, an app that said it has nothing to close, or an app that answers "not handled" = My PC's menu.
+            // A keyboard's Esc / Backspace always go to the game as its Back ('cancel').
             if (action === 'back') {
-                if (Input.tvBack() && !(api && api.ownBack)) { if (pressed && !repeat) openPause(); return; }
+                if (Input.tvBack()) {
+                    if (!own) { if (!(api && api.ownBack)) { if (pressed && !repeat) openPause(); return; } }
+                    else if (pressed && !repeat) {
+                        var now = Date.now(), dbl = now - lastBack < DOUBLE_BACK;
+                        lastBack = dbl ? 0 : now;
+                        if (dbl || (api.backSaid && !api.ownBack)) { lastBack = 0; pausedAt = Date.now(); openPause(); return; }
+                        backHint();
+                    }
+                }
                 action = 'cancel';
             }
             // gamepad Start or Select: the game's own menu when it has one, else nothing (holding both opens My PC's
@@ -681,7 +715,8 @@ var GameHost = (function () {
         }
         if (!pressed) return;
         if (state === 'paused') {
-            if (action === 'back' || action === 'cancel' || action === 'pause' || action === 'menu') { if (!repeat) resume(); }
+            // the second of two quick Backs (or a Back the app passed back to us) must not close the menu Back just opened
+            if (action === 'back' || action === 'cancel' || action === 'pause' || action === 'menu') { if (!repeat && !((action === 'back' || action === 'cancel') && Date.now() - pausedAt < 600)) resume(); }
             else if (action === 'up' || action === 'down') Focus.move(action);
             else if (action === 'confirm' && !repeat) { var c = Focus.current(); if (c) c.click(); }
         } else if (state === 'error') {
@@ -700,7 +735,7 @@ var GameHost = (function () {
     }
 
     return {
-        init: init, launch: launch, exit: exit, onAction: onAction, openPause: openPause, background: background, hold: hold, release: release,
+        init: init, launch: launch, exit: exit, onAction: onAction, ownsKeys: function () { return state === 'running' && ownsKeys(); }, openPause: openPause, background: background, hold: hold, release: release,
         active: function () { return state !== 'idle'; },
         // a notification for the app that is open: its deep link goes to it (MyPC.launch + onLaunch); true when delivered
         // the running app asked for the remote's media keys (MyPC.init({ keys: ['media'] })): shortcuts leave them to it

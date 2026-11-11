@@ -316,7 +316,12 @@
   player (Music stops); pauses under My PC's menu, suspend / restore on hide. `MyPC.back(true)` = the remote's Back reaches the app as
   `cancel` (`remote.ownBack`); `MyPC.init({ keys: ['channel', 'media'] })` = CH + / CH − (`pageUp` / `pageDown`) and media keys
   (`playPause`, `media*`; shortcuts on media keys wait, `GameHost.wantsMedia`); `MyPC.text.keyboard` = My PC's `Keyboard` over the app
-  (`kb` message; `main.js` routes keys to it). Docs GUIDE.md section 21. Tests: `MYPC_ONLY=video node tests/run-tests.mjs`; Speedy itself inside My PC (fake AVPlay + USB drive, the
+  (`kb` message; `main.js` routes keys to it). **Every button to the app (API 18, owner request 2026-11-11)**: per profile `app_keys` (Control Panel >
+  Gaming, on by default): installed apps get every key incl. the remote's Back (as `cancel`) and Pause; shortcuts wait (`GameHost.ownsKeys`). My PC's
+  menu = Back twice within 450 ms, or Back when the app has nothing to close: SDK posts `unhandled` when `onInput` returns `false` for `cancel` (or has
+  no onInput), or the app called `MyPC.back(false)` after `true` (`backSaid`); the controller's Home (`guide`) stays My PC's. Built-in games (no
+  cancel use) keep Back = menu. A Back within 600 ms of the menu opening does not close it. Card "Press Back twice quickly..." once per app (`back_hint`).
+  Docs GUIDE.md section 21. Tests: `MYPC_ONLY=video node tests/run-tests.mjs`; Speedy itself inside My PC (fake AVPlay + USB drive, the
   checkout `../g_iptv` or `SPEEDY_DIR`, skipped when missing): `MYPC_ONLY=speedy` (its browser tests: `node tests/run.mjs` in g_iptv).
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /
   start failures and timeouts from `game-host.js` (with why: no SDK answer, no `ready()`, given up), uncaught errors of built-in games, the

@@ -36,7 +36,7 @@
 var MyPC = (function () {
     'use strict';
 
-    var VERSION = 1, API = 17, HELLO_WAIT = 1200;
+    var VERSION = 1, API = 18, HELLO_WAIT = 1200;
     var handlers = {}, info = null, data = {}, started = false, destroyed = false, isReady = false;
     var hosted = false, hostWin = null, hostOrigin = '*', helloTimer = 0;
     var down = {};                       // action -> number of keys / buttons holding it
@@ -202,7 +202,10 @@ var MyPC = (function () {
 
     function setInput(action, pressed, repeat, dev) {
         if (!repeat) down[action] = Math.max(0, (down[action] || 0) + (pressed ? 1 : -1));
-        call('onInput', action, pressed, !!repeat, dev || 'keys');
+        var r = call('onInput', action, pressed, !!repeat, dev || 'keys');
+        // API 18: the remote's Back reaches the app as 'cancel'; onInput returning false (or no onInput at all) = nothing
+        // left to close here (the app's first screen): My PC shows its own menu
+        if (hosted && action === 'cancel' && pressed && !repeat && (r === false || typeof handlers.onInput !== 'function')) post('unhandled', { action: 'cancel' });
     }
     function releaseAll() { for (var a in down) if (down[a] > 0) { down[a] = 0; call('onInput', a, false, false, 'keys'); } }
 
@@ -2150,7 +2153,7 @@ var MyPC = (function () {
 
     var pub = {
         version: VERSION,
-        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy, 17 MyPC.video + MyPC.back + init keys + MyPC.text.keyboard (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy, 17 MyPC.video + MyPC.back + init keys + MyPC.text.keyboard, 18 every button to the app: onInput returning false for 'cancel' = nothing to close (My PC's menu) (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,

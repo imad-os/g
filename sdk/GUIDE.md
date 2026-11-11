@@ -43,7 +43,8 @@ this guide and the SDK fresh before every task.
   player quits, the iframe is **destroyed**, which frees all its memory.
 - **My PC owns the input.** Your page never receives focus on the TV. My PC sends you
   **actions** (`left`, `jump`...), not keys. Never read `keydown` yourself; use the SDK.
-- **My PC's pause menu** (Resume, your own menu items, Quit) opens with **the TV remote's Back** or by
+- **My PC's pause menu** (Resume, your own menu items, Quit) opens with **the TV remote's Back pressed twice quickly**
+  (or once on your first screen, see "Back" below; with the player's setting "Every button goes to the app" off: once) or by
   **holding Start + Select together for 1 s** on a gamepad (Switch **+** and **-**, Xbox Menu + View,
   PlayStation Options + Share). You get `onPause` / `onResume` / `onDestroy`. Nothing else opens it
   while your app runs: a keyboard's **Esc / Backspace**, gamepad **B** and the phone controller's buttons
@@ -160,7 +161,7 @@ still slow down a hidden page by itself. Standalone, outside My PC, the SDK does
 itself. Your app only sees `info.profile` and keeps progress with `MyPC.save` / `MyPC.load`, which are already per
 profile and backed up. **Never** build your own login, accounts, cloud saves, name entry for scores, Firebase or backend.
 
-Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text, 14 drive, 15 no input while paused, 16 usb / copy, 17 video / back / keys / keyboard) and hide the feature
+Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text, 14 drive, 15 no input while paused, 16 usb / copy, 17 video / back / keys / keyboard, 18 every button to the app: Back as `cancel`, `onInput` returns `false` = nothing to close) and hide the feature
 when it is missing.
 
 ### App config: `MyPC.app_config`
@@ -410,15 +411,19 @@ Actions: `left right up down` (directions), `jump` and `confirm` (OK / Enter / S
 - **Text fields are typing, not actions.** While one of your `<input>` / `<textarea>` / contenteditable has the focus,
   its keys stay in it (Backspace deletes, letters are letters: no `cancel`, no pause), on My PC and standalone; Esc and
   the TV's Back still leave. A phone in the Game controller's **Text mode** types into it (section 17).
-- The TV remote's Back belongs to My PC (pause menu) while your app is on its first screen. A keyboard's Esc and
-  Backspace reach you as `cancel` (use it as your own "back": close a sub-menu, leave a screen). **An app with screens of
-  its own** (a list, then details, then a player) calls `MyPC.back(true)` while it has something to close: the remote's
-  Back then reaches it as `cancel` too; `MyPC.back(false)` back on the first screen, so Back opens My PC's menu (Quit)
-  again (API level 17, section 21).
+- **Back (API level 18).** Every button goes to your app, the TV remote's Back too: it reaches you as `cancel`, like a
+  keyboard's Esc / Backspace (use it as your own "back": close a sub-menu, leave a screen). My PC's menu opens when the
+  player presses **Back twice quickly**, or when your app has nothing left to close: **return `false` from `onInput` for
+  `cancel`** on your first screen (or have no `onInput`), or call `MyPC.back(false)` after `MyPC.back(true)` (section 21).
+  Any other return value = you used it. Built-in games and apps on players who turned off Control Panel > Gaming > "Every
+  button goes to the app" keep the older rule: Back opens My PC's menu unless you called `MyPC.back(true)`. The first time
+  an app gets Back, My PC shows a card "Press Back twice quickly to open My PC's menu". The controller's Home button
+  always opens My PC's menu.
 - **Shortcuts belong to the player.** Each My PC user maps buttons to actions (Control Panel > Shortcuts): any remote or
   keyboard key and any controller button except the arrows / D-pad, OK / B, Back / A (by default only Play / Pause = My
-  PC's music and Guide = switch user). A mapped button runs its shortcut, also during your app, and never reaches you
-  (no action, no `MyPC.gamepad` report while it is held). Don't build anything that needs the remote's media, colour,
+  PC's music and Guide = switch user). A mapped button runs its shortcut and never reaches you (no action, no
+  `MyPC.gamepad` report while it is held), but not during an installed app while "Every button goes to the app" is on
+  (the default, API 18): then shortcuts wait and the button is yours. Don't build anything that needs the remote's media, colour,
   number or Guide buttons; the controller's buttons are yours unless the player gave one a shortcut.
 - `menu`: gamepad Start or Select pressed alone (sent when let go). Sent only to apps that init with
   `ownMenu: true` (open your own menu on it, and close it on `menu` or `cancel`); on a gamepad other
@@ -581,7 +586,7 @@ the World records.
       and closes the `AudioContext`
 - [ ] **game controller first**: every button, trigger and both sticks used through `MyPC.gamepad`, controls shown on screen, up to 4 pads by `dev`
 - [ ] input only through the SDK (`onInput` / `MyPC.isDown` / `MyPC.gamepad`), still playable with arrows + OK only
-- [ ] no `keydown` listeners of your own (Esc reaches you as `cancel`; the remote's Back only with `MyPC.back(true)`)
+- [ ] no `keydown` listeners of your own (Esc and the remote's Back reach you as `cancel`); `onInput` returns `false` for `cancel` on your first screen
 - [ ] fills the window at any 16:9 size, readable text, obvious focus
 - [ ] runs on Chromium 108 (Tizen 8, 2024 TVs): no CSS nesting, nothing newer than Chrome 108; no allocation in the game loop
 - [ ] saves through `MyPC.save/load`; scores through `MyPC.submitScore` (games with points)
@@ -1416,8 +1421,10 @@ if (MyPC.video.supported()) {                                  // a TV (else: yo
 ### `MyPC.back(on)`: the remote's Back for your screens
 
 `MyPC.back(true)` while your app has a screen, menu or dialog of its own to close: the TV remote's Back then reaches you
-as `cancel`. Call `MyPC.back(false)` when you are back on your first screen: Back opens My PC's menu again (Quit). Without
-it, Back always opens My PC's menu. Standalone, Esc behaves the same way.
+as `cancel`. Call `MyPC.back(false)` when you are back on your first screen: Back opens My PC's menu again (Quit). Since API
+level 18 Back reaches every installed app anyway (see "Back" in the input rules): `MyPC.back` still tells My PC at once that
+you have nothing to close, and it is what counts for players who turned "Every button goes to the app" off. The simplest
+way for every app: `onInput` returns `false` for `cancel` when nothing was closed. Standalone, Esc behaves the same way.
 
 ### `MyPC.init({ keys })`: CH + / CH − and the media keys
 

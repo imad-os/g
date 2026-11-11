@@ -215,6 +215,7 @@ var Shortcuts = (function () {
     }
     function mayRun(id) {
         if (window.Welcome && Welcome.open()) return false;
+        if (window.GameHost && GameHost.ownsKeys && GameHost.ownsKeys()) return false;     // "Every button goes to the app": no shortcuts over it
         if (typeof MusicSaver !== 'undefined' && MusicSaver.isOn()) return false;   // the music screensaver: any key only brings My PC back
         var w = window.Win && Win.isOpen && Win.isOpen() ? Win.current() : null, b = button(id);
         if (w && OWN_MEDIA[w] && b && MEDIA_USE[b.use]) return false;   // Memo / Music keep Play / Pause and Record

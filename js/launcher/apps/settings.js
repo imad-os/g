@@ -154,6 +154,7 @@
             var now = new Date();
             out.push({ kind: 'info', label: t('dateTime'), value: Desktop.timeText(now) + ', ' + Desktop.dateText(now, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) });
         } else if (id === 'gaming') {
+            out.push({ kind: 'toggle', label: t('allKeys'), desc: t('allKeysDesc'), get: function () { return Store.get('app_keys', true) !== false; }, set: function (v) { Store.set('app_keys', !!v); } });
             lines = t('controlsText');
             for (i = 0; i < lines.length; i++) out.push({ kind: 'text', value: lines[i] });
             out.push({ kind: 'action', label: t('resetProgress'), desc: t('resetText'), danger: true, run: function () {

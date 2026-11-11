@@ -328,6 +328,10 @@ async function newPage(browser, base, db, opts) {
 async function tvBack(page) {
     await page.evaluate(() => { const k = (d) => Input.onKey({ keyCode: 10009, repeat: false, preventDefault() {} }, d); k(true); k(false); });
 }
+// My PC's menu over an installed app: the remote's Back twice quickly (API 18: one Back is the app's own)
+async function tvMenu(page) {
+    await page.evaluate(() => { const k = (d) => Input.onKey({ keyCode: 10009, repeat: false, preventDefault() {} }, d); k(true); k(false); k(true); k(false); });
+}
 
 async function playable(page, id = 'blocks') {
     await page.waitForSelector(`[data-game="${id}"]`, { timeout: 15000 });
@@ -1104,7 +1108,7 @@ async function main() {
         check(await page.evaluate(() => document.activeElement.id === 'tb-explorer'), 'the same app opened from the taskbar refocuses the taskbar button, not the desktop icon');
         const quitGame = async (id) => {
             await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 15000 });
-            await tvBack(page);
+            await tvMenu(page);
             await Promise.all([page.waitForURL(new RegExp('from=' + id)), page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); })]);
             await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
         };
@@ -1186,7 +1190,7 @@ async function main() {
         await key('Enter');
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 8000 });
         check(await page.evaluate(() => document.getElementById('window').hidden && Win.current() === null), 'opening a game from File Explorer closes the app first');
-        await tvBack(page);
+        await tvMenu(page);
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
         check(await page.evaluate(() => !document.getElementById('desktop').hidden && document.activeElement.getAttribute('data-game') === 'jumper'), 'quitting the game returns to the desktop');
@@ -1303,7 +1307,7 @@ async function main() {
         check(await frame.evaluate(() => ['LB:1:1:pad0', 'X:1:1:pad0', 'Y:1:1:pad0', 'RT:1:0.6:pad0', 'Button17:1:1:pad0'].every((e) => __gb.indexOf(e) >= 0) &&
             MyPC.gamepad.pressed(4) && MyPC.gamepad.pressed(3, 'pad0') && MyPC.gamepad.value(7) > 0.59 && MyPC.gamepad.axis(2, 'pad0') > 0.7),
             'every controller button reaches the app with its name and analog value (LB, X, Y, RT 0.6, a 18th button), and the right stick (' + await frame.evaluate(() => __gb.join(' ')) + ')');
-        await tvBack(page);
+        await tvMenu(page);
         await page.waitForTimeout(150);
         await frame.evaluate(() => { __gb.length = 0; });
         await page.evaluate(() => window.__gp(5, 1));
@@ -1330,14 +1334,14 @@ async function main() {
         await frame.evaluate(() => { MyPC.text.close(); document.getElementById('__tx').remove(); });
         await page.waitForFunction(() => TextIn.current() === null, null, { timeout: 3000 }).catch(() => {});
         check(await page.evaluate(() => TextIn.current() === null), 'with no field open in the app, My PC has no text field either');
-        await tvBack(page);
+        await tvMenu(page);
         const items = await page.evaluate(() => [...document.querySelectorAll('#pause-items button')].map((b) => b.textContent));
         check(await page.evaluate(() => window.GameHost.state()) === 'paused' && items.indexOf('Restart') > 0, 'Back opens My PC\'s pause menu with the app\'s own items (' + items.join(', ') + ')');
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[0].click(); });
         await frame.evaluate(() => MyPC.submitScore(321));
         await page.waitForFunction(() => Scores.list('app-star-catcher').length === 1, null, { timeout: 4000 }).catch(() => {});
         check(await page.evaluate(() => Scores.list('app-star-catcher')[0].s === 321 && window.GameHost.state() === 'paused' || window.GameHost.state() === 'running'), 'MyPC.submitScore saves the record for the profile by itself, no initials screen');
-        await tvBack(page);
+        await tvMenu(page);
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body);
         check(await page.evaluate(() => document.querySelectorAll('iframe').length === 0 && document.activeElement.getAttribute('data-game') === 'app-star-catcher'), 'quitting removes the iframe and returns to its desktop icon');
@@ -1354,7 +1358,7 @@ async function main() {
         await loseFocus();
         check(await page.evaluate(() => window.GameHost.state() === 'running' && document.getElementById('pause').hidden) && (await f2.evaluate(() => __life.length)) === 0,
             'allow_background_running: losing the focus leaves the app running, no menu');
-        await tvBack(page);
+        await tvMenu(page);
         check(await page.evaluate(() => { const t = document.getElementById('pause-bg'); return t.classList.contains('on') && t.textContent === 'Background: on'; }), 'the menu (opened with Back) shows a green "Background: on" tag');
         await page.evaluate(() => document.querySelector('#pause-items button').click());
         await page.waitForTimeout(150);
@@ -4080,7 +4084,7 @@ async function main() {
             'stop() gives the recording as a .wav; live chunks and levels came while it listened; the red microphone goes away (' + rec.len + ' bytes, ' + rec.chunks + ' chunks)');
         const ended = frame.evaluate(() => new Promise((res) => { const off = MyPC.mic.on('end', (e) => { off(); res(e.reason + ':' + !!(e.result && e.result.audio)); }); MyPC.mic.start({ chunkMs: 0 }); }));
         await page.waitForSelector('.mic-on', { timeout: 4000 });
-        await tvBack(page);
+        await tvMenu(page);
         check(await ended === 'paused:true' && await page.evaluate(() => !document.querySelector('.mic-on')), 'My PC\'s menu stops the microphone; the app gets "end" with the recording so far');
         await page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon') && document.activeElement !== document.body, null, { timeout: 8000 });
@@ -4149,7 +4153,7 @@ async function main() {
         const loop = by('error', /loop error/);
         check(loop && loop.n === 5 && reps.filter((r) => /loop error/.test(r.msg)).length === 1, 'the same error 5 times is one report with n = 5 (' + (loop && loop.n) + ')');
         const one = by('error', /boom/) || {};
-        check(one.appv === '2.0.1' && one.sdk === 17 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
+        check(one.appv === '2.0.1' && one.sdk === 18 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
             'each report has the app version, SDK level, TV id and model, My PC version and build, language, place, address, time and a 30-day expiry (' + JSON.stringify(one) + ')');
         const keys = new Set(reps.flatMap((r) => Object.keys(r)));
         const allowed = ['app', 'kind', 'msg', 'stack', 'src', 'stage', 'appv', 'sdk', 'n', 'at', 'exp', 'tv', 'model', 'ver', 'build', 'lang', 'user', 'where', 'ua', 'url'];
@@ -5122,7 +5126,7 @@ async function driveTests(browser, base) {
     await page.evaluate(() => document.getElementById('dialog-no').click());
     const denied = await pAsk;
     check(/Drive Test wants to use your Google Drive/.test(q) && /sara@example.com/.test(q) && denied === 'denied', 'without permission My PC asks once ("Drive Test wants to use your Google Drive"); Don\'t allow gives denied ' + q);
-    await tvBack(page);
+    await tvMenu(page);
     await Promise.all([page.waitForURL(/from=app-drivetest/), page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); })]);
     await page.waitForSelector('#desk-icons .dicon');
     // Control Panel > Google Drive: the account, Add files, the apps allowed, Sign out
@@ -5807,7 +5811,7 @@ async function cycle(page, id, warm) {
         api.destroy();
         return { audio: ctx ? ctx.state : 'closed', running: api._isRunning() };
     });
-    await tvBack(page);
+    await tvMenu(page);
     await Promise.all([page.waitForURL(new RegExp('from=' + id)), page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); })]);
     await page.waitForSelector(`#desk-icons [data-game="${id}"]`);
     r.noDesktop = noDesktop;
@@ -6272,7 +6276,7 @@ async function flowTests(browser, base) {
     const quit = async (id, forget) => {
         if (forget) await pg.evaluate(() => Object.keys(sessionStorage).filter((k) => k === 'boot_pick' || /^arc_(games|sync)_/.test(k)).forEach((k) => sessionStorage.removeItem(k)));
         const hits = hostedHits.length;
-        await tvBack(pg);
+        await tvMenu(pg);
         await pg.waitForFunction(() => !document.getElementById('pause').hidden);
         const t = Date.now();
         await Promise.all([pg.waitForURL(new RegExp('from=app-' + id)), pg.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); })]);
@@ -6288,7 +6292,7 @@ async function flowTests(browser, base) {
     check(o.asked === 0 && await pg.evaluate((n) => AppBoot.build() === n, NEXT), `opening an app: no server round trip, same hosted build as the desktop (${o.ms} ms)`);
     check(await f.evaluate(() => navigator.getGamepads()[0] && navigator.getGamepads()[0].id === 'Test pad' && !au.paused), 'running: the app reads its pad and plays its sound');
     await f.evaluate(() => document.getElementById('t').click());          // a click puts the focus inside the app's frame (a PC)
-    await tvBack(pg);
+    await tvMenu(pg);
     await pg.waitForFunction(() => !document.getElementById('pause').hidden);
     const menu = await pg.evaluate(() => [...document.querySelectorAll('#pause-items button')].map((b) => b.textContent));
     check(menu[menu.length - 1] === 'Quit' && menu.indexOf('Quit to menu') < 0, 'the menu says "Quit" ' + JSON.stringify(menu));
@@ -6314,7 +6318,7 @@ async function flowTests(browser, base) {
     o = await open('flow-bare');
     const fb = o.f;
     await fb.evaluate(() => new Promise((r) => setTimeout(r, 300)));
-    await tvBack(pg);
+    await tvMenu(pg);
     await pg.waitForFunction(() => !document.getElementById('pause').hidden);
     const a = await fb.evaluate(() => new Promise((r) => setTimeout(() => { const n = frames_; setTimeout(() => r({ n, m: frames_, ac: ac.state, au: au.paused }), 500); }, 100)));
     check(a.n === a.m && a.au, 'no onPause: its frames wait under the menu and its sound stops ' + JSON.stringify(a));
@@ -6646,7 +6650,7 @@ async function copyTests(browser, base) {
     await page.waitForFunction((id) => { const x = CopyJobs.list().find((y) => y.id === id); return x && x.state === 'copying' && x.doneBytes > 0; }, j3, { timeout: 15000 }).catch(() => {});
     await page.evaluate(() => { for (const k of Object.keys(window.__usb.tree)) if (/film\.mp4/.test(k)) delete window.__usb.tree[k]; });
     await snapshot();                // what the drive holds now goes with it to the next page (the copy keeps writing meanwhile)
-    await tvBack(page);
+    await tvMenu(page);
     await Promise.all([page.waitForURL(/from=app-mydrive/), page.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); })]);
     await page.waitForSelector('#desk-icons .dicon');
     await page.evaluate(() => { window.__usb.slow = 0; });
@@ -6688,12 +6692,12 @@ const FAKE_AVPLAY = () => {
 // app's own screens), keys: ['channel', 'media'] (CH + / CH - and the media keys go to the app), MyPC.text.keyboard (My PC's
 // on-screen keyboard over the app). MYPC_ONLY=video runs only these.
 async function videoTests(browser, base) {
-    console.log('49. Video player, Back, channel / media keys and the keyboard for apps (API 17)');
+    console.log('49. Video player, Back (every button to the app), channel / media keys and the keyboard for apps (API 17 / 18)');
     const APP = 'https://vtest.example.test/';
     const APP_HTML = `<!doctype html><meta charset=utf-8><title>VTest</title><body style="background:transparent;color:#fff;font:40px sans-serif"><p id=t style="background:#123;margin:0;padding:20px">VTest</p>
 <script src="${OLD_HOSTED}sdk/mypc-sdk.js"></script><script>window.__in = []; window.__ev = []; window.__life = [];
 MyPC.init({ keys: ['channel', 'media'], onInit() { MyPC.ready(); window.__ok = 1; }, onPause() { __life.push('pause'); }, onResume() { __life.push('resume'); },
-  onInput(a, p, r) { if (p) __in.push(a); } });
+  onInput(a, p, r) { if (p) __in.push(a); if (a === 'cancel' && p && window.__root) return false; } });
 ['state', 'time', 'sub', 'error', 'buffer', 'info'].forEach((n) => MyPC.video.on(n, (d) => __ev.push(n + ':' + (d.state || d.text || d.code || (d.t !== undefined ? Math.round(d.t) : '') || d.p || ''))));</script>`;
     const db = { apps: {} };
     db.apps.vtest = { id: 'vtest', name: 'VTest', url: APP, entry: APP + 'index.html', icon: '', type: 'app', version: '1.0.0', enabled: true, order: 1, config: {} };
@@ -6714,7 +6718,7 @@ MyPC.init({ keys: ['channel', 'media'], onInit() { MyPC.ready(); window.__ok = 1
     const app = page.frames().find((x) => x.url().indexOf(APP) === 0);
     await app.waitForFunction(() => window.__ok === 1 && MyPC.info() && MyPC.info().bridges);
     const b0 = await app.evaluate(() => ({ api: MyPC.apiLevel, video: MyPC.info().bridges.video, kb: MyPC.info().bridges.keyboard, sup: MyPC.video.supported() }));
-    check(b0.api === 17 && b0.video === 1 && b0.kb === 1 && b0.sup === true, 'API 17 on a TV: MyPC.video and the keyboard are offered ' + JSON.stringify(b0));
+    check(b0.api === 18 && b0.video === 1 && b0.kb === 1 && b0.sup === true, 'API 18 on a TV: MyPC.video and the keyboard are offered ' + JSON.stringify(b0));
 
     // open a live stream in a small box (a preview): the TV's player gets the address and the box scaled to its 1920x1080 plane
     const r1 = await app.evaluate(() => MyPC.video.open('http://iptv.example:8080/live/u/p/1.ts', { live: true, rect: { x: 640, y: 180, w: 640, h: 360 }, ua: 'SpeedyTest' }).then((r) => r, (e) => 'err ' + e.code));
@@ -6743,29 +6747,59 @@ MyPC.init({ keys: ['channel', 'media'], onInit() { MyPC.ready(); window.__ok = 1
     const badUrl = await app.evaluate(() => MyPC.video.open('javascript:alert(1)').then(() => 'ok', (e) => e.code));
     check(live === 'live' && broken === 'network' && badUrl === 'bad-request', 'a live stream cannot seek; a stream that does not connect fails with network; other addresses are refused ' + [live, broken, badUrl]);
 
-    // the remote: Back opens My PC's menu (the video waits) until the app says it has a screen to close
+    // the remote's Back (API 18, "Every button goes to the app" on by default): the app's 'cancel'; Back twice quickly = My PC's menu
     await app.evaluate(() => MyPC.video.open('http://iptv.example:8080/movie/u/p/8.mp4'));
-    await page.evaluate(() => { window.__av.log = []; });
+    await app.evaluate(() => { window.__in = []; });
+    await page.evaluate(() => { window.__av.log = []; Store.set('back_hint', []); });
     await tvBack(page);
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(900);
+    const one = { st: await page.evaluate(() => GameHost.state()), ins: await app.evaluate(() => window.__in.join(' ')), hint: await page.evaluate(() => document.getElementById('toast').textContent) };
+    check(one.st === 'running' && one.ins === 'cancel' && /twice quickly/.test(one.hint), 'one Back goes to the app as "cancel" (My PC stays out of the way); the first time, a card says how to reach My PC\'s menu ' + JSON.stringify(one));
+    await shot('1-back-hint');
+    await page.evaluate(() => { const k = (d) => Input.onKey({ keyCode: 10009, repeat: false, preventDefault() {} }, d); k(true); k(false); k(true); k(false); });
+    await page.waitForTimeout(150);
     const menu = await page.evaluate(() => ({ st: GameHost.state(), log: window.__av.log.join(' | ') }));
-    await shot('1-menu-over-video');
+    await shot('2-menu-over-video');
+    await page.waitForTimeout(650);
     await tvBack(page);
     await page.waitForTimeout(100);
     const after = await page.evaluate(() => ({ st: GameHost.state(), log: window.__av.log.join(' | ') }));
-    check(menu.st === 'paused' && /pause/.test(menu.log) && after.st === 'running' && /play$/.test(after.log), 'Back (app at its first screen): My PC\'s menu, the video pauses under it and plays again on Resume ' + menu.log + ' / ' + after.log);
+    check(menu.st === 'paused' && /pause/.test(menu.log) && after.st === 'running' && /play$/.test(after.log), 'Back twice quickly: My PC\'s menu, the video pauses under it; Back again plays on ' + menu.log + ' / ' + after.log);
+    // the app says it has nothing to close: onInput returns false for "cancel" (its first screen) -> My PC's menu at once
+    await app.evaluate(() => { window.__root = true; });
+    await page.waitForTimeout(500);
+    await tvBack(page);
+    await page.waitForTimeout(150);
+    check(await page.evaluate(() => GameHost.state()) === 'paused', 'Back on the app\'s first screen (onInput returned false): My PC\'s menu');
+    await page.waitForTimeout(650); await tvBack(page); await page.waitForTimeout(100);
+    await app.evaluate(() => { window.__root = false; });
+    // MyPC.back(true) then back(false): the app said it has nothing to close -> the menu without asking it
     await app.evaluate(() => { MyPC.back(true); window.__in = []; });
-    await page.waitForTimeout(50);
+    await page.waitForTimeout(500);
     await tvBack(page);
     await key(427); await key(428); await key(415); await key(417); await key(10233);
     await page.waitForTimeout(100);
     const ins = await app.evaluate(() => window.__in.join(' '));
     check(await page.evaluate(() => GameHost.state()) === 'running' && /^cancel pageUp pageDown playPause mediaFf mediaNext$/.test(ins), 'MyPC.back(true): Back is the app\'s "cancel"; keys: channel + media: CH + / CH -, Play / Pause, ⏩, ⏭ reach the app ' + ins);
+    await app.evaluate(() => { MyPC.back(false); window.__in = []; });
+    await page.waitForTimeout(500);
+    await tvBack(page);
+    await page.waitForTimeout(100);
+    check(await page.evaluate(() => GameHost.state()) === 'paused' && await app.evaluate(() => window.__in.join(' ')) === '', 'MyPC.back(false) after true: Back opens My PC\'s menu at once');
+    await page.waitForTimeout(650); await tvBack(page); await page.waitForTimeout(100);
+    // Control Panel > Gaming > "Every button goes to the app" off: Back = My PC's menu unless MyPC.back(true), as before
+    await page.evaluate(() => Store.set('app_keys', false));
+    await app.evaluate(() => { window.__in = []; });
+    await tvBack(page); await page.waitForTimeout(100);
+    const old1 = await page.evaluate(() => GameHost.state());
+    await page.waitForTimeout(650); await tvBack(page); await page.waitForTimeout(100);
+    await app.evaluate(() => MyPC.back(true)); await page.waitForTimeout(500);
+    await tvBack(page); await page.waitForTimeout(100);
+    const old2 = [await page.evaluate(() => GameHost.state()), await app.evaluate(() => window.__in.join(' '))];
     await app.evaluate(() => MyPC.back(false));
-    await page.waitForTimeout(50);
-    await tvBack(page);
-    check(await page.evaluate(() => GameHost.state()) === 'paused', 'MyPC.back(false): Back opens My PC\'s menu again');
-    await tvBack(page);
+    await page.evaluate(() => Store.set('app_keys', true));
+    check(old1 === 'paused' && old2[0] === 'running' && old2[1] === 'cancel', 'with the setting off: Back opens My PC\'s menu, unless the app has a screen to close ' + JSON.stringify([old1, old2]));
+    await page.waitForTimeout(500);
 
     // My PC's keyboard over the app (MyPC.text.keyboard): typed with the remote, the app paused meanwhile
     await app.evaluate(() => { window.__life = []; window.__kb = MyPC.text.keyboard({ label: 'Search channels', value: 'bein', kind: 'search' }).then((v) => { window.__kbv = v; }); });
@@ -6866,8 +6900,9 @@ async function speedyTests(browser, base) {
     await tvBack(page); await page.waitForTimeout(150);
     const m1 = await page.evaluate(() => GameHost.state());
     await shot('3-mypc-menu');
+    await page.waitForTimeout(650);
     await tvBack(page); await page.waitForTimeout(150);
-    check(m1 === 'paused' && await page.evaluate(() => GameHost.state()) === 'running', 'Back on Speedy\'s home screen opens My PC\'s menu, Back again goes on ' + m1);
+    check(m1 === 'paused' && await page.evaluate(() => GameHost.state()) === 'running', 'Back on Speedy\'s home screen (nothing left to close there) opens My PC\'s menu, Back again goes on ' + m1);
 
     // Live TV: a channel in the box plays on the TV's video plane (the page is transparent there), full screen, CH + zaps
     await key(OK);
@@ -6900,14 +6935,14 @@ async function speedyTests(browser, base) {
     const z2 = await page.evaluate(() => window.__av.url);
     check(/\/7\.ts$/.test(z) && /\/5\.ts$/.test(z2), 'CH + zaps up, CH − twice zaps down (one open after the keys stop) ' + z + ' ' + z2);
     // Back closes Speedy's own layers, never My PC's menu
-    await tvBack(page); await page.waitForTimeout(200);
-    await tvBack(page); await page.waitForTimeout(200);
+    await tvBack(page); await page.waitForTimeout(500);
+    await tvBack(page); await page.waitForTimeout(500);
     const lb = await app.evaluate(() => ({ mode: Player.mode(), top: UI.top().constructor.name }));
     check(lb.mode === 'preview' && lb.top === 'LiveScreen' && await page.evaluate(() => GameHost.state()) === 'running', 'Back from full screen: the picture goes back into the box, inside the app (My PC\'s menu stays shut) ' + JSON.stringify(lb));
     await page.waitForTimeout(200);
     const backRect = await page.evaluate(() => window.__av.rects[window.__av.rects.length - 1]);
     check(backRect !== '0,0,1920,1080', 'the plane shrinks back to the box ' + backRect);
-    for (let i = 0; i < 4 && await top() !== 'HomeScreen'; i++) { await tvBack(page); await page.waitForTimeout(200); }
+    for (let i = 0; i < 4 && await top() !== 'HomeScreen'; i++) { await tvBack(page); await page.waitForTimeout(500); }
     const off = await page.evaluate(() => ({ log: window.__av.log.slice(-3).join(' | '), av: document.documentElement.classList.contains('av-video') }));
     check(await top() === 'HomeScreen' && /close/.test(off.log) && !off.av, 'leaving Live TV closes the TV\'s player and My PC draws its layers again ' + JSON.stringify(off));
 
@@ -6933,7 +6968,7 @@ async function speedyTests(browser, base) {
     await page.waitForTimeout(1200);
     const p2 = await page.evaluate(() => window.__av.log.join(' | '));
     check(/pause/.test(p1) && /play/.test(p2) && /seek \d+/.test(p2), 'the remote\'s Play / Pause pauses and plays; ⏩ seeks forward ' + p1 + ' / ' + p2);
-    for (let i = 0; i < 5 && await top() !== 'HomeScreen'; i++) { await tvBack(page); await page.waitForTimeout(250); }
+    for (let i = 0; i < 5 && await top() !== 'HomeScreen'; i++) { await tvBack(page); await page.waitForTimeout(500); }
     const saved = await app.evaluate(() => Store.recent(null, ['vod']).length);
     check(saved >= 1, 'the film is in Continue watching after Back');
 
@@ -6959,7 +6994,7 @@ async function speedyTests(browser, base) {
         'its subtitle files (English, Arabic) are found; the English one is read from the drive and shown in time with the TV\'s player ' + JSON.stringify(subs));
     await page.waitForTimeout(400);
     await shot('8-usb-film');
-    for (let i = 0; i < 4 && await top() !== 'UsbScreen'; i++) { await tvBack(page); await page.waitForTimeout(250); }
+    for (let i = 0; i < 4 && await top() !== 'UsbScreen'; i++) { await tvBack(page); await page.waitForTimeout(500); }
     // a show: its page, the first episode, then the next one by itself at the end (with its own subtitle file)
     if (await app.evaluate(() => UI.top().zone) === 'grid') await tvBack(page);
     await key(DOWN); await page.waitForTimeout(500); await key(RIGHT); await key(OK);
@@ -6976,7 +7011,7 @@ async function speedyTests(browser, base) {
     await app.waitForFunction(() => Player.state().cues > 0, null, { timeout: 5000 }).catch(() => {});
     const e2 = await page.evaluate(() => window.__av.url), e2s = await app.evaluate(() => ({ cur: Player.current().sub, files: (Player.current().files || []).length, cues: Player.state().cues }));
     check(/S01E02\.mkv$/.test(e2) && e2s.files === 1 && e2s.cues === 2, 'at the end of an episode the next one plays by itself, with its subtitle file ' + e2 + ' ' + JSON.stringify(e2s));
-    for (let i = 0; i < 6 && await top() !== 'HomeScreen'; i++) { await tvBack(page); await page.waitForTimeout(250); }
+    for (let i = 0; i < 6 && await top() !== 'HomeScreen'; i++) { await tvBack(page); await page.waitForTimeout(500); }
     const uh = await app.evaluate(() => UI.top().rec.filter((r) => r.kind === 'usb').map((r) => r.name + (r.key[1] === '#' ? ' (show)' : '')));
     check(uh.join(',') === 'My Show (show),Movie Name', 'Continue watching keeps the USB show once (not each episode) and the film ' + JSON.stringify(uh));
     await app.evaluate(() => { const h = UI.top(); h.zone = h.zones.indexOf('row'); h.row.setCount(h.rec.length, h.rec.findIndex((r) => r.key[1] === '#')); h.paint(); });
@@ -6985,7 +7020,7 @@ async function speedyTests(browser, base) {
     await page.waitForFunction(() => /S01E02\.mkv$/.test(window.__av.url) && window.__av.state === 'PLAYING', null, { timeout: 8000 }).catch(() => {});
     const rs = await page.evaluate(() => window.__av.log.filter((x) => /^(open|seek)/.test(x)).join(' | '));
     check(/open file:.*S01E02\.mkv/.test(rs), 'OK on the show in Continue watching goes on with its last episode ' + rs);
-    for (let i = 0; i < 4 && await top() !== 'HomeScreen'; i++) { await tvBack(page); await page.waitForTimeout(250); }
+    for (let i = 0; i < 4 && await top() !== 'HomeScreen'; i++) { await tvBack(page); await page.waitForTimeout(500); }
 
     check(stats.live >= 0, 'requests: ' + JSON.stringify({ api: stats.api, film: stats.film }));
     check(!page.errors.length, 'no page errors ' + page.errors.join(' | '));
