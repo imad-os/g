@@ -9,12 +9,14 @@ html.th-xp { --acc: #316ac5; --ink: #fff; }
 html.th-mac { --acc: #0a84ff; --ink: #fff; }
 html.th-android { --acc: #8ab4f8; --ink: #0b1b3a; }
 html.th-ios { --acc: #0a84ff; --ink: #fff; }
-:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios) :is(.btn-primary, .set-primary, .set-toggle.on, .pcard-tag) { background: var(--acc); color: var(--ink); }
-:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios) :is(.btn-primary, .set-primary):focus { background: var(--acc); filter: brightness(1.2); }
-:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios) .set-toggle.on { border-color: var(--acc); }
-:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios) .set-primary :is(.set-row-name, .set-chev) { color: var(--ink); }
-:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios) :is(.set-slider-fill, .set-nav-btn.on:before) { background: var(--acc); }
-:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios) .set-wp.on { border-color: var(--acc); }
+html.th-neon { --acc: #7c8cff; --ink: #fff; }
+html.th-quest { --acc: #ffcc4d; --ink: #14110a; }
+:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios, .th-neon, .th-quest) :is(.btn-primary, .set-primary, .set-toggle.on, .pcard-tag) { background: var(--acc); color: var(--ink); }
+:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios, .th-neon, .th-quest) :is(.btn-primary, .set-primary):focus { background: var(--acc); filter: brightness(1.2); }
+:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios, .th-neon, .th-quest) .set-toggle.on { border-color: var(--acc); }
+:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios, .th-neon, .th-quest) .set-primary :is(.set-row-name, .set-chev) { color: var(--ink); }
+:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios, .th-neon, .th-quest) :is(.set-slider-fill, .set-nav-btn.on:before) { background: var(--acc); }
+:is(.th-win7, .th-xp, .th-mac, .th-android, .th-ios, .th-neon, .th-quest) .set-wp.on { border-color: var(--acc); }
 
 /* ---------- Windows 7 style: dark glass taskbar, round Start orb, glass title bars ---------- */
 .th-win7 .stage { font-family: "Segoe UI", Tahoma, Arial, sans-serif; }
@@ -202,3 +204,191 @@ html.th-ios { --acc: #0a84ff; --ink: #fff; }
 .th-win7 .wdg { border-radius: 10px; background: rgba(30, 50, 80, 0.78); border-color: rgba(255, 255, 255, 0.3); }
 .tall:is(.th-mac, .th-android, .th-ios) .desk-widgets, [dir="rtl"].tall.th-mac .desk-widgets { top: auto; left: 24px; right: 24px; height: 320px; }
 .tall.compact:is(.th-mac, .th-android, .th-ios) .desk-widgets { height: 420px; }
+
+/* ---------- Neon night (owner request 2026-11-12): glass cards that glow over a night picture, a floating taskbar.
+   "Glass" without backdrop-filter (too heavy for TVs): translucent gradients + one static glow (box-shadow, painted once). ---------- */
+.th-neon .stage { font-family: "Segoe UI", "Samsung One", Arial, sans-serif; }
+.th-neon #desk-title { position: absolute; left: 36px; top: 20px; width: auto; height: 72px; clip: auto; overflow: visible; margin: 0; z-index: 1;
+                       display: flex; align-items: center; gap: 16px; font-size: 40px; font-weight: 600; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.85); }
+[dir="rtl"].th-neon #desk-title { left: auto; right: 36px; }
+.th-neon .dt-ic { display: block; width: 68px; height: 68px; }
+.th-neon .desk-icons { top: 108px; height: calc(var(--sh) - 236px); }
+.th-neon .dicon .lbl { text-shadow: 0 2px 6px #000, 0 0 2px #000; }
+.th-neon .dicon:focus { background: rgba(124, 140, 255, 0.24); box-shadow: inset 0 0 0 3px #fff, inset 0 0 22px rgba(150, 170, 255, 0.55); }
+.th-neon .taskbar { left: 24px; bottom: 16px; width: calc(var(--sw) - 48px); height: 92px; border-radius: 30px; border: 2px solid rgba(110, 150, 255, 0.62);
+                    background: linear-gradient(180deg, rgba(38, 44, 104, 0.8), rgba(14, 16, 50, 0.9));
+                    box-shadow: 0 0 22px rgba(70, 110, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.18); }
+.th-neon .tb-apps { left: 16px; top: 3px; transform: none; }
+[dir="rtl"].th-neon .tb-apps { left: auto; right: 16px; }
+.th-neon .tb-btn { border-radius: 18px; }
+.th-neon .tb-btn:focus { background: rgba(140, 160, 255, 0.24); box-shadow: 0 0 0 3px #fff, 0 0 16px rgba(120, 150, 255, 0.8); }
+.th-neon .tb-start { position: relative; display: flex; align-items: center; width: auto; margin-inline-end: 26px; padding: 0 24px 0 14px; }
+.th-neon .tb-start svg { flex: none; width: 52px; height: 52px; }
+.th-neon .tb-start:after { content: attr(data-title); margin-inline-start: 14px; font-size: 30px; font-weight: 600; white-space: nowrap; }
+.th-neon .tb-start:before { content: ''; position: absolute; right: -14px; top: 16px; width: 2px; height: 50px; background: rgba(255, 255, 255, 0.28); }
+[dir="rtl"].th-neon .tb-start:before { right: auto; left: -14px; }
+.th-neon .tray { top: 5px; right: 24px; }
+[dir="rtl"].th-neon .tray { right: auto; left: 24px; }
+.th-neon .tray-clock { margin-inline-start: 14px; border-radius: 0 18px 18px 0; border-inline-start: 2px solid rgba(255, 255, 255, 0.28); }
+.th-neon .tray-ver { bottom: 112px; }
+.compact.th-neon .taskbar { height: 176px; border-radius: 44px; }
+.compact.th-neon .tb-start svg { width: 96px; height: 96px; }
+.compact.th-neon .tb-start:after { font-size: 44px; }
+.compact.th-neon .desk-icons { top: 108px; height: calc(var(--sh) - 316px); }
+.th-neon .start { bottom: 124px; border-radius: 28px; border: 2px solid rgba(110, 150, 255, 0.6);
+                  background: linear-gradient(180deg, rgba(32, 38, 96, 0.97), rgba(12, 14, 44, 0.98)); box-shadow: 0 0 30px rgba(70, 110, 255, 0.45); }
+.compact.th-neon .start { bottom: 204px; }
+.th-neon .start-foot { border-radius: 0 0 26px 26px; background: rgba(0, 0, 0, 0.25); border-top: 1px solid rgba(110, 150, 255, 0.35); }
+.th-neon .stile:focus, .th-neon .srec:focus { background: rgba(124, 140, 255, 0.24); }
+.th-neon .win-bar { background: linear-gradient(90deg, #161a4a, #2a1652); border-bottom: 2px solid rgba(124, 140, 255, 0.75); box-shadow: 0 2px 14px rgba(90, 110, 255, 0.35); }
+.th-neon .win-close:focus { background: #d4365c; }
+/* the widgets: rounded glass cards, a glow around them (the id selector beats the per-widget colour line) */
+.th-neon .desk-widgets { top: 28px; width: 460px; height: calc(var(--sh) - 160px); gap: 20px; }
+.th-neon .has-wdg .desk-icons { right: 508px; }
+[dir="rtl"].th-neon .has-wdg .desk-icons { right: 24px; left: 508px; }
+.th-neon #desk-widgets .wdg { padding: 20px 24px; border-radius: 28px; border: 2px solid rgba(110, 150, 255, 0.58);
+                              background: linear-gradient(160deg, rgba(48, 56, 130, 0.62), rgba(14, 16, 50, 0.8));
+                              box-shadow: 0 0 18px rgba(70, 110, 255, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.16); }
+.th-neon #desk-widgets .wdg:focus { border-color: #dfe5ff; box-shadow: 0 0 0 2px #fff, 0 0 28px rgba(120, 150, 255, 0.85);
+                                    background: linear-gradient(160deg, rgba(70, 80, 170, 0.72), rgba(22, 26, 70, 0.86)); }
+.th-neon .wdg-head { color: #eef0ff; font-weight: 600; }
+.th-neon .wdg-clocked .wdg-head { display: none; }
+.th-neon .wdg-clocked { min-height: 0 !important; }
+.th-neon .wdg-ck-t, .th-quest .wdg-ck-t { font-size: 64px; }
+.th-neon .wdg-ck-t { text-shadow: 0 0 14px rgba(150, 170, 255, 0.6); }
+.th-neon .wdg-bar i { background: linear-gradient(90deg, #4fc3ff, #a65bff); }
+.th-neon .wdg-lb:focus { background: rgba(140, 160, 255, 0.28); box-shadow: 0 0 0 3px #fff; }
+.th-neon .wdg-ring:before { box-shadow: 0 0 10px var(--rc); }
+.th-neon .wdg-ev, .th-neon .wdg-alert { border-radius: 12px; }
+
+/* ---------- Quest (owner request 2026-11-12): an original look taken from game menus in general: a command bar with a slanted
+   gold tab, item slots with notched corners, HUD panels, the A / B button hints. Solid colours and clip-path: no blur, no animation. ---------- */
+.th-quest .stage { font-family: "Segoe UI", "Samsung One", Arial, sans-serif; }
+.th-quest .desk-icons { top: 32px; height: calc(var(--sh) - 196px); }
+.th-quest .dicon, .th-quest .stile { border-radius: 0; border: 2px solid rgba(77, 225, 210, 0.28); background: linear-gradient(180deg, rgba(18, 28, 36, 0.8), rgba(8, 12, 18, 0.9));
+                                     -webkit-clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
+                                     clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px); }
+.th-quest .dicon { width: 164px; height: 184px; margin: 0 12px 12px 0; }
+[dir="rtl"].th-quest .dicon { margin: 0 0 12px 12px; }
+.th-quest .dicon .lbl, .th-quest .stile .lbl { font-size: 18px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; text-shadow: none; }
+.th-quest :is(.dicon, .stile):focus { border-color: #ffcc4d; background: linear-gradient(180deg, rgba(255, 204, 77, 0.34), rgba(255, 204, 77, 0.08)); box-shadow: inset 0 0 0 2px #ffcc4d; }
+.th-quest :is(.dicon, .stile):focus .lbl { color: #ffe08a; }
+.th-quest .taskbar { height: 96px; border-top: 3px solid #ffcc4d; background: linear-gradient(180deg, rgba(12, 17, 24, 0.95), rgba(5, 7, 11, 0.98)); }
+.th-quest .tb-apps { left: 0; top: 0; height: 100%; transform: none; align-items: center; }
+[dir="rtl"].th-quest .tb-apps { left: auto; right: 0; }
+.th-quest .tb-btn { border-radius: 0; -webkit-clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%); clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%); }
+.th-quest .tb-btn:focus { background: rgba(255, 204, 77, 0.26); box-shadow: inset 0 -5px 0 #ffcc4d; }
+.th-quest .tb-start { display: flex; align-items: center; width: auto; height: 100%; margin: 0 24px 0 0; padding: 0 64px 0 26px; background: #ffcc4d;
+                      -webkit-clip-path: polygon(0 0, 100% 0, calc(100% - 40px) 100%, 0 100%); clip-path: polygon(0 0, 100% 0, calc(100% - 40px) 100%, 0 100%); }
+[dir="rtl"].th-quest .tb-start { margin: 0 0 0 24px; padding: 0 26px 0 64px; -webkit-clip-path: polygon(0 0, 100% 0, 100% 100%, 40px 100%); clip-path: polygon(0 0, 100% 0, 100% 100%, 40px 100%); }
+.th-quest .tb-start svg { flex: none; width: 50px; height: 50px; }
+.th-quest .tb-start:after { content: attr(data-label); margin-inline-start: 14px; font-size: 30px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #14110a; }
+.th-quest .tb-start:focus { background: #fff; box-shadow: none; }
+.th-quest .tray-clock { font-weight: 700; letter-spacing: 0.04em; }
+.th-quest .tray-clock:focus, .th-quest .tray-poll:focus { background: rgba(255, 204, 77, 0.22); box-shadow: inset 0 -5px 0 #ffcc4d; border-radius: 0; }
+.th-quest .th-hints { position: absolute; left: 36px; bottom: calc(100% + 16px); display: flex; gap: 30px; font-size: 22px; font-weight: 700; letter-spacing: 0.06em;
+                      text-transform: uppercase; text-shadow: 0 2px 4px #000; white-space: nowrap; pointer-events: none; }
+[dir="rtl"].th-quest .th-hints { left: auto; right: 36px; }
+.th-quest .th-hints span { display: flex; align-items: center; gap: 10px; }
+.th-quest .th-hints b { display: block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; text-align: center; font-size: 22px; color: #0c1117; background: #e9eef3; text-shadow: none; }
+.th-quest .th-hints b.hold { background: #ffcc4d; box-shadow: 0 0 0 4px rgba(255, 204, 77, 0.35); }
+.compact.th-quest .taskbar { height: 176px; }
+.compact.th-quest .tb-start:after { font-size: 44px; }
+.compact.th-quest .th-hints { font-size: 30px; }
+.compact.th-quest .th-hints b { width: 54px; height: 54px; line-height: 54px; font-size: 30px; }
+.tall.th-quest .th-hints, .compact.th-quest .th-hints { display: none; }
+/* Start = a pause-menu panel on the left, gold headings with a rule */
+.th-quest .start { left: 0; margin-left: 0; top: 0; bottom: 99px; height: auto; width: 1120px; padding-top: 56px; border: 0; border-radius: 0;
+                   background: linear-gradient(90deg, rgba(6, 9, 14, 0.98), rgba(14, 20, 28, 0.97)); box-shadow: inset 8px 0 0 #ffcc4d, 18px 0 40px rgba(0, 0, 0, 0.6); }
+[dir="rtl"].th-quest .start { left: auto; right: 0; box-shadow: inset -8px 0 0 #ffcc4d, -18px 0 40px rgba(0, 0, 0, 0.6); }
+.compact.th-quest .start { bottom: 179px; }
+.th-quest .start-grid { height: 516px; }
+.th-quest .stile { height: 162px; padding-top: 12px; }
+.th-quest .start-h { color: #ffcc4d; font-size: 24px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; }
+.th-quest .start-h:after { content: ''; display: block; height: 2px; margin-top: 10px; background: linear-gradient(90deg, #ffcc4d, rgba(255, 204, 77, 0)); }
+.th-quest .stile { width: 150px; margin: 0 10px 10px 0; }
+.th-quest .stile .ic { width: 72px; height: 72px; margin-bottom: 10px; }
+.th-quest .srec { border-radius: 0; border-inline-start: 4px solid rgba(77, 225, 210, 0.5); }
+.th-quest .srec:focus, .th-quest .start-user:focus, .th-quest .start-power:focus { background: rgba(255, 204, 77, 0.22); box-shadow: inset 0 0 0 2px #ffcc4d; border-radius: 0; }
+.th-quest .start-foot { border-radius: 0; border-top: 2px solid rgba(255, 204, 77, 0.45); background: rgba(0, 0, 0, 0.4); }
+/* app windows: a gold slanted title tab on a dark bar */
+.th-quest .win-bar { padding-left: 0; background: #0a0f15; border-bottom: 3px solid #ffcc4d; }
+[dir="rtl"].th-quest .win-bar { padding-right: 0; }
+.th-quest .win-icon { display: none; }
+.th-quest .win-title { flex: none; max-width: 70%; height: 88px; line-height: 88px; margin-right: auto; padding: 0 70px 0 32px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+                       background: #ffcc4d; color: #14110a; font-size: 28px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+                       -webkit-clip-path: polygon(0 0, 100% 0, calc(100% - 44px) 100%, 0 100%); clip-path: polygon(0 0, 100% 0, calc(100% - 44px) 100%, 0 100%); }
+[dir="rtl"].th-quest .win-title { margin-right: 0; margin-left: auto; padding: 0 32px 0 70px; -webkit-clip-path: polygon(0 0, 100% 0, 100% 100%, 44px 100%); clip-path: polygon(0 0, 100% 0, 100% 100%, 44px 100%); }
+.th-quest .win-close:focus { background: #e0454b; }
+.th-quest .btn { border-radius: 0; text-transform: uppercase; letter-spacing: 0.08em; }
+/* the widgets: HUD panels, a cyan edge, one notched corner, segmented rings */
+.th-quest .desk-widgets { width: 460px; height: calc(var(--sh) - 160px); }
+.th-quest .has-wdg .desk-icons { right: 508px; }
+[dir="rtl"].th-quest .has-wdg .desk-icons { right: 24px; left: 508px; }
+.th-quest #desk-widgets .wdg { border: 0; border-radius: 0; border-inline-start: 5px solid #4de1d2; background: linear-gradient(90deg, rgba(14, 22, 30, 0.92), rgba(8, 12, 18, 0.78));
+                               -webkit-clip-path: polygon(0 0, calc(100% - 26px) 0, 100% 26px, 100% 100%, 0 100%); clip-path: polygon(0 0, calc(100% - 26px) 0, 100% 26px, 100% 100%, 0 100%); }
+.th-quest #desk-widgets .wdg:focus { border-color: #ffcc4d; background: linear-gradient(90deg, rgba(60, 48, 16, 0.94), rgba(16, 18, 20, 0.84)); box-shadow: inset 0 0 0 2px #ffcc4d; }
+.th-quest .wdg-head { color: #4de1d2; font-size: 18px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
+.th-quest .wdg-clocked .wdg-head { display: none; }
+.th-quest .wdg-clocked { min-height: 0 !important; }
+.th-quest .wdg-ck-t { color: #ffcc4d; font-weight: 800; }
+.th-quest .wdg-ck-d { text-transform: uppercase; letter-spacing: 0.08em; font-size: 18px; }
+.th-quest .wdg-clock { border-color: rgba(77, 225, 210, 0.45); }
+.th-quest .wdg-bar { border-radius: 0; } .th-quest .wdg-bar i { border-radius: 0; background: #4de1d2; }
+.th-quest .wdg-ring { --rc: #4de1d2; } .th-quest .wdg-ring:nth-child(2) { --rc: #ffcc4d; } .th-quest .wdg-ring:nth-child(3) { --rc: #ff6b5a; }
+.th-quest .wdg-ring:before { background: conic-gradient(var(--rc) calc(var(--p) * 1%), rgba(255, 255, 255, 0.12) 0);
+                             -webkit-mask: radial-gradient(closest-side, transparent 70%, #000 72%), repeating-conic-gradient(#000 0 13deg, transparent 13deg 15deg);
+                             -webkit-mask-composite: source-in; mask: radial-gradient(closest-side, transparent 70%, #000 72%) intersect, repeating-conic-gradient(#000 0 13deg, transparent 13deg 15deg); border-radius: 50%; }
+.th-quest .wdg-ring span { text-transform: uppercase; letter-spacing: 0.1em; font-size: 15px; font-weight: 700; }
+.th-quest .wdg-lb { border-radius: 0; background: rgba(255, 255, 255, 0.05); -webkit-clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+                    clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); }
+.th-quest .wdg-lb:focus { background: rgba(255, 204, 77, 0.3); box-shadow: inset 0 0 0 2px #ffcc4d; }
+.th-quest .wdg-lb-t { text-transform: uppercase; font-size: 16px; font-weight: 700; letter-spacing: 0.06em; }
+.th-quest .wdg-ev, .th-quest .wdg-alert { border-radius: 0; }
+
+/* theme cards of the two new themes */
+.set-th-neon { left: 5%; bottom: 4px; width: 90%; height: 13px; border-radius: 7px; background: rgba(34, 40, 100, 0.9); box-shadow: 0 0 6px rgba(120, 150, 255, 0.95); }
+.set-th-quest { background: #0a0e14; border-top: 2px solid #ffcc4d; box-shadow: inset 44px 0 0 #ffcc4d; }
+
+/* their backgrounds (CSS only, painted once) */
+.wp-nightlake { background-color: #0a1240;
+    background-image:
+        linear-gradient(172deg, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0) 71.2%, rgba(120, 180, 255, 0.9) 71.5%, rgba(120, 180, 255, 0) 72.2%),
+        radial-gradient(ellipse 2.5% 22% at 58% 84%, rgba(230, 220, 255, 0.5), rgba(230, 220, 255, 0)),
+        radial-gradient(ellipse 30% 10% at 40% 76%, rgba(255, 170, 90, 0.25), rgba(255, 170, 90, 0)),
+        linear-gradient(180deg, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0) 64%, #23338c 64%, #121c63 80%, #070c35 100%),
+        radial-gradient(ellipse 0.5% 10% at 75% 74%, rgba(255, 200, 120, 0.5), rgba(255, 200, 120, 0)),
+        radial-gradient(ellipse 0.4% 8% at 71% 73%, rgba(255, 170, 230, 0.45), rgba(255, 170, 230, 0)),
+        radial-gradient(ellipse 0.5% 9% at 33% 73%, rgba(255, 190, 110, 0.45), rgba(255, 190, 110, 0)),
+        radial-gradient(ellipse 0.9% 1.6% at 75% 47%, rgba(255, 230, 170, 0.95), rgba(255, 230, 170, 0)),
+        radial-gradient(ellipse 0.6% 1.2% at 72% 50%, rgba(255, 210, 150, 0.9), rgba(255, 210, 150, 0)),
+        radial-gradient(ellipse 0.6% 1.2% at 78% 51%, rgba(255, 210, 150, 0.9), rgba(255, 210, 150, 0)),
+        radial-gradient(ellipse 0.5% 1% at 33% 60%, rgba(255, 200, 130, 0.9), rgba(255, 200, 130, 0)),
+        radial-gradient(ellipse 5% 7% at 75% 48%, rgba(255, 200, 140, 0.35), rgba(255, 200, 140, 0)),
+        conic-gradient(from 148deg at 75% 42%, rgba(0, 0, 0, 0) 0deg, #191245 0deg 64deg, rgba(0, 0, 0, 0) 64deg),
+        conic-gradient(from 140deg at 47% 46%, rgba(0, 0, 0, 0) 0deg, #2a2266 0deg 80deg, rgba(0, 0, 0, 0) 80deg),
+        conic-gradient(from 150deg at 60% 52%, rgba(0, 0, 0, 0) 0deg, #221b58 0deg 60deg, rgba(0, 0, 0, 0) 60deg),
+        radial-gradient(ellipse 34% 20% at 76% 66%, #140f3e 0, #140f3e 97%, rgba(20, 15, 62, 0) 100%),
+        radial-gradient(ellipse 30% 16% at 30% 66%, #1c1550 0, #1c1550 97%, rgba(28, 21, 80, 0) 100%),
+        radial-gradient(ellipse 22% 26% at 92% 66%, #241a5e 0, #241a5e 97%, rgba(36, 26, 94, 0) 100%),
+        radial-gradient(circle at 58% 20%, #fbf8ff 0, #e8e0ff 60px, #c2b6f5 70px, rgba(170, 150, 255, 0.4) 74px, rgba(120, 100, 255, 0) 240px),
+        radial-gradient(ellipse 26% 34% at 10% 8%, rgba(255, 60, 190, 0.85), rgba(255, 60, 190, 0)),
+        radial-gradient(ellipse 18% 22% at 26% 22%, rgba(220, 70, 255, 0.55), rgba(220, 70, 255, 0)),
+        radial-gradient(ellipse 18% 30% at 4% 92%, rgba(255, 70, 200, 0.6), rgba(255, 70, 200, 0)),
+        radial-gradient(1.6px 1.6px at 30px 40px, #fff 50%, rgba(255, 255, 255, 0) 100%),
+        radial-gradient(1.2px 1.2px at 140px 110px, rgba(255, 255, 255, 0.85) 50%, rgba(255, 255, 255, 0) 100%),
+        radial-gradient(1.4px 1.4px at 90px 170px, rgba(220, 225, 255, 0.9) 50%, rgba(255, 255, 255, 0) 100%),
+        linear-gradient(180deg, #040822 0%, #0f1650 36%, #352a8c 58%, #1d2b85 64%);
+    background-size: auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, 211px 197px, 263px 181px, 157px 223px, auto;
+    background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat, repeat, repeat, no-repeat; }
+.wp-quest { background-color: #0b1016;
+    background-image:
+        radial-gradient(ellipse 75% 70% at 50% 50%, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.6) 100%),
+        linear-gradient(118deg, rgba(255, 255, 255, 0) 30%, rgba(255, 204, 77, 0.1) 30.2%, rgba(255, 204, 77, 0.1) 38%, rgba(255, 255, 255, 0) 38.2%),
+        linear-gradient(118deg, rgba(255, 255, 255, 0) 41%, rgba(77, 225, 210, 0.08) 41.2%, rgba(77, 225, 210, 0.08) 44%, rgba(255, 255, 255, 0) 44.2%),
+        radial-gradient(ellipse 70% 40% at 50% 108%, rgba(77, 225, 210, 0.45), rgba(77, 225, 210, 0)),
+        radial-gradient(ellipse 40% 50% at 82% 18%, rgba(255, 140, 60, 0.22), rgba(255, 140, 60, 0)),
+        repeating-linear-gradient(0deg, rgba(120, 200, 220, 0.06) 0, rgba(120, 200, 220, 0.06) 1px, rgba(0, 0, 0, 0) 1px, rgba(0, 0, 0, 0) 64px),
+        repeating-linear-gradient(90deg, rgba(120, 200, 220, 0.06) 0, rgba(120, 200, 220, 0.06) 1px, rgba(0, 0, 0, 0) 1px, rgba(0, 0, 0, 0) 64px),
+        linear-gradient(160deg, #101a24 0%, #0b1118 50%, #141018 100%); }
+.th-quest .start:not([hidden]) ~ .taskbar .th-hints { display: none; }

@@ -34,7 +34,7 @@ var Widgets = (function () {
             if (err === 'notfound') return done({ icon: 'i:cloud', big: '--', text: t('wgNoPlace').replace('%s', s.place) });
             if (!data || !data.now || data.now.temp === null) return done(stale(ctx.id, t('wgOffline')));
             var c = data.now, d = data.days[0] || {}, k = Weather.sky(c.code, c.day);
-            var v = { icon: 'i:' + k.ic, art: k.ic, anim: s.anim !== false, bigSize: WX_T[s.tsize] || WX_T.l, artSize: WX_I[s.isize] || WX_I.l,
+            var v = { icon: 'i:' + k.ic, art: k.ic, anim: s.anim !== false, clock: s.clock || 'auto', bigSize: WX_T[s.tsize] || WX_T.l, artSize: WX_I[s.isize] || WX_I.l,
                       big: Math.round(c.temp) + '°', sub: loc.name, text: t('wx_' + k.k), rows: [] };
             var al = Weather.alerts(data, s.warn);
             if (al.length) { v.alerts = al.map(function (a) { return { level: a.level, text: Weather.alertText(a) }; }); tell(al); }
@@ -88,20 +88,41 @@ var Widgets = (function () {
         return stor.kb;
     }
     function mb(b) { return Math.round(b / 1048576) + ' MB'; }
+    // the TV's own storage (Tizen systeminfo STORAGE, internal units), asked at most once a minute (for the ring look)
+    var disk = { at: 0, v: null };
+    function diskUse(si, cb) {
+        if (!si || !si.getPropertyValue || now() - disk.at < 60000) return cb();
+        disk.at = now();
+        var told = false, end = function () { if (!told) { told = true; cb(); } };
+        try {
+            si.getPropertyValue('STORAGE', function (st) {
+                var cap = 0, av = 0;
+                ((st && st.units) || []).forEach(function (u) { if (u && u.type === 'INTERNAL' && u.capacity > 0) { cap += u.capacity; av += u.availableCapacity || 0; } });
+                disk.v = cap > 0 ? (cap - av) / cap : null;
+                end();
+            }, end);
+        } catch (e) { end(); }
+        setTimeout(end, 1000);
+    }
     function sysmon(ctx, done) {
-        var v = { icon: 'i:chip', rows: [] }, si = window.tizen && tizen.systeminfo, finished = false;
+        var v = { icon: 'i:chip', rows: [], rings: [] }, si = window.tizen && tizen.systeminfo, finished = false;
+        // rings (CPU, RAM, disk: the look some themes draw instead of the big value and the rows)
+        function ring(label, x) { if (typeof x === 'number' && isFinite(x)) v.rings.push({ label: label, value: Math.max(0, Math.min(1, x)) }); }
         function fin(cpu) {
             if (finished) return;
             finished = true;
-            if (cpu !== null && cpu !== undefined) { v.big = Math.round(cpu * 100) + ' %'; v.sub = t('wgCpu'); v.progress = cpu; }
+            if (cpu !== null && cpu !== undefined) { v.big = Math.round(cpu * 100) + ' %'; v.sub = t('wgCpu'); v.progress = cpu; ring(t('wgRCpu'), cpu); }
             try {
                 if (si && si.getTotalMemory) {
                     var tot = si.getTotalMemory(), av = si.getAvailableMemory();
+                    ring(t('wgRRam'), (tot - av) / tot);
                     v.rows.push({ label: t('wgMemory'), value: mb(tot - av) + ' / ' + mb(tot) });
                     if (v.progress === undefined) { v.big = Math.round((tot - av) * 100 / tot) + ' %'; v.sub = t('wgMemory'); v.progress = (tot - av) / tot; }
                 }
             } catch (e) {}
+            ring(t('wgRDisk'), disk.v);
             var pm = window.performance && performance.memory;
+            if (pm && pm.usedJSHeapSize && pm.jsHeapSizeLimit && v.rings.length < 3) ring(t('wgRHeap'), pm.usedJSHeapSize / pm.jsHeapSizeLimit);
             if (pm && pm.usedJSHeapSize) {
                 if (v.progress === undefined && pm.jsHeapSizeLimit) { v.big = mb(pm.usedJSHeapSize); v.sub = t('wgHeap'); v.progress = pm.usedJSHeapSize / pm.jsHeapSizeLimit; }
                 else v.rows.push({ label: t('wgHeap'), value: mb(pm.usedJSHeapSize) });
@@ -112,11 +133,12 @@ var Widgets = (function () {
             if (!v.big) { v.big = Perf.profile().tier; v.sub = t('device'); }
             done(v);
         }
-        if (si && si.getPropertyValue) {
+        if (si && si.getPropertyValue) diskUse(si, cpuNow); else fin(null);
+        function cpuNow() {
             try { si.getPropertyValue('CPU', function (c) { fin(c && typeof c.load === 'number' ? c.load : null); }, function () { fin(null); }); }
             catch (e) { fin(null); }
             setTimeout(function () { fin(null); }, 1500);
-        } else fin(null);
+        }
     }
 
     // Calendar: today in the Gregorian and the Moroccan Hijri calendars, then today's and tomorrow's events (holidays, big events,
@@ -176,6 +198,33 @@ var Widgets = (function () {
                          { id: 'next', icon: 'next', label: t('wgNext') }] });
     }
 
+    // Quick launch (owner request 2026-11-12, with the Neon night theme): four buttons, each an app or the last game played.
+    // Nothing to refresh (no timer once drawn); the profile picks the four in the widget's settings.
+    var QUICK = ['last', 'music', 'explorer', 'store'];
+    function lastGame() {
+        var id = Desktop.lastPlayed(), l = Desktop.games();
+        for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i];
+        return null;
+    }
+    function quick(ctx, done) {
+        var s = ctx.settings, out = [];
+        QUICK.forEach(function (def, i) {
+            var id = s['a' + (i + 1)] || def;
+            if (id === 'last') {
+                var g = lastGame();
+                out.push(g ? { id: 'last', label: I18n.pick(g.manifest.title), image: Desktop.coverUrl(g) } : { id: 'last', icon: 'controller', label: t('wgGames') });
+                return;
+            }
+            var a = Desktop.appById(id);
+            if (a) out.push({ id: a.id, icon: a.icon, label: t(a.label) });
+        });
+        done({ icon: 'i:bolt', launch: out });
+    }
+    function quickPress(b) {
+        if (b === 'last') { var g = lastGame(); if (g) Desktop.play(g); else Desktop.openStart(); return; }
+        if (Desktop.appById(b)) Win.open(b);
+    }
+
     var BUILT = [
         { id: 'weather', icon: 'weather', title: function () { return t('wg_weather'); }, size: 'medium', every: 1800, choices: [900, 1800, 3600, 10800], bg: false,
           settings: function () {
@@ -183,7 +232,8 @@ var Widgets = (function () {
               return [{ id: 'place', type: 'text', label: t('wgPlace'), 'default': '' },
                       { id: 'units', type: 'select', label: t('wgUnits'), 'default': 'c', options: [{ value: 'c', label: t('wgCelsius') }, { value: 'f', label: t('wgFahrenheit') }] },
                       { id: 'warn', type: 'select', label: t('wxWarn'), 'default': '6', options: [{ value: '0', label: t('wxWarnOff') }].concat(['1', '2', '4', '6', '8', '24'].map(function (h) { return { value: h, label: t('wxWarnH').replace('%n', h) }; })) },
-                      sz('tsize', 'wxTSize'), sz('isize', 'wxISize'), { id: 'anim', type: 'toggle', label: t('wxAnim'), 'default': true }];
+                      sz('tsize', 'wxTSize'), sz('isize', 'wxISize'), { id: 'anim', type: 'toggle', label: t('wxAnim'), 'default': true },
+                      { id: 'clock', type: 'select', label: t('wgClock'), 'default': 'auto', options: [{ value: 'auto', label: t('wgWithTheme') }, { value: 'yes', label: t('on') }, { value: 'no', label: t('off') }] }];
           }, refresh: weather, keep: true, open: function () { Win.open('weather'); } },
         { id: 'calendar', icon: 'calendar', title: function () { return t('wg_calendar'); }, size: 'medium', every: 900, choices: [300, 900, 1800, 3600], bg: false,
           settings: function () {
@@ -196,7 +246,13 @@ var Widgets = (function () {
         { id: 'music', icon: 'music', title: function () { return t('wg_music'); }, size: 'medium', every: 2, choices: [1, 2, 5, 10], bg: true, refresh: music,
           idle: function () { return !Music.state().playing; },
           press: function (b) { if (b === 'toggle') Music.toggle(); else if (b === 'next') Music.next(); else if (b === 'prev') Music.prev(); else if (b === 'open') Win.open('music'); },
-          open: function () { Win.open('music'); } }
+          open: function () { Win.open('music'); } },
+        { id: 'quick', icon: 'bolt', title: function () { return t('wg_quick'); }, size: 'medium', every: 3600, choices: [3600], bg: false, refresh: quick,
+          idle: function () { return true; }, press: quickPress, quiet: true,
+          settings: function () {
+              var opts = [{ value: 'last', label: t('wgLastGame') }].concat(Desktop.APPS.map(function (a) { return { value: a.id, label: t(a.label) }; }));
+              return QUICK.map(function (def, i) { return { id: 'a' + (i + 1), type: 'select', label: t('wgSlot').replace('%n', i + 1), 'default': def, options: opts }; });
+          } }
     ];
 
     /* ---------------- app widgets (installed store apps) ---------------- */
@@ -407,6 +463,7 @@ var Widgets = (function () {
         (v.alerts || []).forEach(function (a) { p.push(a.text); });
         (v.events || []).forEach(function (e) { p.push((e.when ? e.when + ': ' : '') + e.text); });
         (v.rows || []).forEach(function (r) { p.push(r.label + ' ' + r.value); });
+        (v.launch || []).forEach(function (b) { p.push(b.label); });
         return p.join('. ');
     }
     // draws a view into its card, only when it changed
@@ -414,12 +471,18 @@ var Widgets = (function () {
         if (!box || headless) return;
         var c = document.getElementById('wdg-' + id), d = find(id);
         if (!c || !d) return;
-        var key = JSON.stringify(v) + I18n.lang();
+        var th = typeof Themes !== 'undefined' && Themes.find(Themes.current()) || {};
+        var key = JSON.stringify(v) + I18n.lang() + (th.id || '');
         if (painted[id] === key) return;
         painted[id] = key;
         var had = document.activeElement, focusBtn = had && c.contains(had) && had !== c ? had.getAttribute('data-b') : null;
         c.innerHTML = '';
         c.style.borderTopColor = v.accent || '';
+        // the clock beside the weather (setting "Show the clock": with the theme / on / off), CPU / RAM / disk as rings
+        var clock = v.art && (v.clock === 'yes' || (v.clock === 'auto' && th.clock));
+        var rings = th.rings && v.rings && v.rings.length;
+        c.classList.toggle('wdg-clocked', !!clock);
+        c.classList.toggle('wdg-ringed', !!rings);
         var head = el('div', 'wdg-head');
         head.appendChild(iconEl(v.icon, d.icon));
         head.appendChild(el('span', 'wdg-title', v.title || d.title()));
@@ -436,6 +499,33 @@ var Widgets = (function () {
             if (v.page.bottom) pg.appendChild(el('span', 'wdg-pg-bot', v.page.bottom));
             hero2.appendChild(col2); hero2.appendChild(pg);
             c.appendChild(hero2);
+        } else if (rings) {
+            var rs = el('div', 'wdg-rings');
+            v.rings.forEach(function (r) {
+                var x = el('div', 'wdg-ring'), pc = Math.round(r.value * 100);
+                x.style.setProperty('--p', pc);
+                x.className = 'wdg-ring' + (pc >= 85 ? ' wdg-hot' : pc >= 60 ? ' wdg-warm' : '');
+                var n = el('b', '', String(pc)); n.appendChild(el('small', '', '%'));
+                x.appendChild(n);
+                x.appendChild(el('span', '', r.label));
+                rs.appendChild(x);
+            });
+            c.appendChild(rs);
+        } else if (v.launch) {
+            var ls = el('div', 'wdg-launch');
+            v.launch.forEach(function (b) {
+                var x = el('button', 'wdg-lb'), ic = el('span', 'wdg-lb-ic');
+                x.setAttribute('data-focus', '');
+                x.setAttribute('data-b', b.id);
+                x.setAttribute('aria-label', b.label);
+                if (b.image) { var im2 = el('img'); im2.alt = ''; im2.src = b.image; im2.onerror = function () { this.remove(); }; ic.appendChild(im2); }
+                else Icons.put(ic, b.icon);
+                x.appendChild(ic);
+                x.appendChild(el('span', 'wdg-lb-t', b.label));
+                x.onclick = function (e) { e.stopPropagation(); press(d, b.id); };
+                ls.appendChild(x);
+            });
+            c.appendChild(ls);
         } else if (v.art) {
             // big value + its text on the left, a big picture on the right (Weather)
             var hero = el('div', 'wdg-hero'), col = el('div', 'wdg-col'), big = el('div', 'wdg-big', v.big || '');
@@ -448,7 +538,16 @@ var Widgets = (function () {
             var moving = v.anim && typeof Weather !== 'undefined' ? Weather.art(v.art) : '';
             if (moving) art.innerHTML = moving; else Icons.put(art, v.art);
             hero.appendChild(col); hero.appendChild(art);
-            c.appendChild(hero);
+            if (clock) {
+                var duo = el('div', 'wdg-duo'), ck = el('div', 'wdg-clock'), tl = el('div', 'wdg-ck-t');
+                tl.appendChild(el('span', 'wdg-ck-h'));
+                tl.appendChild(el('small', 'wdg-ck-ap'));
+                ck.appendChild(tl);
+                ck.appendChild(el('div', 'wdg-ck-d'));
+                duo.appendChild(ck); duo.appendChild(hero);
+                c.appendChild(duo);
+                tick();
+            } else c.appendChild(hero);
         } else {
             if (v.big) c.appendChild(el('div', 'wdg-big', v.big));
             // no big value: the text leads (a song title, then its artist)
@@ -467,7 +566,7 @@ var Widgets = (function () {
             });
             c.appendChild(evs);
         }
-        if (v.progress !== undefined) {
+        if (v.progress !== undefined && !rings) {
             var bar = el('div', 'wdg-bar'), fill = el('i');
             fill.style.width = Math.round(v.progress * 100) + '%';
             // a song: how much of it is loaded, light grey under the progress
@@ -476,7 +575,7 @@ var Widgets = (function () {
             bar.appendChild(fill);
             c.appendChild(bar);
         }
-        if (v.rows) {
+        if (v.rows && !rings) {
             var rows = el('div', 'wdg-rows');
             v.rows.forEach(function (r) { var x = el('div', 'wdg-row'); x.appendChild(el('span', '', r.label)); x.appendChild(el('b', '', r.value)); rows.appendChild(x); });
             c.appendChild(rows);
@@ -494,13 +593,24 @@ var Widgets = (function () {
             });
             c.appendChild(bs);
         }
-        c.setAttribute('role', v.buttons ? 'group' : 'button');
+        c.setAttribute('role', v.buttons || v.launch ? 'group' : 'button');
         c.setAttribute('aria-label', label(d, v));
         if (focusBtn) { var nb = c.querySelector('[data-b="' + focusBtn + '"]'); try { (nb || c).focus(); } catch (e) {} }
     }
     function press(d, b) {
+        if (d.press && d.quiet) { d.press(b); return; }
         if (d.press) { d.press(b); refresh(d.id); A11y.announce((views[d.id] || {}).text || ''); return; }
         if (d.app) { delete last[d.id]; refresh(d.id, b); }
+    }
+
+    // the clock beside the weather: Desktop.tick calls this once a minute (no timer of its own)
+    function tick() {
+        var c = box && document.getElementById('wdg-weather');
+        if (!c || !c.querySelector('.wdg-clock')) return;
+        var d = new Date(), txt = Desktop.timeText(d), m = /^(.*?)\s?(AM|PM)$/.exec(txt);
+        c.querySelector('.wdg-ck-h').textContent = m ? m[1] : txt;
+        c.querySelector('.wdg-ck-ap').textContent = m ? m[2] : '';
+        c.querySelector('.wdg-ck-d').textContent = Desktop.dateText(d, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
     }
 
     // builds the cards of the shown widgets (desktop page); each shows its last view at once, then refreshes when due
@@ -548,7 +658,7 @@ var Widgets = (function () {
     init();
 
     return {
-        render: render, pause: pause, resume: resume, background: background, refreshNow: refreshNow,
+        render: render, tick: tick, pause: pause, resume: resume, background: background, refreshNow: refreshNow,
         list: function () { return ordered(); }, find: find, conf: conf, set: set, setSetting: setSetting, reset: reset, move: move,
         on: on, setOn: setOn, shown: shown, view: function (id) { return views[id] || cached(id); },
         // for tests

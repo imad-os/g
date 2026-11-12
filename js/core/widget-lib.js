@@ -157,6 +157,17 @@
                 return { when: cut(e.when, 24), text: cut(e.text, 80), kind: /^(holiday|observance|event|mine)$/.test(str(e.kind)) ? e.kind : 'event' };
             }).filter(function (e) { return e.text; });
             if (out.events && !out.events.length) delete out.events;
+            // the clock beside the weather (with the theme / on / off), rings (System Monitor), quick launch buttons
+            if (/^(auto|yes|no)$/.test(str(v.clock))) out.clock = v.clock;
+            if (Array.isArray(v.rings)) out.rings = v.rings.filter(isObject).slice(0, 3).map(function (r) { return { label: cut(r.label, 12), value: Math.max(0, Math.min(1, +r.value || 0)) }; });
+            if (out.rings && !out.rings.length) delete out.rings;
+            if (Array.isArray(v.launch)) out.launch = v.launch.filter(isObject).slice(0, 4).map(function (b) {
+                var o = { id: cut(b.id, 20), label: cut(b.label, LIMITS.label) };
+                if (/^[a-zA-Z0-9]{1,20}$/.test(str(b.icon))) o.icon = str(b.icon);
+                if (/^(https:\/\/[^"'()<>\s]+|[a-zA-Z0-9_.\/-]+)$/.test(str(b.image))) o.image = str(b.image);
+                return o;
+            }).filter(function (b) { return b.id && b.label; });
+            if (out.launch && !out.launch.length) delete out.launch;
         }
         if (/^#[0-9a-fA-F]{6}$/.test(str(v.accent))) out.accent = str(v.accent);
         var l = str(v.link);

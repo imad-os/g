@@ -1036,6 +1036,38 @@ html.av-video, html.av-video body, html.av-video .stage, html.av-video .game-lay
 .tall.compact .desk-widgets { height: 420px; bottom: 216px; }
 .tall.compact .has-wdg .desk-icons { height: calc(var(--sh) - 680px); }
 
+/* the clock beside the weather (Weather setting "Show the clock"), System Monitor rings, Quick launch buttons (owner request 2026-11-12) */
+.wdg-duo { display: flex; align-items: center; gap: 16px; margin-top: 2px; }
+.wdg-duo .wdg-hero { flex: 1; min-width: 0; flex-direction: row-reverse; gap: 8px; margin: 0; }
+.wdg-clock { flex: none; padding-inline-end: 16px; border-inline-end: 2px solid rgba(255, 255, 255, 0.22); }
+.wdg-ck-t { font-size: 56px; font-weight: 600; line-height: 1; white-space: nowrap; direction: ltr; }
+.wdg-ck-ap { margin-inline-start: 6px; font-size: 22px; font-weight: 600; }
+.wdg-ck-d { margin-top: 10px; font-size: 20px; color: #d6daf0; white-space: nowrap; }
+.wdg-clocked .wdg-art { width: 64px !important; height: 64px !important; }
+.wdg-clocked .wdg-big { font-size: 44px !important; }
+.wdg-clocked .wdg-hero .wdg-text { display: none; }
+.wdg-rings { display: flex; justify-content: space-around; margin-top: 14px; }
+.wdg-ring { position: relative; width: 108px; height: 108px; display: flex; flex-direction: column; align-items: center; justify-content: center; --rc: #3fb8ff; }
+.wdg-ring:nth-child(2) { --rc: #a65bff; } .wdg-ring:nth-child(3) { --rc: #3ddc84; }
+/* the ring itself: a conic gradient with its middle masked out (static: painted once per refresh, no canvas) */
+.wdg-ring:before { content: ''; position: absolute; left: 0; top: 0; right: 0; bottom: 0; border-radius: 50%;
+                   background: conic-gradient(var(--rc) calc(var(--p) * 1%), rgba(255, 255, 255, 0.14) 0);
+                   -webkit-mask: radial-gradient(closest-side, transparent 77%, #000 79%); mask: radial-gradient(closest-side, transparent 77%, #000 79%); }
+.wdg-ring b { position: relative; font-size: 32px; font-weight: 700; line-height: 1; }
+.wdg-ring small { font-size: 16px; font-weight: 600; }
+.wdg-ring span { position: relative; margin-top: 4px; font-size: 17px; color: #d6daf0; }
+#wdg-quick { border-top-color: #ff9f43; height: auto; }
+.wdg-launch { display: flex; gap: 8px; margin-top: 12px; }
+.wdg-lb { flex: 1; min-width: 0; height: 130px; padding: 12px 4px 8px; border-radius: 14px; text-align: center; }
+.wdg-lb:focus { background: rgba(255, 255, 255, 0.14); box-shadow: 0 0 0 4px #fff; }
+.wdg-lb-ic { display: block; width: 64px; height: 64px; margin: 0 auto 8px; border-radius: 14px; overflow: hidden; }
+.wdg-lb-ic img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.wdg-lb-t { display: block; font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.compact .wdg-lb { height: 190px; } .compact .wdg-lb-ic { width: 96px; height: 96px; } .compact .wdg-lb-t { font-size: 26px; }
+.compact .wdg-ring { width: 150px; height: 150px; } .compact .wdg-ring b { font-size: 44px; } .compact .wdg-ring span { font-size: 24px; }
+.compact .wdg-ck-t { font-size: 84px; } .compact .wdg-ck-d { font-size: 28px; }
+.dt-ic, .th-hints { display: none; }
+
 .tall .dw-cap { width: 92%; top: 110px; }
 .tall .gdui { width: 1000px; margin-left: -500px; margin-top: -460px; }
 .tall .gdui-row { flex-direction: column; text-align: center; }

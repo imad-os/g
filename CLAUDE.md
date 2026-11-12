@@ -64,7 +64,12 @@
   before roles: the first is admin. A new profile is a user once the TV has a named or signed-in admin. Switching from a user to an
   admin that has an account asks its password. API: `Profiles.isAdmin(id?)`, `setRole`, `canRemove`; Control Panel > Accounts > Other users.
 - **Themes** (per profile, `Store` key `theme`): `js/launcher/themes.js` puts `th-<id>` on `<html>`; looks are CSS only in
-  `css/themes.css` (win11 = launcher.css itself, win7, xp, mac, android, ios; no images, no blur). Picking one also sets its wallpaper.
+  `css/themes.css` (win11 = launcher.css itself, win7, xp, mac, android, ios, **neon** "Neon night" and **quest** "Quest" (owner request 2026-11-12, build 160:
+  neon = glass cards glowing on a night lake, floating rounded taskbar, "My PC" title top left; quest = original game-menu look: gold slanted Start tab, item
+  slots with notched corners, HUD widgets, A / B hints above the taskbar `#th-hints`); no images, no blur). Picking one also sets its wallpaper and turns on the theme's
+  `widgets` (`Themes.LIST[i].widgets`, only on, never off). Theme flags `clock` (Weather widget shows the clock: its setting "Show the clock" = with the theme / on / off; ticks
+  from `Desktop.tick` -> `Widgets.tick`, no timer of its own) and `rings` (System Monitor draws CPU / RAM / disk rings, conic-gradient + mask, Tizen systeminfo STORAGE once a minute).
+  Built-in widget **Quick launch** (`quick`, off by default): 4 buttons (last game + apps, its settings). Tests: `MYPC_ONLY=themes node tests/run-tests.mjs`.
 - **Control Panel** (was Settings; the app id stays `settings`): opens on a grid of categories (`Win.open('settings')`), a page
   with `Win.open('settings', '<page>')`; Back: row > page list > grid > close. Its strings, roles and themes are in `js/core/i18n-users.js` (`I18n.add`).
 - **Player accounts** (owner decision): a profile is created with a **unique username** (plain, like `imad12`, not tied to a TV) and a

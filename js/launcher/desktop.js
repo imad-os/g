@@ -29,7 +29,7 @@ var Desktop = (function () {
     // the Game controller is for phones and tablets (the TV is what it controls)
     if (window.tizen) APPS = APPS.filter(function (a) { return a.id !== 'gamepad'; });
     else PINNED.splice(5, 0, 'gamepad');
-    var WALLPAPERS = ['bloom', 'aurora', 'sunset', 'night', 'aero', 'hills', 'dunes', 'material', 'lagoon'];   // the last five go with the themes (js/launcher/themes.js)
+    var WALLPAPERS = ['bloom', 'aurora', 'sunset', 'night', 'aero', 'hills', 'dunes', 'material', 'lagoon', 'nightlake', 'quest'];   // the last seven go with the themes (js/launcher/themes.js)
 
     function $(id) { return document.getElementById(id); }
     function el(tag, cls, text) {
@@ -360,6 +360,7 @@ var Desktop = (function () {
         $('tray-date').textContent = dateText(d);
         $('tray-clock').setAttribute('aria-label', timeText(d) + ', ' + dateText(d, { weekday: 'long', day: 'numeric', month: 'long' }));
         clockTimer = setTimeout(tick, (60 - d.getSeconds()) * 1000 + 50);
+        if (window.Widgets && Widgets.tick) Widgets.tick();
     }
     function stopClock() { clearTimeout(clockTimer); clockTimer = 0; }
 

@@ -24,6 +24,7 @@
             wx_clear: 'Clear', wx_partly: 'Partly cloudy', wx_cloudy: 'Cloudy', wx_fog: 'Fog', wx_drizzle: 'Drizzle', wx_rain: 'Rain', wx_snow: 'Snow', wx_showers: 'Showers', wx_storm: 'Thunderstorm',
             wgH: 'h', wgMin: 'min', wgToday: 'Played today', wgWeek: 'This week', wgTop: 'Most played', wgLast: 'Last played', wgNoPlay: 'Play a game and your time shows here.',
             wgCpu: 'Processor', wgMemory: 'Memory', wgHeap: 'My PC memory', wgCores: 'Processor cores',
+            wgRCpu: 'CPU', wgRRam: 'RAM', wgRDisk: 'Disk', wgRHeap: 'My PC', wgClock: 'Show the clock', wgWithTheme: 'With the theme', wg_quick: 'Quick launch', wgSlot: 'Button %n', wgLastGame: 'Last game played', wgGames: 'Games',
             wgPrev: 'Previous', wgNext: 'Next', wgPlay: 'Play', wgPause: 'Pause',
             wgPrivacy: 'Weather widget and Weather app: to find your place, your internet address is looked up by GeoJS (get.geojs.io), unless you type a city; the place, without your name, is then sent to Open-Meteo (open-meteo.com) for the forecast. This happens only while the widget is shown or the Weather app is open: hide the widget in Control Panel > Widgets and do not open the app to stop it.'
         },
@@ -49,6 +50,7 @@
             wx_clear: 'Dégagé', wx_partly: 'Partiellement nuageux', wx_cloudy: 'Nuageux', wx_fog: 'Brouillard', wx_drizzle: 'Bruine', wx_rain: 'Pluie', wx_snow: 'Neige', wx_showers: 'Averses', wx_storm: 'Orage',
             wgH: 'h', wgMin: 'min', wgToday: 'Joué aujourd’hui', wgWeek: 'Cette semaine', wgTop: 'Le plus joué', wgLast: 'Dernier joué', wgNoPlay: 'Jouez à un jeu et votre temps s’affiche ici.',
             wgCpu: 'Processeur', wgMemory: 'Mémoire', wgHeap: 'Mémoire de My PC', wgCores: 'Cœurs du processeur',
+            wgRCpu: 'CPU', wgRRam: 'RAM', wgRDisk: 'Disque', wgRHeap: 'My PC', wgClock: 'Afficher l’horloge', wgWithTheme: 'Selon le thème', wg_quick: 'Lancement rapide', wgSlot: 'Bouton %n', wgLastGame: 'Dernier jeu joué', wgGames: 'Jeux',
             wgPrev: 'Précédent', wgNext: 'Suivant', wgPlay: 'Lecture', wgPause: 'Pause',
             wgPrivacy: 'Widget Météo et app Météo : pour trouver votre lieu, votre adresse internet est consultée par GeoJS (get.geojs.io), sauf si vous tapez une ville ; le lieu, sans votre nom, est ensuite envoyé à Open-Meteo (open-meteo.com) pour les prévisions. Cela n’a lieu que si le widget est affiché ou l’app Météo ouverte : masquez le widget dans Panneau de configuration > Widgets et n’ouvrez pas l’app pour l’arrêter.'
         },
@@ -74,6 +76,7 @@
             wx_clear: 'Despejado', wx_partly: 'Parcialmente nublado', wx_cloudy: 'Nublado', wx_fog: 'Niebla', wx_drizzle: 'Llovizna', wx_rain: 'Lluvia', wx_snow: 'Nieve', wx_showers: 'Chubascos', wx_storm: 'Tormenta',
             wgH: 'h', wgMin: 'min', wgToday: 'Jugado hoy', wgWeek: 'Esta semana', wgTop: 'Más jugado', wgLast: 'Último jugado', wgNoPlay: 'Juega a un juego y tu tiempo aparecerá aquí.',
             wgCpu: 'Procesador', wgMemory: 'Memoria', wgHeap: 'Memoria de My PC', wgCores: 'Núcleos del procesador',
+            wgRCpu: 'CPU', wgRRam: 'RAM', wgRDisk: 'Disco', wgRHeap: 'My PC', wgClock: 'Mostrar el reloj', wgWithTheme: 'Según el tema', wg_quick: 'Inicio rápido', wgSlot: 'Botón %n', wgLastGame: 'Último juego', wgGames: 'Juegos',
             wgPrev: 'Anterior', wgNext: 'Siguiente', wgPlay: 'Reproducir', wgPause: 'Pausa',
             wgPrivacy: 'Widget y app del Tiempo: para encontrar tu lugar, GeoJS (get.geojs.io) consulta tu dirección de internet, salvo que escribas una ciudad; el lugar, sin tu nombre, se envía luego a Open-Meteo (open-meteo.com) para la previsión. Solo ocurre con el widget visible o la app Tiempo abierta: oculta el widget en Panel de control > Widgets y no abras la app para detenerlo.'
         },
@@ -99,6 +102,7 @@
             wx_clear: 'صافٍ', wx_partly: 'غائم جزئياً', wx_cloudy: 'غائم', wx_fog: 'ضباب', wx_drizzle: 'رذاذ', wx_rain: 'مطر', wx_snow: 'ثلج', wx_showers: 'زخات', wx_storm: 'عاصفة رعدية',
             wgH: 'س', wgMin: 'د', wgToday: 'لُعب اليوم', wgWeek: 'هذا الأسبوع', wgTop: 'الأكثر لعباً', wgLast: 'آخر لعبة', wgNoPlay: 'العب لعبة وسيظهر وقتك هنا.',
             wgCpu: 'المعالج', wgMemory: 'الذاكرة', wgHeap: 'ذاكرة My PC', wgCores: 'أنوية المعالج',
+            wgRCpu: 'المعالج', wgRRam: 'الذاكرة', wgRDisk: 'التخزين', wgRHeap: 'My PC', wgClock: 'إظهار الساعة', wgWithTheme: 'حسب السمة', wg_quick: 'تشغيل سريع', wgSlot: 'الزر %n', wgLastGame: 'آخر لعبة', wgGames: 'الألعاب',
             wgPrev: 'السابق', wgNext: 'التالي', wgPlay: 'تشغيل', wgPause: 'إيقاف مؤقت',
             wgPrivacy: 'أداة الطقس وتطبيق الطقس: لتحديد مكانك يُستعلم عن عنوانك على الإنترنت لدى GeoJS (get.geojs.io)، إلا إذا كتبت مدينة؛ ثم يُرسل المكان، دون اسمك، إلى Open-Meteo (open-meteo.com) لجلب التوقعات. يحدث ذلك فقط عند ظهور الأداة أو فتح تطبيق الطقس: أخفِ الأداة في لوحة التحكم > الأدوات المصغّرة ولا تفتح التطبيق لإيقافه.'
         }

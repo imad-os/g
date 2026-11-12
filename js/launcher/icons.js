@@ -103,6 +103,8 @@ var Icons = (function () {
         fog: '<g stroke="#dfe7f2" stroke-width="4" stroke-linecap="round"><path d="M8 16h32M5 24h38M10 32h30M14 40h20"/></g>',
         hourglass: '<path d="M13 5h22M13 43h22" stroke="#c6b6ff" stroke-width="3.5" stroke-linecap="round"/><path d="M15 6c0 10 9 12 9 18s-9 8-9 18h18c0-10-9-12-9-18s9-8 9-18z" fill="none" stroke="#c6b6ff" stroke-width="3"/>' +
                    '<path d="M18 40c1-5 6-7 6-9s5 4 6 9z" fill="#9a7bff"/>',
+        // lightning bolt (Quick launch)
+        bolt: '<path d="M28 4L10 27h12l-3 17 19-24H26z" fill="#ffc83d" stroke="#e08a00" stroke-width="1.5" stroke-linejoin="round"/>',
         chip: '<rect x="11" y="11" width="26" height="26" rx="4" fill="#3ad29f"/><rect x="18" y="18" width="12" height="12" rx="2" fill="#0f5b43"/>' +
               '<g stroke="#3ad29f" stroke-width="3" stroke-linecap="round"><path d="M18 4v5M24 4v5M30 4v5M18 39v5M24 39v5M30 39v5M4 18h5M4 24h5M4 30h5M39 18h5M39 24h5M39 30h5"/></g>',
         play: '<path d="M15 9l25 15-25 15z" fill="#fff"/>',

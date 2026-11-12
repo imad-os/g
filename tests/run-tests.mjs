@@ -367,6 +367,7 @@ async function main() {
     if (process.env.MYPC_ONLY === 'calendar') { await calendarTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'clock') { await clockTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'pads') { await padTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'themes') { await themeTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'ring') { await ringTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'flow') { await flowTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'music') { await musicTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
@@ -4245,7 +4246,7 @@ async function main() {
         await page.keyboard.press('Escape');
         // themes: per profile, one class on <html>, the theme's background, nothing broken
         await page.evaluate(() => Win.open('settings', 'personal'));
-        check(await page.evaluate(() => document.querySelectorAll('.set-th').length === 6 && document.querySelectorAll('.set-wp:not(.set-th)').length === Desktop.WALLPAPERS.length + DynWall.IDS.length), 'Personalization has the 6 themes and the backgrounds (+ the 2 live ones)');
+        check(await page.evaluate(() => document.querySelectorAll('.set-th').length === Themes.LIST.length && Themes.LIST.length === 8 && document.querySelectorAll('.set-wp:not(.set-th)').length === Desktop.WALLPAPERS.length + DynWall.IDS.length), 'Personalization has the 8 themes and the backgrounds (+ the 2 live ones)');
         await page.evaluate(() => document.querySelector('.set-th[data-theme="xp"]').click());
         check(await page.evaluate(() => document.documentElement.classList.contains('th-xp') && Store.get('theme') === 'xp' && Store.get('wallpaper') === 'hills' && document.activeElement.getAttribute('data-theme') === 'xp'), 'picking a theme applies it with its background and keeps the focus on it');
         await page.evaluate(() => Win.close());
@@ -4278,11 +4279,11 @@ async function main() {
         await page.waitForFunction(() => document.getElementById('wallpaper').className === 'wp wp-img', null, { timeout: 8000 });
         check(await page.evaluate(() => /dunes\.png/.test(document.getElementById('wallpaper').style.backgroundImage) && JSON.parse(localStorage.getItem('arc_dev_global')).wallpapers.length === 2),
             'My PC copies settings/mypc at start: a new profile gets the background chosen for new profiles (only https pictures are kept)');
-        check(await page.evaluate(() => Desktop.wallpapers().map((w) => w.title).join() === 'Bloom,Aurora,Sunset,Night sky,Glass,Green hills,Dunes,Material,Lagoon,Horizon,Earth now,Golden dunes,Broken'),
+        check(await page.evaluate(() => Desktop.wallpapers().map((w) => w.title).join() === 'Bloom,Aurora,Sunset,Night sky,Glass,Green hills,Dunes,Material,Lagoon,Night lake,Quest,Horizon,Earth now,Golden dunes,Broken'),
             'the pictures come after the built-in backgrounds, a missing title taken from the address');
         await page.evaluate(() => Win.open('settings', 'personal'));
         await page.waitForSelector('.set-wp[data-wp="u:https://pics.example/broken.jpg"]');
-        check(await page.evaluate(() => { const b = document.querySelector('.set-wp[data-wp].on'); return b && b.getAttribute('data-wp') === 'u:https://pics.example/dunes.png' && /dunes-small/.test(b.style.backgroundImage) && document.querySelectorAll('.set-wp[data-wp]').length === 13; }),
+        check(await page.evaluate(() => { const b = document.querySelector('.set-wp[data-wp].on'); return b && b.getAttribute('data-wp') === 'u:https://pics.example/dunes.png' && /dunes-small/.test(b.style.backgroundImage) && document.querySelectorAll('.set-wp[data-wp]').length === 15; }),
             'Settings > Personalization shows the pictures (their small version), the one in use marked');
         await page.evaluate(() => document.querySelector('.set-wp[data-wp="u:https://pics.example/broken.jpg"]').click());
         await page.waitForTimeout(300);
@@ -4811,6 +4812,7 @@ async function main() {
     await wallTests(browser, base);
     await flowTests(browser, base);
     await ringTests(browser, base);
+    await themeTests(browser, base);
     await videoTests(browser, base);
     await speedyTests(browser, base);
 
@@ -6135,7 +6137,7 @@ async function wallTests(browser, base) {
         const txt = await page.textContent('.set-main');
         const lists = await page.evaluate(() => [...document.querySelectorAll('.set-wps:not(.set-wps-live) .set-wp:not(.set-th)')].map((b) => b.getAttribute('data-wp')).join() + '|' +
                                                 [...document.querySelectorAll('.set-wps-live .set-wp')].map((b) => b.getAttribute('data-wp')).join());
-        check(/Live backgrounds/.test(txt) && lists === 'bloom,aurora,sunset,night,aero,hills,dunes,material,lagoon|dyn_horizon,dyn_astro',
+        check(/Live backgrounds/.test(txt) && lists === 'bloom,aurora,sunset,night,aero,hills,dunes,material,lagoon,nightlake,quest|dyn_horizon,dyn_astro',
               'Personalization: the live backgrounds have their own section, Horizon and Earth now ' + lists);
         check(/Horizon: the weather, the holidays and the big football nights/.test(txt) && /Show the weather/.test(txt) && /Weather place and units/.test(txt) && /Moving rain and snow/.test(txt) && /Raindrops on the glass/.test(txt) && /Style/.test(txt) && /Drawn/.test(txt) && /Medium/.test(txt) &&
               /Holidays of/.test(txt) && /Morocco/.test(txt) && /Football nights/.test(txt) && /semi-finals and final only/.test(txt) && /CAF Champions League/.test(txt) && /Show the event’s name/.test(txt),
@@ -6405,6 +6407,99 @@ async function ringTests(browser, base) {
         if (shots && (id === 'win7' || id === 'xp')) await page.screenshot({ path: path.join(shots, 'ring-desktop-' + id + '.png') });
         await page.evaluate(() => Desktop.openStart());
     }
+    check(page.errors.length === 0, 'no page errors' + (page.errors.length ? ': ' + page.errors[0] : ''));
+    await page.context().close();
+}
+
+// 50. Neon night and Quest themes (owner request 2026-11-12): their widgets turn on, the clock beside the weather ticks with the
+// desktop's clock, System Monitor draws CPU / RAM / disk rings, Quick launch opens apps, the A / B hints, nothing off screen. MYPC_ONLY=themes.
+async function themeTests(browser, base) {
+    console.log('50. Neon night and Quest themes: clock + weather card, rings, Quick launch, floating taskbar, button hints');
+    const shots = process.env.MYPC_SHOTS;
+    const page = await newPage(browser, base, {});
+    await page.addInitScript(() => {
+        const si = window.tizen.systeminfo;
+        si.getTotalMemory = () => 2048 * 1048576; si.getAvailableMemory = () => 1350 * 1048576;
+        si.getPropertyValue = (n, ok) => setTimeout(() => ok(n === 'CPU' ? { load: 0.12 } : { units: [{ type: 'INTERNAL', capacity: 8e9, availableCapacity: 2.4e9 }, { type: 'USB_HOST', capacity: 3e10, availableCapacity: 1e10 }] }), 5);
+    });
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.goto(base + 'index.html');
+    await page.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
+    check(await page.evaluate(() => !Widgets.conf('sysmon').show && !Widgets.conf('quick').show), 'before: only Weather is on (owner decision)');
+    await page.evaluate(() => Themes.set('neon'));
+    await page.waitForFunction(() => document.querySelector('#wdg-weather .wdg-ck-h') && document.querySelectorAll('#wdg-sysmon .wdg-ring').length === 3 && document.querySelectorAll('#wdg-quick .wdg-lb').length === 4, null, { timeout: 8000 });
+    const n = await page.evaluate(() => ({
+        cls: document.documentElement.classList.contains('th-neon'), wp: Store.get('wallpaper'),
+        on: ['weather', 'sysmon', 'quick'].every((w) => Widgets.conf(w).show),
+        time: document.querySelector('#wdg-weather .wdg-ck-h').textContent, date: document.querySelector('#wdg-weather .wdg-ck-d').textContent,
+        tray: document.getElementById('tray-time').textContent,
+        rings: [...document.querySelectorAll('#wdg-sysmon .wdg-ring')].map((r) => r.textContent),
+        tb: (() => { const r = document.getElementById('taskbar').getBoundingClientRect(), s = document.getElementById('stage').getBoundingClientRect(); return { l: r.left - s.left, b: s.bottom - r.bottom, rad: getComputedStyle(document.getElementById('taskbar')).borderRadius }; })(),
+        title: getComputedStyle(document.getElementById('desk-title')).clip, label: getComputedStyle(document.getElementById('tb-start'), ':after').content
+    }));
+    check(n.cls && n.wp === 'nightlake' && n.on, 'Neon night: theme class, its night lake background, Weather + System Monitor + Quick launch turned on ' + JSON.stringify([n.wp, n.on]));
+    check(n.time && n.tray.indexOf(n.time) === 0 && /\d{4}/.test(n.date), 'the Weather card shows the clock and the date, the same time as the taskbar ' + JSON.stringify([n.time, n.tray, n.date]));
+    check(n.rings.join() === '12%CPU,34%RAM,70%Disk', 'System Monitor draws rings: CPU 12 %, RAM 34 %, disk 70 % (TV systeminfo) ' + n.rings.join());
+    check(n.tb.l > 10 && n.tb.b > 10 && n.tb.rad === '30px' && /My PC/.test(n.label), 'the taskbar floats (gaps all round, rounded) with "My PC" beside Start ' + JSON.stringify(n.tb) + n.label);
+    // the widgets' clock follows the desktop's clock tick
+    await page.evaluate(() => { const o = Date; window.__D = o; Date = function (...a) { return a.length ? new o(...a) : new o(2026, 10, 12, 21, 7, 0); }; Date.now = o.now; Date.prototype = o.prototype; Desktop.tick(); });
+    const tk = await page.evaluate(() => [document.querySelector('#wdg-weather .wdg-ck-h').textContent, document.getElementById('tray-time').textContent]);
+    await page.evaluate(() => { Date = window.__D; Desktop.tick(); });
+    check(tk[1].indexOf(tk[0]) === 0 && /^(21|9):07/.test(tk[0]), 'the clock beside the weather changes with the desktop\'s minute tick ' + JSON.stringify(tk));
+    // nothing of the desktop under the taskbar or off screen
+    const fit = await page.evaluate(() => {
+        const s = document.getElementById('stage').getBoundingClientRect(), tb = document.getElementById('taskbar').getBoundingClientRect(), out = [];
+        document.querySelectorAll('#desk-widgets .wdg, #desk-title').forEach((e) => { const r = e.getBoundingClientRect(); if (r.bottom > tb.top + 1 || r.right > s.right || r.left < s.left || r.top < s.top) out.push(e.id || e.className); });
+        return out;
+    });
+    check(fit.length === 0, 'Neon night: the title and the widgets stay above the taskbar, on screen ' + fit.join());
+    // Quick launch: the remote reaches its buttons, OK opens the app
+    await page.evaluate(() => document.querySelector('#wdg-quick [data-b="music"]').focus());
+    if (shots) { await page.evaluate(() => document.querySelector('#wdg-sysmon').focus()); await page.evaluate(() => Notify.clear()); await page.waitForTimeout(700); await page.screenshot({ path: path.join(shots, 'neon-1-desktop.png') }); }
+    await page.evaluate(() => document.querySelector('#wdg-quick [data-b="store"]').click());
+    check(await page.waitForFunction(() => Win.current() === 'store', null, { timeout: 5000 }).then(() => true, () => false), 'Quick launch: OK on App Store opens it');
+    if (shots) { await page.waitForTimeout(600); await page.screenshot({ path: path.join(shots, 'neon-2-window.png') }); }
+    await page.evaluate(() => Win.close());
+    await page.evaluate(() => Desktop.openStart());
+    if (shots) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(shots, 'neon-3-start.png') }); }
+    await page.evaluate(() => Desktop.closeStart());
+    // the Weather setting "Show the clock": off hides it even with this theme
+    await page.evaluate(() => Widgets.setSetting('weather', 'clock', 'no'));
+    await page.waitForFunction(() => !document.querySelector('#wdg-weather .wdg-clock'), null, { timeout: 5000 });
+    await page.evaluate(() => Widgets.setSetting('weather', 'clock', 'auto'));
+    // Quest
+    await page.evaluate(() => Themes.set('quest'));
+    await page.waitForFunction(() => document.querySelector('#wdg-weather .wdg-ck-h') && document.querySelectorAll('#wdg-sysmon .wdg-ring').length === 3, null, { timeout: 8000 });
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    const q = await page.evaluate(() => ({
+        cls: document.documentElement.className.split(' ').filter((c) => c.indexOf('th-') === 0).join(), wp: Store.get('wallpaper'),
+        hints: [...document.querySelectorAll('#th-hints b')].map((b) => b.textContent).join(''), hintTxt: document.getElementById('th-hints').textContent,
+        hintsBox: (() => { const r = document.getElementById('th-hints').getBoundingClientRect(), s = document.getElementById('stage').getBoundingClientRect(); return r.right <= s.right && r.left >= s.left && r.width > 100; })(),
+        start: getComputedStyle(document.getElementById('tb-start')).backgroundColor, dtitle: getComputedStyle(document.getElementById('desk-title')).clip
+    }));
+    check(q.cls === 'th-quest' && q.wp === 'quest' && q.start === 'rgb(255, 204, 77)', 'Quest: theme class, its background, the gold Start tab ' + JSON.stringify([q.cls, q.wp, q.start]));
+    check(q.hints === 'AAB' && /Open/.test(q.hintTxt) && /Back/.test(q.hintTxt) && q.hintsBox, 'Quest: the button hints use A and B (A = Open, hold A = more, B = Back), on screen ' + q.hintTxt);
+    if (shots) { await page.evaluate(() => document.querySelector('#desk-icons .dicon').focus()); await page.evaluate(() => Notify.clear()); await page.waitForTimeout(700); await page.screenshot({ path: path.join(shots, 'quest-1-desktop.png') }); }
+    await page.evaluate(() => Desktop.openStart());
+    if (shots) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(shots, 'quest-2-start.png') }); }
+    await page.evaluate(() => Desktop.closeStart());
+    await page.evaluate(() => document.querySelector('#wdg-quick [data-b="music"]').click());
+    if (shots) { await page.waitForTimeout(800); await page.evaluate(() => Notify.clear()); await page.screenshot({ path: path.join(shots, 'quest-5-window.png') }); }
+    await page.evaluate(() => { Win.close(); Win.open('settings', 'personal'); });
+    await page.waitForSelector('.set-th', { timeout: 5000 });
+    if (shots) { await page.waitForTimeout(400); await page.screenshot({ path: path.join(shots, 'quest-3-control-panel.png') }); }
+    await page.evaluate(() => Win.close());
+    // back to Windows 11: the hints go, the widgets stay as the profile left them, plain look again
+    await page.evaluate(() => Themes.set('win11'));
+    const w = await page.evaluate(() => ({ hints: !!document.getElementById('th-hints'), rings: document.querySelectorAll('#wdg-sysmon .wdg-ring').length, clock: !!document.querySelector('#wdg-weather .wdg-clock'), bar: !!document.querySelector('#wdg-sysmon .wdg-big') }));
+    check(!w.hints && !w.rings && !w.clock && w.bar, 'Windows 11 again: no hints, System Monitor back to its value + bar, no clock in Weather ' + JSON.stringify(w));
+    // Arabic: right to left, the strings translated
+    await page.evaluate(() => { I18n.setLang('ar'); Desktop.render(); Themes.set('quest'); });
+    await page.waitForTimeout(300);
+    const ar = await page.evaluate(() => ({ t: document.getElementById('th-hints').textContent, dir: document.documentElement.dir || document.body.dir, r: (() => { const r = document.getElementById('th-hints').getBoundingClientRect(), s = document.getElementById('stage').getBoundingClientRect(); return r.left - s.left; })() }));
+    check(/رجوع|المزيد/.test(ar.t) && ar.r > 1000, 'Quest in Arabic: hints translated, on the right (right to left) ' + JSON.stringify(ar));
+    if (shots) await page.screenshot({ path: path.join(shots, 'quest-4-arabic.png') });
+    await page.evaluate(() => { I18n.setLang('en'); });
     check(page.errors.length === 0, 'no page errors' + (page.errors.length ? ': ' + page.errors[0] : ''));
     await page.context().close();
 }
