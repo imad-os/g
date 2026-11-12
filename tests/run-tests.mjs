@@ -391,6 +391,7 @@ async function main() {
     if (process.env.MYPC_ONLY === 'calendar') { await calendarTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'clock') { await clockTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'pads') { await padTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'bookmarks') { await bookmarkTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'themes') { await themeTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'ring') { await ringTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'flow') { await flowTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
@@ -6520,6 +6521,107 @@ async function ringTests(browser, base) {
 
 // 50. Neon night and Quest themes (owner request 2026-11-12): their widgets turn on, the clock beside the weather ticks with the
 // desktop's clock, System Monitor draws CPU / RAM / disk rings, Quick launch opens apps, the A / B hints, nothing off screen. MYPC_ONLY=themes.
+async function bookmarkTests(browser, base) {
+    console.log('51. Browser bookmarks: YouTube / Facebook by default, hold OK menu, + and the star save a page, sites that refuse frames open outside');
+    const shots = process.env.MYPC_SHOTS;
+    const SITE = 'https://web.example.test/';
+    const page = await newPage(browser, base, {});
+    await page.addInitScript(() => {
+        window.__launched = [];
+        window.tizen.application.launch = (id, ok) => { window.__launched.push('app:' + id); setTimeout(ok, 5); };
+        window.tizen.ApplicationControl = function (op, uri) { this.operation = op; this.uri = uri; };
+        window.tizen.application.launchAppControl = (c, id, ok) => { window.__launched.push('view:' + c.uri + (id ? '@' + id : '')); setTimeout(ok, 5); };
+        const mk = () => { const b = []; for (let k = 0; k < 17; k++) b.push({ pressed: false, value: 0 }); return { index: 0, id: 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)', connected: true, mapping: 'standard', buttons: b, axes: [0, 0, 0, 0] }; };
+        window.__pads = [];
+        navigator.getGamepads = () => window.__pads;
+        window.__plug = () => { window.__pads = [mk()]; window.dispatchEvent(new Event('gamepadconnected')); };
+        window.__pad = (b, on) => { window.__pads[0].buttons[b].pressed = on; window.__pads[0].buttons[b].value = on ? 1 : 0; };
+    });
+    await page.route(SITE + '**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Fake</title><body style="margin:0;background:#fff;font:40px sans-serif">A web page</body>' }));
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.goto(base + 'index.html');
+    await page.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
+    const key = async (...ks) => { for (const k of ks) { await page.keyboard.press(k); await page.waitForTimeout(60); } };
+    const pad = async (b) => { await page.evaluate((x) => window.__pad(x, true), b); await page.waitForTimeout(120); await page.evaluate((x) => window.__pad(x, false), b); await page.waitForTimeout(120); };
+    const tiles = () => page.evaluate(() => [...document.querySelectorAll('.br-links .br-link')].map((b) => b.querySelector('.br-link-name').textContent));
+    const focused = () => page.evaluate(() => { const a = document.activeElement; return a ? (a.querySelector('.br-link-name') || a).textContent.trim() : ''; });
+    await page.evaluate(() => Win.open('browser'));
+    await page.waitForTimeout(200);
+    check(JSON.stringify(await tiles()) === JSON.stringify(['YouTube', 'Facebook', 'Wikipedia', 'OpenStreetMap', 'Add bookmark']), 'default bookmarks YouTube, Facebook, Wikipedia, OpenStreetMap + Add bookmark ' + JSON.stringify(await tiles()));
+    if (shots) await page.screenshot({ path: shots + '/bm-1-start.png' });
+    // the remote alone: Down to the tiles, OK held = the bookmark's menu
+    await key('ArrowDown');
+    check(['YouTube', 'Facebook', 'Wikipedia', 'OpenStreetMap'].indexOf(await focused()) >= 0, 'Down from the search box reaches the bookmarks (' + await focused() + ')');
+    for (let i = 0; i < 4 && await focused() !== 'YouTube'; i++) await key('ArrowLeft');
+    check(await focused() === 'YouTube', 'the arrows move along them');
+    await page.keyboard.down('Enter'); await page.waitForTimeout(800); await page.keyboard.up('Enter'); await page.waitForTimeout(100);
+    const menu = await page.evaluate(() => [...document.querySelectorAll('.br-menu .dm-item')].map((b) => b.textContent));
+    check(JSON.stringify(menu) === JSON.stringify(['Open', 'Rename', 'Change the address', 'Move right', 'Remove']), 'holding OK on a bookmark opens its menu ' + JSON.stringify(menu));
+    check(await page.evaluate(() => window.__launched.length === 0), 'letting OK go after the menu opened does not open the site');
+    if (shots) await page.screenshot({ path: shots + '/bm-2-menu.png' });
+    await key('ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');              // Move right (Open, Rename, Change the address, Move right)
+    check(JSON.stringify((await tiles()).slice(0, 2)) === '["Facebook","YouTube"]' && await focused() === 'YouTube', 'Move right swaps it with the next one and keeps the focus on it');
+    await page.keyboard.down('Enter'); await page.waitForTimeout(800); await page.keyboard.up('Enter'); await page.waitForTimeout(100);
+    check(await page.evaluate(() => [...document.querySelectorAll('.br-menu .dm-item')].map((b) => b.textContent).join()) === 'Open,Rename,Change the address,Move left,Move right,Remove', 'a bookmark in the middle can move both ways');
+    await key('Escape');
+    check(await page.evaluate(() => !document.querySelector('.br-menu') && Win.current() === 'browser') && await focused() === 'YouTube', 'Back closes the menu and keeps the focus on the bookmark');
+    // a short OK on YouTube: the YouTube app on the TV (YouTube refuses frames)
+    await page.evaluate(() => [...document.querySelectorAll('.br-link')].find((b) => b.textContent.indexOf('YouTube') >= 0).focus());
+    await key('Enter');
+    await page.waitForTimeout(100);
+    check(await page.evaluate(() => window.__launched[0] === 'app:111299001912' && document.querySelector('.br-view').hidden), 'YouTube opens the TV\'s YouTube app, not a blank frame ' + await page.evaluate(() => window.__launched.join()));
+    await page.evaluate(() => [...document.querySelectorAll('.br-link')].find((b) => b.textContent.indexOf('Facebook') >= 0).click());
+    await page.waitForTimeout(100);
+    check(await page.evaluate(() => window.__launched[1] === 'view:https://www.facebook.com/'), 'Facebook opens in the TV\'s web browser ' + await page.evaluate(() => window.__launched.join()));
+    // a page that works in the frame: the star saves it, the + button of a controller takes it out again
+    await page.evaluate(() => document.querySelector('.br-search').focus());
+    await key('Enter');
+    await page.keyboard.type('web.example.test');
+    await page.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
+    await page.waitForTimeout(500);
+    const star = () => page.evaluate(() => { const b = document.querySelector('.br-bar [aria-pressed]'); return b.getAttribute('aria-pressed') + '|' + b.getAttribute('aria-label'); });
+    check(await star() === 'false|Add this page to bookmarks', 'the star on the toolbar offers to save the page');
+    await page.evaluate(() => document.querySelector('.br-bar [aria-pressed]').click());
+    check(await star() === 'true|Remove this page from bookmarks' && await page.evaluate(() => Store.get('br_marks').some((m) => m.u === 'https://web.example.test' && m.n === 'Web.example.test')), 'the star saves it (name from the address) ' + JSON.stringify(await page.evaluate(() => Store.get('br_marks'))));
+    if (shots) await page.screenshot({ path: shots + '/bm-3-star.png' });
+    await page.evaluate(() => window.__plug()); await page.waitForTimeout(300);
+    await pad(9);                                                            // + (Start)
+    check(await star() === 'false|Add this page to bookmarks' && !(await page.evaluate(() => Store.get('br_marks').some((m) => /example/.test(m.u)))), 'the + button takes it out of the bookmarks');
+    await pad(9);
+    check(await star() === 'true|Remove this page from bookmarks', 'and + again saves it');
+    // back on the start page: the new tile; + on a tile = its menu; Remove
+    await page.evaluate(() => document.querySelector('.br-bar [aria-label="Home"]').click());
+    await page.waitForTimeout(100);
+    check((await tiles()).indexOf('Web.example.test') === 4, 'the saved page is a tile on the start page ' + JSON.stringify(await tiles()));
+    await page.evaluate(() => document.querySelectorAll('.br-link')[4].focus());
+    await pad(9);
+    check(await page.evaluate(() => !!document.querySelector('.br-menu')), '+ on a bookmark opens its menu');
+    await page.evaluate(() => [...document.querySelectorAll('.br-menu .dm-item')].pop().click());
+    check((await tiles()).indexOf('Web.example.test') < 0 && await page.evaluate(() => !document.querySelector('.br-menu')), 'Remove takes it away and closes the menu');
+    // Add bookmark tile: one step, the address
+    await page.evaluate(() => document.querySelector('.br-add').click());
+    await page.keyboard.type('news.example.test');
+    await page.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
+    await page.waitForTimeout(150);
+    check((await tiles()).indexOf('News.example.test') === 4 && await focused() === 'News.example.test', 'Add bookmark: type an address, the tile appears focused');
+    // rename through the menu
+    await page.evaluate(() => { const b = document.querySelectorAll('.br-link')[4]; b.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })); });
+    await page.evaluate(() => [...document.querySelectorAll('.br-menu .dm-item')][1].click());
+    await page.evaluate(() => { document.getElementById('namer-text').textContent = ''; });
+    await page.evaluate(() => Keyboard.isOpen());
+    await page.keyboard.press('Control+a').catch(() => {});
+    const renamed = await page.evaluate(() => { const l = Store.get('br_marks'); return l[4] && l[4].n; });
+    check(renamed === 'News.example.test', 'a right click opens the menu, Rename asks with the keyboard (name kept until saved)');
+    await page.evaluate(() => Keyboard.close && Keyboard.close());
+    if (shots) { await page.waitForTimeout(150); await page.screenshot({ path: shots + '/bm-4-added.png' }); }
+    // per profile, survives a reopen
+    await page.evaluate(() => { Win.close(); Win.open('browser'); });
+    check((await tiles()).indexOf('News.example.test') === 4, 'bookmarks are kept (profile key br_marks)');
+    await page.evaluate(() => Win.close());
+    check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+    await page.context().close();
+}
+
 async function themeTests(browser, base) {
     console.log('50. Neon night and Quest themes: clock + weather card, rings, Quick launch, floating taskbar, button hints');
     const shots = process.env.MYPC_SHOTS;

@@ -330,16 +330,24 @@ svg { display: block; width: 100%; height: 100%; }
 .br-view { position: absolute; left: 0; top: 96px; width: var(--sw); height: calc(var(--sh) - 185px); overflow: hidden; background: #fff; }
 .br-view:focus { box-shadow: inset 0 0 0 4px #4cc2ff; }
 .br-frame { display: block; width: var(--sw); border: 0; background: #fff; }
-.br-start { padding-top: 110px; text-align: center; }
+.br-start { height: calc(var(--sh) - 185px); padding: 70px 0 40px; overflow-y: auto; text-align: center; box-sizing: border-box; }
 .br-hello { margin: 0 0 40px; font-size: 56px; font-weight: 600; }
 .br-search { display: block; width: 900px; height: 80px; margin: 0 auto; padding: 0 32px; border-radius: 40px; background: #2b2b2b; font-size: 26px; color: #c5c5c5; text-align: left; }
 .br-search-ic { display: inline-block; width: 34px; height: 34px; margin-right: 18px; vertical-align: -8px; }
-.br-links { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; margin-top: 56px; }
+.br-links { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center;
+    max-width: 1500px; margin: 0 auto; row-gap: 12px; }
+.br-marks-t { margin: 48px 0 18px; font-size: 26px; font-weight: 600; color: #c5c5c5; }
+.br-add-ic { background: rgba(255, 255, 255, 0.08); border: 2px dashed rgba(255, 255, 255, 0.35); box-sizing: border-box; padding: 24px; }
+.br-add-ic svg { display: block; width: 100%; height: 100%; }
+.br-link-name { display: block; padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.br-menu-wrap { z-index: 30; background: rgba(0, 0, 0, 0.35); }
+.br-menu { left: 50%; top: 50%; -webkit-transform: translate(-50%, -50%); transform: translate(-50%, -50%); width: 460px; }
 .br-link { display: block; width: 190px; height: 190px; margin: 0 12px; padding-top: 26px; border-radius: 16px; }
 .br-link:focus { background: rgba(255, 255, 255, 0.08); }
 .br-link-ic { display: block; width: 92px; height: 92px; line-height: 92px; margin: 0 auto 16px; border-radius: 46px; font-size: 36px; font-weight: 700; }
 .br-link-name { font-size: 22px; }
-.br-note { margin-top: 56px; font-size: 22px; color: #9a9a9a; }
+.br-note { margin: 40px auto 0; max-width: 1300px; font-size: 22px; color: #9a9a9a; }
+.br-note2 { margin-top: 12px; }
 
 /* ---------- Calculator ---------- */
 .calc { width: 660px; margin: 36px auto 0; }
