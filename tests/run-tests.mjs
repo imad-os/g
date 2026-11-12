@@ -6617,7 +6617,7 @@ async function themeTests(browser, base) {
         await page.evaluate((t) => { Themes.set(t); Win.open('settings', 'widgets'); }, t);
         await page.waitForSelector('.set-row', { timeout: 5000 });
         await page.evaluate(() => document.querySelectorAll('.set-row')[1].focus());
-        const a = await page.evaluate(() => { const r = document.querySelectorAll('.set-row'); return { win: getComputedStyle(document.querySelector('.window')).backgroundImage,
+        const a = await page.evaluate(() => { const r = document.querySelectorAll('.set-row'); return { win: getComputedStyle(document.querySelector('.window'), ':before').backgroundImage,
             row: getComputedStyle(r[0]).backgroundImage, foc: getComputedStyle(r[1]).boxShadow }; });
         check(plain.win === 'none' && /gradient/.test(a.win) && /gradient/.test(a.row) && a.foc !== 'none', t + ': Control Panel (Widgets) has the theme\'s window, rows and focus ' + JSON.stringify([plain, a.win.slice(0, 40), a.row.slice(0, 40), a.foc.slice(0, 40)]));
         if (shots) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(shots, t + '-apps-1-widgets.png') }); }
@@ -6628,7 +6628,7 @@ async function themeTests(browser, base) {
         await page.evaluate(() => { Win.close(); Win.open('explorer'); });
         await page.waitForSelector('.fx-item', { timeout: 5000 });
         await page.evaluate(() => document.querySelector('.fx-item').focus());
-        check(await page.evaluate(() => /gradient/.test(getComputedStyle(document.querySelector('.window')).backgroundImage) && getComputedStyle(document.querySelector('.fx-item')).boxShadow !== 'none'), t + ': File Explorer follows the theme');
+        check(await page.evaluate(() => /gradient/.test(getComputedStyle(document.querySelector('.window'), ':before').backgroundImage) && getComputedStyle(document.querySelector('.fx-item')).boxShadow !== 'none'), t + ': File Explorer follows the theme');
         if (shots) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(shots, t + '-apps-3-explorer.png') }); }
         await page.evaluate(() => { Win.close(); Notify.clear(); });
         await page.waitForTimeout(400);
@@ -6643,6 +6643,17 @@ async function themeTests(browser, base) {
         if (shots) await page.screenshot({ path: path.join(shots, t + '-apps-5-dialog.png') });
         await page.keyboard.press('Escape');
         await page.waitForTimeout(200);
+    }
+    // owner report 2026-11-12 (2): Quest did not show the focused key of the on-screen keyboard / the focused menu item
+    for (const t of ['quest', 'neon']) {
+        await page.evaluate((t) => { Themes.set(t); Keyboard.open({ title: 'Name', mode: 'title', max: 30 }, function () {}); }, t);
+        await page.waitForTimeout(300);
+        await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight');
+        const kf = await page.evaluate(() => { const a = document.activeElement, b = a.nextElementSibling; const ca = getComputedStyle(a), cb = getComputedStyle(b);
+            return { key: a.classList.contains('key') || a.classList.contains('btn'), bg: ca.backgroundColor, sh: ca.boxShadow, other: cb.backgroundColor }; });
+        check(kf.key && (t === 'quest' ? kf.bg === 'rgb(255, 204, 77)' && kf.other !== kf.bg : /inset/.test(kf.sh)), t + ': the focused key of the keyboard stands out ' + JSON.stringify(kf));
+        if (shots) { await page.waitForTimeout(200); await page.screenshot({ path: path.join(shots, t + '-keyboard.png') }); }
+        await page.keyboard.press('Escape'); await page.waitForTimeout(200);
     }
     // owner report 2026-11-12: the loading screen of games and apps (the game page builds no desktop) follows the theme too
     for (const t of ['neon', 'quest']) {

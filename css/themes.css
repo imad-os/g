@@ -261,16 +261,17 @@ html.th-quest { --acc: #ffcc4d; --ink: #14110a; }
 .th-neon .taskbar:before { background: linear-gradient(90deg, #e4f4ff 0, #5fb0ff 2.5%, rgba(100, 150, 255, 0.5) 10%, rgba(110, 140, 255, 0.28) 50%, rgba(100, 150, 255, 0.5) 90%, #5fb0ff 97.5%, #e4f4ff 100%); }
 .th-neon .taskbar:after, .th-neon .start:after, .th-neon #desk-widgets .wdg:after {
     content: ''; position: absolute; left: -24px; top: -24px; right: -24px; bottom: -24px; z-index: -1; pointer-events: none;
-    background: radial-gradient(30px 30px at 34px 34px, rgba(170, 215, 255, 0.85), rgba(120, 185, 255, 0.3) 55%, rgba(120, 185, 255, 0)),
-                radial-gradient(130px 16px at 130px 25px, rgba(130, 190, 255, 0.55), rgba(130, 190, 255, 0)),
-                radial-gradient(16px 90px at 25px 110px, rgba(130, 190, 255, 0.5), rgba(130, 190, 255, 0)),
-                radial-gradient(30px 30px at calc(100% - 34px) calc(100% - 34px), rgba(160, 210, 255, 0.85), rgba(110, 180, 255, 0.3) 55%, rgba(110, 180, 255, 0)),
-                radial-gradient(150px 16px at calc(100% - 150px) calc(100% - 25px), rgba(120, 185, 255, 0.55), rgba(120, 185, 255, 0)),
-                radial-gradient(16px 80px at calc(100% - 25px) calc(100% - 100px), rgba(120, 185, 255, 0.5), rgba(120, 185, 255, 0)); }
-.th-neon .taskbar:after { background: radial-gradient(22px 56px at 28px 50%, rgba(150, 220, 255, 0.95), rgba(100, 200, 255, 0.3) 55%, rgba(100, 200, 255, 0)),
-                                      radial-gradient(220px 14px at 220px 24px, rgba(120, 200, 255, 0.5), rgba(120, 200, 255, 0)),
-                                      radial-gradient(22px 56px at calc(100% - 28px) 50%, rgba(150, 200, 255, 0.85), rgba(110, 170, 255, 0.28) 55%, rgba(110, 170, 255, 0)),
-                                      radial-gradient(220px 14px at calc(100% - 220px) calc(100% - 24px), rgba(120, 180, 255, 0.5), rgba(120, 180, 255, 0)),
+    /* each glow is painted only in its own small box (size + no-repeat): the rest of the layer costs nothing */
+    background: radial-gradient(30px 30px at 34px 34px, rgba(170, 215, 255, 0.85), rgba(120, 185, 255, 0.3) 55%, rgba(120, 185, 255, 0)) 0 0 / 68px 68px no-repeat,
+                radial-gradient(130px 16px at 130px 25px, rgba(130, 190, 255, 0.55), rgba(130, 190, 255, 0)) 0 0 / 260px 50px no-repeat,
+                radial-gradient(16px 90px at 25px 110px, rgba(130, 190, 255, 0.5), rgba(130, 190, 255, 0)) 0 0 / 50px 220px no-repeat,
+                radial-gradient(30px 30px at 34px 34px, rgba(160, 210, 255, 0.85), rgba(110, 180, 255, 0.3) 55%, rgba(110, 180, 255, 0)) 100% 100% / 68px 68px no-repeat,
+                radial-gradient(150px 16px at 150px 25px, rgba(120, 185, 255, 0.55), rgba(120, 185, 255, 0)) 100% 100% / 300px 50px no-repeat,
+                radial-gradient(16px 80px at 25px 100px, rgba(120, 185, 255, 0.5), rgba(120, 185, 255, 0)) 100% 100% / 50px 200px no-repeat; }
+.th-neon .taskbar:after { background: radial-gradient(22px 56px at 28px 56px, rgba(150, 220, 255, 0.95), rgba(100, 200, 255, 0.3) 55%, rgba(100, 200, 255, 0)) 0 50% / 56px 112px no-repeat,
+                                      radial-gradient(220px 14px at 220px 24px, rgba(120, 200, 255, 0.5), rgba(120, 200, 255, 0)) 0 0 / 440px 48px no-repeat,
+                                      radial-gradient(22px 56px at 28px 56px, rgba(150, 200, 255, 0.85), rgba(110, 170, 255, 0.28) 55%, rgba(110, 170, 255, 0)) 100% 50% / 56px 112px no-repeat,
+                                      radial-gradient(220px 14px at 220px 24px, rgba(120, 180, 255, 0.5), rgba(120, 180, 255, 0)) 100% 100% / 440px 48px no-repeat,
                                       linear-gradient(90deg, rgba(0, 0, 0, 0) 4%, rgba(80, 130, 255, 0.12) 50%, rgba(0, 0, 0, 0) 96%) 0 100% / 100% 34px no-repeat; }
 /* the focused card: the whole rim lights up */
 .th-neon #desk-widgets .wdg:focus { box-shadow: inset 0 0 30px rgba(110, 160, 255, 0.45), 0 0 26px rgba(110, 160, 255, 0.75); background: linear-gradient(180deg, rgba(66, 78, 160, 0.72), rgba(20, 24, 70, 0.86)); }
@@ -375,7 +376,7 @@ html.th-quest { --acc: #ffcc4d; --ink: #14110a; }
 .set-th-quest { background: #0a0e14; border-top: 2px solid #ffcc4d; box-shadow: inset 44px 0 0 #ffcc4d; }
 
 /* their backgrounds (CSS only, painted once) */
-.wp-nightlake { background-color: #0a1240;
+.wps-nightlake { background-color: #0a1240;
     background-image:
         linear-gradient(172deg, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0) 71.2%, rgba(120, 180, 255, 0.9) 71.5%, rgba(120, 180, 255, 0) 72.2%),
         radial-gradient(ellipse 2.5% 22% at 58% 84%, rgba(230, 220, 255, 0.5), rgba(230, 220, 255, 0)),
@@ -405,7 +406,7 @@ html.th-quest { --acc: #ffcc4d; --ink: #14110a; }
         linear-gradient(180deg, #040822 0%, #0f1650 36%, #352a8c 58%, #1d2b85 64%);
     background-size: auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, auto, 211px 197px, 263px 181px, 157px 223px, auto;
     background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat, repeat, repeat, no-repeat; }
-.wp-quest { background-color: #0b1016;
+.wps-quest { background-color: #0b1016;
     background-image:
         radial-gradient(ellipse 75% 70% at 50% 50%, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.6) 100%),
         linear-gradient(118deg, rgba(255, 255, 255, 0) 30%, rgba(255, 204, 77, 0.1) 30.2%, rgba(255, 204, 77, 0.1) 38%, rgba(255, 255, 255, 0) 38.2%),
@@ -422,7 +423,11 @@ html.th-quest { --acc: #ffcc4d; --ink: #14110a; }
    desktop: static gradients, inset shadows and clip-path only; no blur, no animation. :where() keeps each app's own states
    (primary, today, on) winning over these. ---------- */
 /* Neon night: the app sits on the night sky, rows are glass, the focused one lights up */
-.th-neon :is(.window, .profiles, .mp) { background: radial-gradient(1100px 640px at 8% 0%, rgba(58, 66, 180, 0.55), rgba(58, 66, 180, 0) 70%),
+.th-neon :is(.window, .profiles, .mp) { background: #0a0d30; }
+/* the sky behind an app is drawn once on its own layer (will-change): moving the focus in the app never draws it again */
+.th-neon :is(.window, .profiles, .mp):before, .th-quest :is(.window, .profiles, .mp):before { content: ''; position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+    z-index: -1; pointer-events: none; will-change: transform; }
+.th-neon :is(.window, .profiles, .mp):before { background: radial-gradient(1100px 640px at 8% 0%, rgba(58, 66, 180, 0.55), rgba(58, 66, 180, 0) 70%),
     radial-gradient(1000px 640px at 100% 100%, rgba(96, 34, 150, 0.5), rgba(96, 34, 150, 0) 70%), linear-gradient(160deg, #0d1240 0%, #080a26 60%, #120a30 100%); }
 .th-neon :is(.set-nav, .fx-side, .lb-side, .mx-side) { background: rgba(8, 10, 36, 0.4); border-right: 0; box-shadow: inset -1px 0 0 rgba(124, 150, 255, 0.3); }
 [dir="rtl"].th-neon :is(.set-nav, .fx-side, .lb-side, .mx-side) { box-shadow: inset 1px 0 0 rgba(124, 150, 255, 0.3); }
@@ -430,14 +435,14 @@ html.th-quest { --acc: #ffcc4d; --ink: #14110a; }
 .th-neon :where(.set-row:not(.set-primary):not(.set-text), .set-wps, .set-qr, .set-padtest, .fx-path, .fx-item, .memo-item, .cal-day:not(.cal-today), .cal-ev, .cal-frow,
     .lb-tab, .lb-scope-btn, .st-row, .st-card, .st-search, .br-search, .br-bar, .pcard, .mp-room, .pic-cell, .pill-btn, .btn:not(.btn-primary), .mx-set-row, .wx-card) {
     border-radius: 16px; background: linear-gradient(180deg, rgba(74, 90, 200, 0.24), rgba(28, 34, 100, 0.3));
-    box-shadow: inset 0 0 0 1px rgba(120, 160, 255, 0.26), inset 0 1px 0 rgba(210, 230, 255, 0.3), inset 0 0 18px rgba(70, 130, 255, 0.12); }
+    box-shadow: inset 0 0 0 1px rgba(120, 160, 255, 0.26), inset 0 1px 0 rgba(210, 230, 255, 0.3); }
 .th-neon .fx-item { background: none; box-shadow: none; }
 .th-neon .btn:not(.btn-primary), .th-neon .pill-btn { border-radius: 30px; }
 .th-neon :where(.set-row:not(.set-primary), .set-nav-btn, .cp-tile, .fx-nav, .fx-item, .memo-item, .cal-day:not(.cal-today), .cal-ev, .cal-frow, .lb-tab, .lb-scope-btn,
     .st-row, .st-card, .st-search, .br-search, .pcard, .mp-room, .pic-cell, .pill-btn, .icon-btn, .btn:not(.btn-primary), .dm-item, .mx-nav, .mx-tile, .mx-row, .mx-set-row,
     .mx-cb, .mx-act:not(.mx-act-main), .pt-game, .wx-chip, .wx-hour, .wx-day):focus {
     background: linear-gradient(180deg, rgba(104, 122, 245, 0.44), rgba(44, 52, 140, 0.52));
-    box-shadow: inset 0 0 0 2px #d6e4ff, inset 0 0 22px rgba(120, 170, 255, 0.45), 0 0 18px rgba(110, 160, 255, 0.7); }
+    box-shadow: inset 0 0 0 2px #d6e4ff, inset 0 0 0 5px rgba(120, 170, 255, 0.28), 0 0 0 3px rgba(110, 160, 255, 0.55), 0 0 0 7px rgba(110, 160, 255, 0.2); }
 .th-neon :is(.set-nav-btn, .fx-nav, .mx-nav).on { background: rgba(124, 140, 255, 0.2); }
 .th-neon :is(.set-nav-btn, .fx-nav, .mx-nav).on:before { background: #8fb4ff; box-shadow: 0 0 10px #6f9bff; }
 .th-neon :is(.btn-primary, .set-primary, .mx-act-main) { background: linear-gradient(90deg, #5468ff, #9a5cff); color: #fff; box-shadow: 0 0 16px rgba(120, 110, 255, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
@@ -450,7 +455,7 @@ html.th-quest { --acc: #ffcc4d; --ink: #14110a; }
 /* bigger panels get the same glass as the widgets: the uneven rim and the corner blooms */
 .th-neon :is(.dialog, .pause-box, .dmenu, .nt, .cp-tile, .set-card) { border: 0; border-radius: 26px; isolation: isolate;
     background: linear-gradient(180deg, rgba(46, 56, 124, 0.9) 0%, rgba(18, 22, 64, 0.94) 45%, rgba(10, 12, 42, 0.96) 100%);
-    box-shadow: inset 0 0 26px rgba(70, 130, 255, 0.3), inset 0 1px 1px rgba(200, 225, 255, 0.25), 0 0 16px rgba(40, 80, 230, 0.28), 0 14px 40px rgba(0, 0, 0, 0.5); }
+    box-shadow: inset 0 0 26px rgba(70, 130, 255, 0.3), inset 0 1px 1px rgba(200, 225, 255, 0.25), 0 0 16px rgba(40, 80, 230, 0.28); }
 .th-neon :is(.cp-tile, .set-card) { position: relative; border-radius: 20px; background: linear-gradient(180deg, rgba(56, 68, 160, 0.42), rgba(18, 22, 70, 0.55));
     box-shadow: inset 0 0 22px rgba(70, 130, 255, 0.22), inset 0 1px 1px rgba(200, 225, 255, 0.25); }
 .th-neon :is(.dialog, .pause-box, .dmenu, .nt, .cp-tile, .set-card):before {
@@ -460,10 +465,10 @@ html.th-quest { --acc: #ffcc4d; --ink: #14110a; }
     mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
 .th-neon :is(.dialog, .pause-box, .dmenu, .nt):after {
     content: ''; position: absolute; left: -24px; top: -24px; right: -24px; bottom: -24px; z-index: -1; pointer-events: none;
-    background: radial-gradient(30px 30px at 34px 34px, rgba(170, 215, 255, 0.85), rgba(120, 185, 255, 0.3) 55%, rgba(120, 185, 255, 0)),
-                radial-gradient(130px 16px at 130px 25px, rgba(130, 190, 255, 0.55), rgba(130, 190, 255, 0)),
-                radial-gradient(30px 30px at calc(100% - 34px) calc(100% - 34px), rgba(160, 210, 255, 0.85), rgba(110, 180, 255, 0.3) 55%, rgba(110, 180, 255, 0)),
-                radial-gradient(150px 16px at calc(100% - 150px) calc(100% - 25px), rgba(120, 185, 255, 0.55), rgba(120, 185, 255, 0)); }
+    background: radial-gradient(30px 30px at 34px 34px, rgba(170, 215, 255, 0.85), rgba(120, 185, 255, 0.3) 55%, rgba(120, 185, 255, 0)) 0 0 / 68px 68px no-repeat,
+                radial-gradient(130px 16px at 130px 25px, rgba(130, 190, 255, 0.55), rgba(130, 190, 255, 0)) 0 0 / 260px 50px no-repeat,
+                radial-gradient(30px 30px at 34px 34px, rgba(160, 210, 255, 0.85), rgba(110, 180, 255, 0.3) 55%, rgba(110, 180, 255, 0)) 100% 100% / 68px 68px no-repeat,
+                radial-gradient(150px 16px at 150px 25px, rgba(120, 185, 255, 0.55), rgba(120, 185, 255, 0)) 100% 100% / 300px 50px no-repeat; }
 .th-neon .cp-tile:focus { background: linear-gradient(180deg, rgba(90, 106, 230, 0.6), rgba(30, 36, 110, 0.7)); box-shadow: inset 0 0 30px rgba(110, 160, 255, 0.45), 0 0 26px rgba(110, 160, 255, 0.75); }
 .th-neon .cp-tile:focus:before { padding: 3px; background: linear-gradient(118deg, #fff 0%, #a9d4ff 30%, #a9d4ff 70%, #fff 100%); }
 /* notifications: glass cards; the kind is the tint, the icon glows */
@@ -478,7 +483,8 @@ html.th-quest { --acc: #ffcc4d; --ink: #14110a; }
 .th-neon .nt-title { color: #b9c8ff; }
 
 /* Quest: the app is a game's menu screen: dark HUD with a faint grid, item slots with a cyan edge and a notched corner, gold when chosen */
-.th-quest :is(.window, .profiles, .mp) { background: repeating-linear-gradient(0deg, rgba(77, 225, 210, 0.035) 0 1px, rgba(0, 0, 0, 0) 1px 48px),
+.th-quest :is(.window, .profiles, .mp) { background: #0b1118; }
+.th-quest :is(.window, .profiles, .mp):before { background: repeating-linear-gradient(0deg, rgba(77, 225, 210, 0.035) 0 1px, rgba(0, 0, 0, 0) 1px 48px),
     repeating-linear-gradient(90deg, rgba(77, 225, 210, 0.035) 0 1px, rgba(0, 0, 0, 0) 1px 48px), linear-gradient(180deg, #0e161f 0%, #070a0f 100%); }
 .th-quest :is(.set-nav, .fx-side, .lb-side, .mx-side) { background: rgba(0, 0, 0, 0.38); border-right: 0; box-shadow: inset -2px 0 0 rgba(77, 225, 210, 0.28); }
 [dir="rtl"].th-quest :is(.set-nav, .fx-side, .lb-side, .mx-side) { box-shadow: inset 2px 0 0 rgba(77, 225, 210, 0.28); }
@@ -500,10 +506,13 @@ html.th-quest { --acc: #ffcc4d; --ink: #14110a; }
     .mx-set-row, .mx-cb, .mx-act:not(.mx-act-main), .pt-game, .wx-chip, .wx-hour, .wx-day):focus { box-shadow: inset 0 0 0 2px #ffcc4d, inset -7px 0 0 #ffcc4d; }
 .th-quest :is(.set-nav-btn, .fx-nav, .mx-nav).on { background: linear-gradient(90deg, rgba(77, 225, 210, 0.2), rgba(77, 225, 210, 0)); }
 .th-quest :is(.set-nav-btn, .fx-nav, .mx-nav).on:before { border-radius: 0; background: #4de1d2; }
-.th-quest .btn:not(.btn-primary) { background: #16202b; box-shadow: inset 0 0 0 2px rgba(77, 225, 210, 0.45); }
+.th-quest :where(.btn:not(.btn-primary)) { background: #16202b; box-shadow: inset 0 0 0 2px rgba(77, 225, 210, 0.45); }
+/* owner report 2026-11-12: the focused key / menu item did not show: solid gold, dark text, readable from the sofa */
+.th-quest .btn:not(.btn-primary):focus { background: #ffcc4d; color: #14110a; box-shadow: inset 0 0 0 3px #fff3cf; }
+.th-quest .btn-primary:focus { background: #fff; color: #14110a; box-shadow: inset 0 0 0 3px #ffcc4d; }
 .th-quest :is(.btn, .set-primary, .pill-btn) { -webkit-clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
     clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px); }
-.th-quest :is(.btn-primary, .set-primary):focus { background: #fff; filter: none; }
+.th-quest :is(.btn-primary, .set-primary):focus { background: #fff; color: #14110a; filter: none; }
 .th-quest :is(.set-title, .screen-title, .dialog-title, .pause-title) { color: #ffcc4d; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
 .th-quest .set-title:after, .th-quest .pause-title:after { content: ''; display: block; height: 3px; margin-top: 12px; background: linear-gradient(90deg, #ffcc4d, rgba(255, 204, 77, 0)); }
 [dir="rtl"].th-quest .set-title:after { background: linear-gradient(270deg, #ffcc4d, rgba(255, 204, 77, 0)); }
@@ -538,10 +547,10 @@ html.th-quest { --acc: #ffcc4d; --ink: #14110a; }
 .th-quest .nt-warn .nt-title { color: #ffcc4d; } .th-quest .nt-err .nt-title { color: #ff8a7c; } .th-quest .nt-ok .nt-title { color: #7fe6a0; }
 /* MyMusic, Playtime and Weather load their CSS after this file: the same looks, one step stronger */
 html.th-neon :where(.mx-set-row, .wx-card) { border-radius: 16px; background: linear-gradient(180deg, rgba(74, 90, 200, 0.24), rgba(28, 34, 100, 0.3));
-    box-shadow: inset 0 0 0 1px rgba(120, 160, 255, 0.26), inset 0 1px 0 rgba(210, 230, 255, 0.3), inset 0 0 18px rgba(70, 130, 255, 0.12); }
+    box-shadow: inset 0 0 0 1px rgba(120, 160, 255, 0.26), inset 0 1px 0 rgba(210, 230, 255, 0.3); }
 html.th-neon :where(.mx-nav, .mx-tile, .mx-row, .mx-set-row, .mx-cb, .mx-act:not(.mx-act-main), .mx-mini-open, .pt-game, .wx-chip, .wx-hour, .wx-day):focus {
     background: linear-gradient(180deg, rgba(104, 122, 245, 0.44), rgba(44, 52, 140, 0.52));
-    box-shadow: inset 0 0 0 2px #d6e4ff, inset 0 0 22px rgba(120, 170, 255, 0.45), 0 0 18px rgba(110, 160, 255, 0.7); }
+    box-shadow: inset 0 0 0 2px #d6e4ff, inset 0 0 0 5px rgba(120, 170, 255, 0.28), 0 0 0 3px rgba(110, 160, 255, 0.55), 0 0 0 7px rgba(110, 160, 255, 0.2); }
 html.th-quest :where(.mx-set-row, .wx-card) { border-radius: 0; background: linear-gradient(90deg, rgba(20, 31, 42, 0.96), rgba(11, 17, 24, 0.92)); box-shadow: inset 4px 0 0 rgba(77, 225, 210, 0.6); }
 html.th-quest :where(.mx-nav, .mx-tile, .mx-row, .mx-set-row, .mx-cb, .mx-act:not(.mx-act-main), .mx-mini-open, .pt-game, .wx-chip, .wx-hour, .wx-day):focus {
     background: linear-gradient(90deg, rgba(255, 204, 77, 0.32), rgba(255, 204, 77, 0.07)); box-shadow: inset 0 0 0 2px #ffcc4d, inset 7px 0 0 #ffcc4d; color: #fff3cf; }
@@ -567,3 +576,14 @@ html.th-quest .mx-art { border-radius: 0; }
 .th-quest .gl-ring { border-radius: 0; border-color: rgba(77, 225, 210, 0.3); border-top-color: #ffcc4d; }
 .th-quest .gl-status { color: #9fb3c4; text-transform: uppercase; letter-spacing: 0.1em; font-size: 22px; font-weight: 700; }
 .th-quest .gl-brand { color: #6f8494; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 700; }
+
+/* ---------- speed (owner report 2026-11-12: "Neon night is very laggy on the TV, make both snappy, keep the look") ----------
+   tests/theme-perf-proof.mjs measures it. Each focus move makes the TV draw again the parts of the screen it touches, with all
+   that is under them: so the costly, never-changing parts (backgrounds, glass rims, corner glows) sit on their own layers
+   (will-change), drawn once and only moved together by the GPU; the backgrounds are pictures (tools/render-wallpapers.mjs,
+   one image instead of 26 gradients); things drawn again often (rows, keys, focus) have no blur. */
+.wp-nightlake { background: #0a1240 url(../wallpapers/nightlake.jpg) center / cover no-repeat; }
+.wp-quest { background: #0b1016 url(../wallpapers/quest.jpg) center / cover no-repeat; }
+.th-neon #wallpaper, .th-quest #wallpaper { will-change: transform; }
+.th-neon :is(.taskbar, .start, #desk-widgets .wdg, .dialog, .pause-box, .dmenu, .nt, .cp-tile, .set-card):before,
+.th-neon :is(.taskbar, .start, #desk-widgets .wdg, .dialog, .pause-box, .dmenu, .nt):after { will-change: transform; }
