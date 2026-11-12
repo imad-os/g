@@ -211,7 +211,7 @@
   and My PC's menu at once; "open" actions ask, then quit the game and the desktop runs it (`sc_next`). Control Panel > **Shortcuts**: list, Add,
   then Button (owner request: OK listens 5 s for the next button of ANY device: remote / keyboard key = `k<code>` (every TV key registered meanwhile), controller button = `p<index>` via `Input.setPadHook` (taken buttons give no action / raw report); only arrows / D-pad, OK / Enter / Space / B, Back / Esc / Backspace / A, Tab and modifiers are kept; Back cancels; "Choose the button from a list" stays for keyboards) / Action / App or page lists, Save, Remove, Back to defaults. The game menu (`game-host.js renderPause`)
   has **Play music / Pause music** (`Music.toggle`, stays open).
-- **Browser bookmarks** (owner request 2026-11-12, build 167, `apps/browser.js`): per profile `br_marks` [{ n, u }] (backed up); until changed =
+- **Browser bookmarks** (owner request 2026-11-12, build 168, `apps/browser.js`): per profile `br_marks` [{ n, u }] (backed up); until changed =
   YouTube, Facebook, Wikipedia, OpenStreetMap (`DEFAULTS`, `{lang}` = My PC's language). Tiles on the start page + an "Add bookmark" tile (one step: the
   address; name from the host, Rename in the menu). Save the page shown: the toolbar star (`staro` / `star`) or the controller's **+** (`menu`). Hold OK /
   + / long press / right click on a tile = Open / Rename / Change the address / Move / Remove (`.dmenu` look). Max 24. **Sites that refuse frames**
