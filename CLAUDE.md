@@ -215,8 +215,8 @@
   YouTube, Facebook, Wikipedia, OpenStreetMap (`DEFAULTS`, `{lang}` = My PC's language). Tiles on the start page + an "Add bookmark" tile (one step: the
   address; name from the host, Rename in the menu). Save the page shown: the toolbar star (`staro` / `star`) or the controller's **+** (`menu`). Hold OK /
   + / long press / right click on a tile = Open / Rename / Change the address / Move / Remove (`.dmenu` look). Max 24. **Sites that refuse frames**
-  (`NO_FRAME`: YouTube, Facebook, Instagram, X, Google, Netflix...) never load blank: on the TV YouTube opens the YouTube app (`111299001912`), others the
-  TV's web browser (appcontrol view, then `org.tizen.browser`); elsewhere a new tab (the APK hands it to the phone). Tests: `MYPC_ONLY=bookmarks`.
+  (`NO_FRAME`: YouTube, Facebook, Instagram, X, Google, Netflix...) can not show in any app's frame: a card says so (`brRefused`).
+  **Owner rule (2026-11-12, build 169): the browser NEVER leaves My PC** (no TV browser, no YouTube app; build 168 did, imad: "fix this"). Tests: `MYPC_ONLY=bookmarks`.
 - `apps/store.js`: the App Store app (Home / Games / Apps / Library / Search, Install / Open / Uninstall).
 - **Settings of every My PC** (owner decision): App Store Manager > Settings writes Firestore `settings/mypc` (admins only, read by
   every TV): backgrounds (`wallpapers: [{ url, title, thumb }]`, an empty title is taken from the address) and the background of new

@@ -6522,7 +6522,7 @@ async function ringTests(browser, base) {
 // 50. Neon night and Quest themes (owner request 2026-11-12): their widgets turn on, the clock beside the weather ticks with the
 // desktop's clock, System Monitor draws CPU / RAM / disk rings, Quick launch opens apps, the A / B hints, nothing off screen. MYPC_ONLY=themes.
 async function bookmarkTests(browser, base) {
-    console.log('51. Browser bookmarks: YouTube / Facebook by default, hold OK menu, + and the star save a page, sites that refuse frames open outside');
+    console.log('51. Browser bookmarks: YouTube / Facebook by default, hold OK menu, + and the star save a page, sites that refuse frames never leave My PC');
     const shots = process.env.MYPC_SHOTS;
     const SITE = 'https://web.example.test/';
     const page = await newPage(browser, base, {});
@@ -6565,14 +6565,16 @@ async function bookmarkTests(browser, base) {
     check(await page.evaluate(() => [...document.querySelectorAll('.br-menu .dm-item')].map((b) => b.textContent).join()) === 'Open,Rename,Change the address,Move left,Move right,Remove', 'a bookmark in the middle can move both ways');
     await key('Escape');
     check(await page.evaluate(() => !document.querySelector('.br-menu') && Win.current() === 'browser') && await focused() === 'YouTube', 'Back closes the menu and keeps the focus on the bookmark');
-    // a short OK on YouTube: the YouTube app on the TV (YouTube refuses frames)
+    // a short OK on YouTube: YouTube refuses frames; My PC is never left (owner rule 2026-11-12), a card says why
     await page.evaluate(() => [...document.querySelectorAll('.br-link')].find((b) => b.textContent.indexOf('YouTube') >= 0).focus());
     await key('Enter');
-    await page.waitForTimeout(100);
-    check(await page.evaluate(() => window.__launched[0] === 'app:111299001912' && document.querySelector('.br-view').hidden), 'YouTube opens the TV\'s YouTube app, not a blank frame ' + await page.evaluate(() => window.__launched.join()));
+    await page.waitForTimeout(150);
+    check(await page.evaluate(() => window.__launched.length === 0 && Win.current() === 'browser' && document.querySelector('.br-view').hidden && /YouTube does not allow other apps to show it/.test(document.getElementById('toast').textContent)),
+        'YouTube never leaves My PC (no YouTube app, no TV browser) and a card says why ' + await page.evaluate(() => window.__launched.join()));
+    if (shots) await page.screenshot({ path: shots + '/bm-5-refused.png' });
     await page.evaluate(() => [...document.querySelectorAll('.br-link')].find((b) => b.textContent.indexOf('Facebook') >= 0).click());
     await page.waitForTimeout(100);
-    check(await page.evaluate(() => window.__launched[1] === 'view:https://www.facebook.com/'), 'Facebook opens in the TV\'s web browser ' + await page.evaluate(() => window.__launched.join()));
+    check(await page.evaluate(() => window.__launched.length === 0 && Win.current() === 'browser'), 'Facebook never leaves My PC either');
     // a page that works in the frame: the star saves it, the + button of a controller takes it out again
     await page.evaluate(() => document.querySelector('.br-search').focus());
     await key('Enter');

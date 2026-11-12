@@ -13,8 +13,8 @@
  * Bookmarks (per profile, key br_marks, backed up like every profile key): tiles on the start page, YouTube / Facebook /
  * Wikipedia / OpenStreetMap until the user changes them. Save one with the star on the toolbar or the + button while a page
  * shows, or the "Add bookmark" tile. Hold OK, + , a long press or a right click on a tile: Open / Rename / Change the address /
- * Move / Remove. Sites known to refuse frames (YouTube, Facebook...) open outside My PC: the YouTube app or the TV's own web
- * browser on the TV (privilege application.launch), a new tab elsewhere (the Android app hands it to the phone). */
+ * Move / Remove. Sites known to refuse frames (YouTube, Facebook...) can not show in any app's frame: a card says so, and My PC is
+ * never left (owner rule 2026-11-12: no TV browser, no YouTube app). */
 (function () {
     'use strict';
 
@@ -33,7 +33,6 @@
     var COLORS = ['#2a8fd8', '#7c5cff', '#e0663a', '#1aa37a', '#c2417a', '#c79a1d', '#4a6fd8', '#8a4fd0'];
     // sites that refuse to be shown in a frame (X-Frame-Options / CSP): they open outside My PC
     var NO_FRAME = /(^|\.)(youtube\.com|youtu\.be|facebook\.com|fb\.com|instagram\.com|x\.com|twitter\.com|google\.[a-z.]+|netflix\.com|tiktok\.com|linkedin\.com|whatsapp\.com|amazon\.[a-z.]+|github\.com|twitch\.tv)$/i;
-    var YOUTUBE_TV = '111299001912';      // the YouTube app on Samsung TVs
     var MAX_MARKS = 24, HOLD_MS = 600;
     var PAGE_H = 4000, STEP = 300;
 
@@ -103,31 +102,15 @@
         renderMarks();
     }
 
-    // sites that refuse frames: the YouTube app / the TV's web browser, a new tab on a computer
-    function openOutside(url) {
-        var yt = /(^|\.)(youtube\.com|youtu\.be)$/i.test(hostOf(url));
-        var ti = window.tizen && tizen.application;
-        if (ti) {
-            var fail = function () { App.toast(t('brOutFail'), { kind: 'err' }); };
-            var browse = function () {
-                try {
-                    var ctl = new tizen.ApplicationControl('http://tizen.org/appcontrol/operation/view', url);
-                    tizen.application.launchAppControl(ctl, null, function () {}, function () {
-                        try { tizen.application.launchAppControl(ctl, 'org.tizen.browser', function () {}, fail); } catch (e) { fail(); }
-                    });
-                } catch (e) { fail(); }
-            };
-            App.toast(t(yt ? 'brOutYt' : 'brOutTv'), { kind: 'info' });
-            if (yt) { try { tizen.application.launch(YOUTUBE_TV, function () {}, browse); return; } catch (e) {} }
-            browse();
-            return;
-        }
-        App.toast(t('brOutTab'), { kind: 'info' });
-        try { window.open(url, '_blank', 'noopener'); } catch (e) {}
+    // sites that refuse frames (their own rule, X-Frame-Options / CSP): no blank page and never out of My PC (owner rule 2026-11-12)
+    function refused(url) {
+        var h = hostOf(url), m = marks(), i, n = '';
+        for (i = 0; i < m.length; i++) if (hostOf(real(m[i].u)) === h) { n = m[i].n; break; }
+        App.toast(tf('brRefused', n || nameFor(url)), { kind: 'warn', timeout: 8000 });
     }
     // every page the user asks for goes through here
     function go(url) {
-        if (NO_FRAME.test(hostOf(url))) { openOutside(url); return; }
+        if (NO_FRAME.test(hostOf(url))) { refused(url); return; }
         load(url, true);
         Focus.focus(view);
     }
@@ -465,7 +448,7 @@
             // Win.open('browser', 'https://…'): opens on that page (a push notification's link)
             if (typeof arg === 'string' && /^https:\/\//.test(arg)) {
                 if (!NO_FRAME.test(hostOf(arg))) { load(arg, true); return view; }
-                openOutside(arg);
+                refused(arg);
             }
             return start.querySelector('[data-focus]');
         },
