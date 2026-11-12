@@ -274,11 +274,11 @@
   the rebuilt `My-PC.apk` (+ the same file as old name `My-PC-Controller.apk`; build.ps1 also bumps `build`, which the Get the app link carries, so commit app-manifest.json with it); the signing key lives outside the repo (`.tooling\keys`), never commit it.
 - **Which controller (owner report 2026-11-11, build 156, API 20)**: `js/core/pad-info.js` (`PadInfo.detect(id, mapping)` -> brand / model /
   layout `nintendo` | `xbox` | `playstation` | `other` from the USB vendor:product in the gamepad id; `PadInfo.label(info, i)` = the name PRINTED
-  on that pad). Actions stay by POSITION (0 bottom = OK / jump, 1 right = Back / run); only names change (Switch Pro: 0 = B, 1 = A; Xbox: 0 = A).
-  Unknown pads get My PC's Nintendo-place names. `Input.pads()` carries brand / model / layout / vendor / product; Control Panel > Gaming lists
+  on that pad). Button order: see "A = OK by letter" below.
+  Unknown pads get A B X Y names. `Input.pads()` carries brand / model / layout / vendor / product; Control Panel > Gaming lists
   them + the button test (name, number, what My PC does); Shortcuts names pad buttons the same way; SDK `MyPC.gamepad.label(i, dev)` + pad
   fields. The SDK has an identical copy between `PADINFO-BEGIN` / `END` (unit test 10 keeps them equal). Tests: `MYPC_ONLY=pads`.
-  **A = OK by letter (owner decision 2026-11-11, build 158; build 157 got it backwards)**: My PC's button 0 = the button LABELLED A (OK / jump), 1 = B
+  **A = OK by letter (owner decision 2026-11-11, build 159; build 157 got it backwards)**: My PC's button 0 = the button LABELLED A (OK / jump), 1 = B
   (Back / run), 2 = X, 3 = Y on every controller. Xbox / PlayStation give that already; a Nintendo pad on the TV / Android also comes A first (letter
   order); only Chrome on a computer reads a Switch Pro by place, so `Input` (`faceMap`) swaps 0 <-> 1 and 2 <-> 3 there (Nintendo layout, real pads
   only), before actions, shortcuts, the test and `MyPC.gamepad`. `PadInfo` Nintendo / other labels = A B X Y. Per controller model in Control Panel >
