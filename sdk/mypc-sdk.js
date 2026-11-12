@@ -1250,8 +1250,8 @@ var MyPC = (function () {
             return out.length ? out : def;
         }
         // owner rule: A B X Y in the Nintendo places, each one sending what the same button of a real Nintendo pad sends, never A B C or a menu symbol
-        var DEFAULT = list([{ label: 'A', action: 'b', place: 'right' }, { label: 'B', action: 'ok', place: 'bottom' }]);
-        var CATALOG = list([{ label: 'A', action: 'b', place: 'right' }, { label: 'B', action: 'ok', place: 'bottom' }, { label: 'X', action: 'run', place: 'top' }, { label: 'Y', action: 'run', place: 'left' }]);
+        var DEFAULT = list([{ label: 'A', action: 'ok', place: 'right' }, { label: 'B', action: 'b', place: 'bottom' }]);
+        var CATALOG = list([{ label: 'A', action: 'ok', place: 'right' }, { label: 'B', action: 'b', place: 'bottom' }, { label: 'X', action: 'run', place: 'top' }, { label: 'Y', action: 'run', place: 'left' }]);
 
         // actions of the pad -> the SDK's own input (no fake keyboard events)
         function onAction(action, down) {
@@ -1431,14 +1431,14 @@ var MyPC = (function () {
         /* PADINFO-BEGIN (copied as is into sdk/mypc-sdk.js) */
         // labels by standard index: 4 face buttons, shoulders, triggers, the two small middle buttons, stick clicks, D-pad, home, extra
         var LABELS = {
-            nintendo: ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L3', 'R3', '▲', '▼', '◀', '▶', 'Home', 'Capture'],
+            nintendo: ['A', 'B', 'X', 'Y', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L3', 'R3', '▲', '▼', '◀', '▶', 'Home', 'Capture'],
             xbox: ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Menu', 'LS', 'RS', '▲', '▼', '◀', '▶', 'Xbox', 'Share'],
             playstation: ['✕', '○', '□', '△', 'L1', 'R1', 'L2', 'R2', 'Share', 'Options', 'L3', 'R3', '▲', '▼', '◀', '▶', 'PS', 'Touchpad'],
-            // a controller we do not know: My PC's own names (A B X Y in the Nintendo places, the + for the menu)
-            other: ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L3', 'R3', '▲', '▼', '◀', '▶', 'Home', 'Capture']
+            // a controller we do not know: A = button 0 (OK), B = 1 (Back), like a Nintendo pad in My PC
+            other: ['A', 'B', 'X', 'Y', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L3', 'R3', '▲', '▼', '◀', '▶', 'Home', 'Capture']
         };
-        // a Nintendo pad the browser does not map ("standard: false"): its own HID order (DirectInput), the D-pad is an axis
-        var NINTENDO_RAW = ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L3', 'R3', 'Home', 'Capture'];
+        // a Nintendo pad the browser does not map ("standard: false"): its own HID order, the D-pad is an axis
+        var NINTENDO_RAW = ['A', 'B', 'X', 'Y', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L3', 'R3', 'Home', 'Capture'];
         var BRANDS = {      // USB vendor id -> [brand, layout when the model is not known ('' = from the name)]
             '057e': ['Nintendo', 'nintendo'], '045e': ['Microsoft', 'xbox'], '054c': ['Sony', 'playstation'], '046d': ['Logitech', 'xbox'],
             '0f0d': ['Hori', ''], '20d6': ['PowerA', ''], '24c6': ['PowerA', 'xbox'], '0e6f': ['PDP', ''], '2dc8': ['8BitDo', 'nintendo'],
@@ -1460,7 +1460,7 @@ var MyPC = (function () {
             '046d:c21d': ['Gamepad F310', 'xbox'], '046d:c21e': ['Gamepad F510', 'xbox'], '046d:c21f': ['Gamepad F710', 'xbox'],
             '18d1:9400': ['Stadia Controller', 'xbox', { 8: 'Options', 9: 'Menu', 16: 'Stadia', 17: 'Capture' }],
             '1949:0419': ['Luna Controller', 'xbox', { 16: 'Luna', 17: 'Mic' }], '0955:7214': ['SHIELD Controller', 'xbox', { 16: 'NVIDIA' }],
-            '0000:0000': ['Phone controller', 'nintendo']       // My PC's own: a phone in Buttons / Keyboard mode (Input.virtualPad)
+            '0000:0000': ['Phone controller', 'nintendo']       // My PC's own: a phone in Buttons / Keyboard mode (Input.virtualPad), A = 0 like a real pad
         };
         function hex4(s) { s = String(s || '').toLowerCase(); while (s.length < 4) s = '0' + s; return s.slice(-4); }
         // "Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)" -> "Xbox Wireless Controller"

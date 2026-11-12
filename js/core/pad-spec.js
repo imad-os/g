@@ -2,8 +2,8 @@
  * The Game controller's Buttons mode (js/launcher/apps/gamepad.js) and the shell's pad over apps and games
  * (js/launcher/touchpad.js) both draw VirtualPad with PadSpec.options(): same buttons, places, sizes, Home and + buttons,
  * Stick / D-pad switch, and ONE saved layout (vpad:controller2), so a change made on either shows on both.
- * A B X Y in the Nintendo places, each named after the W3C standard gamepad button it is (owner rule): A right = button 1
- * (run + back), B bottom = 0 (OK / jump), X top = 3 and Y left = 2 (run), L R = 4 5, ZL ZR = 6 7, − = 8, + = 9 (Start),
+ * A B X Y in the Nintendo places, each sending the gamepad button a real Nintendo pad's same letter gives in My PC (owner decision
+ * 2026-11-11: A = OK, as on a Switch): A right = button 0 (OK / jump), B bottom = 1 (Back / run), X top = 2 and Y left = 3 (run), L R = 4 5, ZL ZR = 6 7, − = 8, + = 9 (Start),
  * L3 R3 = 10 11, Home = 16 (Guide), Capture = 17. L and R are shown at first, the gear adds ZL ZR − Capture L3 R3.
  *   PadSpec.options(extra)    VirtualPad.init options of the pad (extra: onAction, onSettings, onHide, ...)
  *   PadSpec.index(action)     the W3C button index of a pad action ('pause' = 9, 'home' = 16), -1 for the stick
@@ -12,8 +12,8 @@ var PadSpec = (function () {
     'use strict';
 
     var ID = 'controller2', KEY = 'arc_dev_vpad:' + ID;
-    var ABXY = [{ label: 'A', key: 13, action: 'g1', place: 'right' }, { label: 'B', key: 88, action: 'g0', place: 'bottom' },
-                { label: 'X', key: 77, action: 'g3', place: 'top' }, { label: 'Y', key: 90, action: 'g2', place: 'left' }];
+    var ABXY = [{ label: 'A', key: 13, action: 'g0', place: 'right' }, { label: 'B', key: 88, action: 'g1', place: 'bottom' },
+                { label: 'X', key: 77, action: 'g2', place: 'top' }, { label: 'Y', key: 90, action: 'g3', place: 'left' }];
     var EXTRA = [{ label: 'L', key: 76, action: 'l', place: 'l' }, { label: 'R', key: 82, action: 'r', place: 'r' }, { label: 'ZL', key: 75, action: 'zl', place: 'zl' }, { label: 'ZR', key: 84, action: 'zr', place: 'zr' },
                  { label: '−', key: 189, action: 'minus' }, { label: '●', key: 67, action: 'capture' }, { label: 'L3', key: 49, action: 'ls' }, { label: 'R3', key: 50, action: 'rs' }];
     var BUTTONS = ABXY.concat(EXTRA.slice(0, 2)), CATALOG = ABXY.concat(EXTRA);

@@ -214,8 +214,7 @@ What the pad sends (the same actions the TV remote and gamepads send, device `'t
 | **microphone** button (hidden at first, the player can add it; top centre under **+**) | the Record key (`record`, for My PC's own apps such as Memo; your app gets nothing). Same button as the phone controller's Buttons mode (shown there) |
 
 **Owner rule: the buttons are always called and placed A B X Y like a Nintendo controller (A right, B bottom, X top, Y left).
-Never A B C, never a menu symbol (&#9776;) or the word "Menu" as a button. Pause / menu is the Nintendo-style **+** button.** The phone and the touch pad send exactly what the same button of a real Nintendo controller connected to the TV sends (My PC reads a pad by position:
-the bottom button confirms / jumps, the right one runs / goes back), so a game plays the same with either. On the phone controller **+** is
+Never A B C, never a menu symbol (&#9776;) or the word "Menu" as a button. Pause / menu is the Nintendo-style **+** button.** The phone and the touch pad send exactly what the same button of a real Nintendo controller connected to the TV sends (owner decision 2026-11-11: **A confirms / jumps, B goes back / runs, X and Y run**, like on a Nintendo Switch; My PC follows the letter on every controller, so an Xbox pad's A is OK too), so a game plays the same with either. On the phone controller **+** is
 Start (`menu`) and **Home** is the Guide button. Defaults: **A B X Y**, **L R**, **+** and **Home** are shown; the gear adds the rest.
 
 **Change the buttons in `mypc-app.json`** (optional; the App Store Manager stores it with the app; an app that sets `buttons` or
@@ -380,22 +379,21 @@ MyPC.gamepad.label(1, 'pad0');     // 'A' on a Switch Pro controller, 'B' on an 
 MyPC.gamepad.pads();               // the connected controllers
 ```
 
-**Show the names printed on the player's controller** (API level 20): `name(i)` is the standard position name (`A` = the
-bottom button), but a Nintendo pad prints **B** at the bottom and **A** on the right. For on-screen hints use
+**Show the names printed on the player's controller** (API level 20). In My PC **button 0 is the button labelled A on every
+controller** (OK / jump), 1 is B (back / run), 2 is X, 3 is Y (owner decision 2026-11-11). An Xbox or PlayStation pad gives
+A / ✕ as 0 by itself; a Nintendo pad (A on the right) is also delivered in letter order: the TV sends it that way and My PC
+swaps it where a browser reads it by place, before your app sees it, so never swap anything yourself. For on-screen hints use
 `MyPC.gamepad.label(i, dev)`: My PC knows the controller from its USB vendor / product id (Nintendo Switch Pro and Switch 2
 Pro, Joy-Con, Xbox 360 / One / Series / Elite, DualShock 3 / 4, DualSense, 8BitDo, Logitech, Stadia, Luna, SHIELD, the
 phone controller...) and each pad in `pads()` says `brand`, `model` and `layout` (`'nintendo'`, `'xbox'`, `'playstation'` or
-`'other'`). An unknown controller gets My PC's own names (A B X Y in the Nintendo places, `+` for the menu). Keep the
-controls by POSITION (button 0 = jump / OK, 1 = back / run on every controller); only the names on screen change. Players
-see all of it in Control Panel > Gaming (brand, model, USB id, button order, and a button test). Some systems (Samsung TVs, Android) send a
-Nintendo pad's A B X Y by letter instead of by place; My PC puts them back in the standard order before your app sees them,
-so never swap them yourself.
+`'other'`). Players see all of it in Control Panel > Gaming (brand, model, USB id, button order, a button test, and
+"Swap A ↔ B and X ↔ Y" for a controller that still comes the wrong way).
 
 Button indices follow the W3C **standard** layout (by position, whatever is printed on the pad):
 
 | Index | Name | Xbox | PlayStation | Switch |
 |---|---|---|---|---|
-| 0 / 1 / 2 / 3 | `A` `B` `X` `Y` | A B X Y | Cross Circle Square Triangle | B A Y X |
+| 0 / 1 / 2 / 3 | `A` `B` `X` `Y` | A B X Y | Cross Circle Square Triangle | A B X Y (by letter, see below) |
 | 4 / 5 | `LB` `RB` | LB RB | L1 R1 | L R |
 | 6 / 7 | `LT` `RT` (analog) | LT RT | L2 R2 | ZL ZR |
 | 8 / 9 | `Select` `Start` | View Menu | Share/Create Options | − + |
@@ -630,7 +628,7 @@ metrics if you want them) and **Motion data** (raw sensor samples at the rate yo
 is a magic-remote style pointer for the My PC screens only: your app never sees it (its A / B buttons arrive as the
 usual actions), and `players` may report `'pointer'` for such a phone. **Buttons** has A B X Y where a Nintendo
 controller has them (A right, B bottom, X top, Y left), a **+** (Start) and a Home (Guide) button that My PC keeps for itself (your app never gets Home); the player may swap the stick for a D-pad (same `left` `right` `up` `down`). Each button sends exactly what the same
-button of a real Nintendo controller on the TV sends: A = `run` + `cancel`, B = OK / `jump`, X = `run`, Y = `run`, **+** = Start (`menu`), Home = Guide. **L** and **R** are on the pad from the start (shoulder buttons at the top corners: standard buttons 4 and 5, read them with `MyPC.gamepad`); the pad's gear can also add ZL, ZR, −, Capture and the stick clicks (standard buttons 6 to 11 and 17). The phone buzzes on each press at the player's Vibration setting (0 to 3, on the phone); your app does nothing for it.
+button of a real Nintendo controller on the TV sends: A = OK / `jump` (button 0), B = `run` + `cancel` (button 1), X = `run` (2), Y = `run` (3), **+** = Start (`menu`), Home = Guide. **L** and **R** are on the pad from the start (shoulder buttons at the top corners: standard buttons 4 and 5, read them with `MyPC.gamepad`); the pad's gear can also add ZL, ZR, −, Capture and the stick clicks (standard buttons 6 to 11 and 17). The phone buzzes on each press at the player's Vibration setting (0 to 3, on the phone); your app does nothing for it.
 **Keyboard** mode: a keyboard plugged into the phone (USB or Bluetooth) is a whole Switch Pro style controller: the
 player maps each key to a control (every button, the D-pad and both sticks; ZQSD = D-pad, arrows = left stick, numeric
 keypad = right stick, I J K L = X Y B A by default) and your app gets **gamepad buttons and axes, never keys**: the same

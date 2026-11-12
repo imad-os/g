@@ -358,11 +358,12 @@ var Input = (function () {
         }
     }
 
-    // Nintendo pads whose A B X Y come by LETTER, not by place (owner report 2026-11-11, imad's Switch Pro on the TV: A came as button 0,
-    // B as 1, X as 2, Y as 3, so every face button was the wrong one). Only Chrome on a computer reads a Switch Pro itself, by place (A = 1);
-    // a TV / Android system driver gives the letter order. faceMap(p) -> null, or [1, 0, 3, 2, 4, 5...]: My PC reads p.buttons[map[i]] for
-    // standard button i, so actions, shortcuts, the button test and apps (MyPC.gamepad) all see the standard order. Per controller the player
-    // can force it in Control Panel > Gaming (TV-wide arc_dev_padorder { 'vendor:product': 'swap' | 'keep' }).
+    // A on every controller is OK and B is Back (owner decision 2026-11-11, imad's Switch Pro: "my real A must do OK and B Back, like before").
+    // My PC's button 0 = OK / jump, 1 = Back / run, 2 / 3 = run. Xbox / PlayStation pads already give A / ✕ as 0. A Nintendo pad on the TV
+    // (and Android) comes in LETTER order (A = 0, B = 1, X = 2, Y = 3): nothing to do. Only Chrome on a computer reads a Switch Pro by
+    // PLACE (B = 0, A = 1, Y = 2, X = 3): faceMap(p) -> [1, 0, 3, 2, 4, 5...] puts it in letter order (My PC reads p.buttons[map[i]] for its
+    // button i) before actions, shortcuts, the button test and apps (MyPC.gamepad). Per controller model the player can force it in
+    // Control Panel > Gaming (TV-wide arc_dev_padorder { 'vendor:product': 'swap' | 'keep' }). Phone pads (index 100+) never change.
     var SWAP = new Uint8Array(32), faceCache = {}, padOrder = null;
     (function () { for (var i = 0; i < 32; i++) SWAP[i] = i; SWAP[0] = 1; SWAP[1] = 0; SWAP[2] = 3; SWAP[3] = 2; })();
     var DESKTOP_CHROME = !window.tizen && !/Android|Tizen|Web0S|SMART-TV|SmartTV/i.test(navigator.userAgent || '');
@@ -376,7 +377,7 @@ var Input = (function () {
         var c = faceCache['pad' + p.index];
         if (c && c.id === p.id) return c;
         var inf = window.PadInfo ? PadInfo.detect(p.id, p.mapping) : null;
-        var auto = !!inf && p.index < 100 && inf.vendor !== '0000' && inf.layout === 'nintendo' && !DESKTOP_CHROME;
+        var auto = !!inf && p.index < 100 && inf.vendor !== '0000' && inf.layout === 'nintendo' && DESKTOP_CHROME;
         var key = inf ? padKey(inf) : '', set = key && orders()[key];
         c = faceCache['pad' + p.index] = { id: p.id, key: key, auto: auto, set: set || 'auto', swap: set === 'swap' || (set !== 'keep' && auto) };
         return c;

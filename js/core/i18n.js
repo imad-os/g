@@ -35,7 +35,7 @@ var I18n = (function () {
             controlsText: [
                 'Remote: arrows move, OK jumps or confirms, hold OK to jump higher, Back pauses.',
                 'Red key: run on or off (for remote-only play). Play/Pause key: pause.',
-                'Gamepad: D-pad or left stick to move, the bottom button (B on a Nintendo pad, A on Xbox) to jump, the other face buttons to run or fire, + (Start) for the menu.',
+                'Gamepad: D-pad or left stick to move, A to jump or confirm, B to go back, X or Y to run or fire, + (Start) for the menu.',
                 'Keyboard: arrows, Space or Z to jump, Shift or X to run, P to pause.',
                 'Super Jumper for two: open the pause menu, choose Two players, then player 2 presses OK or A on their own controller (another gamepad, the remote, or W A S D + F on a keyboard).',
                 'Channel Up / Down (also PageUp / PageDown, or LB / RB on a gamepad): scroll a page in the browser. Guide (or F6): opens Start, and goes to the browser toolbar.',
@@ -133,7 +133,7 @@ var I18n = (function () {
             controlsText: [
                 'Télécommande : flèches pour bouger, OK pour sauter ou valider, maintenir OK pour sauter plus haut, Retour pour la pause.',
                 'Touche rouge : course activée ou non. Touche Lecture/Pause : pause.',
-                'Manette : croix ou stick gauche pour bouger, le bouton du bas (B sur une manette Nintendo, A sur Xbox) pour sauter, les autres boutons pour courir ou tirer, + (Start) pour le menu.',
+                'Manette : croix ou stick gauche pour bouger, A pour sauter ou valider, B pour revenir, X ou Y pour courir ou tirer, + (Start) pour le menu.',
                 'Clavier : flèches, Espace ou Z pour sauter, Maj ou X pour courir, P pour la pause.',
                 'Super Jumper à deux : ouvrez le menu pause, choisissez Deux joueurs, puis le joueur 2 appuie sur OK ou A sur sa propre manette (une autre manette, la télécommande, ou W A S D + F sur un clavier).',
                 'Chaîne + / − (ou PageUp / PageDown, ou LB / RB sur une manette) : faire défiler une page dans le navigateur. Guide (ou F6) : ouvre Démarrer et va à la barre du navigateur.',
@@ -231,7 +231,7 @@ var I18n = (function () {
             controlsText: [
                 'Mando a distancia: flechas para moverse, OK para saltar o confirmar, mantén OK para saltar más, Atrás para pausar.',
                 'Tecla roja: correr sí o no. Tecla Reproducir/Pausa: pausa.',
-                'Mando: cruceta o stick izquierdo para moverse, el botón de abajo (B en un mando Nintendo, A en Xbox) para saltar, los otros botones para correr o disparar, + (Start) para el menú.',
+                'Mando: cruceta o stick izquierdo para moverse, A para saltar o confirmar, B para volver, X o Y para correr o disparar, + (Start) para el menú.',
                 'Teclado: flechas, Espacio o Z para saltar, Mayús o X para correr, P para pausar.',
                 'Super Jumper para dos: abre el menú de pausa, elige Dos jugadores y el jugador 2 pulsa OK o A en su propio mando (otro mando, el mando a distancia, o W A S D + F en un teclado).',
                 'Canal + / − (o RePág / AvPág, o LB / RB en un mando): desplazar una página en el navegador. Guía (o F6): abre Inicio y va a la barra del navegador.',
@@ -329,7 +329,7 @@ var I18n = (function () {
             controlsText: [
                 'جهاز التحكم: الأسهم للتحرك، OK للقفز أو التأكيد، اضغط مطولاً على OK لقفزة أعلى، رجوع للإيقاف المؤقت.',
                 'الزر الأحمر: تشغيل أو إيقاف الركض. زر تشغيل/إيقاف: إيقاف مؤقت.',
-                'وحدة التحكم: الأسهم أو العصا اليسرى للتحرك، الزر السفلي (B في وحدة Nintendo، وA في Xbox) للقفز، الأزرار الأخرى للركض أو الإطلاق، + (Start) للقائمة.',
+                'وحدة التحكم: الأسهم أو العصا اليسرى للتحرك، A للقفز أو التأكيد، B للرجوع، X أو Y للركض أو الإطلاق، + (Start) للقائمة.',
                 'لوحة المفاتيح: الأسهم، المسافة أو Z للقفز، Shift أو X للركض، P للإيقاف المؤقت.',
                 'سوبر جمبر للاعبَين: افتح قائمة الإيقاف واختر لاعبان، ثم يضغط اللاعب 2 على OK أو A في وحدة التحكم الخاصة به (وحدة تحكم أخرى، أو جهاز التحكم، أو W A S D و F على لوحة المفاتيح).',
                 'القناة + / − (أو PageUp / PageDown، أو LB / RB في وحدة التحكم): تمرير صفحة في المتصفح. Guide (أو F6): يفتح ابدأ وينتقل إلى شريط المتصفح.',

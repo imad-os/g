@@ -2747,16 +2747,16 @@ async function main() {
         check(await fr.evaluate(() => MyPC.isDown('right') && MyPC.isDown('up')), 'a diagonal sends two actions');
         await fg.up(1); await wait(P);
         check(await fr.evaluate(() => !MyPC.isDown('right') && !MyPC.isDown('up') && !MyPC.isDown('left')), 'letting go releases the stick');
-        // buttons: A = confirm + jump (like the remote's OK), B = run, held while the finger stays
-        await fg.down(2, pad.labels.B.x, pad.labels.B.y); await wait(P);
-        check(await fr.evaluate(() => MyPC.isDown('confirm') && MyPC.isDown('jump') && !MyPC.isDown('run')), 'B (bottom) = "confirm" + "jump" (the remote\'s OK), like a Nintendo pad\'s B, held while pressed');
+        // buttons: A = confirm + jump (like the remote's OK), B = run + back, held while the finger stays (owner decision 2026-11-11)
+        await fg.down(2, pad.labels.A.x, pad.labels.A.y); await wait(P);
+        check(await fr.evaluate(() => MyPC.isDown('confirm') && MyPC.isDown('jump') && !MyPC.isDown('run')), 'A = "confirm" + "jump" (the remote\'s OK), like a Nintendo pad\'s A, held while pressed');
         await P.waitForTimeout(300);
         check(await fr.evaluate(() => MyPC.isDown('jump')), 'a button stays held');
         // multi-touch: stick + A + B at once
-        await fg.down(1, pad.stick.x + 45, pad.stick.y); await fg.down(3, pad.labels.A.x, pad.labels.A.y); await wait(P);
-        check(await fr.evaluate(() => MyPC.isDown('right') && MyPC.isDown('jump') && MyPC.isDown('run') && MyPC.isDown('cancel')), 'multi-touch: stick + B + A (run + back) at the same time');
+        await fg.down(1, pad.stick.x + 45, pad.stick.y); await fg.down(3, pad.labels.B.x, pad.labels.B.y); await wait(P);
+        check(await fr.evaluate(() => MyPC.isDown('right') && MyPC.isDown('jump') && MyPC.isDown('run') && MyPC.isDown('cancel')), 'multi-touch: stick + A + B (run + back) at the same time');
         await fg.up(2); await wait(P);
-        check(await fr.evaluate(() => !MyPC.isDown('jump') && MyPC.isDown('run') && MyPC.isDown('right')), 'releasing B keeps A and the stick');
+        check(await fr.evaluate(() => !MyPC.isDown('jump') && MyPC.isDown('run') && MyPC.isDown('right')), 'releasing A keeps B and the stick');
         await fg.up(3); await fg.up(1); await wait(P);
         check(await fr.evaluate(() => !MyPC.isDown('run') && !MyPC.isDown('right')), 'all released');
 
@@ -3085,10 +3085,10 @@ async function main() {
         check(await P1.evaluate(() => !!Desktop.appById('gamepad') && !!document.getElementById('tb-gamepad')), 'the Game controller app is a system app on the phone (taskbar)');
         await P1.waitForFunction(() => window.GamepadApp && window.GamepadApp.linked(), null, { timeout: 10000 });
         check(await P1.evaluate(() => VirtualPad.active() && !!document.getElementById('vp-stick') && !document.querySelector('.gc-bar').hidden && document.querySelector('.gc-badge').textContent === 'P1'), 'the phone shows the existing virtual pad (stick, A, B, gear, pause) as P1');
-        await press(P1, 'B', true);
+        await press(P1, 'A', true);
         await tv.waitForFunction(() => Input.isDownDev('pad101', 'jump') && Input.isDownDev('pad101', 'confirm'), null, { timeout: 3000 });
-        check(!(await tv.evaluate(() => Input.isDownDev('pad102', 'jump'))), 'P1 button B (bottom, like a Nintendo pad) = OK / jump on the "pad101" device only');
-        await press(P1, 'B', false);
+        check(!(await tv.evaluate(() => Input.isDownDev('pad102', 'jump'))), 'P1 button A (like a Nintendo pad\'s A, owner decision 2026-11-11) = OK / jump on the "pad101" device only');
+        await press(P1, 'A', false);
         await tv.waitForFunction(() => !Input.isDownDev('pad101', 'jump'), null, { timeout: 3000 });
         check(true, 'releasing the button releases the action');
         const st = await P1.evaluate(() => { const r = document.getElementById('vp-stick').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width / 2]; });
@@ -3112,8 +3112,8 @@ async function main() {
         const P2 = await phone(2, 2);
         await tv.waitForFunction(() => Controllers.players()[2], null, { timeout: 40000 });
         await press(P2, 'A', true);
-        await tv.waitForFunction(() => Input.isDownDev('pad102', 'run'), null, { timeout: 3000 });
-        check(!(await tv.evaluate(() => Input.isDownDev('pad101', 'run'))) && await tv.evaluate(() => Input.isDownDev('pad102', 'cancel')), 'P2 button A (right) = run and back, like a Nintendo pad, on the "pad102" device (the second player every game supports)');
+        await tv.waitForFunction(() => Input.isDownDev('pad102', 'confirm'), null, { timeout: 3000 });
+        check(!(await tv.evaluate(() => Input.isDownDev('pad101', 'confirm'))) && await tv.evaluate(() => Input.isDownDev('pad102', 'jump')), 'P2 button A = OK and jump, like a Nintendo pad\'s A (owner decision 2026-11-11), on the "pad102" device (the second player every game supports)');
         await press(P2, 'A', false);
         await press(P2, 'Y', true);
         await tv.waitForFunction(() => Input.isDownDev('pad102', 'run') && !Input.isDownDev('pad102', 'cancel'), null, { timeout: 3000 });
@@ -3133,7 +3133,7 @@ async function main() {
             window.__held = (dev) => ['jump', 'confirm', 'run', 'cancel'].filter((a) => Input.isDownDev(dev, a)).join();
         });
         const real = {};
-        // a Switch Pro on a TV comes by LETTER (A = 0, B = 1, X = 2, Y = 3, imad's TV 2026-11-11); My PC puts them back in place
+        // a Switch Pro on a TV comes by LETTER (A = 0, B = 1, X = 2, Y = 3, imad's TV 2026-11-11): A = OK, B = Back (owner decision)
         for (const [name, idx] of [['A', 0], ['B', 1], ['X', 2], ['Y', 3]]) {
             await tv.evaluate((i) => { __gp.buttons[i] = { pressed: true, value: 1 }; }, idx);
             await tv.waitForFunction(() => __held('pad0') !== '', null, { timeout: 3000 });
@@ -3212,9 +3212,9 @@ async function main() {
         await homeBtn();
         await tv.waitForFunction(() => GameHost.state() === 'paused', null, { timeout: 3000 });
         check(true, 'Home (the Guide button) in a game opens My PC\'s pause menu, like a real pad\'s Home');
-        await press(P2, 'A', true); await press(P2, 'A', false);
+        await press(P2, 'B', true); await press(P2, 'B', false);
         await tv.waitForFunction(() => GameHost.state() === 'running', null, { timeout: 3000 });
-        check(true, 'A (back, like a Nintendo pad\'s A) closes the pause menu');
+        check(true, 'B (back, like a Nintendo pad\'s B) closes the pause menu');
         db.down = true; await tv.evaluate(() => { Controllers.setOn(false); Controllers.setOn(true); });
         await tv.waitForFunction(() => Controllers.status().s === 'error', null, { timeout: 15000 });
         check(await tv.evaluate(() => Controllers.status().err === 'offline'), 'a room that cannot open shows the reason (offline) instead of nothing');
@@ -3348,14 +3348,14 @@ async function main() {
         await ph.click('.gc-tsend');
         check(await ph.evaluate(() => /Open a text field/.test(document.querySelector('.gc-txt .gc-tcue').textContent) && document.querySelector('.gc-tin').value === 'hello'), 'Send with no text field on the TV keeps the text and says to open a field first');
         await ph.fill('.gc-tin', '');
-        // the phone's B (bottom) = OK: the Browser's search box opens the on-screen keyboard; the phone sees the field
+        // the phone's A = OK: the Browser's search box opens the on-screen keyboard; the phone sees the field
         await tv.evaluate(() => Win.open('browser'));
         await tv.waitForFunction(() => document.activeElement && document.activeElement.classList.contains('br-search'), null, { timeout: 5000 });
-        await ph.dispatchEvent('.gc-tb', 'pointerdown'); await ph.dispatchEvent('.gc-tb', 'pointerup');
+        await ph.dispatchEvent('.gc-ta', 'pointerdown'); await ph.dispatchEvent('.gc-ta', 'pointerup');
         await tv.waitForFunction(() => Keyboard.isOpen(), null, { timeout: 5000 });
         await ph.waitForFunction(() => document.querySelector('.gc-tinto').classList.contains('on'), null, { timeout: 5000 });
         const into = await ph.evaluate(() => ({ t: document.querySelector('.gc-tinto').textContent, im: document.querySelector('.gc-tin').getAttribute('inputmode'), cap: document.querySelector('.gc-tin').getAttribute('autocapitalize') }));
-        check(/Typing into: .*(address|search)/i.test(into.t) && into.im === 'url' && into.cap === 'off', 'B on the phone opened the Browser\'s address keyboard; the phone shows that field and an address keyboard ' + JSON.stringify(into));
+        check(/Typing into: .*(address|search)/i.test(into.t) && into.im === 'url' && into.cap === 'off', 'A on the phone opened the Browser\'s address keyboard; the phone shows that field and an address keyboard ' + JSON.stringify(into));
         // live: each letter shows on the TV; Backspace deletes a letter and is never Back
         await ph.focus('.gc-tin');
         await ph.keyboard.type('Wikipedia.org', { delay: 15 });
@@ -3609,12 +3609,12 @@ async function main() {
         await tv.waitForFunction(() => !Input.isDownDev('pad101', 'up'), null, { timeout: 3000 });
         check(await K.evaluate(() => !document.querySelector('[data-k=up]').classList.contains('on')), 'letting go of the key releases the button and its light');
         await K.keyboard.down('l');
-        await tv.waitForFunction(() => Input.isDownDev('pad101', 'run') && Input.isDownDev('pad101', 'cancel'), null, { timeout: 3000 });
+        await tv.waitForFunction(() => Input.isDownDev('pad101', 'jump') && Input.isDownDev('pad101', 'confirm'), null, { timeout: 3000 });
         await K.keyboard.up('l');
         await K.keyboard.down('k');
-        await tv.waitForFunction(() => Input.isDownDev('pad101', 'jump') && Input.isDownDev('pad101', 'confirm'), null, { timeout: 3000 });
+        await tv.waitForFunction(() => Input.isDownDev('pad101', 'run') && Input.isDownDev('pad101', 'cancel'), null, { timeout: 3000 });
         await K.keyboard.up('k');
-        check(true, 'L key = A (right: run + back), K key = B (bottom: OK / jump), like a Nintendo pad');
+        check(true, 'L key = A (OK / jump), K key = B (run + back), like a Nintendo pad\'s A and B (owner decision 2026-11-11)');
         for (const [key, bit, name] of [['u', 4, 'L'], ['o', 5, 'R'], ['a', 6, 'ZL'], ['p', 7, 'ZR'], ['Backspace', 8, '−'], ['Enter', 9, '+'], ['f', 10, 'left stick click'], ['m', 11, 'right stick click'], ['h', 16, 'Home'], ['c', 17, 'Capture']]) {
             await K.keyboard.down(key);
             await tv.waitForFunction((b) => __vp && __vp.m === 1 << b, bit, { timeout: 3000 });
@@ -3632,7 +3632,7 @@ async function main() {
         await K.keyboard.press('w');
         check(await K.evaluate(() => GamepadApp.keys().x === 'w' && Store.rawGet('arc_dev_ctrlphone').keys.x === 'w' && document.querySelector('[data-k=x] .k').textContent === 'W'), 'the key is mapped, shown on the button and kept on the phone');
         await K.keyboard.down('w');
-        await tv.waitForFunction(() => __vp && __vp.m === 1 << 3, null, { timeout: 3000 });
+        await tv.waitForFunction(() => __vp && __vp.m === 1 << 2, null, { timeout: 3000 });
         await K.keyboard.up('w');
         await K.click('.gc-kpic [data-k=y]'); await K.keyboard.press('w');
         check(await K.evaluate(() => GamepadApp.keys().y === 'w' && GamepadApp.keys().x === ''), 'a key given to Y is taken from X (one key, one control)');
@@ -4727,7 +4727,7 @@ async function main() {
         await row('^Button');
         await page.evaluate(() => { Input.virtualPad(1, 1 << 12, 0, 0, 'Test'); Input.virtualPad(1, 0, 0, 0, 'Test'); });   // D-pad up: kept
         check(await page.evaluate(() => Shortcuts.listening()), 'the controller D-pad is not taken');
-        await page.evaluate(() => { Input.virtualPad(1, 1 << 3, 0, 0, 'Test'); Input.virtualPad(1, 0, 0, 0, 'Test'); });     // X (top)
+        await page.evaluate(() => { Input.virtualPad(1, 1 << 2, 0, 0, 'Test'); Input.virtualPad(1, 0, 0, 0, 'Test'); });     // X (button 2)
         await page.waitForTimeout(100);
         check(await page.evaluate(() => /Controller X/.test(document.activeElement.textContent)), 'a controller button (X) is picked');
         await row('^Button');
@@ -6427,20 +6427,20 @@ async function padTests(browser, base) {
     await page.evaluate(() => Win.open('settings', 'gaming'));
     await page.waitForSelector('.set-row', { timeout: 5000 });
     const txt = await page.evaluate(() => document.querySelector('#win, body').innerText);
-    check(/Nintendo Switch Pro Controller/.test(txt) && /Nintendo · Switch Pro Controller/.test(txt) && /B bottom, A right/.test(txt) && /057e:2009/.test(txt) && /A ↔ B and X ↔ Y swapped back/.test(txt) && /Swap A ↔ B and X ↔ Y/.test(txt) && /Automatic \(On\)/.test(txt),
-        'Control Panel > Gaming shows the controller: Nintendo Switch Pro Controller, its button names, USB id 057e:2009, A / B swap Automatic (On) on a TV');
+    check(/Nintendo Switch Pro Controller/.test(txt) && /Nintendo · Switch Pro Controller/.test(txt) && /B bottom, A right/.test(txt) && /057e:2009/.test(txt) && /Swap A ↔ B and X ↔ Y/.test(txt) && /Automatic \(Off\)/.test(txt) && /A is OK \/ jump and B is Back/.test(txt),
+        'Control Panel > Gaming shows the controller: Nintendo Switch Pro Controller, its button names, USB id 057e:2009, nothing swapped on a TV (it sends A first)');
     if (shots) await page.screenshot({ path: path.join(shots, 'pads-1-gaming-switch-pro.png') });
-    // on a TV the Switch Pro sends its buttons by LETTER (A = 0, B = 1, X = 2, Y = 3): My PC puts them back in place
+    // on a TV the Switch Pro sends its buttons by LETTER (A = 0, B = 1, X = 2, Y = 3): A = OK, B = Back (owner decision 2026-11-11)
     const held = () => page.evaluate(() => ['jump', 'confirm', 'run', 'cancel'].filter((a) => Input.isDownDev('pad0', a)).sort().join());
     const acts = {};
     for (const [n, i] of [['A', 0], ['B', 1], ['X', 2], ['Y', 3]]) { await btn(i, true); await page.waitForTimeout(80); acts[n] = await held(); await btn(i, false); await page.waitForTimeout(80); }
-    check(acts.A === 'cancel,run' && acts.B === 'confirm,jump' && acts.X === 'run' && acts.Y === 'run', 'TV, Switch Pro by letter: A = Back / run, B = OK / jump, X and Y = run (' + JSON.stringify(acts) + ')');
+    check(acts.A === 'confirm,jump' && acts.B === 'cancel,run' && acts.X === 'run' && acts.Y === 'run', 'TV, Switch Pro: A = OK / jump, B = Back / run, X and Y = run (' + JSON.stringify(acts) + ')');
     // the button test: press the Switch Pro's A (button 0 on this TV)
     await page.evaluate(() => { const b = [...document.querySelectorAll('[data-row]')].find((e) => /Test the buttons/.test(e.textContent)); b.focus(); b.click(); });
     await page.waitForSelector('.set-padtest .pt-b', { timeout: 5000 });
     const names = await page.evaluate(() => [...document.querySelectorAll('.pt-b .pt-l')].map((e) => e.textContent));
-    check(names.slice(0, 4).join() === 'B,A,Y,X' && names[4] === 'L' && names[7] === 'ZR' && names[9] === '+' && names[16] === 'Home' && names[17] === 'Capture',
-        'the test names the Switch Pro\'s buttons B A Y X, L R ZL ZR, − +, Home, Capture (' + names.join(' ') + ')');
+    check(names.slice(0, 4).join() === 'A,B,X,Y' && names[4] === 'L' && names[7] === 'ZR' && names[9] === '+' && names[16] === 'Home' && names[17] === 'Capture',
+        'the test names the Switch Pro\'s buttons A B X Y, L R ZL ZR, − +, Home, Capture (' + names.join(' ') + ')');
     const lights = async (i) => {
         await btn(i, true);
         await page.waitForFunction(() => document.querySelectorAll('.pt-b.on').length === 1, null, { timeout: 3000 }).catch(() => {});
@@ -6449,15 +6449,15 @@ async function padTests(browser, base) {
         return r;
     };
     const la = await lights(0), lb = await lights(1), lx = await lights(2), ly = await lights(3);
-    check(la.on === 'A' && /^A \(button 1\): Back, run$/.test(la.last) && lb.on === 'B' && /^B \(button 0\): OK, jump$/.test(lb.last) && lx.on === 'X' && ly.on === 'Y',
-        'pressing A lights "A" (Back), B lights "B" (OK), X lights "X", Y lights "Y" (' + JSON.stringify([la, lb, lx, ly]) + ')');
+    check(la.on === 'A' && /^A \(button 0\): OK, jump$/.test(la.last) && lb.on === 'B' && /^B \(button 1\): Back, run$/.test(lb.last) && lx.on === 'X' && ly.on === 'Y',
+        'pressing A lights "A" (OK), B lights "B" (Back), X lights "X", Y lights "Y" (' + JSON.stringify([la, lb, lx, ly]) + ')');
     if (shots) { await btn(0, true); await page.waitForTimeout(150); await page.screenshot({ path: path.join(shots, 'pads-2-test-switch-pro-A.png') }); await btn(0, false); }
     check(await page.evaluate(() => Win.current() === 'settings' && !!document.querySelector('.set-padtest')), 'the controller\'s buttons only test (A / B do not close the page)');
-    // the player can turn it off: "Don't swap" -> button 0 is the bottom one again (B)
-    await page.evaluate(() => Input.setPadOrder('057e:2009', 'keep'));
+    // the player can force it: "Swap" -> the pad's button 1 is My PC's 0
+    await page.evaluate(() => Input.setPadOrder('057e:2009', 'swap'));
     await page.waitForTimeout(100);
     const kb = await lights(0);
-    check(kb.on === 'B' && await page.evaluate(() => JSON.parse(localStorage.getItem('arc_dev_padorder'))['057e:2009'] === 'keep'), 'Don\'t swap: button 0 lights B again, kept for that controller model (' + JSON.stringify(kb) + ')');
+    check(kb.on === 'B' && await page.evaluate(() => JSON.parse(localStorage.getItem('arc_dev_padorder'))['057e:2009'] === 'swap'), 'Swap: the pad\'s button 0 now lights B, kept for that controller model (' + JSON.stringify(kb) + ')');
     await page.evaluate(() => Input.setPadOrder('057e:2009', 'auto'));
     // an Xbox pad: A is the bottom button (0)
     await page.evaluate(() => { navigator.getGamepads = () => [null, null, null, null]; window.dispatchEvent(new Event('gamepaddisconnected')); });
@@ -6476,7 +6476,7 @@ async function padTests(browser, base) {
         'Control Panel > Devices: the controller\'s brand / model and its own button names in the help');
     check(page.errors.length === 0, 'no page errors' + (page.errors.length ? ': ' + page.errors[0] : ''));
     await page.context().close();
-    // Chrome on a computer reads a Switch Pro itself, by place (A = button 1): nothing swapped there
+    // Chrome on a computer reads a Switch Pro itself, by place (A = button 1): My PC swaps it, so A is OK there too
     const pc = await newPage(browser, base, {}, { desktop: true });
     await pc.goto(base + 'index.html');
     await pc.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
@@ -6485,7 +6485,7 @@ async function padTests(browser, base) {
     await pc.evaluate(() => { __gp.buttons[1] = { pressed: true, value: 1 }; });
     await pc.waitForTimeout(150);
     const pcA = await pc.evaluate(() => ({ acts: ['jump', 'confirm', 'run', 'cancel'].filter((a) => Input.isDownDev('pad0', a)).sort().join(), swap: Input.pads()[0].order.swap }));
-    check(pcA.acts === 'cancel,run' && pcA.swap === false, 'Chrome on a computer: the Switch Pro\'s A is button 1 (by place), Back / run, nothing swapped (' + JSON.stringify(pcA) + ')');
+    check(pcA.acts === 'confirm,jump' && pcA.swap === true, 'Chrome on a computer: the Switch Pro\'s A (its button 1, by place) is OK / jump too (' + JSON.stringify(pcA) + ')');
     await pc.context().close();
 }
 

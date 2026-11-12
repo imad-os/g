@@ -329,7 +329,7 @@
     var KCTL = [['up', 12], ['down', 13], ['left', 14], ['right', 15],
                 ['lsUp', -1, 'l', 'up'], ['lsDown', -1, 'l', 'down'], ['lsLeft', -1, 'l', 'left'], ['lsRight', -1, 'l', 'right'], ['ls', 10],
                 ['rsUp', -1, 'r', 'up'], ['rsDown', -1, 'r', 'down'], ['rsLeft', -1, 'r', 'left'], ['rsRight', -1, 'r', 'right'], ['rs', 11],
-                ['a', 1], ['b', 0], ['x', 3], ['y', 2], ['l', 4], ['r', 5], ['zl', 6], ['zr', 7],
+                ['a', 0], ['b', 1], ['x', 2], ['y', 3], ['l', 4], ['r', 5], ['zl', 6], ['zr', 7],
                 ['minus', 8], ['plus', 9], ['home', 16], ['capture', 17]];
     // ZQSD = D-pad (an AZERTY keyboard's W A S D), arrows = left stick, numeric keypad = right stick, I J K L = X Y B A
     var KDEF = { up: 'z', down: 's', left: 'q', right: 'd', lsUp: 'ArrowUp', lsDown: 'ArrowDown', lsLeft: 'ArrowLeft', lsRight: 'ArrowRight', ls: 'f',
@@ -536,7 +536,7 @@
         ui.tLive.checked = txLive();
         if (!field) kindAttrs('text');
     }
-    // arrows and A / B: the Nintendo places (A right = back, B bottom = OK), like the remote, to reach a field on the TV
+    // arrows and A / B (A = OK, B = Back, like a Nintendo Switch; owner decision 2026-11-11), to reach a field on the TV
     function navButton(label, action, cls, aria) {
         var b = el('button', 'gc-tbtn ' + cls, label);
         if (aria) b.setAttribute('aria-label', aria);
@@ -578,7 +578,7 @@
         var nav = el('div', 'gc-tnav');
         nav.appendChild(navButton('▲', 'up', 'gc-tu')); nav.appendChild(navButton('◀', 'left', 'gc-tl2'));
         nav.appendChild(navButton('▶', 'right', 'gc-tr')); nav.appendChild(navButton('▼', 'down', 'gc-td'));
-        nav.appendChild(navButton('A', 'b', 'gc-ta')); nav.appendChild(navButton('B', 'ok', 'gc-tb'));
+        nav.appendChild(navButton('A', 'ok', 'gc-ta')); nav.appendChild(navButton('B', 'b', 'gc-tb'));
         body.appendChild(nav);
         s.appendChild(body);
         return s;

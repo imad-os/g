@@ -244,7 +244,7 @@
   `vpad:controller2`; the GamePad setting = the pad panel's D-pad choice). Any pad change applies to both; only an app's own `touch.buttons` gets a different pad.
   Pairing is a QR code (own page Settings > Devices > Phone controller, `js/core/qr.js`, link `?pair=<code>` opens the Game controller and connects).
   **Owner decision: its Buttons mode reuses the existing virtual pad (`VirtualPad`, id `controller`), never a separately drawn pad;**
-  **A B X Y in the Nintendo places** (pad button option `place`) ****the phone IS a virtual standard gamepad on the TV (`Input.virtualPad`, message `gp`: raw button bits + stick axes, device `pad10<player>`), never high-level actions** (owner rule, games must see exactly a real pad; Input.PAD_BUTTONS reads by position): A right = `b` (run + cancel), B bottom = `ok` (jump + confirm), X top and Y left = run, the + button = `menu` (Start), Home (pad option `home`) = `guide`**; same mapping in the shell's touch pad and the SDK's `MyPC.pad`.
+  **A B X Y in the Nintendo places** (pad button option `place`) ****the phone IS a virtual standard gamepad on the TV (`Input.virtualPad`, message `gp`: raw button bits + stick axes, device `pad10<player>`), never high-level actions** (owner rule, games must see exactly a real pad; Input.PAD_BUTTONS reads by position): A (right) = `ok` (jump + confirm, button 0), B (bottom) = `b` (run + cancel, button 1), X top and Y left = run, the + button = `menu` (Start), Home (pad option `home`) = `guide`**; same mapping in the shell's touch pad and the SDK's `MyPC.pad`.
   **Keyboard mode** (`keyboard`): a keyboard plugged into the phone is a whole Switch Pro style controller; keys mapped per control on the phone
   (`arc_dev_ctrlphone.keys`, ZQSD = D-pad by default), sends the same `gp` message (18 buttons, Capture = 17, `rx` / `ry` right stick), never keys;
   the screen draws the controller and lights the pressed control. The Buttons pad shows L and R by default (shoulder pills, VirtualPad `place: 'l' | 'r' | 'zl' | 'zr'`); its gear adds ZL ZR − Capture L3 R3.
@@ -278,11 +278,12 @@
   Unknown pads get My PC's Nintendo-place names. `Input.pads()` carries brand / model / layout / vendor / product; Control Panel > Gaming lists
   them + the button test (name, number, what My PC does); Shortcuts names pad buttons the same way; SDK `MyPC.gamepad.label(i, dev)` + pad
   fields. The SDK has an identical copy between `PADINFO-BEGIN` / `END` (unit test 10 keeps them equal). Tests: `MYPC_ONLY=pads`.
-  **A B X Y by letter (imad's TV, 2026-11-11, build 157: "A detected as B, X as Y")**: Samsung TVs / Android send a Nintendo pad's face buttons
-  in LETTER order (A = 0, B = 1, X = 2, Y = 3); only Chrome on a computer reads a Switch Pro by place. `Input` (`faceMap`) swaps 0 <-> 1 and
-  2 <-> 3 for Nintendo-layout real pads everywhere but desktop Chrome, before actions, shortcuts, the test and `MyPC.gamepad` (apps always get
-  the standard order). Per controller model in Control Panel > Gaming "Swap A <-> B and X <-> Y": Automatic / Swap / Don't swap (TV-wide
-  `arc_dev_padorder`, `Input.setPadOrder(key, v)`). Phone pads (index 100+) are never swapped.
+  **A = OK by letter (owner decision 2026-11-11, build 158; build 157 got it backwards)**: My PC's button 0 = the button LABELLED A (OK / jump), 1 = B
+  (Back / run), 2 = X, 3 = Y on every controller. Xbox / PlayStation give that already; a Nintendo pad on the TV / Android also comes A first (letter
+  order); only Chrome on a computer reads a Switch Pro by place, so `Input` (`faceMap`) swaps 0 <-> 1 and 2 <-> 3 there (Nintendo layout, real pads
+  only), before actions, shortcuts, the test and `MyPC.gamepad`. `PadInfo` Nintendo / other labels = A B X Y. Per controller model in Control Panel >
+  Gaming "Swap A <-> B and X <-> Y": Automatic / Swap / Don't swap (TV-wide `arc_dev_padorder`, `Input.setPadOrder(key, v)`). The phone / touch pad
+  (`pad-spec.js` A = g0, touchpad A = 'ok', Keyboard mode a = 0) send the same.
 - **Heart-rate sensors (TV)**: `js/core/hr-ble.js` (any BLE Heart Rate Service device: Garmin watches broadcasting, Polar, Garmin HRM, Decathlon),
   created per app by `game-host.js` for `hr-monitor` or apps with `"heartRate": true` in their config; SDK `MyPC.bluetooth`.
   Needs the `bluetooth` privileges in `config.xml` (package 1.4.0+), so a new .wgt on the TV. Unit tests: `node tests/unit-tests.mjs` (part of `npm test`).
@@ -374,7 +375,8 @@
 ## Rules that always apply
 - **Buttons are A B X Y + the +, always (owner rule, repeated many times).** Every pad or hint with face buttons (phone controller, the shell's
   touch pad over apps, the SDK's `MyPC.pad`, the VirtualPad library, games, on-screen hints, docs, examples) uses A B X Y in the Nintendo
-  places, each sending what the same button of a real Nintendo pad sends (A right = run + back, B bottom = OK / jump, X top and Y left = run, + = menu). Never A B C, never a ☰ / "Menu" button: pause / menu is the Nintendo-style **+** button (top centre of the pad). Check this before
+  places, each sending what the same button of a real Nintendo pad sends. **Owner decision 2026-11-11 (imad: "my real A must do OK and B Back,
+  like before"): by LETTER on every controller: A = button 0 = OK / jump, B = 1 = Back / run, X = 2 and Y = 3 = run, + = menu** (was A right = run + back). Never A B C, never a ☰ / "Menu" button: pause / menu is the Nintendo-style **+** button (top centre of the pad). Check this before
   you ship any control or hint.
 - One app or game at a time, full screen; free everything on close (iframes, timers, AudioContext).
   No allocation per frame in games.

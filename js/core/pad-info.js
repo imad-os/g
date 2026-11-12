@@ -1,10 +1,10 @@
 /* PadInfo: which controller a gamepad is (brand, model, button layout), from the id the browser gives it.
  *
  * Chrome:  "Pro Controller (STANDARD GAMEPAD Vendor: 057e Product: 2009)"     Firefox: "57e-2009-Pro Controller"
- * The W3C "standard" mapping numbers buttons by POSITION (0 = bottom face button, 1 = right, 2 = left, 3 = top), never by
- * what is printed on them: a Switch Pro controller's A (right) is button 1, an Xbox pad's A (bottom) is button 0. So the
- * label of a button depends on the controller: PadInfo.label(info, i) gives the one printed on THIS controller.
- * My PC's actions stay by position (bottom = OK / jump, right = Back / run), whatever the controller.
+ * Button 0 is OK / jump and button 1 is Back in My PC. Owner decision 2026-11-11: on every controller the button LABELLED A is OK
+ * and B is Back (as on a Switch). Xbox / PlayStation pads give A / ✕ as 0 already; a Nintendo pad reaches My PC in letter order
+ * (A = 0, B = 1, X = 2, Y = 3: the TV's own driver does it, and Input swaps a pad read by place in Chrome on a computer, faceMap).
+ * PadInfo.label(info, i) gives the name printed on THIS controller for My PC's button i.
  *
  *   PadInfo.detect(id, mapping) -> { vendor: '057e', product: '2009', brand: 'Nintendo', model: 'Switch Pro Controller',
  *                                     layout: 'nintendo' | 'xbox' | 'playstation' | 'other', known: true, standard: true }
@@ -17,14 +17,14 @@ var PadInfo = (function () {
     /* PADINFO-BEGIN (copied as is into sdk/mypc-sdk.js) */
     // labels by standard index: 4 face buttons, shoulders, triggers, the two small middle buttons, stick clicks, D-pad, home, extra
     var LABELS = {
-        nintendo: ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L3', 'R3', '▲', '▼', '◀', '▶', 'Home', 'Capture'],
+        nintendo: ['A', 'B', 'X', 'Y', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L3', 'R3', '▲', '▼', '◀', '▶', 'Home', 'Capture'],
         xbox: ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Menu', 'LS', 'RS', '▲', '▼', '◀', '▶', 'Xbox', 'Share'],
         playstation: ['✕', '○', '□', '△', 'L1', 'R1', 'L2', 'R2', 'Share', 'Options', 'L3', 'R3', '▲', '▼', '◀', '▶', 'PS', 'Touchpad'],
-        // a controller we do not know: My PC's own names (A B X Y in the Nintendo places, the + for the menu)
-        other: ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L3', 'R3', '▲', '▼', '◀', '▶', 'Home', 'Capture']
+        // a controller we do not know: A = button 0 (OK), B = 1 (Back), like a Nintendo pad in My PC
+        other: ['A', 'B', 'X', 'Y', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L3', 'R3', '▲', '▼', '◀', '▶', 'Home', 'Capture']
     };
-    // a Nintendo pad the browser does not map ("standard: false"): its own HID order (DirectInput), the D-pad is an axis
-    var NINTENDO_RAW = ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L3', 'R3', 'Home', 'Capture'];
+    // a Nintendo pad the browser does not map ("standard: false"): its own HID order, the D-pad is an axis
+    var NINTENDO_RAW = ['A', 'B', 'X', 'Y', 'L', 'R', 'ZL', 'ZR', '−', '+', 'L3', 'R3', 'Home', 'Capture'];
     var BRANDS = {      // USB vendor id -> [brand, layout when the model is not known ('' = from the name)]
         '057e': ['Nintendo', 'nintendo'], '045e': ['Microsoft', 'xbox'], '054c': ['Sony', 'playstation'], '046d': ['Logitech', 'xbox'],
         '0f0d': ['Hori', ''], '20d6': ['PowerA', ''], '24c6': ['PowerA', 'xbox'], '0e6f': ['PDP', ''], '2dc8': ['8BitDo', 'nintendo'],
@@ -46,7 +46,7 @@ var PadInfo = (function () {
         '046d:c21d': ['Gamepad F310', 'xbox'], '046d:c21e': ['Gamepad F510', 'xbox'], '046d:c21f': ['Gamepad F710', 'xbox'],
         '18d1:9400': ['Stadia Controller', 'xbox', { 8: 'Options', 9: 'Menu', 16: 'Stadia', 17: 'Capture' }],
         '1949:0419': ['Luna Controller', 'xbox', { 16: 'Luna', 17: 'Mic' }], '0955:7214': ['SHIELD Controller', 'xbox', { 16: 'NVIDIA' }],
-        '0000:0000': ['Phone controller', 'nintendo']       // My PC's own: a phone in Buttons / Keyboard mode (Input.virtualPad)
+        '0000:0000': ['Phone controller', 'nintendo']       // My PC's own: a phone in Buttons / Keyboard mode (Input.virtualPad), A = 0 like a real pad
     };
     function hex4(s) { s = String(s || '').toLowerCase(); while (s.length < 4) s = '0' + s; return s.slice(-4); }
     // "Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)" -> "Xbox Wireless Controller"

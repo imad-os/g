@@ -66,11 +66,11 @@ var Shortcuts = (function () {
     function t(k) { return I18n.t(k); }
     // any other key (remote, keyboard): 'k<keyCode>'; a controller button: 'p<index>' (standard layout, any controller)
     // Kept for moving and confirming everywhere: arrows, OK / Enter / Space, Back / Esc / Backspace, Tab, modifier keys;
-    // on a controller the D-pad, B (bottom, OK) and A (right, Back).
+    // on a controller the D-pad, A (OK) and B (Back).
     var RESERVED = { 8: 1, 9: 1, 13: 1, 16: 1, 17: 1, 18: 1, 20: 1, 27: 1, 32: 1, 37: 1, 38: 1, 39: 1, 40: 1, 91: 1, 92: 1, 93: 1, 229: 1, 10009: 1 };
     var PAD_RESERVED = { 0: 1, 1: 1, 12: 1, 13: 1, 14: 1, 15: 1 };
-    // standard layout -> the Nintendo names (B bottom, A right, Y left, X top)
-    var PAD_NAMES = ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '\u2212', '+', 'L3', 'R3', '\u25B2', '\u25BC', '\u25C0', '\u25B6', 'Home', 'Capture'];
+    // My PC's buttons -> names when no controller is connected (A = 0 = OK, B = 1 = Back)
+    var PAD_NAMES = ['A', 'B', 'X', 'Y', 'L', 'R', 'ZL', 'ZR', '\u2212', '+', 'L3', 'R3', '\u25B2', '\u25BC', '\u25C0', '\u25B6', 'Home', 'Capture'];
     // the name printed on the button of the controller in use (js/core/pad-info.js: Xbox A = button 0, Switch A = button 1)
     function padLabel(i) {
         var pl = window.PadInfo && Input.pads ? Input.pads() : [], a = Input.activePad ? Input.activePad() : -1, p = pl[0], k;

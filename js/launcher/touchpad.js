@@ -45,10 +45,10 @@ var TouchPad = (function () {
         }
         return out.length ? out : null;
     }
-    // owner rule: the buttons are A B X Y in the Nintendo places and each sends what the same button of a real Nintendo pad sends (A right = run + back, B bottom = OK / jump, X top and Y left = run;
+    // owner rule: the buttons are A B X Y in the Nintendo places and each sends what the same button of a real Nintendo pad sends (owner decision 2026-11-11: A = OK / jump, B = Back / run, like a Nintendo Switch; was A right = run + back, B bottom = OK / jump, X top and Y left = run;
     // the + button is the pause menu), never A B C or a menu symbol
-    var DEFAULT = list([{ label: 'A', action: 'b', place: 'right' }, { label: 'B', action: 'ok', place: 'bottom' }]);
-    var CATALOG = list([{ label: 'A', action: 'b', place: 'right' }, { label: 'B', action: 'ok', place: 'bottom' }, { label: 'X', action: 'run', place: 'top' }, { label: 'Y', action: 'run', place: 'left' }]);
+    var DEFAULT = list([{ label: 'A', action: 'ok', place: 'right' }, { label: 'B', action: 'b', place: 'bottom' }]);
+    var CATALOG = list([{ label: 'A', action: 'ok', place: 'right' }, { label: 'B', action: 'b', place: 'bottom' }, { label: 'X', action: 'run', place: 'top' }, { label: 'Y', action: 'run', place: 'left' }]);
 
     // false -> { off: true }; true / nothing / garbage -> defaults; an object -> its valid parts
     function clean(t) {
