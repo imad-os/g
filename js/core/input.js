@@ -64,8 +64,9 @@ var Input = (function () {
     var BUTTONS = { 37: 'left', 38: 'up', 39: 'right', 40: 'down', 13: 'ok', 32: 'space', 427: 'chUp', 428: 'chDown', 33: 'pageUp', 34: 'pageDown',
         415: 'play', 19: 'pause', 10252: 'playPause', 417: 'ff', 412: 'rew', 10233: 'next', 10232: 'prev', 413: 'stop', 416: 'record',
         403: 'red', 404: 'green', 405: 'yellow', 406: 'blue', 457: 'info', 10073: 'chList', 10135: 'tools', 10190: 'prevCh', 10221: 'caption',
-        10195: 'mts', 10200: 'teletext', 10140: 'pictureSize', 10253: 'extra', 189: 'minus', 176: 'next', 177: 'prev', 178: 'stop', 179: 'playPause' };
+        458: 'guide', 10195: 'mts', 10200: 'teletext', 10140: 'pictureSize', 10253: 'extra', 189: 'minus', 176: 'next', 177: 'prev', 178: 'stop', 179: 'playPause' };
     for (var dg = 0; dg <= 9; dg++) BUTTONS[48 + dg] = String(dg);
+    var BUTTON_LABELS = {};         // name -> the TV's own name for a key My PC has no name for ('k<code>')
     // the TV keys apps' buttons need registered (only once an app asks for them)
     var EXTRA_TV_KEYS = ['ColorF1Green', 'ColorF2Yellow', 'ColorF3Blue', 'Info', 'ChannelList', 'Tools', 'PreviousChannel', 'Caption', 'MTS',
         'Teletext', 'PictureSize', 'Extra', 'Minus', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
@@ -76,6 +77,17 @@ var Input = (function () {
         var tvi = window.tizen && tizen.tvinputdevice;
         if (!tvi) return;
         for (var i = 0; i < EXTRA_TV_KEYS.length; i++) { try { tvi.registerKey(EXTRA_TV_KEYS[i]); } catch (e) {} }
+        // and every other key this TV's remote has (owner request 2026-11-12: "not all my remote's buttons"), by 'k<code>' when
+        // My PC has no name for it; never the volume, power, source or exit keys (the TV's own)
+        try {
+            var sup = tvi.getSupportedKeys() || [];
+            for (var j = 0; j < sup.length; j++) {
+                var k = sup[j];
+                if (!k || /^(Volume|Mute|Power|Source|Exit|Home)/i.test(k.name) || KEYMAP[k.code] && !BUTTONS[k.code]) continue;
+                if (!BUTTONS[k.code]) { BUTTONS[k.code] = 'k' + k.code; BUTTON_LABELS['k' + k.code] = String(k.name); }
+                try { tvi.registerKey(k.name); } catch (e2) {}
+            }
+        } catch (e3) {}
     }
     var keyHeld = {};               // keyCode -> true
     var count = {};                 // device -> { action -> number of keys/buttons holding it }
@@ -543,7 +555,7 @@ var Input = (function () {
         setHandler: function (fn) { handler = fn; },
         setKeyHook: function (fn) { keyHook = fn || null; },
         setRawHook: function (fn) { rawHook = fn || null; },   // fn(name, down, repeat) -> true when the app takes the button (MyPC.buttons)
-        registerExtraKeys: registerExtraKeys, BUTTONS: BUTTONS,     // fn(keyCode, down, event) -> true when it used the key
+        registerExtraKeys: registerExtraKeys, BUTTONS: BUTTONS, buttonLabel: function (n) { return BUTTON_LABELS[n] || ''; },     // fn(keyCode, down, event) -> true when it used the key
         setPadHook: function (fn) { padHook = fn || null; },     // fn(buttonIndex, down, dev) -> true when it takes the button
         TV_KEYS: TV_KEYS,
         isDown: isDown,

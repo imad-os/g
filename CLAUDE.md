@@ -347,7 +347,8 @@
   NEVER read (`tracks()` = empty lists + `file: true`, `track()` = `unsupported`); Speedy shows Off + the subtitle files next to it.
   **Remote buttons by name (API 19, owner request 2026-11-11, for Speedy's Settings > Remote buttons)**: `MyPC.init({ keys: ['buttons'] })` ->
   `Input.registerExtraKeys()` (colours, digits, Info, Channel list, Tools...) and `Input.setRawHook` (set in main.js, off under My PC's own screens)
-  sends every named key (`Input.BUTTONS`; never Back / Guide / Tab) ONLY to the app as `btn` -> `MyPC.buttons.on(name, pressed, repeat)`; needs `app_keys` on.
+  sends every named key (`Input.BUTTONS`; never Back / F6 / Tab; the remote's Guide 458 = `guide`, build 158) ONLY to the app as `btn` -> `MyPC.buttons.on(name, pressed, repeat, label)`;
+  every other key of `getSupportedKeys()` (not volume / power / source / exit) is registered too and sent as `k<code>` with the TV's name as label; needs `app_keys` on.
   Docs GUIDE.md section 21. Tests: `MYPC_ONLY=video node tests/run-tests.mjs`; Speedy itself inside My PC (fake AVPlay + USB drive, the
   checkout `../g_iptv` or `SPEEDY_DIR`, skipped when missing): `MYPC_ONLY=speedy` (its browser tests: `node tests/run.mjs` in g_iptv).
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /

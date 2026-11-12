@@ -1456,10 +1456,12 @@ buttons wait meanwhile). Ask only for what you use.
 
 `MyPC.init({ keys: ['buttons'] })`, then `MyPC.buttons.on((name, pressed, repeat) => ...)` (returns `off()`). My PC registers the
 remote's other keys too (colour keys, digits, Info, Channel list, Tools...), and while your app runs those buttons reach **only** this
-listener, not `onInput`: `ok up down left right red green yellow blue 0`..`9 chUp chDown info chList tools prevCh caption mts teletext
-pictureSize extra minus play pause playPause ff rew next prev stop record` (a keyboard adds `space pageUp pageDown`). So your app maps
+listener, not `onInput` (`MyPC.buttons.on((name, pressed, repeat, label) => ...)`): `ok up down left right red green yellow blue 0`..`9 chUp chDown info chList tools prevCh caption mts teletext
+pictureSize extra minus play pause playPause ff rew next prev stop record guide` (`guide` = the remote's Guide key, the button between
+CH + and CH − on many Samsung remotes), and `k<code>` for any other key the TV's remote has (the listener's 4th argument `label` is the
+TV's own name for it, e.g. `k10225` / `"Search"`) (a keyboard adds `space pageUp pageDown`). So your app maps
 every one of them itself, OK and the arrows included (keep OK = OK and the arrows = moving: a remote has nothing else for them).
-Back stays `cancel` in `onInput` (with My PC's double Back), Guide and Tab stay My PC's; controllers still come through `onInput` /
+Back stays `cancel` in `onInput` (with My PC's double Back), a keyboard's F6 and Tab stay My PC's; controllers still come through `onInput` /
 `MyPC.gamepad`. Under My PC's own screens (menu, keyboard, a question) nothing is sent; a press always gets its release. The player can
 turn it off with Control Panel > Gaming > "Every button goes to the app": then the remote's keys come as plain actions again, so
 keep `onInput` working. Standalone nothing is sent (read your own keys). Samsung's Smart Remote shows the colour keys and digits

@@ -7233,6 +7233,16 @@ async function speedyTests(browser, base) {
     const got = await app.evaluate((n) => window.__acts.slice(n), before);
     check(bm.fav === '2' && bm.two === 'fav' && bm.red === '' && /Number 2/.test(bm.row) && got.indexOf('fav') >= 0 && got.indexOf('pageUp') >= 0,
         'Settings > Remote buttons: "Press the button" gives Favorite the 2 key (it reaches Speedy by name), CH + still pages ' + JSON.stringify({ bm, got }));
+    // the remote's Guide key (the button between CH + and CH − on imad's remote) and any other key of the TV can be learned too
+    await key(UP, 2); await key(DOWN, 3); await key(OK); await app.waitForTimeout(300); await key(OK); await app.waitForTimeout(300);
+    await key(458); await app.waitForTimeout(400);
+    await page.evaluate(() => { Input.BUTTONS[10225] = 'k10225'; });
+    await key(DOWN); await key(OK); await app.waitForTimeout(300); await key(OK); await app.waitForTimeout(300);
+    await key(10225); await app.waitForTimeout(400);
+    const gm = await app.evaluate(() => ({ menu: Buttons.map().menu, search: Buttons.map().search, g: Buttons.actionFor('guide', false), k: Buttons.actionFor('k10225', false), lab: Buttons.label('k10225') }));
+    await shot('10b-remote-buttons-guide');
+    check(gm.menu === 'guide' && gm.search === 'k10225' && gm.g === 'menu' && gm.k === 'search' && gm.lab === 'Button 10225' && await page.evaluate(() => GameHost.state()) === 'running',
+        'the remote\'s Guide key and a key My PC has no name for can be given to an action too (Guide stays in Speedy) ' + JSON.stringify(gm));
     await app.evaluate(() => Store.setPref('btns', {}));
     await tvBack(page); await page.waitForTimeout(700);
     check(stats.live >= 0, 'requests: ' + JSON.stringify({ api: stats.api, film: stats.film }));

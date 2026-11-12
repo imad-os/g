@@ -250,7 +250,7 @@ var MyPC = (function () {
             case 'ble-event': bluetooth._message(d); break;
             case 'sensors': sensors._message(d); break;
             case 'gp': gamepad._message(d); break;
-            case 'btn': if (d && typeof d.n === 'string') buttons._emit(d.n, !!d.d, !!d.r); break;
+            case 'btn': if (d && typeof d.n === 'string') buttons._emit(d.n, !!d.d, !!d.r, typeof d.l === 'string' ? d.l : ''); break;
             case 'net': net._message(d); break;
             case 'ai': ai._message(d); break;
             case 'mic': mic._message(d); break;
@@ -1410,16 +1410,17 @@ var MyPC = (function () {
      * Inside My PC the shell reads the pads and sends only changes, and nothing while its own menus are open. Standalone the SDK
      * reads navigator.getGamepads() itself (and maps the standard buttons to actions too, like My PC does). */
     /* ---------------- MyPC.buttons: the remote's buttons by name, for apps that map them themselves (API level 19) ----------------
-     *   MyPC.init({ keys: ['buttons'] });  MyPC.buttons.on(function (name, pressed, repeat) {})   // returns off()
+     *   MyPC.init({ keys: ['buttons'] });  MyPC.buttons.on(function (name, pressed, repeat, label) {})   // returns off()
      * Inside My PC those buttons then reach ONLY this listener (not onInput): ok, up, down, left, right, red, green, yellow, blue,
      * 0..9, chUp, chDown, info, chList, tools, prevCh, caption, mts, teletext, pictureSize, extra, minus, play, pause, playPause,
-     * ff, rew, next, prev, stop, record (+ a keyboard's space, pageUp, pageDown). Back, Guide and Tab stay as before (onInput's
+     * ff, rew, next, prev, stop, record, guide (the remote's Guide), and k<code> for any other key of the TV's remote (label = the TV's name
+     * for it) (+ a keyboard's space, pageUp, pageDown). Back, F6 and Tab stay as before (onInput's
      * 'cancel', My PC's menu). Controllers still come through onInput / MyPC.gamepad. Standalone: nothing (use your own keys). */
     var buttons = (function () {
         var ls = [];
         return {
             on: function (fn) { if (typeof fn === 'function') ls.push(fn); return function () { var i = ls.indexOf(fn); if (i >= 0) ls.splice(i, 1); }; },
-            _emit: function (n, p, r) { if (frozen) return; for (var i = 0; i < ls.length; i++) { try { ls[i](n, p, r); } catch (x) { try { console.error('[MyPC buttons] ' + x); } catch (y) {} } } }
+            _emit: function (n, p, r, l) { if (frozen) return; for (var i = 0; i < ls.length; i++) { try { ls[i](n, p, r, l); } catch (x) { try { console.error('[MyPC buttons] ' + x); } catch (y) {} } } }
         };
     })();
 

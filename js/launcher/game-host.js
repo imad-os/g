@@ -337,7 +337,7 @@ var GameHost = (function () {
             menuItems: function () { return items; },
             onMenu: function (mid) { send('menu', { id: String(mid).slice(4) }); },
             onAction: function (a, pressed, repeat, dev) { send('input', { action: a, pressed: pressed, repeat: repeat, dev: dev }); },
-            button: function (n, down, repeat) { send('btn', { n: n, d: down ? 1 : 0, r: repeat ? 1 : 0 }); }
+            button: function (n, down, repeat) { send('btn', { n: n, d: down ? 1 : 0, r: repeat ? 1 : 0, l: Input.buttonLabel(n) }); }
         };
         return remote;
     }
