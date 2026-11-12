@@ -6489,7 +6489,7 @@ async function themeTests(browser, base) {
     check(n.cls && n.wp === 'nightlake' && n.on, 'Neon night: theme class, its night lake background (widgets turned on by the test) ' + JSON.stringify([n.wp, n.on]));
     check(n.time && n.tray.indexOf(n.time) === 0 && /\d{4}/.test(n.date), 'the Weather card shows the clock and the date, the same time as the taskbar ' + JSON.stringify([n.time, n.tray, n.date]));
     check(n.rings.join() === '12%CPU,34%RAM,70%Disk', 'System Monitor draws rings: CPU 12 %, RAM 34 %, disk 70 % (TV systeminfo) ' + n.rings.join());
-    check(n.tb.l > 10 && n.tb.b > 10 && n.tb.rad === '30px' && /My PC/.test(n.label), 'the taskbar floats (gaps all round, rounded) with "My PC" beside Start ' + JSON.stringify(n.tb) + n.label);
+    check(n.tb.l > 10 && n.tb.b > 10 && n.tb.rad === '46px' && /My PC/.test(n.label), 'the taskbar floats (gaps all round, rounded) with "My PC" beside Start ' + JSON.stringify(n.tb) + n.label);
     // the widgets' clock follows the desktop's clock tick
     await page.evaluate(() => { const o = Date; window.__D = o; Date = function (...a) { return a.length ? new o(...a) : new o(2026, 10, 12, 21, 7, 0); }; Date.now = o.now; Date.prototype = o.prototype; Desktop.tick(); });
     const tk = await page.evaluate(() => [document.querySelector('#wdg-weather .wdg-ck-h').textContent, document.getElementById('tray-time').textContent]);

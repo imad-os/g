@@ -215,10 +215,7 @@ html.th-quest { --acc: #ffcc4d; --ink: #14110a; }
 .th-neon .desk-icons { top: 108px; height: calc(var(--sh) - 236px); }
 .th-neon .dicon .lbl { text-shadow: 0 2px 6px #000, 0 0 2px #000; }
 .th-neon .dicon:focus { background: rgba(124, 140, 255, 0.24); box-shadow: inset 0 0 0 3px #fff, inset 0 0 22px rgba(150, 170, 255, 0.55); }
-.th-neon .taskbar { left: 24px; bottom: 16px; width: calc(var(--sw) - 48px); height: 92px; border-radius: 30px; border: 2px solid #7fb6ff;
-                    background: linear-gradient(180deg, rgba(38, 44, 104, 0.8), rgba(14, 16, 50, 0.9));
-                    box-shadow: 0 0 4px #5aa2ff, 0 0 16px rgba(80, 140, 255, 0.9), 0 0 40px rgba(80, 100, 255, 0.55),
-                                inset 0 0 16px rgba(90, 150, 255, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
+.th-neon .taskbar { left: 24px; bottom: 16px; width: calc(var(--sw) - 48px); height: 92px; border-radius: 46px; }
 .th-neon .tb-apps { left: 16px; top: 3px; transform: none; }
 [dir="rtl"].th-neon .tb-apps { left: auto; right: 16px; }
 .th-neon .tb-btn { border-radius: 18px; }
@@ -236,24 +233,48 @@ html.th-quest { --acc: #ffcc4d; --ink: #14110a; }
 .compact.th-neon .tb-start svg { width: 96px; height: 96px; }
 .compact.th-neon .tb-start:after { font-size: 44px; }
 .compact.th-neon .desk-icons { top: 108px; height: calc(var(--sh) - 316px); }
-.th-neon .start { bottom: 124px; border-radius: 28px; border: 2px solid #7fb6ff;
-                  background: linear-gradient(180deg, rgba(32, 38, 96, 0.97), rgba(12, 14, 44, 0.98)); box-shadow: 0 0 4px #5aa2ff, 0 0 18px rgba(80, 140, 255, 0.85), 0 0 44px rgba(80, 100, 255, 0.45), inset 0 0 20px rgba(90, 150, 255, 0.4); }
+.th-neon .start { bottom: 124px; border-radius: 28px; background: linear-gradient(180deg, rgba(32, 38, 96, 0.97), rgba(12, 14, 44, 0.98)); }
 .compact.th-neon .start { bottom: 204px; }
 .th-neon .start-foot { border-radius: 0 0 26px 26px; background: rgba(0, 0, 0, 0.25); border-top: 1px solid rgba(110, 150, 255, 0.35); }
 .th-neon .stile:focus, .th-neon .srec:focus { background: rgba(124, 140, 255, 0.24); }
 .th-neon .win-bar { background: linear-gradient(90deg, #161a4a, #2a1652); border-bottom: 2px solid rgba(124, 140, 255, 0.75); box-shadow: 0 2px 14px rgba(90, 110, 255, 0.35); }
 .th-neon .win-close:focus { background: #d4365c; }
 /* the widgets: rounded glass cards, a glow around them (the id selector beats the per-widget colour line) */
-.th-neon .desk-widgets { top: 8px; right: 4px; width: 500px; padding: 20px; height: calc(var(--sh) - 120px); gap: 22px; }
+.th-neon .desk-widgets { top: 4px; right: 0; width: 508px; padding: 24px; height: calc(var(--sh) - 120px); gap: 22px; }
 [dir="rtl"].th-neon .desk-widgets { right: auto; left: 4px; }
 .th-neon .has-wdg .desk-icons { right: 508px; }
 [dir="rtl"].th-neon .has-wdg .desk-icons { right: 24px; left: 508px; }
-.th-neon #desk-widgets .wdg { padding: 20px 24px; border-radius: 28px; border: 2px solid #7fb6ff;
-                              background: linear-gradient(160deg, rgba(48, 56, 130, 0.62), rgba(14, 16, 50, 0.8));
-                              box-shadow: 0 0 4px #5aa2ff, 0 0 14px rgba(80, 140, 255, 0.85), 0 0 32px rgba(80, 100, 255, 0.45),
-                                          inset 0 0 18px rgba(90, 150, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3); }
-.th-neon #desk-widgets .wdg:focus { border-color: #fff; box-shadow: 0 0 0 2px #fff, 0 0 18px #8fc0ff, 0 0 44px rgba(120, 150, 255, 0.8), inset 0 0 22px rgba(140, 180, 255, 0.55);
-                                    background: linear-gradient(160deg, rgba(70, 80, 170, 0.72), rgba(22, 26, 70, 0.86)); }
+.th-neon #desk-widgets .wdg { padding: 20px 24px; border-radius: 28px; overflow: visible; }
+/* Neon glass (owner request 2026-11-12, "the glow is not even, it is not just a border"): the light falls on the glass from the top
+   left, so the rim is a thin line, bright white-blue on the top-left and bottom-right corners and faint along the middles, with a soft
+   bloom around those two corners and a blue light inside along the edges. All static: one gradient rim (masked to a 2 px ring) and one
+   bloom layer per card, painted once; no blur, no animation. */
+.th-neon .taskbar, .th-neon .start, .th-neon #desk-widgets .wdg { border: 0; isolation: isolate;
+    background: linear-gradient(180deg, rgba(46, 56, 124, 0.62) 0%, rgba(18, 22, 64, 0.74) 45%, rgba(10, 12, 42, 0.84) 100%);
+    box-shadow: inset 0 0 26px rgba(70, 130, 255, 0.3), inset 0 1px 1px rgba(200, 225, 255, 0.25), 0 0 16px rgba(40, 80, 230, 0.28); }
+.th-neon .start { background: linear-gradient(180deg, rgba(36, 44, 104, 0.96), rgba(12, 14, 44, 0.98)); }
+.th-neon .taskbar:before, .th-neon .start:before, .th-neon #desk-widgets .wdg:before {
+    content: ''; position: absolute; left: 0; top: 0; right: 0; bottom: 0; padding: 2px; border-radius: inherit; pointer-events: none;
+    background: linear-gradient(118deg, #f2faff 0%, #9fd2ff 6%, #5fa6ff 12%, rgba(100, 150, 255, 0.4) 24%, rgba(110, 130, 255, 0.16) 50%, rgba(100, 150, 255, 0.4) 76%, #5fa6ff 88%, #9fd2ff 94%, #f2faff 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+.th-neon .taskbar:before { background: linear-gradient(90deg, #e4f4ff 0, #5fb0ff 2.5%, rgba(100, 150, 255, 0.5) 10%, rgba(110, 140, 255, 0.28) 50%, rgba(100, 150, 255, 0.5) 90%, #5fb0ff 97.5%, #e4f4ff 100%); }
+.th-neon .taskbar:after, .th-neon .start:after, .th-neon #desk-widgets .wdg:after {
+    content: ''; position: absolute; left: -24px; top: -24px; right: -24px; bottom: -24px; z-index: -1; pointer-events: none;
+    background: radial-gradient(30px 30px at 34px 34px, rgba(170, 215, 255, 0.85), rgba(120, 185, 255, 0.3) 55%, rgba(120, 185, 255, 0)),
+                radial-gradient(130px 16px at 130px 25px, rgba(130, 190, 255, 0.55), rgba(130, 190, 255, 0)),
+                radial-gradient(16px 90px at 25px 110px, rgba(130, 190, 255, 0.5), rgba(130, 190, 255, 0)),
+                radial-gradient(30px 30px at calc(100% - 34px) calc(100% - 34px), rgba(160, 210, 255, 0.85), rgba(110, 180, 255, 0.3) 55%, rgba(110, 180, 255, 0)),
+                radial-gradient(150px 16px at calc(100% - 150px) calc(100% - 25px), rgba(120, 185, 255, 0.55), rgba(120, 185, 255, 0)),
+                radial-gradient(16px 80px at calc(100% - 25px) calc(100% - 100px), rgba(120, 185, 255, 0.5), rgba(120, 185, 255, 0)); }
+.th-neon .taskbar:after { background: radial-gradient(22px 56px at 28px 50%, rgba(150, 220, 255, 0.95), rgba(100, 200, 255, 0.3) 55%, rgba(100, 200, 255, 0)),
+                                      radial-gradient(220px 14px at 220px 24px, rgba(120, 200, 255, 0.5), rgba(120, 200, 255, 0)),
+                                      radial-gradient(22px 56px at calc(100% - 28px) 50%, rgba(150, 200, 255, 0.85), rgba(110, 170, 255, 0.28) 55%, rgba(110, 170, 255, 0)),
+                                      radial-gradient(220px 14px at calc(100% - 220px) calc(100% - 24px), rgba(120, 180, 255, 0.5), rgba(120, 180, 255, 0)),
+                                      linear-gradient(90deg, rgba(0, 0, 0, 0) 4%, rgba(80, 130, 255, 0.12) 50%, rgba(0, 0, 0, 0) 96%) 0 100% / 100% 34px no-repeat; }
+/* the focused card: the whole rim lights up */
+.th-neon #desk-widgets .wdg:focus { box-shadow: inset 0 0 30px rgba(110, 160, 255, 0.45), 0 0 26px rgba(110, 160, 255, 0.75); background: linear-gradient(180deg, rgba(66, 78, 160, 0.72), rgba(20, 24, 70, 0.86)); }
+.th-neon #desk-widgets .wdg:focus:before { padding: 3px; background: linear-gradient(118deg, #fff 0%, #a9d4ff 30%, #a9d4ff 70%, #fff 100%); }
 .th-neon .wdg-head { color: #eef0ff; font-weight: 600; }
 .th-neon .wdg-clocked .wdg-head { display: none; }
 .th-neon .wdg-clocked { min-height: 0 !important; }
