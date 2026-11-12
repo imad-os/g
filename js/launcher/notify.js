@@ -63,6 +63,8 @@ var Notify = (function () {
         if (typeof o === 'string') o = { text: o };
         o = o || {};
         if (!o.text && !o.title) return null;
+        // the open app's settings say no notifications over it (My PC's menu > App settings): errors and controllers still show
+        if (o.kind !== 'err' && !/^(pad|ctrl|net|avcrash)/.test(String(o.id || '')) && typeof GameHost !== 'undefined' && GameHost.quiet && GameHost.quiet()) return null;
         var b = root();
         if (!b) return null;
         var c = o.id != null ? find(String(o.id)) : null;

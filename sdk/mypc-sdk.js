@@ -37,7 +37,7 @@
 var MyPC = (function () {
     'use strict';
 
-    var VERSION = 1, API = 20, HELLO_WAIT = 1200;
+    var VERSION = 1, API = 21, HELLO_WAIT = 1200;
     var handlers = {}, info = null, data = {}, started = false, destroyed = false, isReady = false;
     var hosted = false, hostWin = null, hostOrigin = '*', helloTimer = 0;
     var down = {};                       // action -> number of keys / buttons holding it
@@ -66,6 +66,27 @@ var MyPC = (function () {
      *    wait and run on resume (like a hidden browser tab), its AudioContexts are suspended and resumed.
      * Apps with onPause stop their own loop and sound there (required, section 4 of the guide). */
     var frozen = false, frozenMedia = [], frozenCtx = [], heldRaf = [], media = [], ctxs = [];
+    /* The player's settings reach navigator.getGamepads() too (API 21, owner request 2026-11-12):
+     *  - My PC's menu > App settings > "Read the controllers directly" = Blocked: no pads at all (the app only gets
+     *    them through onInput / MyPC.gamepad, which My PC sends);
+     *  - Control Panel > Gaming > Map the buttons (or the A <-> B swap): the pads come with their buttons in that order, so
+     *    buttons[0] is the button the player made A. Same objects every call (no allocation per frame). */
+    var padDirect = true, padMaps = {}, padWrap = {};
+    function mappedPads(list) {
+        var out = list, i, p, m, w, j, n;
+        for (i = 0; list && i < list.length; i++) {
+            p = list[i]; m = p && padMaps[p.index];
+            if (!m) continue;
+            if (out === list) out = Array.prototype.slice.call(list);
+            w = padWrap[p.index] || (padWrap[p.index] = { id: '', index: p.index, connected: true, mapping: '', timestamp: 0, axes: null, buttons: [], vibrationActuator: null, hapticActuators: null });
+            w.id = p.id; w.connected = p.connected; w.mapping = p.mapping; w.timestamp = p.timestamp; w.axes = p.axes;
+            w.vibrationActuator = p.vibrationActuator || null; w.hapticActuators = p.hapticActuators || null;
+            n = p.buttons.length; w.buttons.length = n;
+            for (j = 0; j < n; j++) w.buttons[j] = p.buttons[j < m.length && m[j] < n ? m[j] : j];
+            out[i] = w;
+        }
+        return out;
+    }
     function freezeKey(e) {
         if (!frozen) return;
         e.stopImmediatePropagation();
@@ -82,7 +103,8 @@ var MyPC = (function () {
             var realPads = navigator.getGamepads;
             if (typeof realPads === 'function') {
                 Object.defineProperty(navigator, 'getGamepads', { configurable: true, writable: true, value: function () {
-                    return frozen ? [null, null, null, null] : realPads.apply(navigator, arguments);
+                    if (frozen || !padDirect) return [null, null, null, null];
+                    return mappedPads(realPads.apply(navigator, arguments));
                 } });
             }
         } catch (e) {}
@@ -1404,8 +1426,8 @@ var MyPC = (function () {
      *   MyPC.gamepad.on('axes', function (axes, dev) {})                             // sticks moved (axes: the SDK's own array, read it now, don't keep it)
      *   MyPC.gamepad.on('pads', function (list) {})     // [{ dev: 'pad0', name, standard, buttons, axes, brand, model, layout, vendor, product }] connected / gone
      *   MyPC.gamepad.pressed(i, dev?)  value(i, dev?)  axis(i, dev?)  pads()  name(i, dev?)  label(i, dev?)
-     * name(i) = the standard position name ('A' = bottom); label(i) = what is printed on THAT controller (API 20: a Switch
-     * Pro's bottom button 0 is 'B', its right button 1 is 'A'; layout 'nintendo' | 'xbox' | 'playstation' | 'other').
+     * name(i) = My PC's name for button i (0 = 'A' = OK); label(i) = what is printed on THAT controller (API 20; button 0 is the
+     * button labelled A / \u2715 on every pad, a Switch Pro included: My PC puts it there; layout 'nintendo' | 'xbox' | 'playstation' | 'other').
      * dev is 'pad0'..'pad3' (the same as onInput's dev); without it: any pad (pressed), the highest value, the last pad used (axis).
      * Inside My PC the shell reads the pads and sends only changes, and nothing while its own menus are open. Standalone the SDK
      * reads navigator.getGamepads() itself (and maps the standard buttons to actions too, like My PC does). */
@@ -1501,7 +1523,7 @@ var MyPC = (function () {
         function pad(dev) {
             return st[dev] || (st[dev] = { v: new Float32Array(32), p: new Uint8Array(32), a: new Float32Array(8), standard: true, info: null });
         }
-        // the name printed on button i of this controller (Switch Pro: 1 = 'A'; Xbox: 0 = 'A'; PlayStation: 0 = '\u2715')
+        // the name printed on button i of this controller (0 = 'A' on Nintendo and Xbox pads, '\u2715' on PlayStation)
         function labelOf(i, dev) { var s = st[dev || last]; return label(s && s.info ? s.info : 'other', i); }
         function emit(name, a, b, c, d, e) {
             var l = listeners[name];
@@ -1530,10 +1552,12 @@ var MyPC = (function () {
                                              : detect(o.id || o.name, o.standard ? 'standard' : '');
                 inf.standard = !!o.standard;
                 if (inf.vendor && MODELS[inf.vendor + ':' + inf.product]) inf.fix = MODELS[inf.vendor + ':' + inf.product][2] || null;
+                if (typeof o.i === 'number') { if (o.map && o.map.length) padMaps[o.i] = o.map.slice(); else delete padMaps[o.i]; }
                 list.push({ dev: o.d, name: o.name, standard: !!o.standard, buttons: o.buttons, axes: o.axes, brand: inf.brand, model: inf.model, layout: inf.layout, vendor: inf.vendor, product: inf.product });
                 pad(o.d).standard = !!o.standard; pad(o.d).info = inf; keep[o.d] = 1;
             }
             for (var d in st) if (!keep[d]) delete st[d];
+            for (var x in padMaps) if (!keep['pad' + x]) delete padMaps[x];
             emit('pads', list.slice());
         }
         // standalone: read the pads ourselves, like My PC's input module (same mapping)
@@ -1594,6 +1618,7 @@ var MyPC = (function () {
                 if (d.e === 'b') button(String(d.d), +d.i, !!d.p, +d.v || 0);
                 else if (d.e === 'a' && d.a) axes(String(d.d), d.a);
                 else if (d.e === 'pads') setPads(d.list);
+                else if (d.e === 'direct') padDirect = !!d.on;
                 else if (d.e === 'lost') { delete st[d.d]; }
             },
             _release: release,

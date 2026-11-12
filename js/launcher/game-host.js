@@ -203,10 +203,14 @@ var GameHost = (function () {
             if (kind === 'b') send('gp', { e: 'b', d: dev, i: i, p: pressed, v: Math.round(v * 1000) / 1000 });
             else send('gp', { e: 'a', d: dev, a: Array.prototype.slice.call(i) });
         }
+        // the mapper's / swap's order for this pad (null = as the browser gives it): the SDK applies it to navigator.getGamepads()
+        function padMapArr(p) { var m = p.index < 100 ? Input.padMap(p.index) : null; return m ? Array.prototype.slice.call(m, 0, Math.max(18, p.buttons || 0)) : null; }
+        function sendPrefs() { send('gp', { e: 'direct', on: directOk(id) ? 1 : 0 }); }
         function padsChanged() {
             var list = Input.pads(), out = [], k;
             for (k = 0; k < list.length; k++) out.push({ d: 'pad' + list[k].index, name: list[k].name, standard: list[k].standard, buttons: list[k].buttons, axes: list[k].axes,
-                                                     brand: list[k].brand, model: list[k].model, layout: list[k].layout, vendor: list[k].vendor, product: list[k].product });
+                                                     brand: list[k].brand, model: list[k].model, layout: list[k].layout, vendor: list[k].vendor, product: list[k].product,
+                                                     i: list[k].index, map: padMapArr(list[k]) });
             var j = JSON.stringify(out);
             if (j !== padsSent) { padsSent = j; send('gp', { e: 'pads', list: out }); }
         }
@@ -244,7 +248,7 @@ var GameHost = (function () {
                         bridges: { net: 1, ai: 1, mic: Mic.supported() || Mic.phone() ? 1 : 0, drive: 1, usb: UsbFs.supported() ? 1 : 0, copy: UsbFs.supported() ? 1 : 0, video: AppVideo.supported() ? 1 : 0, keyboard: 1, back: 1 },     // MyPC.net / ai / mic (API 10), MyPC.drive (API 14), MyPC.usb / copy (API 16, TV only) go through My PC
                         notify: 1, launch: Push.takeLaunch(id)        // MyPC.notify, MyPC.launch: push notifications (API 12, js/launcher/push.js)
                     });
-                    padsSent = ''; padsChanged();
+                    padsSent = ''; sendPrefs(); padsChanged();
                     Input.onPadRaw(rawPad); Input.offDevices(padsChanged); Input.onDevices(padsChanged);
                     break;
                 case 'ble':
@@ -337,6 +341,7 @@ var GameHost = (function () {
             menuItems: function () { return items; },
             onMenu: function (mid) { send('menu', { id: String(mid).slice(4) }); },
             onAction: function (a, pressed, repeat, dev) { send('input', { action: a, pressed: pressed, repeat: repeat, dev: dev }); },
+            prefs: function () { sendPrefs(); },
             button: function (n, down, repeat) { send('btn', { n: n, d: down ? 1 : 0, r: repeat ? 1 : 0, l: Input.buttonLabel(n) }); }
         };
         return remote;
@@ -363,7 +368,7 @@ var GameHost = (function () {
         iframe.setAttribute('scrolling', 'no');
         // its own origin: it cannot touch My PC's page, storage or navigation
         iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-pointer-lock');
-        iframe.setAttribute('allow', 'autoplay; gamepad; fullscreen');
+        iframe.setAttribute('allow', directOk(game.id) ? 'autoplay; gamepad; fullscreen' : 'autoplay; fullscreen');     // App settings > Read the controllers directly: no = the browser hides them too
         iframe.setAttribute('referrerpolicy', 'no-referrer');
         api = remoteApi();
         // the version in the address: a new version published in the App Store never opens from the TV's cache
@@ -452,9 +457,41 @@ var GameHost = (function () {
 
     /* ---------- pause menu ---------- */
 
+    var pauseSub = null;            // 'app': the App settings page of the menu
+    function onOff(v) { return I18n.t(v ? 'on' : 'off'); }
+    function appSetItems() {
+        var id = game.id, it = [];
+        it.push({ id: '_s_bg', label: I18n.t('asBg') + ': ' + onOff(runsInBackground()), desc: I18n.t('asBgDesc') });
+        if (game.remote) {
+            it.push({ id: '_s_direct', label: I18n.t('asDirect') + ': ' + I18n.t(directOk(id) ? 'asAllowed' : 'asBlocked'), desc: I18n.t('asDirectDesc') });
+            it.push({ id: '_s_keys', label: I18n.t('allKeys') + ': ' + onOff(allKeys()), desc: I18n.t('allKeysDesc') });
+        }
+        it.push({ id: '_s_quiet', label: I18n.t('asNotif') + ': ' + I18n.t(pref(id, 'quiet') ? 'asHidden' : 'asShown'), desc: I18n.t('asNotifDesc') });
+        if (prefs()[id]) it.push({ id: '_s_reset', label: I18n.t('asReset') });
+        it.push({ id: '_s_back', label: I18n.t('back') });
+        return it;
+    }
     function renderPause(focusId) {
         var box = $('pause-items');
         box.innerHTML = '';
+        $('pause-title').textContent = I18n.t(pauseSub ? 'asTitle' : 'paused');
+        var bgOn = runsInBackground(), tag = $('pause-bg');
+        tag.className = 'pause-bg' + (bgOn ? ' on' : '');
+        tag.textContent = I18n.t(bgOn ? 'bgOn' : 'bgOff');
+        if (pauseSub === 'app') {
+            pauseItems = appSetItems();
+            var who = document.createElement('p');
+            who.className = 'pause-desc';
+            who.textContent = I18n.t('asFor').replace('%a', title()).replace('%u', Profiles.name(null, I18n.t('player')));
+            box.appendChild(who);
+            var f = pauseButtons(box, focusId), hint = document.createElement('p');
+            hint.className = 'pause-hint'; hint.setAttribute('aria-hidden', 'true');
+            box.appendChild(hint);
+            var bs = box.querySelectorAll('button');
+            for (var k = 0; k < bs.length; k++) bs[k].addEventListener('focus', function () { hint.textContent = this.title || ''; });
+            hint.textContent = f && f.title || '';
+            return f;
+        }
         pauseItems = [{ id: '_resume', label: I18n.t('resume') }];
         var extra = [];
         try { extra = (api && api.menuItems && api.menuItems()) || []; } catch (e) {}
@@ -466,18 +503,25 @@ var GameHost = (function () {
         if (window.Rotation && Rotation.phone() && Rotation.mode() === 'manual') pauseItems.push({ id: '_rotate', label: I18n.t('rotNow') });
         // the music that plays on under the game (js/core/music.js): play or pause it from here
         if (typeof Music !== 'undefined') pauseItems.push({ id: '_music', label: I18n.t(musicOn() ? 'gmMusicPause' : 'gmMusicPlay') });
+        pauseItems.push({ id: '_appset', label: I18n.t('asTitle') });
         pauseItems.push({ id: '_quit', label: I18n.t('quit') });
-        var target = null;
+        return pauseButtons(box, focusId);
+    }
+    function pauseButtons(box, focusId) {
+        var target = null, first = null;
         for (var i = 0; i < pauseItems.length; i++) {
             var b = document.createElement('button');
-            b.className = 'btn' + (i === 0 ? ' btn-primary' : '');
+            b.className = 'btn' + (i === 0 && !pauseSub ? ' btn-primary' : '');
             b.setAttribute('data-focus', '');
+            b.setAttribute('data-id', pauseItems[i].id);
             b.textContent = pauseItems[i].label;
+            if (pauseItems[i].desc) { b.title = pauseItems[i].desc; b.setAttribute('aria-description', pauseItems[i].desc); }
             b.onclick = (function (it) { return function () { pauseAction(it.id); }; })(pauseItems[i]);
             box.appendChild(b);
+            if (!first) first = b;
             if (pauseItems[i].id === focusId) target = b;
         }
-        return target || box.firstChild;
+        return target || first;
     }
 
     function musicOn() { try { return !!Music.state().playing; } catch (e) { return false; } }
@@ -492,10 +536,31 @@ var GameHost = (function () {
 
     // the app may keep running while My PC is in the background: "allow_background_running": true in its config
     // (App Store Manager > Config, or a built-in game's game-manifest.json)
-    function runsInBackground() {
+    function bgDefault() {
         var c = game && (game.remote ? game.remote.config : game.manifest), v = c && c.allow_background_running;
         return v === true || v === 'true' || v === 1;       // a JSON typed by hand may give "true"
     }
+    function runsInBackground() { var v = pref(game && game.id, 'bg'); return v === undefined ? bgDefault() : !!v; }
+
+    /* ---------- the app's settings, per user (My PC's menu > App settings, owner request 2026-11-12) ----------
+     * Profile key app_prefs { <app id>: { bg, direct, keys, quiet } }; a missing value = the default:
+     *   bg      run in the background (default: the app's config allow_background_running, App Store Manager)
+     *   direct  the app may read the controllers itself (navigator.getGamepads; default yes). No: only through My PC
+     *           (onInput, MyPC.gamepad), even if the app then cannot be played
+     *   keys    every button goes to the app (default: Control Panel > Gaming's "Every button goes to the app")
+     *   quiet   no notification cards over it (errors and controllers still show)                                      */
+    function prefs() { var o = Store.get('app_prefs', {}); return o && typeof o === 'object' ? o : {}; }
+    function pref(id, k) { var o = id && prefs()[id]; return o ? o[k] : undefined; }
+    function setPref(id, k, v) {
+        if (!id) return;
+        var all = prefs(), o = all[id] || {};
+        if (v === undefined || v === null) delete o[k]; else o[k] = !!v;
+        if (Object.keys(o).length) all[id] = o; else delete all[id];
+        Store.set('app_prefs', all);
+        if (game && game.id === id && api && api.prefs) api.prefs();       // the running app follows at once
+    }
+    function directOk(id) { return pref(id, 'direct') !== false; }
+    function quiet() { return state !== 'idle' && !!game && pref(game.id, 'quiet') === true; }
 
     // My PC lost the focus (TV: another app or source; PC: window minimized or another window; phone: app switched):
     // the game pauses and My PC's menu shows to resume it; an app allowed to run in the background is left alone
@@ -515,7 +580,7 @@ var GameHost = (function () {
     // "Every button goes to the app" (Control Panel > Gaming, per profile, on by default): installed apps get every key and
     // button; My PC's menu = Back twice quickly, Back on the app's first screen, or the controller's Home button
     var DOUBLE_BACK = 450, lastBack = 0, pausedAt = 0;
-    function allKeys() { return Store.get('app_keys', true) !== false; }
+    function allKeys() { var v = pref(game && game.id, 'keys'); return v === undefined ? Store.get('app_keys', true) !== false : !!v; }
     function ownsKeys() { return !!(api && api.sdk && allKeys()); }
     function backUnhandled() { if (state === 'running' && lastBack && Date.now() - lastBack < 1500) { lastBack = 0; pausedAt = Date.now(); openPause(); } }
     // the first time an app gets Back: how to reach My PC's menu (once per app per profile)
@@ -540,10 +605,8 @@ var GameHost = (function () {
         Input.releaseAll();
         Input.setExternalPoll(false);   // the game loop is stopped: the launcher reads the gamepads
         screenSaver(true);
+        pauseSub = null;
         var first = renderPause(typeof focusId === 'string' ? focusId : undefined);
-        var bg = runsInBackground(), tag = $('pause-bg');
-        tag.className = 'pause-bg' + (bg ? ' on' : '');
-        tag.textContent = I18n.t(bg ? 'bgOn' : 'bgOff');
         $('pause').hidden = false;
         Focus.push($('pause'), first);
         AudioPrefs.chime();
@@ -586,6 +649,17 @@ var GameHost = (function () {
 
     function pauseAction(id) {
         if (id === '_resume') return resume();
+        if (id === '_appset' || id === '_s_back') { pauseSub = id === '_appset' ? 'app' : null; return pauseRedraw(id === '_appset' ? '_s_bg' : '_appset'); }
+        if (id.slice(0, 3) === '_s_') {
+            var gid = game.id;
+            var nv;     // a value equal to the default is not kept: the app follows the default again (config / Control Panel)
+            if (id === '_s_bg') { nv = !runsInBackground(); setPref(gid, 'bg', nv === bgDefault() ? null : nv); }
+            else if (id === '_s_direct') setPref(gid, 'direct', directOk(gid) ? false : null);
+            else if (id === '_s_keys') { nv = !allKeys(); setPref(gid, 'keys', nv === (Store.get('app_keys', true) !== false) ? null : nv); }
+            else if (id === '_s_quiet') setPref(gid, 'quiet', pref(gid, 'quiet') ? null : true);
+            else if (id === '_s_reset') { var all = prefs(); delete all[gid]; Store.set('app_prefs', all); if (api && api.prefs) api.prefs(); return pauseRedraw('_s_bg'); }
+            return pauseRedraw(id);
+        }
         if (id === '_quit') return exit();
         if (id === '_touchpad') return TouchPad.settings();           // the pause menu stays; the pad's own panel opens over it
         var r;
@@ -597,12 +671,14 @@ var GameHost = (function () {
         }
         else if (id === '_rotate') { if (!Rotation.turn()) App.toast(I18n.t('rotUpdate')); r = 'stay'; }   // Manual screen rotation
         else try { r = api.onMenu(id); } catch (e) {}
-        if (r === 'stay') {
-            Focus.pop();
-            var t = renderPause(id);
-            Focus.push($('pause'), t);
-            A11y.announce(t.textContent);
-        } else resume();
+        if (r === 'stay') pauseRedraw(id);
+        else resume();
+    }
+    function pauseRedraw(focusId) {
+        Focus.pop();
+        var t = renderPause(focusId);
+        Focus.push($('pause'), t);
+        A11y.announce(t.textContent);
     }
 
     /* ---------- exit ---------- */
@@ -723,7 +799,11 @@ var GameHost = (function () {
         if (!pressed) return;
         if (state === 'paused') {
             // the second of two quick Backs (or a Back the app passed back to us) must not close the menu Back just opened
-            if (action === 'back' || action === 'cancel' || action === 'pause' || action === 'menu') { if (!repeat && !((action === 'back' || action === 'cancel') && Date.now() - pausedAt < 600)) resume(); }
+            if (action === 'back' || action === 'cancel' || action === 'pause' || action === 'menu') {
+                if (repeat || ((action === 'back' || action === 'cancel') && Date.now() - pausedAt < 600)) return;
+                if (pauseSub && (action === 'back' || action === 'cancel')) pauseAction('_s_back');       // App settings > Back: the menu
+                else resume();
+            }
             else if (action === 'up' || action === 'down') Focus.move(action);
             else if (action === 'confirm' && !repeat) { var c = Focus.current(); if (c) c.click(); }
         } else if (state === 'error') {
@@ -742,6 +822,10 @@ var GameHost = (function () {
     }
 
     return {
+        quiet: quiet,                    // App settings > Notifications: hidden over this app (js/launcher/notify.js)
+        appPrefs: function (id) { var o = prefs()[id]; return o ? JSON.parse(JSON.stringify(o)) : {}; },
+        setAppPref: setPref,             // (app id, 'bg' | 'direct' | 'keys' | 'quiet', true | false | null)
+        resetAppPrefs: function (id) { var all = prefs(); delete all[id]; Store.set('app_prefs', all); },
         init: init, launch: launch, exit: exit, onAction: onAction, ownsKeys: function () { return state === 'running' && ownsKeys(); }, openPause: openPause, background: background, hold: hold, release: release,
         active: function () { return state !== 'idle'; },
         // a notification for the app that is open: its deep link goes to it (MyPC.launch + onLaunch); true when delivered

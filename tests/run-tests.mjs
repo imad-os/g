@@ -4159,7 +4159,7 @@ async function main() {
         const loop = by('error', /loop error/);
         check(loop && loop.n === 5 && reps.filter((r) => /loop error/.test(r.msg)).length === 1, 'the same error 5 times is one report with n = 5 (' + (loop && loop.n) + ')');
         const one = by('error', /boom/) || {};
-        check(one.appv === '2.0.1' && one.sdk === 20 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
+        check(one.appv === '2.0.1' && one.sdk === 21 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
             'each report has the app version, SDK level, TV id and model, My PC version and build, language, place, address, time and a 30-day expiry (' + JSON.stringify(one) + ')');
         const keys = new Set(reps.flatMap((r) => Object.keys(r)));
         const allowed = ['app', 'kind', 'msg', 'stack', 'src', 'stage', 'appv', 'sdk', 'n', 'at', 'exp', 'tv', 'model', 'ver', 'build', 'lang', 'user', 'where', 'ua', 'url'];
@@ -6258,7 +6258,7 @@ async function flowTests(browser, base) {
         return r.fulfill({ status: 200, contentType: 'text/html', headers: { 'Access-Control-Allow-Origin': '*' }, body: APPHTML });
     });
     // a controller the app reads itself (navigator.getGamepads inside its frame)
-    await pg.context().addInitScript(() => { if (window.top === window) return; const pad = { index: 0, id: 'Test pad', connected: true, mapping: 'standard', buttons: [{ pressed: true, value: 1 }], axes: [0, 0] }; navigator.getGamepads = () => [pad, null, null, null]; });
+    await pg.context().addInitScript(() => { if (window.top === window) return; const pad = { index: 0, id: 'Test pad', connected: true, mapping: 'standard', buttons: [{ pressed: true, value: 1 }, { pressed: false, value: 0.2 }, { pressed: false, value: 0.3 }, { pressed: false, value: 0.4 }], axes: [0, 0] }; navigator.getGamepads = () => [pad, null, null, null]; });
     await pg.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'flow-good', at: 1 }, { id: 'flow-bare', at: 1 }])); });
 
     const t0 = Date.now();
@@ -6298,6 +6298,46 @@ async function flowTests(browser, base) {
     const f = o.f;
     check(o.asked === 0 && await pg.evaluate((n) => AppBoot.build() === n, NEXT), `opening an app: no server round trip, same hosted build as the desktop (${o.ms} ms)`);
     check(await f.evaluate(() => navigator.getGamepads()[0] && navigator.getGamepads()[0].id === 'Test pad' && !au.paused), 'running: the app reads its pad and plays its sound');
+    // My PC's menu > App settings (owner request 2026-11-12): per user; "Read the controllers directly" = Blocked hides the pads from the app
+    const menuOpen = async () => { await tvMenu(pg); await pg.waitForFunction(() => !document.getElementById('pause').hidden); await pg.waitForTimeout(650); };
+    const menuItems = () => pg.evaluate(() => [...document.querySelectorAll('#pause-items button')].map((b) => b.textContent));
+    const menuClick = (id) => pg.evaluate((id) => document.querySelector('#pause-items [data-id="' + id + '"]').click(), id);
+    await menuOpen();
+    const mainItems = await menuItems();
+    await menuClick('_appset');
+    const setItems = await menuItems();
+    const setText = await pg.evaluate(() => document.getElementById('pause').innerText);
+    check(mainItems.indexOf('App settings') === mainItems.length - 2 && setItems.join('|') === 'Run in the background: Off|Read the controllers directly: Allowed|Every button goes to the app: On|Notifications: Shown|Back'
+          && /Flow flow-good, for .+ only/.test(setText) && /keeps running when you switch/.test(setText),
+        'My PC\'s menu has App settings (before Quit): background, read the controllers directly, every button, notifications, for this user only (' + setItems.join(' | ') + ')');
+    await menuClick('_s_direct');
+    await menuClick('_s_bg');
+    if (shots) await pg.screenshot({ path: path.join(shots, 'appset-1-menu.png') });
+    const prefs1 = await pg.evaluate(() => ({ p: Store.get('app_prefs', {})['app-flow-good'], items: [...document.querySelectorAll('#pause-items button')].map((b) => b.textContent), tag: document.getElementById('pause-bg').textContent }));
+    check(prefs1.p && prefs1.p.direct === false && prefs1.p.bg === true && prefs1.items[0] === 'Run in the background: On' && prefs1.items[1] === 'Read the controllers directly: Blocked' && /on/i.test(prefs1.tag) && prefs1.items.indexOf('Back to the default settings') >= 0,
+        'toggling them saves this user\'s app_prefs (direct: false, bg: true); the menu\'s Background tag follows ' + JSON.stringify(prefs1));
+    await pg.keyboard.press('Escape');
+    await pg.waitForTimeout(100);
+    check((await menuItems())[0] === 'Resume' && await pg.evaluate(() => !document.getElementById('pause').hidden), 'Back in App settings goes back to the menu (not to the app)');
+    await menuClick('_resume');
+    await pg.waitForFunction(() => GameHost.state() === 'running');
+    await f.waitForTimeout(100);
+    check(await f.evaluate(() => navigator.getGamepads().filter(Boolean).length === 0), 'Blocked: navigator.getGamepads() gives the app no controller, even while it runs');
+    await menuOpen(); await menuClick('_appset'); await menuClick('_s_direct'); await menuClick('_s_bg'); await menuClick('_s_back'); await menuClick('_resume');
+    await pg.waitForFunction(() => GameHost.state() === 'running');
+    await f.waitForTimeout(100);
+    check(await f.evaluate(() => navigator.getGamepads()[0] && navigator.getGamepads()[0].buttons[0].value === 1) && await pg.evaluate(() => !Store.get('app_prefs', {})['app-flow-good']),
+        'Allowed again: the app reads its pad (nothing left in app_prefs once every setting is back to its default)');
+    // the button map reaches the app's own navigator.getGamepads() too (same object every call)
+    await pg.evaluate(() => { window.__tp = { index: 0, id: 'Pro Controller (STANDARD GAMEPAD Vendor: 057e Product: 2009)', connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons: Array.from({ length: 18 }, () => ({ pressed: false, value: 0 })) };
+        window.__realGp = navigator.getGamepads; navigator.getGamepads = () => [window.__tp, null, null, null]; window.dispatchEvent(new Event('gamepadconnected'));
+        Input.setPadMap('057e:2009', [3, 2, 1, 0]); });
+    await f.waitForFunction(() => navigator.getGamepads()[0].buttons[0].value === 0.4, null, { timeout: 3000 }).catch(() => {});
+    const mapped = await f.evaluate(() => { const a = navigator.getGamepads()[0], b = navigator.getGamepads()[0]; return { v: [0, 1, 2, 3].map((i) => a.buttons[i].value), id: a.id, same: a === b, n: a.buttons.length }; });
+    check(mapped.v.join() === '0.4,0.3,0.2,1' && mapped.id === 'Test pad' && mapped.same && mapped.n === 4, 'the player\'s button map (Control Panel > Gaming) is applied to the app\'s own navigator.getGamepads() ' + JSON.stringify(mapped));
+    await pg.evaluate(() => { Input.setPadMap('057e:2009', null); navigator.getGamepads = window.__realGp; window.dispatchEvent(new Event('gamepaddisconnected')); });
+    await f.waitForFunction(() => navigator.getGamepads()[0].buttons[0].value === 1, null, { timeout: 3000 }).catch(() => {});
+    check(await f.evaluate(() => navigator.getGamepads()[0].buttons[0].value === 1), 'map removed: the app reads the pad as it is again');
     await f.evaluate(() => document.getElementById('t').click());          // a click puts the focus inside the app's frame (a PC)
     await tvMenu(pg);
     await pg.waitForFunction(() => !document.getElementById('pause').hidden);
@@ -6554,6 +6594,48 @@ async function padTests(browser, base) {
     const kb = await lights(0);
     check(kb.on === 'B' && await page.evaluate(() => JSON.parse(localStorage.getItem('arc_dev_padorder'))['057e:2009'] === 'swap'), 'Swap: the pad\'s button 0 now lights B, kept for that controller model (' + JSON.stringify(kb) + ')');
     await page.evaluate(() => Input.setPadOrder('057e:2009', 'auto'));
+    // Control Panel > Gaming > Map the buttons (owner request 2026-11-12): My PC asks for each button, the player presses one
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => [...document.querySelectorAll('[data-row]')].some((e) => /Map the buttons/.test(e.textContent)), null, { timeout: 3000 }).catch(() => {});
+    await page.evaluate(() => { const b = [...document.querySelectorAll('[data-row]')].find((e) => /Map the buttons/.test(e.textContent)); b.focus(); b.click(); });
+    await page.waitForSelector('.set-padmap .pm-ask', { timeout: 5000 });
+    const ask = () => page.evaluate(() => ({ ask: document.querySelector('.pm-ask').textContent, sub: document.querySelector('.pm-sub').textContent, last: document.querySelector('.set-padmap .pt-last').textContent }));
+    const a0 = await ask();
+    check(a0.ask === 'Press the button that should be A' && /^Button 1 of 18 · skipped in \d s$/.test(a0.sub), 'the mapper asks "Press the button that should be A", button 1 of 18 ' + JSON.stringify(a0));
+    if (shots) await page.screenshot({ path: path.join(shots, 'pads-4-mapper-ask-A.png') });
+    const press = async (i) => { await btn(i, true); await page.waitForTimeout(60); await btn(i, false); await page.waitForTimeout(60); };
+    await press(3);                    // A = the pad's button 3
+    const a1 = await ask();
+    const noAct = await page.evaluate(() => !Input.isDownDev('pad0', 'confirm') && Win.current() === 'settings' && !!document.querySelector('.set-padmap'));
+    await press(3);                    // the same button again for B: refused
+    const a2 = await ask();
+    check(a1.ask === 'Press the button that should be B' && a1.last === 'A = button 3' && noAct && a2.ask === a1.ask && a2.last === 'That button is already A',
+        'pressing a button sets it ("A = button 3") without doing anything else; a button already used is refused ' + JSON.stringify([a1, a2]));
+    await press(2);
+    await page.evaluate(() => { const b = [...document.querySelectorAll('[data-row]')].find((e) => /Skip this button/.test(e.textContent)); b.click(); });   // X: OK on the remote = skip
+    await press(0);                    // Y = the pad's button 0
+    for (let i = 4; i < 18; i++) await press(i);
+    await page.waitForFunction(() => /Map saved/.test(document.querySelector('.pm-ask').textContent), null, { timeout: 3000 }).catch(() => {});
+    const saved = await page.evaluate(() => ({ map: JSON.parse(localStorage.getItem('arc_dev_padmap') || '{}')['057e:2009'], order: Input.pads()[0].order.set, ask: document.querySelector('.pm-ask').textContent }));
+    check(saved.ask === 'Map saved' && saved.map && saved.map.slice(0, 6).join() === '3,2,1,0,4,5' && saved.map.length === 18 && saved.order === 'custom',
+        'the map is saved for that controller model, TV-wide; skipped X takes the button B gave up (1) ' + JSON.stringify(saved));
+    if (shots) await page.screenshot({ path: path.join(shots, 'pads-5-mapper-saved.png') });
+    await page.waitForTimeout(150);
+    await btn(3, true); await page.waitForTimeout(100);
+    const mA = await held(); await btn(3, false);          // A = OK: it pressed the focused "Test the buttons"
+    await page.waitForSelector('.set-padtest:not(.set-padmap) .pt-b', { timeout: 3000 }).catch(() => {});
+    await page.waitForTimeout(100);
+    const tA = await lights(3), tY = await lights(0);
+    check(mA === 'confirm,jump' && tA.on === 'A' && /^A \(button 0\): OK, jump$/.test(tA.last) && tY.on === 'Y', 'with the map the pad\'s button 3 is A (OK, it opened the test) and the test lights A for it, Y for button 0 ' + JSON.stringify([mA, tA, tY]));
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+    check(/Your own map/.test(await page.evaluate(() => document.body.innerText)), 'Control Panel > Gaming shows "Your own map" for the controller');
+    await page.evaluate(() => { const b = [...document.querySelectorAll('[data-row]')].find((e) => /Swap A ↔ B/.test(e.textContent)); b.focus(); });
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(100);
+    check(await page.evaluate(() => !localStorage.getItem('arc_dev_padmap') && Input.pads()[0].order.set === 'auto'), 'choosing Automatic again drops the map: back to the order My PC chooses');
+    await page.evaluate(() => { const b = [...document.querySelectorAll('[data-row]')].find((e) => /Test the buttons/.test(e.textContent)); b.focus(); b.click(); });
+    await page.waitForSelector('.set-padtest .pt-b', { timeout: 5000 });
     // an Xbox pad: A is the bottom button (0)
     await page.evaluate(() => { navigator.getGamepads = () => [null, null, null, null]; window.dispatchEvent(new Event('gamepaddisconnected')); });
     await plug('Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)');
@@ -6569,6 +6651,27 @@ async function padTests(browser, base) {
     await page.waitForTimeout(300);
     check(/Microsoft Xbox Series X\|S Controller · Xbox/.test(await page.evaluate(() => document.body.innerText)) && /A: OK · B: Back · LB \/ RB/.test(await page.evaluate(() => document.body.innerText)),
         'Control Panel > Devices: the controller\'s brand / model and its own button names in the help');
+    // Control Panel > Gaming > Settings of each app and game: the same settings as My PC's menu > App settings, per user
+    await page.evaluate(() => Win.open('settings', 'gaming'));
+    await page.waitForTimeout(300);
+    await page.evaluate(() => { const b = [...document.querySelectorAll('[data-row]')].find((e) => /Settings of each app and game/.test(e.textContent)); b.focus(); b.click(); });
+    await page.waitForTimeout(200);
+    const gl = await page.evaluate(() => [...document.querySelectorAll('[data-row]')].map((e) => e.textContent));
+    const gid = await page.evaluate(() => Desktop.games()[0].id), gname = await page.evaluate(() => I18n.pick(Desktop.games()[0].manifest.title));
+    check(gl.some((x) => x.indexOf(gname) === 0 && /Default settings/.test(x)), 'Settings of each app and game lists the games with "Default settings" (' + gl.slice(0, 3).join(' | ') + ')');
+    await page.evaluate((n) => { const b = [...document.querySelectorAll('[data-row]')].find((e) => e.textContent.indexOf(n) === 0); b.focus(); b.click(); }, gname);
+    await page.waitForTimeout(200);
+    const one = await page.evaluate(() => [...document.querySelectorAll('[data-row]')].map((e) => e.textContent).join(' | '));
+    await page.evaluate(() => { const b = [...document.querySelectorAll('[data-row]')].find((e) => /^Notifications/.test(e.textContent)); b.focus(); b.click(); });
+    await page.waitForTimeout(100);
+    const q = await page.evaluate((id) => Store.get('app_prefs', {})[id], gid);
+    if (shots) await page.screenshot({ path: path.join(shots, 'pads-6-app-settings-cp.png') });
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+    const gl2 = await page.evaluate(() => [...document.querySelectorAll('[data-row]')].map((e) => e.textContent));
+    check(/Run in the background/.test(one) && !/Read the controllers directly/.test(one) && q && q.quiet === true && gl2.some((x) => x.indexOf(gname) === 0 && /Notifications: Hidden/.test(x)),
+        'a built-in game\'s page: background + notifications (no direct-controller row: it has no SDK); hiding notifications is saved for this user and shown in the list');
+    check(await page.evaluate((id) => { GameHost.resetAppPrefs(id); return !Store.get('app_prefs', {})[id]; }, gid), 'Back to the default settings clears them');
     check(page.errors.length === 0, 'no page errors' + (page.errors.length ? ': ' + page.errors[0] : ''));
     await page.context().close();
     // Chrome on a computer reads a Switch Pro itself, by place (A = button 1): My PC swaps it, so A is OK there too

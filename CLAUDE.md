@@ -289,6 +289,19 @@
   only), before actions, shortcuts, the test and `MyPC.gamepad`. `PadInfo` Nintendo / other labels = A B X Y. Per controller model in Control Panel >
   Gaming "Swap A <-> B and X <-> Y": Automatic / Swap / Don't swap (TV-wide `arc_dev_padorder`, `Input.setPadOrder(key, v)`). The phone / touch pad
   (`pad-spec.js` A = g0, touchpad A = 'ok', Keyboard mode a = 0) send the same.
+  **Controller mapper (owner request 2026-11-12, build 160, API 21)**: Control Panel > Gaming > Map the buttons (per pad): "Press the button that
+  should be A" for each of My PC's buttons (`Input.capturePad(fn)`: raw presses, no actions meanwhile; OK on the remote = Skip, Back = Cancel,
+  8 s = skipped so a controller alone finishes); saved per model TV-wide `arc_dev_padmap` { 'vendor:product': [real button for 0..17] }
+  (`Input.setPadMap` / `padMapOf`; a custom map wins over the swap setting, picking Automatic / Swap / Don't swap drops it). Applied in `faceMap`,
+  so everything follows (actions, shortcuts, the test, `MyPC.gamepad`), and the SDK applies it to the app's own `navigator.getGamepads()` too
+  (`pads` message carries `i` + `map`; same wrapper objects every call).
+- **App settings per user (owner request 2026-11-12, build 160, API 21)**: My PC's menu over an app / game has **App settings** (sub-page of the
+  pause menu, Back returns to the menu), also Control Panel > Gaming > Settings of each app and game. Profile key `app_prefs` { <id>: { bg, direct,
+  keys, quiet } }, a value equal to the default is not kept: `bg` overrides config `allow_background_running`; `direct: false` = the app cannot read
+  the controllers itself (SDK `navigator.getGamepads()` returns no pads, message `gp` `{ e: 'direct' }`, and the iframe `allow` loses `gamepad` at the
+  next open); `keys` overrides Control Panel's "Every button goes to the app" for that app; `quiet` = no Notify cards over it (errors and
+  pad / ctrl / net cards still show, `GameHost.quiet()`). API: `GameHost.appPrefs(id)` / `setAppPref(id, k, v|null)` / `resetAppPrefs(id)`. Tests:
+  `MYPC_ONLY=flow` (menu, Blocked, map in the app) and `MYPC_ONLY=pads` (mapper, Control Panel list).
 - **Heart-rate sensors (TV)**: `js/core/hr-ble.js` (any BLE Heart Rate Service device: Garmin watches broadcasting, Polar, Garmin HRM, Decathlon),
   created per app by `game-host.js` for `hr-monitor` or apps with `"heartRate": true` in their config; SDK `MyPC.bluetooth`.
   Needs the `bluetooth` privileges in `config.xml` (package 1.4.0+), so a new .wgt on the TV. Unit tests: `node tests/unit-tests.mjs` (part of `npm test`).

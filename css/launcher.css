@@ -628,6 +628,9 @@ html.av-video, html.av-video body, html.av-video .stage, html.av-video .game-lay
 .pause-bg.on { background: #1f7a3a; color: #fff; }
 [dir="rtl"] .pause-bg { right: auto; left: 16px; }
 .pause-items .btn { display: block; width: 100%; margin: 0 0 16px; }
+/* My PC's menu > App settings: whose settings they are, and what the focused one does */
+.pause-desc { margin: -14px 0 24px; font-size: 22px; color: #bdbdbd; }
+.pause-hint { min-height: 60px; margin: 4px 0 0; font-size: 21px; line-height: 1.4; color: #a9a9a9; text-align: start; }
 
 /* ---------- notifications (js/launcher/notify.js, shown above games too) ----------
  * Windows style: small cards in the bottom right corner, the newest at the bottom; each one rises in and slides back down.
@@ -735,6 +738,10 @@ html.av-video, html.av-video body, html.av-video .stage, html.av-video .game-lay
 .pt-i { position: absolute; right: 5px; bottom: 2px; font-size: 13px; line-height: 14px; opacity: 0.6; font-weight: 400; }
 .pt-name { font-size: 28px; font-weight: 600; color: #fff; margin-bottom: 4px; }
 .pt-last { margin-top: 14px; min-height: 34px; font-size: 26px; color: #fff; }
+/* Control Panel > Gaming > Map the buttons: what to press now, then each button's real number */
+.pm-ask { margin-top: 10px; font-size: 40px; font-weight: 700; color: #4cc2ff; }
+.pm-sub { margin-top: 4px; font-size: 22px; color: #a9a9a9; }
+.pt-b.pm-set { background: #23492f; color: #e8ffe9; }
 .pt-sticks { display: -webkit-box; display: -webkit-flex; display: flex; margin-top: 10px; }
 .pt-stick { position: relative; display: block; width: 96px; height: 96px; margin-right: 24px; border-radius: 48px; background: #1c1c1c; border: 2px solid #4a4a4a; }
 .pt-dot { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 11px; background: #4cc2ff; }

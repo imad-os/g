@@ -313,6 +313,8 @@ var Input = (function () {
             if (!p || !p.connected) continue;
             var dev = 'pad' + p.index, now = {}, any = false;
             var prev = padNow[dev] || (padNow[dev] = {}), rep = padRepeatAt[dev] || (padRepeatAt[dev] = {});
+            if (capFn && p.index < 100) { capture(dev, p); continue; }      // the mapper is listening: raw presses only, no action
+            if (capHold && p.index < 100) { if (anyHeld(p)) continue; capHold = false; }
             var mp = faceMap(p);
             var taken = padHook ? padEdges(dev, p, mp) : null;
             if (rawFn) rawPad(dev, p, taken, mp);
@@ -373,23 +375,66 @@ var Input = (function () {
         return padOrder;
     }
     function padKey(inf) { return inf.vendor ? inf.vendor + ':' + inf.product : 'name:' + inf.name; }
+    // The controller mapper (Control Panel > Gaming > Map the buttons, owner request 2026-11-12): per controller model, TV-wide,
+    // arc_dev_padmap { 'vendor:product': [real button for My PC's button 0, 1, ... 17] }. A custom map wins over the swap setting.
+    var padMaps = null;
+    function maps() {
+        if (padMaps) return padMaps;
+        try { padMaps = JSON.parse(localStorage.getItem('arc_dev_padmap') || '{}') || {}; } catch (e) { padMaps = {}; }
+        return padMaps;
+    }
     function faceInfo(p) {
         var c = faceCache['pad' + p.index];
         if (c && c.id === p.id) return c;
         var inf = window.PadInfo ? PadInfo.detect(p.id, p.mapping) : null;
         var auto = !!inf && p.index < 100 && inf.vendor !== '0000' && inf.layout === 'nintendo' && DESKTOP_CHROME;
-        var key = inf ? padKey(inf) : '', set = key && orders()[key];
-        c = faceCache['pad' + p.index] = { id: p.id, key: key, auto: auto, set: set || 'auto', swap: set === 'swap' || (set !== 'keep' && auto) };
+        var key = inf ? padKey(inf) : '', set = key && orders()[key], cm = key && maps()[key], custom = null, i;
+        if (cm && cm.length) {
+            custom = new Uint8Array(32);
+            for (i = 0; i < 32; i++) custom[i] = i < cm.length && cm[i] >= 0 && cm[i] < 32 ? cm[i] : i;
+        }
+        c = faceCache['pad' + p.index] = { id: p.id, key: key, auto: auto, set: custom ? 'custom' : set || 'auto', swap: !custom && (set === 'swap' || (set !== 'keep' && auto)), custom: custom };
         return c;
     }
-    function faceMap(p) { return p.index < 100 && faceInfo(p).swap ? SWAP : null; }
+    function faceMap(p) { if (p.index >= 100) return null; var f = faceInfo(p); return f.custom || (f.swap ? SWAP : null); }
+    function padsChanged() {
+        faceCache = {};
+        releaseAll();
+        for (var i = 0; i < padListeners.length; i++) padListeners[i]();
+    }
     function setPadOrder(key, v) {
         var o = orders();
         if (v === 'swap' || v === 'keep') o[key] = v; else delete o[key];
         try { localStorage.setItem('arc_dev_padorder', JSON.stringify(o)); } catch (e) {}
-        faceCache = {};
-        releaseAll();
-        for (var i = 0; i < padListeners.length; i++) padListeners[i]();
+        if (v !== 'custom') setPadMap(key, null, true);       // picking a swap setting drops the custom map
+        padsChanged();
+    }
+    // (key, [18 real button indices] | null): saved by the mapper; null = back to the swap setting
+    function setPadMap(key, arr, quiet) {
+        var m = maps();
+        if (arr && arr.length) { var a = []; for (var i = 0; i < arr.length && i < 32; i++) a.push(+arr[i] | 0); m[key] = a; } else delete m[key];
+        try { if (Object.keys(m).length) localStorage.setItem('arc_dev_padmap', JSON.stringify(m)); else localStorage.removeItem('arc_dev_padmap'); } catch (e) {}
+        if (!quiet) padsChanged();
+    }
+    // the mapper listens: fn(padIndex, realButton) for each real button pressed (raw, before any map); no action meanwhile
+    var capFn = null, capPrev = {}, capHold = false;
+    function anyHeld(p) { for (var j = 0; j < p.buttons.length; j++) { var b = p.buttons[j]; if (b && (b.pressed || b.value > 0.5)) return true; } return false; }
+    function capture(dev, p) {
+        var pv = capPrev[dev], j, b, on;
+        if (!pv) { pv = capPrev[dev] = new Uint8Array(32); for (j = 0; j < p.buttons.length && j < 32; j++) { b = p.buttons[j]; pv[j] = b && (b.pressed || b.value > 0.5) ? 1 : 0; } return; }
+        for (j = 0; j < p.buttons.length && j < 32; j++) {
+            b = p.buttons[j]; on = b && (b.pressed || b.value > 0.5) ? 1 : 0;
+            if (on === pv[j]) continue;
+            pv[j] = on;
+            if (on && capFn) capFn(p.index, j);
+        }
+    }
+    function capturePad(fn) {
+        if (fn && !capFn) releaseAll();
+        var was = !!capFn;
+        capFn = fn || null; capPrev = {};
+        if (!fn && was) { padPrev = {}; padTaken = {}; capHold = true; }      // the last press must not become an action: wait until every button is let go
+        ensureLoop();
     }
 
     // The profile's shortcuts on controller buttons (js/launcher/shortcuts.js): padHook(index, down, dev) is told of every
@@ -477,7 +522,7 @@ var Input = (function () {
             var inf = window.PadInfo ? PadInfo.detect(p.id, p.mapping) : { brand: '', model: padName(p.id), layout: 'other', vendor: '', product: '', known: false, standard: p.mapping === 'standard' };
             out.push({ index: p.index, name: padName(p.id), id: p.id, standard: p.mapping === 'standard', buttons: p.buttons ? p.buttons.length : 0, axes: p.axes ? p.axes.length : 0,
                        brand: inf.brand, model: inf.model, layout: inf.layout, vendor: inf.vendor, product: inf.product, known: inf.known, info: inf, active: p.index === activePad,
-                       order: p.index < 100 ? faceInfo(p) : null });   // { key, auto, set: 'auto' | 'swap' | 'keep', swap }: A B X Y read by letter -> put back in place
+                       order: p.index < 100 ? faceInfo(p) : null });   // { key, auto, set: 'auto' | 'swap' | 'keep' | 'custom', swap, custom }: A B X Y read by letter -> put back in place
         }
         return out;
     }
@@ -572,6 +617,9 @@ var Input = (function () {
         activePad: function () { return activePad; },
         padMap: function (index) { var p = this.pad(index); return p ? faceMap(p) : null; },   // null or the standard -> real button index map
         setPadOrder: setPadOrder,            // (key, 'auto' | 'swap' | 'keep'): Control Panel > Gaming
+        setPadMap: function (key, arr) { setPadMap(key, arr); },     // (key, [real button for My PC's 0..17] | null): the mapper
+        padMapOf: function (key) { var m = maps()[key]; return m ? m.slice() : null; },
+        capturePad: capturePad,              // fn(padIndex, realButton) | null: the mapper hears raw presses, no actions meanwhile
         pad: function (index) { var l = getPads(); for (var i = 0; i < l.length; i++) if (l[i] && l[i].index === index) return l[i]; return null; },   // its live state (the test page)     // the index of the last pad used (-1: none yet)
         onPadRaw: function (fn) { rawFn = fn || null; rawPrev = {}; },      // every button / axis change (installed apps' MyPC.gamepad)
         seen: function () { return { remote: !!window.tizen, keyboard: seen.keyboard, mouse: seen.mouse }; },

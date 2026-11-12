@@ -53,6 +53,9 @@
         if (id === 'shortcuts') { scRows(out); return out; }
         if (sub === 'users' && id === 'accounts') { usersRows(out); return out; }
         if (sub === 'user' && id === 'accounts') { userRows(out); return out; }
+        if (sub === 'padmap' && id === 'gaming') { mapRows(out); return out; }
+        if (sub === 'appsets' && id === 'gaming') { appSetsRows(out); return out; }
+        if (sub === 'appset' && id === 'gaming') { appSetRows(out); return out; }
         if (sub === 'padtest' && (id === 'devices' || id === 'gaming')) {
             var tp = testPad();
             if (tp) out.push({ kind: 'padtest', pad: tp.index }); else out.push({ kind: 'text', value: t('devNoPad') });
@@ -155,6 +158,7 @@
             out.push({ kind: 'info', label: t('dateTime'), value: Desktop.timeText(now) + ', ' + Desktop.dateText(now, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) });
         } else if (id === 'gaming') {
             padRows(out);
+            out.push({ kind: 'action', label: t('asEach'), desc: t('asEachDesc'), run: function () { sub = 'appsets'; var f = renderMain(1); if (f) Focus.focus(f); } });
             out.push({ kind: 'toggle', label: t('allKeys'), desc: t('allKeysDesc'), get: function () { return Store.get('app_keys', true) !== false; }, set: function (v) { Store.set('app_keys', !!v); } });
             lines = t('controlsText');
             for (i = 0; i < lines.length; i++) out.push({ kind: 'text', value: lines[i] });
@@ -322,17 +326,21 @@
             out.push({ kind: 'info', label: t('devController') + ' ' + (i + 1) + (pl.length > 1 && p.index === a ? ' (' + t('padActive') + ')' : ''), value: padTitle(p) });
             out.push({ kind: 'info', label: t('padBrand') + ' \u00B7 ' + t('padModel'), value: (p.brand || t('padUnknown')) + ' \u00B7 ' + (p.known ? p.model : t('padUnknown') + ' (' + p.name + ')') });
             out.push({ kind: 'info', label: t('padLayout'), value: t('padLay_' + p.layout) });
-            out.push({ kind: 'info', label: t('padMap'), value: (p.order && p.order.swap ? t('padSwapped') : t(p.standard ? 'padMapStd' : 'padMapRaw')) + ' \u00B7 ' + p.buttons + ' / ' + p.axes });
+            out.push({ kind: 'info', label: t('padMap'), value: (p.order && p.order.custom ? t('padCustom') : p.order && p.order.swap ? t('padSwapped') : t(p.standard ? 'padMapStd' : 'padMapRaw')) + ' \u00B7 ' + p.buttons + ' / ' + p.axes });
             if (p.vendor) out.push({ kind: 'info', label: t('padIds'), value: p.vendor + ':' + p.product });
             // A B X Y by letter or by place (Input.setPadOrder): Automatic / Swap / Don't swap, per controller model, TV-wide
-            if (p.order) (function (o) {
+            if (p.order) (function (o, pi) {
                 var ORD = ['auto', 'swap', 'keep'];
                 out.push({ kind: 'select', label: t('padSwap'), desc: t('padSwapDesc'),
                            value: function () { var c = Input.pads().filter(function (q) { return q.order && q.order.key === o.key; })[0], cur = c ? c.order : o;
                                                 return cur.set === 'auto' ? t('padOrd_auto').replace('%s', t(cur.auto ? 'on' : 'off')) : t('padOrd_' + cur.set); },
+                           // from a custom map: Automatic / Swap / Don't swap drop it (the mapper makes a new one)
                            adjust: function (d) { var c = Input.pads().filter(function (q) { return q.order && q.order.key === o.key; })[0], cur = (c ? c.order : o).set;
-                                                  Input.setPadOrder(o.key, ORD[(ORD.indexOf(cur) + d + ORD.length) % ORD.length]); } });
-            })(p.order);
+                                                  var at = ORD.indexOf(cur); if (at < 0) at = d > 0 ? -1 : 0;
+                                                  Input.setPadOrder(o.key, ORD[(at + d + ORD.length) % ORD.length]); } });
+                // the controller mapper: press each button in turn (owner request 2026-11-12)
+                out.push({ kind: 'action', label: t('pmOpen'), desc: t('pmOpenDesc'), run: function () { mapStart(pi); } });
+            })(p.order, p.index);
         }
         out.push({ kind: 'action', label: t('padTest'), desc: pl.length ? t('padTestDesc') : t('devNoPad'), run: function () { sub = 'padtest'; var f = renderMain(0); if (f) Focus.focus(f); } });
         out.push({ kind: 'text', value: t('padWhy') });
@@ -768,6 +776,13 @@
             return;
         }
         if (sub === 'user') { sub = 'users'; var f0 = renderMain(1); if (f0) Focus.focus(f0); return; }
+        if (sub === 'appset') {
+            var gl = asSorted(), at2 = 0;
+            for (var q = 0; q < gl.length; q++) if (gl[q].id === asId) at2 = q;
+            sub = 'appsets'; asId = null;
+            var fa = renderMain(1 + at2); if (fa) Focus.focus(fa);
+            return;
+        }
         var back = sub === 'motionmoves' ? 'phonectrl' : null;
         if (sub === 'motionmoves') { Controllers.monitor(null); monEl = null; }
         sub = back;
@@ -791,7 +806,161 @@
         card.appendChild(box); card.appendChild(txt);
         return card;
     }
-    function stopPadTest() { if (padRaf) cancelAnimationFrame(padRaf); padRaf = 0; padCard = null; }
+    /* ---------- Control Panel > Gaming > Settings of each app or game: the same as My PC's menu > App settings, per user ---------- */
+    var asId = null;
+    function asGames() { var g = (typeof Desktop !== 'undefined' && Desktop.games) ? Desktop.games() : []; return g.filter(function (x) { return x && x.id && x.manifest; }); }
+    function asGame(id) { var g = asGames(); for (var i = 0; i < g.length; i++) if (g[i].id === id) return g[i]; return null; }
+    // the ones with settings of their own first, then by name
+    function asSorted() { return asGames().slice().sort(function (a, b) { var x = Object.keys(GameHost.appPrefs(a.id)).length ? 0 : 1, y = Object.keys(GameHost.appPrefs(b.id)).length ? 0 : 1; return x - y || asName(a).localeCompare(asName(b)); }); }
+    function asName(g) { return I18n.pick(g.manifest.title) || g.id; }
+    function asBgDefault(g) { var c = g.remote ? g.remote.config : g.manifest, v = c && c.allow_background_running; return v === true || v === 'true' || v === 1; }
+    function asVal(g, k) {
+        var v = GameHost.appPrefs(g.id)[k];
+        if (v !== undefined) return v;
+        return k === 'bg' ? asBgDefault(g) : k === 'keys' ? Store.get('app_keys', true) !== false : k === 'direct';
+    }
+    function asSummary(g) {
+        var o = GameHost.appPrefs(g.id), l = [];
+        if (o.bg !== undefined) l.push(t('asBg') + ': ' + t(o.bg ? 'on' : 'off'));
+        if (o.direct === false) l.push(t('asDirect') + ': ' + t('asBlocked'));
+        if (o.keys !== undefined) l.push(t('allKeys') + ': ' + t(o.keys ? 'on' : 'off'));
+        if (o.quiet) l.push(t('asNotif') + ': ' + t('asHidden'));
+        return l.length ? l.join(' \u00B7 ') : t('asDefault');
+    }
+    function appSetsRows(out) {
+        var g = asSorted();
+        out.push({ kind: 'text', value: t('asEachText') });
+        if (!g.length) out.push({ kind: 'info', label: t('asEach'), value: t('asNone') });
+        for (var i = 0; i < g.length; i++) (function (x) {
+            out.push({ kind: 'action', label: asName(x), desc: asSummary(x), run: function () { asId = x.id; sub = 'appset'; var f = renderMain(1); if (f) Focus.focus(f); } });
+        })(g[i]);
+        out.push({ kind: 'action', label: t('back'), run: function () { leaveSub(); } });
+    }
+    function appSetRows(out) {
+        var g = asGame(asId);
+        if (!g) { out.push({ kind: 'action', label: t('back'), primary: true, run: function () { leaveSub(); } }); return; }
+        out.push({ kind: 'text', value: t('asFor').replace('%a', asName(g)).replace('%u', Profiles.name(null, t('player'))) });
+        function set(k, v, def) { GameHost.setAppPref(g.id, k, v === def ? null : v); }
+        out.push({ kind: 'toggle', label: t('asBg'), desc: t('asBgDesc'), get: function () { return asVal(g, 'bg'); }, set: function (v) { set('bg', !!v, asBgDefault(g)); } });
+        if (g.remote) {
+            out.push({ kind: 'toggle', label: t('asDirect'), desc: t('asDirectDesc'), get: function () { return asVal(g, 'direct'); }, set: function (v) { set('direct', !!v, true); } });
+            out.push({ kind: 'toggle', label: t('allKeys'), desc: t('allKeysDesc'), get: function () { return asVal(g, 'keys'); }, set: function (v) { set('keys', !!v, Store.get('app_keys', true) !== false); } });
+        }
+        out.push({ kind: 'toggle', label: t('asNotif'), desc: t('asNotifDesc'), get: function () { return !GameHost.appPrefs(g.id).quiet; }, set: function (v) { GameHost.setAppPref(g.id, 'quiet', v ? null : true); } });
+        out.push({ kind: 'action', label: t('asReset'), run: function () { GameHost.resetAppPrefs(g.id); App.toast(t('asResetDone')); rerender(); } });
+        out.push({ kind: 'action', label: t('back'), run: function () { leaveSub(); } });
+    }
+
+    function stopPadTest() { if (padRaf) cancelAnimationFrame(padRaf); padRaf = 0; padCard = null; mapStop(); }
+
+    /* ---------- Control Panel > Gaming > Map the buttons (owner request 2026-11-12) ----------
+     * My PC asks for each of its buttons in turn ("Press A") and the player presses the button that should do it; the real
+     * button numbers are saved per controller model, TV-wide (Input.setPadMap, arc_dev_padmap) and used everywhere: My PC,
+     * games, apps (MyPC.gamepad and navigator.getGamepads in the SDK). While it listens the controller gives no action; the
+     * remote / keyboard still works (OK = Skip, Back = Cancel), and a button not pressed in 8 s is skipped (a controller alone). */
+    var MAP_WAIT = 8000, pm = null, pmTimer = 0, pmCard = null;
+    function mapStart(index) {
+        var pl = Input.pads(), p = null, live = Input.pad(index), i;
+        for (i = 0; i < pl.length; i++) if (pl[i].index === index) p = pl[i];
+        if (!p || !p.order) return;
+        var n = Math.max(4, Math.min(18, live && live.buttons ? live.buttons.length : 17));
+        pm = { pad: index, key: p.order.key, info: p, n: n, step: 0, map: [], used: {}, done: false, msg: '', at: Date.now(),
+               base: p.order.custom ? null : p.order.swap ? 'swap' : 'keep' };
+        sub = 'padmap';
+        var f = renderMain(0); if (f) Focus.focus(f);
+    }
+    function mapRows(out) {
+        if (!pm) { out.push({ kind: 'action', label: t('back'), primary: true, run: function () { leaveSub(); } }); return; }
+        out.push({ kind: 'padmap' });
+        if (!pm.done) {
+            out.push({ kind: 'action', label: t('pmSkip'), desc: t('pmSkipDesc'), run: function () { mapNext(-1); } });
+            if (pm.step) out.push({ kind: 'action', label: t('pmUndo'), run: function () { mapUndo(); } });
+            out.push({ kind: 'action', label: t('cancel'), run: function () { pm = null; leaveSub(); } });
+        } else {
+            out.push({ kind: 'action', label: t('padTest'), primary: true, run: function () { pm = null; sub = 'padtest'; var f = renderMain(0); if (f) Focus.focus(f); } });
+            out.push({ kind: 'action', label: t('pmAgain'), run: function () { mapStart(pm.pad); } });
+            out.push({ kind: 'action', label: t('pmClear'), desc: t('pmClearDesc'), run: function () { Input.setPadMap(pm.key, null); App.toast(t('pmCleared')); pm = null; leaveSub(); } });
+            out.push({ kind: 'action', label: t('back'), run: function () { pm = null; leaveSub(); } });
+        }
+    }
+    function mapLabel(i) { return padLabel(pm.info, i); }
+    function mapCard() {
+        var card = el('div', 'set-padtest set-padmap'), i;
+        card.appendChild(el('div', 'pt-name', padTitle(pm.info)));
+        var big = el('div', 'pm-ask'); big.setAttribute('aria-live', 'polite');
+        card.appendChild(big);
+        card.appendChild(el('div', 'pm-sub'));
+        var grid = el('div', 'pt-grid');
+        for (i = 0; i < pm.n; i++) { var b = el('span', 'pt-b'); b.appendChild(el('span', 'pt-l', mapLabel(i))); b.appendChild(el('span', 'pt-i', '')); grid.appendChild(b); }
+        card.appendChild(grid);
+        card.appendChild(el('div', 'pt-last'));
+        pmCard = card;
+        mapPaint();
+        if (!pm.done) {
+            Input.capturePad(mapHeard);
+            if (!pmTimer) pmTimer = setInterval(mapTick, 250);
+        }
+        return card;
+    }
+    function mapStop() { if (pmTimer) clearInterval(pmTimer); pmTimer = 0; pmCard = null; Input.capturePad(null); }
+    function mapPaint() {
+        if (!pmCard || !pm) return;
+        var ask = pmCard.querySelector('.pm-ask'), subl = pmCard.querySelector('.pm-sub'), bs = pmCard.querySelectorAll('.pt-b'), i;
+        if (pm.done) { ask.textContent = t('pmSaved'); subl.textContent = t('pmSavedDesc'); }
+        else {
+            ask.textContent = t('pmPress').replace('%b', mapLabel(pm.step));
+            var left = Math.max(0, Math.ceil((MAP_WAIT - (Date.now() - pm.at)) / 1000));
+            subl.textContent = t('pmStep').replace('%i', pm.step + 1).replace('%n', pm.n) + ' \u00B7 ' + t('pmLeft').replace('%s', left);
+        }
+        for (i = 0; i < bs.length; i++) {
+            var v = pm.map[i], fin = pm.final ? pm.final[i] : -1;      // once saved: the real button each one got (a skipped one too)
+            bs[i].className = 'pt-b' + (i === pm.step && !pm.done ? ' on' : v >= 0 ? ' pm-set' : '');
+            bs[i].querySelector('.pt-i').textContent = v >= 0 ? String(v) : fin >= 0 ? String(fin) : i < pm.step ? '\u2013' : '';
+        }
+        pmCard.querySelector('.pt-last').textContent = pm.msg;
+    }
+    function mapTick() {
+        if (!pm || pm.done || !pmCard) return;
+        if (Date.now() - pm.at >= MAP_WAIT) { pm.msg = t('pmSkipped').replace('%b', mapLabel(pm.step)); mapNext(-1); return; }
+        mapPaint();
+    }
+    function mapHeard(index, j) {
+        if (!pm || pm.done || index !== pm.pad) return;
+        if (pm.used[j] !== undefined) { pm.msg = t('pmUsed').replace('%b', mapLabel(pm.used[j])); pm.at = Date.now(); mapPaint(); return; }
+        pm.msg = t('pmGot').replace('%b', mapLabel(pm.step)).replace('%i', j);
+        mapNext(j);
+    }
+    function mapNext(j) {
+        if (j >= 0) { pm.map[pm.step] = j; pm.used[j] = pm.step; } else pm.map[pm.step] = -1;
+        pm.step++; pm.at = Date.now();
+        if (pm.step < pm.n) { mapPaint(); A11y.announce(pmCard ? pmCard.querySelector('.pm-ask').textContent : ''); return; }
+        mapSave();
+    }
+    function mapUndo() {
+        if (!pm || !pm.step) return;
+        pm.step--; var j = pm.map[pm.step]; if (j >= 0) delete pm.used[j]; pm.map.length = pm.step; pm.at = Date.now(); pm.msg = '';
+        mapPaint();
+    }
+    // a skipped button keeps what it had before the mapper (A <-> B swapped back or not); when another button took that one, it
+    // gets what that other button had (so two buttons swapped by the player stay swapped); nothing pressed at all = nothing saved
+    function mapSave() {
+        var arr = [], any = false, i, k, want, guard, sw = [1, 0, 3, 2];
+        function def(x) { return pm.base === 'swap' && x < 4 ? sw[x] : x; }
+        for (i = 0; i < pm.n; i++) if (pm.map[i] >= 0) any = true;
+        for (i = 0; i < pm.n; i++) {
+            if (pm.map[i] >= 0) { arr.push(pm.map[i]); continue; }
+            want = def(i); guard = 0;
+            while (pm.used[want] !== undefined && guard++ < 40) { k = pm.used[want]; want = def(k); }
+            arr.push(want);
+            pm.used[want] = i;
+        }
+        pm.done = true;
+        mapStop();
+        if (any) { Input.setPadMap(pm.key, arr); pm.final = arr; }
+        else pm.msg = t('pmNothing');
+        var f = renderMain(1); if (f) Focus.focus(f);
+        A11y.announce(t('pmSaved'));
+    }
 
     function padTestCard(r) {
         var card = el('div', 'set-padtest'), grid = el('div', 'pt-grid'), i, b;
@@ -940,6 +1109,10 @@
         for (var i = 0; i < PAGES.length; i++) if (PAGES[i].id === page) lbl = t(PAGES[i].label);
         var wd = page === 'widgets' && sub === 'widget' ? Widgets.find(widgetId) : null;
         if (wd) lbl += ' \u203A ' + wd.title();                      // Widgets > Weather
+        // where you are in a page's own pages: Gaming > Map the buttons, Gaming > Settings of each app and game > Super Jumper
+        var crumb = { padtest: 'padTest', padmap: 'pmOpen', appsets: 'asEach', appset: 'asEach', phonectrl: 'ctrlTitle' }[sub];
+        if (crumb && (page === 'gaming' || page === 'devices')) lbl += ' \u203A ' + t(crumb);
+        if (sub === 'appset' && asGame(asId)) lbl += ' \u203A ' + asName(asGame(asId));
         main.appendChild(el('h3', 'set-title', lbl));
         try { rows = rowsFor(page); } catch (e) { rows = [{ kind: 'text', value: String(e && e.message || e) }]; }   // a broken row never blocks the page
         var target = null;
@@ -950,6 +1123,7 @@
             if (r.kind === 'profile') { main.appendChild(profileCard()); continue; }
             if (r.kind === 'status') { main.appendChild(statusCard(r)); continue; }
             if (r.kind === 'padtest') { main.appendChild(padTestCard(r)); continue; }
+            if (r.kind === 'padmap') { main.appendChild(mapCard()); continue; }
             if (r.kind === 'qr') { main.appendChild(qrCard(r)); continue; }
             if (r.kind === 'motionlog') { main.appendChild(motionCard()); continue; }
             b = el('button', 'set-row' + (r.kind === 'text' ? ' set-text' : '') + (r.danger ? ' set-danger' : '') + (r.primary ? ' set-primary' : ''));
@@ -1222,7 +1396,7 @@
             renderMain();
             return navBtn();
         },
-        close: function () { Shortcuts.stopListen(); clearInterval(scTick); scTick = 0; Updater.offChange(onUpdater); Input.offDevices(onDevices); Controllers.offChange(onCtrl); Controllers.monitor(null); monEl = null; sub = null; Updater.cancel(); stopPadTest(); body = nav = main = home = null; rows = []; page = null; },
+        close: function () { Shortcuts.stopListen(); clearInterval(scTick); scTick = 0; Updater.offChange(onUpdater); Input.offDevices(onDevices); Controllers.offChange(onCtrl); Controllers.monitor(null); monEl = null; sub = null; pm = null; Updater.cancel(); stopPadTest(); body = nav = main = home = null; rows = []; page = null; },
         refresh: function () { if (!nav) return; if (!page) { var c = Focus.current(), id = c && c.getAttribute('data-page'); Focus.focus(showHome(id)); return; } renderNav(); renderMain(); },
         action: action,
         back: back

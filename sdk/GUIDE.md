@@ -357,6 +357,10 @@ make sure it still works with the other inputs. Players should never have to fig
   You still receive their button events, but don't give them an essential job of their own.
 - Never call `navigator.getGamepads()` or listen to `gamepadconnected` yourself: on the TV your page has no focus and gets
   nothing. The SDK does it for you (also standalone, where it reads the pads itself, so you can test with a pad on a PC).
+  **The player decides (API level 21):** My PC's menu > **App settings** > "Read the controllers directly" can be set to
+  Blocked for your app (per user); then `navigator.getGamepads()` gives no pads at all inside My PC and only `onInput` /
+  `MyPC.gamepad` work. When it is allowed, the pads it gives already follow the player's button map (Control Panel > Gaming >
+  Map the buttons, and the A ↔ B swap): `buttons[0]` is the button the player made A. Use `MyPC.gamepad` and nothing breaks.
 - Physical controllers only: the TV remote, the keyboard, the touch pad send actions (a phone in Buttons or Keyboard mode is a real gamepad: `MyPC.gamepad` sees it as a standard pad with 18 buttons like a Switch Pro controller, device `pad101` / `pad102`)
   (`onInput`), so the game must also be playable with `left right up down` + `confirm` (see the rules below).
 
@@ -375,7 +379,7 @@ MyPC.gamepad.pressed(2, 'pad0');   // X held on the first pad (without dev: on a
 MyPC.gamepad.value(7);             // RT, 0..1 (the highest value of all pads)
 MyPC.gamepad.axis(2, 'pad0');      // right stick x; apply your own dead zone (about 0.15)
 MyPC.gamepad.name(3);              // 'Y' (the standard position name: 3 = top)
-MyPC.gamepad.label(1, 'pad0');     // 'A' on a Switch Pro controller, 'B' on an Xbox pad: the name PRINTED on that pad (API 20)
+MyPC.gamepad.label(0, 'pad0');     // 'A' on a Switch Pro or Xbox pad, '✕' on a PlayStation pad: the name PRINTED on that pad (API 20)
 MyPC.gamepad.pads();               // the connected controllers
 ```
 
@@ -386,8 +390,15 @@ swaps it where a browser reads it by place, before your app sees it, so never sw
 `MyPC.gamepad.label(i, dev)`: My PC knows the controller from its USB vendor / product id (Nintendo Switch Pro and Switch 2
 Pro, Joy-Con, Xbox 360 / One / Series / Elite, DualShock 3 / 4, DualSense, 8BitDo, Logitech, Stadia, Luna, SHIELD, the
 phone controller...) and each pad in `pads()` says `brand`, `model` and `layout` (`'nintendo'`, `'xbox'`, `'playstation'` or
-`'other'`). Players see all of it in Control Panel > Gaming (brand, model, USB id, button order, a button test, and
-"Swap A ↔ B and X ↔ Y" for a controller that still comes the wrong way).
+`'other'`). Players see all of it in Control Panel > Gaming (brand, model, USB id, button order, a button test,
+"Swap A ↔ B and X ↔ Y" for a controller that still comes the wrong way, and **Map the buttons**: the player presses each
+button in turn to choose which real button is A, B, X, Y, L, R... for that controller model; API level 21). Everything you
+get (`onInput`, `MyPC.gamepad`, `navigator.getGamepads()`) already follows that map: index 0 is always the player's A.
+
+**Per-user app settings (API level 21).** My PC's menu over your app has **App settings**, also in Control Panel > Gaming >
+Settings of each app and game: Run in the background (overrides your config's `allow_background_running`), Read the
+controllers directly (Allowed / Blocked), Every button goes to the app, and Notifications (Hidden = no cards over your app).
+They are the player's choice: your app only needs to keep working through `onInput` / `MyPC.gamepad` and `onPause`.
 
 Button indices follow the W3C **standard** layout (by position, whatever is printed on the pad):
 
