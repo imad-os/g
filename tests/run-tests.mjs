@@ -273,6 +273,25 @@ async function fakeFirestore(ctx, db) {
 }
 
 // An Open-Meteo forecast answer (js/core/weather.js asks now + hours + 7 days in one request): the hours start 2 hours before now
+// a made-up world cloud map (grey, equirectangular, as clouds.matteason.co.uk serves): a band of clouds over the equator, a
+// storm turning west of Morocco (30 N, 20 W) and a front over Europe; BMP so no image library is needed
+function cloudMapBmp(w = 512, h = 256) {
+    const row = Math.ceil(w * 3 / 4) * 4, buf = Buffer.alloc(54 + row * h);
+    buf.write('BM', 0); buf.writeUInt32LE(buf.length, 2); buf.writeUInt32LE(54, 10); buf.writeUInt32LE(40, 14);
+    buf.writeInt32LE(w, 18); buf.writeInt32LE(h, 22); buf.writeUInt16LE(1, 26); buf.writeUInt16LE(24, 28); buf.writeUInt32LE(row * h, 34);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const lon = x / w * 360 - 180, lat = 90 - y / h * 180;
+        let v = Math.max(0, 1 - Math.abs(lat - 4) / 8) * (0.6 + 0.4 * Math.sin(lon / 9));          // the band over the equator
+        const dx = (lon + 20) * Math.cos(30 * Math.PI / 180), dy = lat - 30, r = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
+        if (r < 14) v = Math.max(v, (1 - r / 14) * (0.55 + 0.45 * Math.cos(a * 2 - r * 0.7)));     // the storm's arms
+        if (r < 2.2) v = Math.max(v, 0.15);                                                           // its eye
+        v = Math.max(v, Math.max(0, 1 - Math.abs(lat - 52 - lon * 0.25) / 4) * (lon > -10 && lon < 30 ? 0.9 : 0));   // a front over Europe
+        const g = Math.round(Math.min(1, v) * 255), o = 54 + (h - 1 - y) * row + x * 3;
+        buf[o] = buf[o + 1] = buf[o + 2] = g;
+    }
+    return buf;
+}
+const CLOUD_BMP = cloudMapBmp();
 function forecastBody(temp) {
     const day = (i) => `2026-11-${String(5 + i).padStart(2, '0')}`, hours = [];
     // 7 whole days of hours (like the real answer); hours 7..33 keep the values the older checks expect (index i = hour - 7);
@@ -316,6 +335,11 @@ async function newPage(browser, base, db, opts) {
         if (/espn/.test(u)) { const lg = /soccer\/([^/]+)\//.exec(u)[1]; return json({ events: (db.espn && db.espn[lg]) || [] }); }
         if (/googleapis/.test(u)) return db.cal ? json({ items: db.cal }) : r.fulfill({ status: 403, body: '{}' });
         return db.ics ? r.fulfill({ status: 200, contentType: 'text/calendar', body: db.ics }) : r.fulfill({ status: 404, body: '' });
+    });
+    // the cloud map of Earth now (js/launcher/dynwall.js clouds()): never the real one in tests (db.noClouds: no internet there)
+    await ctx.route(/^https:\/\/clouds\.matteason\.co\.uk\//, (r) => {
+        (db.clouds = db.clouds || []).push(r.request().url());
+        return db.noClouds ? r.abort() : r.fulfill({ status: 200, contentType: 'image/bmp', headers: { 'Access-Control-Allow-Origin': '*' }, body: CLOUD_BMP });
     });
     const page = await ctx.newPage();
     page.errors = [];
@@ -6086,7 +6110,7 @@ async function wallTests(browser, base) {
 
     // Earth now: the globe with day and night, the Moon in its phase, redrawn every 10 minutes at most
     {
-        const page = await at('2026-11-05T17:30:00Z', {});
+        const db0 = {}, page = await at('2026-11-05T17:30:00Z', db0);
         await page.evaluate(() => Desktop.setWallpaper('dyn_astro'));
         check(await painted(page, 'a,'), 'Earth now is drawn');
         const r = await page.evaluate(() => {
@@ -6101,8 +6125,51 @@ async function wallTests(browser, base) {
             return { west: lp(200 - 110, 200), east: lp(200 + 110, 200), photo: px(W / 2, H / 2), sun: DynArt.sun(Date.now()) };
         });
         check(r.west > 400 && r.east < 120 && r.photo > 20 && r.sun.lon < -70 && r.sun.lon > -100 && r.sun.lat < -14 && r.sun.lat > -17, 'the day side is lit and the night side is dark (west ' + r.west + ', east ' + r.east + ', Sun over ' + r.sun.lat.toFixed(1) + ', ' + r.sun.lon.toFixed(1) + ')');
-        check(/Moon: /.test(await cap(page)) && /Day and night/.test(await cap(page)), 'its caption names the Moon\'s phase: ' + await cap(page));
+        check(await cap(page) === '', 'no text over the Earth (owner request 2026-11-12): "' + await cap(page) + '"');
+        // the real clouds: one map asked, drawn on the globe (white over the Atlantic storm by day, city lights hidden by night)
+        const cl = await page.evaluate(() => {
+            const m = DynWall._clouds(), flat = (v) => ({ w: 1, h: 1, d: new Uint8ClampedArray([v, v, v, 255]) });
+            const t = document.createElement('canvas'); t.width = t.height = 400; const tg = t.getContext('2d');
+            // seen from over the storm at noon there: white where the storm is, the dark sea (flat 20) without clouds
+            const noon = Date.UTC(2026, 10, 5, 13, 20), opts = (c) => ({ lat: 30, lon: -20, at: noon, clouds: c });
+            // the mean of the 60 x 60 pixels around the storm (east of the centre: the eye itself is clear)
+            const sum = (x, y) => { const d = tg.getImageData(x - 30, y - 30, 60, 60).data; let v = 0; for (let i = 0; i < d.length; i += 4) v += d[i] + d[i + 1] + d[i + 2]; return Math.round(v / 3600); };
+            DynArt.earth(tg, 400, 400, flat(20), flat(0), null, opts(m)); const withC = sum(200 + 20, 200), farSea = sum(200 + 150, 200 - 150);
+            DynArt.earth(tg, 400, 400, flat(20), flat(0), null, opts(null)); const noC = sum(200 + 20, 200);
+            // by night city lights (flat 250) are hidden under the storm
+            const night = Date.UTC(2026, 10, 5, 1, 20);
+            DynArt.earth(tg, 400, 400, flat(20), flat(120), null, { lat: 30, lon: -20, at: night, clouds: m }); const lightsC = sum(200 + 20, 200);
+            DynArt.earth(tg, 400, 400, flat(20), flat(120), null, { lat: 30, lon: -20, at: night, clouds: null }); const lights = sum(200 + 20, 200);
+            const saved = JSON.parse(localStorage.getItem('arc_dev_dwclouds') || 'null');
+            return { w: m && m.w, h: m && m.h, withC, noC, farSea, lightsC, lights, saved: !!(saved && /^data:image\/jpeg/.test(saved.img)), kb: saved ? Math.round(saved.img.length / 1024) : 0 };
+        });
+        check(db0.clouds.length === 1 && /images\/(2048x1024|1024x512)\/clouds\.jpg\?h=\d+$/.test(db0.clouds[0]) && cl.w >= 1024 && cl.h === cl.w / 2,
+              'one cloud map asked (' + db0.clouds.join(' ') + '), kept as ' + cl.w + 'x' + cl.h);
+        check(cl.withC > cl.noC + 80 && cl.lightsC < cl.lights - 25, 'the storm is drawn: white by day (' + cl.withC + ' vs ' + cl.noC + ' without clouds), hiding the city lights by night (' + cl.lightsC + ' vs ' + cl.lights + ')');
+        check(cl.saved && cl.kb < 400, 'a copy is kept on the device for restarts and no internet (' + cl.kb + ' KB)');
+        // 10 minutes later: drawn again, the map NOT asked again (once an hour at most)
+        await page.clock.setFixedTime(new Date('2026-11-05T17:41:00Z'));
+        await page.evaluate(() => DynWall.refresh());
+        check(await painted(page, 'a,' + Math.floor(Date.parse('2026-11-05T17:41:00Z') / 600000)) && db0.clouds.length === 1, 'redrawn 10 min later from the clouds in memory (asked ' + db0.clouds.length + ' time)');
         await shot(page, 'earth-now');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+    // Earth now without internet: the clouds kept on the device are drawn; none at all: the globe without clouds, no error
+    {
+        const db1 = { noClouds: true };
+        const page = await at('2026-11-05T19:00:00Z', db1, () => {
+            const c = document.createElement('canvas'); c.width = 64; c.height = 32; const g = c.getContext('2d');
+            g.fillStyle = '#000'; g.fillRect(0, 0, 64, 32); g.fillStyle = '#fff'; g.fillRect(20, 6, 20, 10);
+            localStorage.setItem('arc_dev_dwclouds', JSON.stringify({ at: Date.parse('2026-11-05T17:00:00Z'), img: c.toDataURL('image/jpeg', 0.9) }));
+        });
+        await page.evaluate(() => Desktop.setWallpaper('dyn_astro'));
+        check(await painted(page, 'a,'), 'drawn with no internet');
+        const m = await page.evaluate(() => { const c = DynWall._clouds(); return c ? { w: c.w, white: c.a[Math.round(c.h * 0.35) * c.w + Math.round(c.w * 0.47)], black: c.a[5] } : null; });
+        check(db1.clouds.length === 1 && m && m.white > 200 && m.black < 30, 'no internet: the copy on the device is used (' + JSON.stringify(m) + ')');
+        await page.evaluate(() => { localStorage.removeItem('arc_dev_dwclouds'); DynWall._cloudsReset(); DynWall.refresh(); });
+        await page.waitForTimeout(800);
+        check(await page.evaluate(() => DynWall._clouds() === null) && await varied(page) > 20, 'nothing kept and no internet: the globe without clouds');
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }
@@ -6157,7 +6224,7 @@ async function wallTests(browser, base) {
         await page.waitForTimeout(200);
         const txt2 = await page.textContent('.set-main');
         check(await page.evaluate(() => Desktop.wallpaper() === 'dyn_astro' && document.activeElement.getAttribute('data-wp') === 'dyn_astro') &&
-              /Earth now: the Earth seen from space/.test(txt2) && /Moon’s phase/.test(txt2) && !/Holidays of|Moving rain/.test(txt2), 'OK on Earth now: it is used at once, its details and option show, focus stays on it');
+              /Earth now: the Earth seen from space/.test(txt2) && /real clouds/.test(txt2) && /EUMETSAT/.test(txt2) && !/Moon’s phase|Holidays of|Moving rain/.test(txt2), 'OK on Earth now: it is used at once, its details and the clouds\' credit show (no title switch any more), focus stays on it');
         await page.focus('.set-wps:not(.set-wps-live) .set-wp[data-wp="aurora"]');
         await page.keyboard.press('Enter');
         await page.waitForTimeout(200);

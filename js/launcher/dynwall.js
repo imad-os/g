@@ -4,8 +4,9 @@
  *                js/core/events.js for the rules); on other days the sky of your place now (sunny, cloudy, rain, snow, fog, storm,
  *                day / dawn / dusk / night, season, temperature) from js/core/weather.js (shared with the Weather widget and app: no
  *                extra request when either asked in the last 15 min), or, with Live weather off, a picture of the season.
- *   dyn_astro    Earth now: the globe over your place with the real day and night line, city lights on the night side and the
- *                Moon in its phase (NASA pictures, wallpapers/*.jpg).
+ *   dyn_astro    Earth now: the globe over your place with the real day and night line, city lights on the night side, the
+ *                real clouds of the last hours (satellites, see clouds() below) and the Moon in its phase (NASA pictures,
+ *                wallpapers/*.jpg). No text over it (owner request 2026-11-12).
  * Light on purpose (low-end TVs): the picture is drawn ONCE on a canvas, again only when what it shows changed (checked every 10 min,
  * at the stage size times 1 / 0.75 / 0.5 by the graphics tier). Nothing runs while an app or game is open (Desktop.hide), on the
  * game page (no desktop there) or when My PC is in the background. The only thing that can move is the optional rain / snow layer
@@ -266,42 +267,83 @@ var DynWall = (function () {
 
     /* ---------------- Earth now ---------------- */
 
-    var texMemo = {};
-    function texture(name, w, cb) {
-        var im = new Image();
+    function texture(name, w, cb) { picture(/^(https?:|data:)/.test(name) ? name : base() + 'wallpapers/' + name, w, false, cb); }
+    // a picture as pixels at w x w/2 (equirectangular); grey: one byte per pixel (the red channel), else RGBA
+    function picture(url, w, grey, cb, keep) {
+        var im = new Image(), done = false, to = setTimeout(function () { fin(null); }, 20000);
+        function fin(out) { if (done) return; done = true; clearTimeout(to); im.onload = im.onerror = null; if (!out) im.src = ''; cb(out, out && keep ? im : null); }
         im.crossOrigin = 'anonymous';
         im.onload = function () {
             var h = Math.round(w / 2), tc = document.createElement('canvas'), out = null;
             tc.width = w; tc.height = h;
-            try { var g = tc.getContext('2d'); g.drawImage(im, 0, 0, w, h); out = { w: w, h: h, d: g.getImageData(0, 0, w, h).data }; } catch (e) {}
+            try {
+                var g = tc.getContext('2d'), d;
+                g.drawImage(im, 0, 0, w, h); d = g.getImageData(0, 0, w, h).data;
+                if (grey) { var a = new Uint8Array(w * h); for (var i = 0, j = 0; j < a.length; i += 4, j++) a[j] = d[i]; out = { w: w, h: h, a: a }; }
+                else out = { w: w, h: h, d: d };
+            } catch (e) {}
             tc.width = tc.height = 0;
-            cb(out);
+            fin(out);
         };
-        im.onerror = function () { cb(null); };
-        im.src = base() + 'wallpapers/' + name;
+        im.onerror = function () { fin(null); };
+        im.src = url;
+    }
+
+    /* Real clouds (owner request 2026-11-12: "see the storms coming"): the world's cloud cover from the geostationary weather satellites
+     * (EUMETSAT data, one map every 3 h, put together by the free live-cloud-maps project, CC0, CORS open). Light on purpose:
+     * asked at most once an hour (the address changes once an hour, so the browser's cache answers in between), a grey map of
+     * 2048 x 1024 (1024 x 512 on small TVs) kept as one byte per pixel; a 1024 px JPEG copy is kept on the device (arc_dev_dwclouds,
+     * not in the backup) so a restart, the page change after a game, or no internet still shows the last clouds (up to 12 h old). */
+    var CLOUD_URL = 'https://clouds.matteason.co.uk/images/%s/clouds.jpg', CLOUD_KEY = 'arc_dev_dwclouds', HOUR = 3600000;
+    var cloudMem = null, cloudTry = 0;          // { w, h, a, at: when it was fetched }
+    function cloudSaved() { try { var c = JSON.parse(localStorage.getItem(CLOUD_KEY) || 'null'); return c && /^data:image\//.test(c.img) && Date.now() - c.at < 12 * HOUR ? c : null; } catch (e) { return null; } }
+    function clouds(w, cb) {
+        var now = Date.now();
+        if (cloudMem && now - cloudMem.at < HOUR && cloudMem.w >= Math.min(w, 1024)) return cb(cloudMem);
+        var saved = cloudSaved();
+        function fromSaved(ok) {
+            if (cloudMem && now - cloudMem.at < 12 * HOUR) return cb(cloudMem);
+            if (!saved) return cb(null);
+            picture(saved.img, Math.min(w, 1024), true, function (tx) { if (tx) { tx.at = saved.at; cloudMem = tx; } cb(tx); });
+        }
+        if (saved && now - saved.at < HOUR && !cloudMem) return fromSaved();
+        if (now - cloudTry < 10 * 60000) return fromSaved();      // failed a moment ago: not again for 10 min
+        cloudTry = now;
+        picture(CLOUD_URL.replace('%s', w + 'x' + (w / 2)) + '?h=' + Math.floor(now / HOUR), w, true, function (tx, im) {
+            if (!tx) return fromSaved();
+            tx.at = now; cloudMem = tx; cloudTry = 0;
+            try {                                                   // the copy on the device, 1024 px, grey JPEG
+                var sc = document.createElement('canvas'); sc.width = 1024; sc.height = 512;
+                sc.getContext('2d').drawImage(im, 0, 0, 1024, 512);
+                var img = sc.toDataURL('image/jpeg', 0.7); sc.width = sc.height = 0;
+                localStorage.setItem(CLOUD_KEY, JSON.stringify({ at: now, img: img }));
+            } catch (e) { try { localStorage.removeItem(CLOUD_KEY); } catch (e2) {} }
+            im.src = '';
+            cb(tx);
+        }, true);
     }
     function flat(rgb) { return { w: 1, h: 1, d: new Uint8ClampedArray([rgb[0], rgb[1], rgb[2], 255]) }; }
     function tickAstro(done) {
         var now = Date.now(), slot = Math.floor(now / 600000), loc = place();
         var k = ['a', slot, Math.round(loc.lat), Math.round(loc.lon)].join(',');
-        var mp = Math.round(DynArt.moonAge(now) * 8) % 8, names = String(t('mp')).split(',');
-        setCaption(t('dwEarth'), t('dwMoon').replace('%s', names[mp] || ''));
+        setCaption('', '');                                  // no text over the Earth (owner request 2026-11-12)
         var ss = stageSize();
         if (key.indexOf(k + '|') === 0 && key === k + '|' + Math.round(ss.w * scale()) + 'x' + Math.round(ss.h * scale())) return done(600000 - now % 600000 + 1000);
         // the photos are read for this one drawing only, then dropped (8 MB of pixels at 2048 px)
-        var tw = scale() === 1 ? 2048 : scale() === 0.75 ? 1536 : 1024, got = {}, left = 3;
+        var tw = scale() === 1 ? 2048 : scale() === 0.75 ? 1536 : 1024, got = {}, left = 4;
         function one(n, w, name) { texture(name, w, function (tx) { got[n] = tx; if (--left === 0) { busy(false); draw(); } }); }
         function draw() {
             if (cur !== 'dyn_astro') return;
             var dayT = got.day || flat([24, 60, 120]), nightT = got.night || flat([4, 6, 14]);
             paint(k, function (c, W, H) {
-                DynArt.earth(c, W, H, dayT, nightT, got.moon, { lat: Math.max(-40, Math.min(40, loc.lat * 0.6)), lon: loc.lon, at: now, here: Store.get('weather_loc', null) ? loc : null });
+                DynArt.earth(c, W, H, dayT, nightT, got.moon, { lat: Math.max(-40, Math.min(40, loc.lat * 0.6)), lon: loc.lon, at: now, here: Store.get('weather_loc', null) ? loc : null, clouds: got.clouds });
             });
             got = null;
             done(600000 - Date.now() % 600000 + 1000);
         }
         busy(true);
         one('day', tw, 'earth-day.jpg'); one('night', tw, 'earth-night.jpg'); one('moon', 512, 'moon.jpg');
+        clouds(scale() === 0.5 ? 1024 : 2048, function (tx) { got.clouds = tx; if (--left === 0) { busy(false); draw(); } });
     }
 
     /* ---------------- Holidays and events ---------------- */
@@ -348,5 +390,5 @@ var DynWall = (function () {
     }
 
     return { IDS: IDS, OLD: OLD, GLASS_LV: GLASS_LV, STYLES: STYLES, is: is, start: start, stop: stop, pause: pause, resume: resume, refresh: refresh, prefs: prefs, setPref: setPref,
-             current: function () { return cur; }, _key: function () { return key; }, _timer: function () { return timer; }, _pick: pick };
+             current: function () { return cur; }, _clouds: function () { return cloudMem; }, _cloudsReset: function () { cloudMem = null; cloudTry = 0; }, _key: function () { return key; }, _timer: function () { return timer; }, _pick: pick };
 })();

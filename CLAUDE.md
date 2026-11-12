@@ -153,7 +153,10 @@
   `mypc-horizon` (not in the backup), a missing one falls back to the built-in photo; photos get the same rain / glass (`DynArt.photo`); holidays stay drawn; guide `dwCustomGuide`), Raindrops on the glass (`dynwall.glass` off / low / medium (default) / high,
   owner request 2026-11-09: lens drops showing the scene flipped, mist, trails, soft scene behind; drawn once with the picture, `DynArt` `glass`), Holidays of, Football nights, the football rules written out
   (`dwFootballRules`), Show the event's name (`dynwall.caption`). `dyn_astro` = Earth globe with the real day / night line, city lights, Moon
-  phase (NASA public-domain photos `wallpapers/*.jpg`, read only while drawing). Drawn ONCE on a canvas (stage size x 1 / 0.75 / 0.5 by Perf tier)
+  phase (NASA public-domain photos `wallpapers/*.jpg`, read only while drawing) and **real clouds** (owner request 2026-11-12, build 166: "see the storms coming"; **no text on it**):
+  `clouds.matteason.co.uk/images/<2048x1024|1024x512>/clouds.jpg` (free live-cloud-maps, EUMETSAT geostationary data, a new map every 3 h, CC0, CORS;
+  credit "Contains modified EUMETSAT data" = `dwCloudCredit` in Control Panel, privacy line `dwCloudPrivacy`), asked at most once an hour (`?h=<hour>`),
+  kept as 1 byte / pixel, a 1024 px grey JPEG copy in `arc_dev_dwclouds` (not backed up, used up to 12 h when offline); no copy + no internet = no clouds. Drawn ONCE on a canvas (stage size x 1 / 0.75 / 0.5 by Perf tier)
   when what it shows changes (checked every 10 min, 30 on an event day); no timer while an app / game is open (Desktop.hide), on the game page or
   in the background. While it asks for data the taskbar shows a turning icon next to the clock (`#tray-wp`, at least 1 s). The last picture
   is kept on the device (`arc_dev_dwlast`: id, profile, state key, caption, JPEG; not in the backup; owner request 2026-11-09: it opened on a default

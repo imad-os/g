@@ -5,7 +5,8 @@
  *   DynArt.weather(ctx, W, H, s)   s: { k (Weather condition), phase: 'night' | 'dawn' | 'day' | 'dusk', sunT (0..1 through the day),
  *                                       temp (°C), season, clouds (%), moon (age 0..1), wind, seed }
  *   DynArt.event(ctx, W, H, id, s) id: an Events id ('eidadha', 'greenmarch', 'ucl', ...) or 'season'
- *   DynArt.earth(ctx, W, H, day, night, s)   day / night: { w, h, d: Uint8ClampedArray } (equirectangular), s: { lat, lon, at, moon }
+ *   DynArt.earth(ctx, W, H, day, night, s)   day / night: { w, h, d: Uint8ClampedArray } (equirectangular), s: { lat, lon, at, moon,
+ *                                            clouds: { w, h, a: Uint8Array grey, equirectangular } or null }
  *   DynArt.moonAge(ms), DynArt.sun(ms) -> { lat, lon } (degrees), DynArt.rainTile(kind) -> canvas (the moving layer) */
 var DynArt = (function () {
     'use strict';
@@ -684,6 +685,8 @@ var DynArt = (function () {
         var sl0 = Math.sin(lat0), cl0 = Math.cos(lat0), so = Math.sin(lon0), co = Math.cos(lon0);
         var sx = -so * ex + co * ey, sy = -sl0 * co * ex - sl0 * so * ey + cl0 * ez, sz = cl0 * co * ex + cl0 * so * ey + sl0 * ez;
         var img = c.createImageData(D, D), o = img.data, dw = day.w, dh = day.h, nw = night.w, nh = night.h, dd = day.d, nd = night.d;
+        // the real clouds (dynwall.js clouds()): a grey map, white = thick cloud; thin haze under ~35 is left out
+        var cl = s.clouds || null, cw = cl ? cl.w : 0, ch = cl ? cl.h : 0, ca = cl ? cl.a : null, cA = 0;
         for (var py = 0; py < D; py++) {
             var y = (r - py - 0.5) / r;
             for (var px = 0; px < D; px++) {
@@ -698,11 +701,17 @@ var DynArt = (function () {
                 t = t * t * (3 - 2 * t);
                 var lit = 0.16 + 1.1 * Math.pow(Math.max(0, dot), 0.6), rim = (1 - z) * (1 - z) * (1 - z);
                 var dr = dd[di] * lit, dg = dd[di + 1] * lit, db = dd[di + 2] * lit;
+                if (ca) {
+                    cA = ca[((v * ch) | 0) * cw + ((u * cw) | 0)];
+                    cA = cA < 35 ? 0 : cA > 205 ? 1 : (cA - 35) / 170;
+                    if (cA > 0) { var cl2 = 238 * lit; dr += (cl2 - dr) * cA; dg += (cl2 + 4 - dg) * cA; db += (cl2 + 10 - db) * cA; }
+                }
                 // a warm band at the line between day and night
                 var dusk = dot > -0.06 && dot < 0.16 ? (1 - Math.abs(dot - 0.05) / 0.11) * 0.22 * t : 0;
                 if (dusk > 0) { dr += 90 * dusk; dg += 30 * dusk; db -= 10 * dusk; }
                 dr += rim * 110 * t; dg += rim * 160 * t; db += rim * 255 * t;
                 var nr = nd[ni] * 1.15 + 4, ng = nd[ni + 1] * 1.05 + 6, nb = nd[ni + 2] * 0.85 + 16;
+                if (cA > 0) { var hid = 1 - cA * 0.85; nr = nr * hid + 22 * cA; ng = ng * hid + 26 * cA; nb = nb * hid + 36 * cA; }   // clouds hide the city lights, faintly lit
                 nr += rim * 20; ng += rim * 30; nb += rim * 70;
                 var k = ((py * D) + px) * 4, edge = rr > 0.994 ? (1 - rr) / 0.006 : 1;
                 o[k] = dr * t + nr * (1 - t); o[k + 1] = dg * t + ng * (1 - t); o[k + 2] = db * t + nb * (1 - t); o[k + 3] = 255 * edge;

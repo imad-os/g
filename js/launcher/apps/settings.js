@@ -80,7 +80,7 @@
             if (window.DynWall && DynWall.is(cw)) {
                 out.push({ kind: 'text', value: t('wp_' + cw) + ': ' + t('dwAbout_' + cw) });
                 if (cw === 'dyn_astro') {
-                    out.push({ kind: 'toggle', label: t('dwCaptionAstro'), get: function () { return DynWall.prefs().caption; }, set: function (v) { DynWall.setPref('caption', v); } });
+                    out.push({ kind: 'text', value: t('dwCloudCredit') });          // no text on the picture itself (owner request 2026-11-12)
                 } else {
                     // Horizon: its look, weather, then holidays, then football (with its rules written out), then the name on screen
                     out.push({ kind: 'select', label: t('dwStyle'), desc: t('dwStyleDesc'), value: function () { return t('dwStyle_' + DynWall.prefs().style); },
