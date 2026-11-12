@@ -416,3 +416,135 @@ html.th-quest { --acc: #ffcc4d; --ink: #14110a; }
         repeating-linear-gradient(90deg, rgba(120, 200, 220, 0.06) 0, rgba(120, 200, 220, 0.06) 1px, rgba(0, 0, 0, 0) 1px, rgba(0, 0, 0, 0) 64px),
         linear-gradient(160deg, #101a24 0%, #0b1118 50%, #141018 100%); }
 .th-quest .start:not([hidden]) ~ .taskbar .th-hints { display: none; }
+
+/* ---------- the built-in apps, dialogs, menus and notifications in Neon night and Quest (owner request 2026-11-12: "the built in
+   apps must use the selected theme too, like the widget app or the file manager, and the notifications too"). Same rules as the
+   desktop: static gradients, inset shadows and clip-path only; no blur, no animation. :where() keeps each app's own states
+   (primary, today, on) winning over these. ---------- */
+/* Neon night: the app sits on the night sky, rows are glass, the focused one lights up */
+.th-neon :is(.window, .profiles, .mp) { background: radial-gradient(1100px 640px at 8% 0%, rgba(58, 66, 180, 0.55), rgba(58, 66, 180, 0) 70%),
+    radial-gradient(1000px 640px at 100% 100%, rgba(96, 34, 150, 0.5), rgba(96, 34, 150, 0) 70%), linear-gradient(160deg, #0d1240 0%, #080a26 60%, #120a30 100%); }
+.th-neon :is(.set-nav, .fx-side, .lb-side, .mx-side) { background: rgba(8, 10, 36, 0.4); border-right: 0; box-shadow: inset -1px 0 0 rgba(124, 150, 255, 0.3); }
+[dir="rtl"].th-neon :is(.set-nav, .fx-side, .lb-side, .mx-side) { box-shadow: inset 1px 0 0 rgba(124, 150, 255, 0.3); }
+.th-neon :is(.fx-bar-top, .fx-status) { border-color: rgba(124, 150, 255, 0.3); }
+.th-neon :where(.set-row:not(.set-primary):not(.set-text), .set-wps, .set-qr, .set-padtest, .fx-path, .fx-item, .memo-item, .cal-day:not(.cal-today), .cal-ev, .cal-frow,
+    .lb-tab, .lb-scope-btn, .st-row, .st-card, .st-search, .br-search, .br-bar, .pcard, .mp-room, .pic-cell, .pill-btn, .btn:not(.btn-primary), .mx-set-row, .wx-card) {
+    border-radius: 16px; background: linear-gradient(180deg, rgba(74, 90, 200, 0.24), rgba(28, 34, 100, 0.3));
+    box-shadow: inset 0 0 0 1px rgba(120, 160, 255, 0.26), inset 0 1px 0 rgba(210, 230, 255, 0.3), inset 0 0 18px rgba(70, 130, 255, 0.12); }
+.th-neon .fx-item { background: none; box-shadow: none; }
+.th-neon .btn:not(.btn-primary), .th-neon .pill-btn { border-radius: 30px; }
+.th-neon :where(.set-row:not(.set-primary), .set-nav-btn, .cp-tile, .fx-nav, .fx-item, .memo-item, .cal-day:not(.cal-today), .cal-ev, .cal-frow, .lb-tab, .lb-scope-btn,
+    .st-row, .st-card, .st-search, .br-search, .pcard, .mp-room, .pic-cell, .pill-btn, .icon-btn, .btn:not(.btn-primary), .dm-item, .mx-nav, .mx-tile, .mx-row, .mx-set-row,
+    .mx-cb, .mx-act:not(.mx-act-main), .pt-game, .wx-chip, .wx-hour, .wx-day):focus {
+    background: linear-gradient(180deg, rgba(104, 122, 245, 0.44), rgba(44, 52, 140, 0.52));
+    box-shadow: inset 0 0 0 2px #d6e4ff, inset 0 0 22px rgba(120, 170, 255, 0.45), 0 0 18px rgba(110, 160, 255, 0.7); }
+.th-neon :is(.set-nav-btn, .fx-nav, .mx-nav).on { background: rgba(124, 140, 255, 0.2); }
+.th-neon :is(.set-nav-btn, .fx-nav, .mx-nav).on:before { background: #8fb4ff; box-shadow: 0 0 10px #6f9bff; }
+.th-neon :is(.btn-primary, .set-primary, .mx-act-main) { background: linear-gradient(90deg, #5468ff, #9a5cff); color: #fff; box-shadow: 0 0 16px rgba(120, 110, 255, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
+.th-neon :is(.btn-primary, .set-primary):focus { background: linear-gradient(90deg, #7385ff, #b47dff); filter: none; box-shadow: 0 0 0 3px #fff, 0 0 24px rgba(140, 130, 255, 0.85); }
+.th-neon :is(.set-slider-fill, .fx-bar-fill, .bar-fill) { background: linear-gradient(90deg, #4fc3ff, #a65bff); }
+.th-neon :is(.set-title, .screen-title, .dialog-title, .pause-title) { text-shadow: 0 0 18px rgba(130, 160, 255, 0.55); }
+.th-neon .set-wp.on { border-color: #9fc2ff; box-shadow: 0 0 16px rgba(110, 160, 255, 0.8); }
+.th-neon .mx-menu { background: linear-gradient(180deg, rgba(36, 44, 110, 0.98), rgba(14, 16, 50, 0.99)); border-color: rgba(124, 150, 255, 0.45); }
+.th-neon .pt { --pt-card: rgba(44, 54, 140, 0.32); --pt-line: rgba(140, 170, 255, 0.18); --pt-r: 20px; }
+.th-neon .game-loading { background: radial-gradient(circle at 50% 42%, #2a3290 0%, #0b0e30 62%); }
+/* bigger panels get the same glass as the widgets: the uneven rim and the corner blooms */
+.th-neon :is(.dialog, .pause-box, .dmenu, .nt, .cp-tile, .set-card) { border: 0; border-radius: 26px; isolation: isolate;
+    background: linear-gradient(180deg, rgba(46, 56, 124, 0.9) 0%, rgba(18, 22, 64, 0.94) 45%, rgba(10, 12, 42, 0.96) 100%);
+    box-shadow: inset 0 0 26px rgba(70, 130, 255, 0.3), inset 0 1px 1px rgba(200, 225, 255, 0.25), 0 0 16px rgba(40, 80, 230, 0.28), 0 14px 40px rgba(0, 0, 0, 0.5); }
+.th-neon :is(.cp-tile, .set-card) { position: relative; border-radius: 20px; background: linear-gradient(180deg, rgba(56, 68, 160, 0.42), rgba(18, 22, 70, 0.55));
+    box-shadow: inset 0 0 22px rgba(70, 130, 255, 0.22), inset 0 1px 1px rgba(200, 225, 255, 0.25); }
+.th-neon :is(.dialog, .pause-box, .dmenu, .nt, .cp-tile, .set-card):before {
+    content: ''; position: absolute; left: 0; top: 0; right: 0; bottom: 0; padding: 2px; border-radius: inherit; pointer-events: none;
+    background: linear-gradient(118deg, #f2faff 0%, #9fd2ff 6%, #5fa6ff 12%, rgba(100, 150, 255, 0.4) 24%, rgba(110, 130, 255, 0.16) 50%, rgba(100, 150, 255, 0.4) 76%, #5fa6ff 88%, #9fd2ff 94%, #f2faff 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+.th-neon :is(.dialog, .pause-box, .dmenu, .nt):after {
+    content: ''; position: absolute; left: -24px; top: -24px; right: -24px; bottom: -24px; z-index: -1; pointer-events: none;
+    background: radial-gradient(30px 30px at 34px 34px, rgba(170, 215, 255, 0.85), rgba(120, 185, 255, 0.3) 55%, rgba(120, 185, 255, 0)),
+                radial-gradient(130px 16px at 130px 25px, rgba(130, 190, 255, 0.55), rgba(130, 190, 255, 0)),
+                radial-gradient(30px 30px at calc(100% - 34px) calc(100% - 34px), rgba(160, 210, 255, 0.85), rgba(110, 180, 255, 0.3) 55%, rgba(110, 180, 255, 0)),
+                radial-gradient(150px 16px at calc(100% - 150px) calc(100% - 25px), rgba(120, 185, 255, 0.55), rgba(120, 185, 255, 0)); }
+.th-neon .cp-tile:focus { background: linear-gradient(180deg, rgba(90, 106, 230, 0.6), rgba(30, 36, 110, 0.7)); box-shadow: inset 0 0 30px rgba(110, 160, 255, 0.45), 0 0 26px rgba(110, 160, 255, 0.75); }
+.th-neon .cp-tile:focus:before { padding: 3px; background: linear-gradient(118deg, #fff 0%, #a9d4ff 30%, #a9d4ff 70%, #fff 100%); }
+/* notifications: glass cards; the kind is the tint, the icon glows */
+.th-neon .nt { padding: 18px 26px; }
+.th-neon .nt-ok   { background: linear-gradient(180deg, rgba(30, 98, 88, 0.99), rgba(10, 32, 38, 0.99)); }
+.th-neon .nt-err  { background: linear-gradient(180deg, rgba(118, 32, 74, 0.99), rgba(38, 10, 32, 0.99)); }
+.th-neon .nt-warn { background: linear-gradient(180deg, rgba(108, 84, 28, 0.99), rgba(38, 27, 12, 0.99)); }
+.th-neon .nt-ic { box-shadow: 0 0 14px rgba(76, 194, 255, 0.85); }
+.th-neon .nt-ok .nt-ic { box-shadow: 0 0 14px rgba(76, 217, 123, 0.85); }
+.th-neon .nt-err .nt-ic { box-shadow: 0 0 14px rgba(255, 93, 115, 0.85); }
+.th-neon .nt-warn .nt-ic { box-shadow: 0 0 14px rgba(255, 200, 61, 0.85); }
+.th-neon .nt-title { color: #b9c8ff; }
+
+/* Quest: the app is a game's menu screen: dark HUD with a faint grid, item slots with a cyan edge and a notched corner, gold when chosen */
+.th-quest :is(.window, .profiles, .mp) { background: repeating-linear-gradient(0deg, rgba(77, 225, 210, 0.035) 0 1px, rgba(0, 0, 0, 0) 1px 48px),
+    repeating-linear-gradient(90deg, rgba(77, 225, 210, 0.035) 0 1px, rgba(0, 0, 0, 0) 1px 48px), linear-gradient(180deg, #0e161f 0%, #070a0f 100%); }
+.th-quest :is(.set-nav, .fx-side, .lb-side, .mx-side) { background: rgba(0, 0, 0, 0.38); border-right: 0; box-shadow: inset -2px 0 0 rgba(77, 225, 210, 0.28); }
+[dir="rtl"].th-quest :is(.set-nav, .fx-side, .lb-side, .mx-side) { box-shadow: inset 2px 0 0 rgba(77, 225, 210, 0.28); }
+.th-quest :is(.fx-bar-top, .fx-status) { border-color: rgba(77, 225, 210, 0.28); }
+.th-quest :where(.set-row:not(.set-primary):not(.set-text), .set-wps, .set-qr, .set-padtest, .set-card, .cp-tile, .fx-path, .memo-item, .cal-day:not(.cal-today), .cal-ev, .cal-frow,
+    .lb-tab, .lb-scope-btn, .st-row, .st-card, .st-search, .br-search, .pcard, .mp-room, .pic-cell, .mx-set-row, .wx-card) {
+    border-radius: 0; background: linear-gradient(90deg, rgba(20, 31, 42, 0.96), rgba(11, 17, 24, 0.92)); box-shadow: inset 4px 0 0 rgba(77, 225, 210, 0.6);
+    -webkit-clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%); clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%); }
+[dir="rtl"].th-quest :where(.set-row:not(.set-primary):not(.set-text), .set-wps, .set-qr, .set-padtest, .set-card, .cp-tile, .fx-path, .memo-item, .cal-day:not(.cal-today), .cal-ev, .cal-frow,
+    .lb-tab, .lb-scope-btn, .st-row, .st-card, .st-search, .br-search, .pcard, .mp-room, .pic-cell, .mx-set-row, .wx-card) { box-shadow: inset -4px 0 0 rgba(77, 225, 210, 0.6); }
+.th-quest .set-primary { border-radius: 0; -webkit-clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%); clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%); }
+.th-quest :is(.set-nav-btn, .fx-nav, .fx-item, .mx-nav, .mx-tile, .mx-row, .pill-btn, .icon-btn, .dm-item, .pt-game, .wx-chip, .wx-hour, .wx-day, .mx-act, .mx-cb) { border-radius: 0; }
+.th-quest :where(.set-row:not(.set-primary), .set-nav-btn, .cp-tile, .set-card, .fx-nav, .fx-item, .memo-item, .cal-day:not(.cal-today), .cal-ev, .cal-frow, .lb-tab, .lb-scope-btn,
+    .st-row, .st-card, .st-search, .br-search, .pcard, .mp-room, .pic-cell, .pill-btn, .icon-btn, .btn:not(.btn-primary), .dm-item, .mx-nav, .mx-tile, .mx-row, .mx-set-row,
+    .mx-cb, .mx-act:not(.mx-act-main), .pt-game, .wx-chip, .wx-hour, .wx-day):focus {
+    background: linear-gradient(90deg, rgba(255, 204, 77, 0.32), rgba(255, 204, 77, 0.07)); box-shadow: inset 0 0 0 2px #ffcc4d, inset 7px 0 0 #ffcc4d; color: #fff3cf; }
+[dir="rtl"].th-quest :where(.set-row:not(.set-primary), .set-nav-btn, .cp-tile, .set-card, .fx-nav, .fx-item, .memo-item, .cal-day:not(.cal-today), .cal-ev, .cal-frow, .lb-tab,
+    .lb-scope-btn, .st-row, .st-card, .st-search, .br-search, .pcard, .mp-room, .pic-cell, .pill-btn, .icon-btn, .btn:not(.btn-primary), .dm-item, .mx-nav, .mx-tile, .mx-row,
+    .mx-set-row, .mx-cb, .mx-act:not(.mx-act-main), .pt-game, .wx-chip, .wx-hour, .wx-day):focus { box-shadow: inset 0 0 0 2px #ffcc4d, inset -7px 0 0 #ffcc4d; }
+.th-quest :is(.set-nav-btn, .fx-nav, .mx-nav).on { background: linear-gradient(90deg, rgba(77, 225, 210, 0.2), rgba(77, 225, 210, 0)); }
+.th-quest :is(.set-nav-btn, .fx-nav, .mx-nav).on:before { border-radius: 0; background: #4de1d2; }
+.th-quest .btn:not(.btn-primary) { background: #16202b; box-shadow: inset 0 0 0 2px rgba(77, 225, 210, 0.45); }
+.th-quest :is(.btn, .set-primary, .pill-btn) { -webkit-clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+    clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px); }
+.th-quest :is(.btn-primary, .set-primary):focus { background: #fff; filter: none; }
+.th-quest :is(.set-title, .screen-title, .dialog-title, .pause-title) { color: #ffcc4d; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+.th-quest .set-title:after, .th-quest .pause-title:after { content: ''; display: block; height: 3px; margin-top: 12px; background: linear-gradient(90deg, #ffcc4d, rgba(255, 204, 77, 0)); }
+[dir="rtl"].th-quest .set-title:after { background: linear-gradient(270deg, #ffcc4d, rgba(255, 204, 77, 0)); }
+.th-quest :is(.cp-title, .set-row-desc, .cp-desc, .fx-detail, .set-val) { color: #9fb3c4; }
+.th-quest .cp-name, .th-quest .set-card-name { letter-spacing: 0.04em; text-transform: uppercase; }
+.th-quest :is(.set-slider-bar, .fx-bar, .gl-bar) { border-radius: 0; } .th-quest :is(.set-slider-fill, .fx-bar-fill, .bar-fill) { border-radius: 0; background: #4de1d2; }
+.th-quest .set-toggle, .th-quest .set-knob { border-radius: 0; }
+.th-quest .set-wp { border-radius: 0; } .th-quest .set-wp.on { border-color: #ffcc4d; }
+.th-quest .mx-menu { border-radius: 0; background: #0b1118; border: 2px solid rgba(77, 225, 210, 0.5); }
+.th-quest .pt { --pt-card: rgba(18, 28, 38, 0.95); --pt-line: rgba(77, 225, 210, 0.18); --pt-r: 0; }
+.th-quest .game-loading { background: radial-gradient(circle at 50% 42%, #1a2632 0%, #070a0f 62%); }
+.th-quest .gl-icon { border-radius: 0; -webkit-clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+/* dialogs, menus, My PC's menu: a HUD frame, gold top edge, notched corners */
+.th-quest :is(.dialog, .pause-box, .dmenu) { border: 0; border-radius: 0; background: linear-gradient(180deg, #121b25, #080c12);
+    box-shadow: inset 0 4px 0 #ffcc4d, inset 0 0 0 2px rgba(77, 225, 210, 0.4);
+    -webkit-clip-path: polygon(0 0, calc(100% - 30px) 0, 100% 30px, 100% 100%, 30px 100%, 0 calc(100% - 30px)); clip-path: polygon(0 0, calc(100% - 30px) 0, 100% 30px, 100% 100%, 30px 100%, 0 calc(100% - 30px)); }
+.th-quest .pause-bg { border-radius: 0; }
+/* notifications: a HUD message, cyan edge, diamond icon, the kind is the edge colour */
+.th-quest .nt { border: 0; border-radius: 0; padding: 18px 30px 18px 22px; background: linear-gradient(90deg, #121c26, #090d13);
+    box-shadow: inset 6px 0 0 #4de1d2, inset 0 0 0 2px rgba(77, 225, 210, 0.35);
+    -webkit-clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 0 100%); clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 0 100%); }
+[dir="rtl"].th-quest .nt { padding: 18px 22px 18px 30px; box-shadow: inset -6px 0 0 #4de1d2, inset 0 0 0 2px rgba(77, 225, 210, 0.35); }
+.th-quest .nt-ok { box-shadow: inset 6px 0 0 #4cd97b, inset 0 0 0 2px rgba(76, 217, 123, 0.4); }
+.th-quest .nt-err { box-shadow: inset 6px 0 0 #ff6b5a, inset 0 0 0 2px rgba(255, 107, 90, 0.45); background: linear-gradient(90deg, #301012, #0e080a); }
+.th-quest .nt-warn { box-shadow: inset 6px 0 0 #ffcc4d, inset 0 0 0 2px rgba(255, 204, 77, 0.45); }
+[dir="rtl"].th-quest .nt-ok { box-shadow: inset -6px 0 0 #4cd97b, inset 0 0 0 2px rgba(76, 217, 123, 0.4); }
+[dir="rtl"].th-quest .nt-err { box-shadow: inset -6px 0 0 #ff6b5a, inset 0 0 0 2px rgba(255, 107, 90, 0.45); }
+[dir="rtl"].th-quest .nt-warn { box-shadow: inset -6px 0 0 #ffcc4d, inset 0 0 0 2px rgba(255, 204, 77, 0.45); }
+.th-quest .nt-ic { border-radius: 0; background: #4de1d2; -webkit-clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.th-quest .nt-warn .nt-ic { background: #ffcc4d; } .th-quest .nt-err .nt-ic { background: #ff6b5a; }
+.th-quest .nt-img { border-radius: 0; }
+.th-quest .nt-title { color: #4de1d2; font-size: 18px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
+.th-quest .nt-warn .nt-title { color: #ffcc4d; } .th-quest .nt-err .nt-title { color: #ff8a7c; } .th-quest .nt-ok .nt-title { color: #7fe6a0; }
+/* MyMusic, Playtime and Weather load their CSS after this file: the same looks, one step stronger */
+html.th-neon :where(.mx-set-row, .wx-card) { border-radius: 16px; background: linear-gradient(180deg, rgba(74, 90, 200, 0.24), rgba(28, 34, 100, 0.3));
+    box-shadow: inset 0 0 0 1px rgba(120, 160, 255, 0.26), inset 0 1px 0 rgba(210, 230, 255, 0.3), inset 0 0 18px rgba(70, 130, 255, 0.12); }
+html.th-neon :where(.mx-nav, .mx-tile, .mx-row, .mx-set-row, .mx-cb, .mx-act:not(.mx-act-main), .mx-mini-open, .pt-game, .wx-chip, .wx-hour, .wx-day):focus {
+    background: linear-gradient(180deg, rgba(104, 122, 245, 0.44), rgba(44, 52, 140, 0.52));
+    box-shadow: inset 0 0 0 2px #d6e4ff, inset 0 0 22px rgba(120, 170, 255, 0.45), 0 0 18px rgba(110, 160, 255, 0.7); }
+html.th-quest :where(.mx-set-row, .wx-card) { border-radius: 0; background: linear-gradient(90deg, rgba(20, 31, 42, 0.96), rgba(11, 17, 24, 0.92)); box-shadow: inset 4px 0 0 rgba(77, 225, 210, 0.6); }
+html.th-quest :where(.mx-nav, .mx-tile, .mx-row, .mx-set-row, .mx-cb, .mx-act:not(.mx-act-main), .mx-mini-open, .pt-game, .wx-chip, .wx-hour, .wx-day):focus {
+    background: linear-gradient(90deg, rgba(255, 204, 77, 0.32), rgba(255, 204, 77, 0.07)); box-shadow: inset 0 0 0 2px #ffcc4d, inset 7px 0 0 #ffcc4d; color: #fff3cf; }
+html.th-quest .mx-art { border-radius: 0; }

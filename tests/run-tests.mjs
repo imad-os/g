@@ -6537,10 +6537,46 @@ async function themeTests(browser, base) {
     await page.evaluate(() => Desktop.closeStart());
     await page.evaluate(() => document.querySelector('#wdg-quick [data-b="music"]').click());
     if (shots) { await page.waitForTimeout(800); await page.evaluate(() => Notify.clear()); await page.screenshot({ path: path.join(shots, 'quest-5-window.png') }); }
+    check(await page.waitForFunction(() => document.activeElement && document.activeElement.closest('.mx') && /255, 204, 77/.test(getComputedStyle(document.activeElement).boxShadow), null, { timeout: 5000 }).then(() => true, () => false), 'Quest: MyMusic\'s focused item has the gold Quest focus');
     await page.evaluate(() => { Win.close(); Win.open('settings', 'personal'); });
     await page.waitForSelector('.set-th', { timeout: 5000 });
     if (shots) { await page.waitForTimeout(400); await page.screenshot({ path: path.join(shots, 'quest-3-control-panel.png') }); }
     await page.evaluate(() => Win.close());
+    // owner request 2026-11-12 (3): the built-in apps, dialogs and notifications follow the theme too
+    const plain = await page.evaluate(() => { Themes.set('win11'); Win.open('settings', 'widgets'); const r = document.querySelector('.set-row');
+        return { win: getComputedStyle(document.querySelector('.window')).backgroundImage, row: getComputedStyle(r).backgroundColor }; });
+    await page.evaluate(() => Win.close());
+    for (const t of ['quest', 'neon']) {
+        await page.evaluate((t) => { Themes.set(t); Win.open('settings', 'widgets'); }, t);
+        await page.waitForSelector('.set-row', { timeout: 5000 });
+        await page.evaluate(() => document.querySelectorAll('.set-row')[1].focus());
+        const a = await page.evaluate(() => { const r = document.querySelectorAll('.set-row'); return { win: getComputedStyle(document.querySelector('.window')).backgroundImage,
+            row: getComputedStyle(r[0]).backgroundImage, foc: getComputedStyle(r[1]).boxShadow }; });
+        check(plain.win === 'none' && /gradient/.test(a.win) && /gradient/.test(a.row) && a.foc !== 'none', t + ': Control Panel (Widgets) has the theme\'s window, rows and focus ' + JSON.stringify([plain, a.win.slice(0, 40), a.row.slice(0, 40), a.foc.slice(0, 40)]));
+        if (shots) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(shots, t + '-apps-1-widgets.png') }); }
+        await page.evaluate(() => { Win.close(); Win.open('settings'); });
+        await page.waitForSelector('.cp-tile', { timeout: 5000 });
+        await page.evaluate(() => document.querySelectorAll('.cp-tile')[1].focus());
+        if (shots) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(shots, t + '-apps-2-control-panel.png') }); }
+        await page.evaluate(() => { Win.close(); Win.open('explorer'); });
+        await page.waitForSelector('.fx-item', { timeout: 5000 });
+        await page.evaluate(() => document.querySelector('.fx-item').focus());
+        check(await page.evaluate(() => /gradient/.test(getComputedStyle(document.querySelector('.window')).backgroundImage) && getComputedStyle(document.querySelector('.fx-item')).boxShadow !== 'none'), t + ': File Explorer follows the theme');
+        if (shots) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(shots, t + '-apps-3-explorer.png') }); }
+        await page.evaluate(() => { Win.close(); Notify.clear(); });
+        await page.waitForTimeout(400);
+        await page.evaluate(() => { Notify.show({ title: 'App Store', text: 'Speedy IPTV was installed', kind: 'ok', timeout: 0 });
+            Notify.show({ title: 'Weather', text: 'Rain in about 2 hours', kind: 'warn', timeout: 0 }); Notify.show({ title: 'Network', text: 'The TV is offline', kind: 'err', timeout: 0 }); });
+        await page.waitForTimeout(600);
+        const nt = await page.evaluate(() => { const c = document.querySelector('#toast .nt'); return c && { bg: getComputedStyle(c).backgroundImage, rad: getComputedStyle(c).borderRadius, clip: getComputedStyle(c).clipPath }; });
+        check(nt && (t === 'neon' ? /gradient/.test(nt.bg) && nt.rad === '26px' : /polygon/.test(nt.clip)), t + ': notification cards use the theme ' + JSON.stringify(nt && [nt.bg.slice(0, 30), nt.rad, nt.clip.slice(0, 20)]));
+        if (shots) await page.screenshot({ path: path.join(shots, t + '-apps-4-notify.png') });
+        await page.evaluate(() => { Notify.clear(); App.confirm('Uninstall Speedy IPTV?', 'Its saved games stay in your account.', function () {}); });
+        await page.waitForTimeout(300);
+        if (shots) await page.screenshot({ path: path.join(shots, t + '-apps-5-dialog.png') });
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(200);
+    }
     // back to Windows 11: the hints go, the widgets stay as the profile left them, plain look again
     await page.evaluate(() => Themes.set('win11'));
     const w = await page.evaluate(() => ({ hints: !!document.getElementById('th-hints'), rings: document.querySelectorAll('#wdg-sysmon .wdg-ring').length, clock: !!document.querySelector('#wdg-weather .wdg-clock'), bar: !!document.querySelector('#wdg-sysmon .wdg-big') }));
