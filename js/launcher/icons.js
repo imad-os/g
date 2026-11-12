@@ -115,8 +115,49 @@ var Icons = (function () {
         repeat: '<g fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 22v-3a6 6 0 0 1 6-6h22M39 26v3a6 6 0 0 1-6 6H11"/><path d="M32 8l5 5-5 5M16 30l-5 5 5 5"/></g>'
     };
 
+    /* Icon packs of the Neon night and Quest themes (owner request 2026-11-12): the same line drawings (G) dressed two ways.
+     * neon  = a dark glass tile, the drawing in a two-colour gradient over a soft wide stroke (the glow: no SVG filter, cheap to draw)
+     * quest = a cyan diamond emblem, the drawing in gold over a dark outline
+     * Only the app icons, Start and Get the app; any other name falls back to the normal icon. */
+    var G = {
+        pc: '<rect x="8" y="10" width="32" height="22" rx="3"/><path d="M24 32v6M16 39h16"/>',
+        store: '<path d="M11 17h26l-2 23H13z"/><path d="M18 17v-3a6 6 0 0 1 12 0v3"/><path d="M19 27l5 5 5-5"/>',
+        browser: '<circle cx="24" cy="24" r="16"/><path d="M8 24h32M24 8c-7 6-7 26 0 32M24 8c7 6 7 26 0 32"/>',
+        calculator: '<rect x="13" y="6" width="22" height="36" rx="4"/><path d="M18 12h12v6H18zM18 26h0M24 26h0M30 26h0M18 34h0M24 34h0M30 34h0"/>',
+        calendar: '<rect x="8" y="11" width="32" height="29" rx="4"/><path d="M8 19h32M16 7v8M32 7v8M16 27h0M24 27h0M32 27h0M16 34h0M24 34h0"/>',
+        weather: '<circle cx="18" cy="17" r="6"/><path d="M18 5v2M6 17h2M9.5 8.5l1.4 1.4M26.5 8.5l-1.4 1.4M16 39h18a7 7 0 0 0 0-14 9 9 0 0 0-17 3 5.5 5.5 0 0 0-1 11z"/>',
+        memo: '<rect x="18" y="6" width="12" height="21" rx="6"/><path d="M12 22a12 12 0 0 0 24 0M24 34v7M18 41h12"/>',
+        music: '<path d="M18 34V12l20-5v23"/><circle cx="13" cy="34" r="5"/><circle cx="33" cy="30" r="5"/>',
+        hourglass: '<path d="M14 7h20M14 41h20M16 7c0 10 8 12 8 17s-8 7-8 17M32 7c0 10-8 12-8 17s8 7 8 17"/>',
+        scores: '<path d="M15 8h18v10a9 9 0 0 1-18 0zM15 11H9a6 6 0 0 0 6 8M33 11h6a6 6 0 0 1-6 8M24 27v7M17 41h14M19 34h10v7H19z"/>',
+        controller: '<path d="M14 16h20a9 9 0 0 1 8.7 11.4l-1.8 6.4a4.5 4.5 0 0 1-7.8 1.5L30 32H18l-3.1 3.3a4.5 4.5 0 0 1-7.8-1.5l-1.8-6.4A9 9 0 0 1 14 16zM15 21v7M11.5 24.5h7M31 22h0M35 27h0"/>',
+        settings: '<circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.6 10.6l4.2 4.2M33.2 33.2l4.2 4.2M10.6 37.4l4.2-4.2M33.2 14.8l4.2-4.2"/>',
+        getapp: '<rect x="14" y="5" width="20" height="38" rx="4"/><path d="M24 13v16M18 23l6 6 6-6M21 38h6"/>',
+        start: '<rect x="8" y="8" width="14" height="14" rx="3"/><rect x="26" y="8" width="14" height="14" rx="3"/><rect x="8" y="26" width="14" height="14" rx="3"/><rect x="26" y="26" width="14" height="14" rx="3"/>'
+    };
+    // neon: two colours per icon (gradient from, to)
+    var NEON = { pc: ['#4fd8ff', '#7c6bff'], store: ['#ff6ad5', '#8a5cff'], browser: ['#3fe0ff', '#3d7bff'], calculator: ['#9be15d', '#00c2a8'],
+                 calendar: ['#ff8a5c', '#ff4f9a'], weather: ['#ffd84d', '#ff8a3d'], memo: ['#ff5f7e', '#ff9a5c'], music: ['#ff5fc8', '#a95cff'],
+                 hourglass: ['#b99cff', '#5ec8ff'], scores: ['#ffd84d', '#ff9f2e'], controller: ['#5effa8', '#2fc3ff'], settings: ['#c2d0ff', '#7c8cff'],
+                 getapp: ['#5effa8', '#18c9b0'], start: ['#5fd0ff', '#a65bff'] };
+    function neon(n) {
+        var c = NEON[n], id = 'nG' + n;
+        return '<defs><linearGradient id="' + id + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + c[0] + '"/><stop offset="1" stop-color="' + c[1] + '"/></linearGradient></defs>' +
+            (n === 'start' ? '' : '<rect x="2" y="2" width="44" height="44" rx="13" fill="#141842" fill-opacity="0.82" stroke="' + c[0] + '" stroke-opacity="0.55" stroke-width="1.5"/>') +
+            '<g transform="' + (n === 'start' ? '' : 'translate(7.7 7.7) scale(0.68)') + '" fill="none" stroke-linecap="round" stroke-linejoin="round">' +
+            '<g stroke="' + c[1] + '" stroke-opacity="0.35" stroke-width="8">' + G[n] + '</g><g stroke="url(#' + id + ')" stroke-width="3.6">' + G[n] + '</g></g>';
+    }
+    function quest(n) {
+        if (n === 'start') return '<path d="M24 3l21 21-21 21L3 24z" fill="#14110a" stroke="#14110a" stroke-width="2"/><g transform="translate(10 10) scale(0.58)" fill="none" stroke="#ffcc4d" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">' + G.start + '</g>';
+        return '<path d="M24 2l22 22-22 22L2 24z" fill="#0f1a22" stroke="#4de1d2" stroke-opacity="0.7" stroke-width="1.6"/><path d="M24 7l17 17-17 17L7 24z" fill="none" stroke="#4de1d2" stroke-opacity="0.22" stroke-width="1"/>' +
+            '<g transform="translate(9.6 9.6) scale(0.6)" fill="none" stroke-linecap="round" stroke-linejoin="round"><g stroke="#05080c" stroke-width="9">' + G[n] + '</g><g stroke="#ffcc4d" stroke-width="4">' + G[n] + '</g></g>';
+    }
+    var PACKS = { neon: neon, quest: quest };
+    function pack() { var id = window.Themes && Themes.current ? Themes.current() : ''; return PACKS[id] || null; }
+
     function svg(name) {
-        return '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">' + (P[name] || P.document) + '</svg>';
+        var pk = G[name] ? pack() : null;
+        return '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">' + (pk ? pk(name) : P[name] || P.document) + '</svg>';
     }
 
     // fills an element with an icon

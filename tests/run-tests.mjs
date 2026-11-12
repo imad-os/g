@@ -6467,7 +6467,16 @@ async function themeTests(browser, base) {
     await page.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
     check(await page.evaluate(() => !Widgets.conf('sysmon').show && !Widgets.conf('quick').show), 'before: only Weather is on (owner decision)');
     await page.evaluate(() => Themes.set('neon'));
-    await page.waitForFunction(() => document.querySelector('#wdg-weather .wdg-ck-h') && document.querySelectorAll('#wdg-sysmon .wdg-ring').length === 3 && document.querySelectorAll('#wdg-quick .wdg-lb').length === 4, null, { timeout: 8000 });
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => !Widgets.conf('sysmon').show && !Widgets.conf('quick').show), 'picking a theme never shows a widget (owner rule)');
+    await page.evaluate(() => { Widgets.set('sysmon', 'show', true); Widgets.set('quick', 'show', true); });
+    await page.waitForFunction(() => document.querySelector('#wdg-weather .wdg-art') && document.querySelectorAll('#wdg-sysmon .wdg-ring').length === 3 && document.querySelectorAll('#wdg-quick .wdg-lb').length === 4, null, { timeout: 8000 });
+    // owner request 2026-11-12 (2): no clock in the Weather card with these themes; their own icon pack on the desktop, the taskbar and Start
+    const pk = await page.evaluate(() => ({ clock: !!document.querySelector('#wdg-weather .wdg-clock'), icon: document.querySelector('#desk-icons [data-app="explorer"] svg').innerHTML.indexOf('nGpc') >= 0,
+        start: document.querySelector('#tb-start svg').innerHTML.indexOf('nGstart') >= 0, tb: document.querySelector('#tb-store svg').innerHTML.indexOf('nGstore') >= 0 }));
+    check(!pk.clock && pk.icon && pk.start && pk.tb, 'Neon night: Weather without the clock, its own icons on the desktop, Start and the taskbar ' + JSON.stringify(pk));
+    await page.evaluate(() => Widgets.setSetting('weather', 'clock', 'yes'));
+    await page.waitForFunction(() => document.querySelector('#wdg-weather .wdg-ck-h'), null, { timeout: 8000 });
     const n = await page.evaluate(() => ({
         cls: document.documentElement.classList.contains('th-neon'), wp: Store.get('wallpaper'),
         on: ['weather', 'sysmon', 'quick'].every((w) => Widgets.conf(w).show),
@@ -6477,7 +6486,7 @@ async function themeTests(browser, base) {
         tb: (() => { const r = document.getElementById('taskbar').getBoundingClientRect(), s = document.getElementById('stage').getBoundingClientRect(); return { l: r.left - s.left, b: s.bottom - r.bottom, rad: getComputedStyle(document.getElementById('taskbar')).borderRadius }; })(),
         title: getComputedStyle(document.getElementById('desk-title')).clip, label: getComputedStyle(document.getElementById('tb-start'), ':after').content
     }));
-    check(n.cls && n.wp === 'nightlake' && n.on, 'Neon night: theme class, its night lake background, Weather + System Monitor + Quick launch turned on ' + JSON.stringify([n.wp, n.on]));
+    check(n.cls && n.wp === 'nightlake' && n.on, 'Neon night: theme class, its night lake background (widgets turned on by the test) ' + JSON.stringify([n.wp, n.on]));
     check(n.time && n.tray.indexOf(n.time) === 0 && /\d{4}/.test(n.date), 'the Weather card shows the clock and the date, the same time as the taskbar ' + JSON.stringify([n.time, n.tray, n.date]));
     check(n.rings.join() === '12%CPU,34%RAM,70%Disk', 'System Monitor draws rings: CPU 12 %, RAM 34 %, disk 70 % (TV systeminfo) ' + n.rings.join());
     check(n.tb.l > 10 && n.tb.b > 10 && n.tb.rad === '30px' && /My PC/.test(n.label), 'the taskbar floats (gaps all round, rounded) with "My PC" beside Start ' + JSON.stringify(n.tb) + n.label);
@@ -6495,7 +6504,6 @@ async function themeTests(browser, base) {
     check(fit.length === 0, 'Neon night: the title and the widgets stay above the taskbar, on screen ' + fit.join());
     // Quick launch: the remote reaches its buttons, OK opens the app
     await page.evaluate(() => document.querySelector('#wdg-quick [data-b="music"]').focus());
-    if (shots) { await page.evaluate(() => document.querySelector('#wdg-sysmon').focus()); await page.evaluate(() => Notify.clear()); await page.waitForTimeout(700); await page.screenshot({ path: path.join(shots, 'neon-1-desktop.png') }); }
     await page.evaluate(() => document.querySelector('#wdg-quick [data-b="store"]').click());
     check(await page.waitForFunction(() => Win.current() === 'store', null, { timeout: 5000 }).then(() => true, () => false), 'Quick launch: OK on App Store opens it');
     if (shots) { await page.waitForTimeout(600); await page.screenshot({ path: path.join(shots, 'neon-2-window.png') }); }
@@ -6507,9 +6515,13 @@ async function themeTests(browser, base) {
     await page.evaluate(() => Widgets.setSetting('weather', 'clock', 'no'));
     await page.waitForFunction(() => !document.querySelector('#wdg-weather .wdg-clock'), null, { timeout: 5000 });
     await page.evaluate(() => Widgets.setSetting('weather', 'clock', 'auto'));
-    // Quest
-    await page.evaluate(() => Themes.set('quest'));
-    await page.waitForFunction(() => document.querySelector('#wdg-weather .wdg-ck-h') && document.querySelectorAll('#wdg-sysmon .wdg-ring').length === 3, null, { timeout: 8000 });
+    if (shots) { await page.waitForTimeout(600); await page.evaluate(() => Notify.clear()); await page.waitForTimeout(500); await page.screenshot({ path: path.join(shots, 'neon-1-desktop.png') }); }
+    // Quest: hidden widgets stay hidden when the theme changes (owner rule 2026-11-12)
+    await page.evaluate(() => { Widgets.set('quick', 'show', false); Themes.set('quest'); });
+    check(await page.evaluate(() => !Widgets.conf('quick').show && !document.getElementById('wdg-quick') && Widgets.conf('sysmon').show), 'changing the theme keeps a hidden widget hidden');
+    await page.evaluate(() => Widgets.set('quick', 'show', true));
+    await page.waitForFunction(() => document.querySelectorAll('#wdg-sysmon .wdg-ring').length === 3, null, { timeout: 8000 });
+    check(await page.evaluate(() => document.querySelector('#desk-icons [data-app="explorer"] svg').innerHTML.indexOf('#ffcc4d') >= 0 && !document.querySelector('#wdg-weather .wdg-clock')), 'Quest: its own icon pack (gold emblems), no clock in Weather');
     await page.evaluate(() => document.activeElement && document.activeElement.blur());
     const q = await page.evaluate(() => ({
         cls: document.documentElement.className.split(' ').filter((c) => c.indexOf('th-') === 0).join(), wp: Store.get('wallpaper'),
@@ -6532,7 +6544,7 @@ async function themeTests(browser, base) {
     // back to Windows 11: the hints go, the widgets stay as the profile left them, plain look again
     await page.evaluate(() => Themes.set('win11'));
     const w = await page.evaluate(() => ({ hints: !!document.getElementById('th-hints'), rings: document.querySelectorAll('#wdg-sysmon .wdg-ring').length, clock: !!document.querySelector('#wdg-weather .wdg-clock'), bar: !!document.querySelector('#wdg-sysmon .wdg-big') }));
-    check(!w.hints && !w.rings && !w.clock && w.bar, 'Windows 11 again: no hints, System Monitor back to its value + bar, no clock in Weather ' + JSON.stringify(w));
+    check(!w.hints && !w.rings && !w.clock && w.bar && await page.evaluate(() => document.querySelector('#desk-icons [data-app="explorer"] svg').innerHTML.indexOf('#ffcc4d') < 0), 'Windows 11 again (its own icons): no hints, System Monitor back to its value + bar, no clock in Weather ' + JSON.stringify(w));
     // Arabic: right to left, the strings translated
     await page.evaluate(() => { I18n.setLang('ar'); Desktop.render(); Themes.set('quest'); });
     await page.waitForTimeout(300);

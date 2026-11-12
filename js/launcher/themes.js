@@ -2,9 +2,9 @@
  * Personalization, or Accounts). Pure CSS (css/themes.css): one class on <html> (th-<id>), no images, no fonts to
  * download, nothing that runs per frame; the default (win11) adds no rule at all. Picking a theme also picks its
  * background, which can be changed after.
- *   Themes.LIST        [{ id, wp, clock, rings, widgets }]: clock = the Weather widget shows the clock beside it (its setting
- *                      "Show the clock" = With the theme), rings = System Monitor draws CPU / RAM / disk rings, widgets = turned on
- *                      when the theme is picked (only turned on, never off; the profile can hide them after)
+ *   Themes.LIST        [{ id, wp, clock, rings, icons }]: clock = the Weather widget shows the clock beside it (its setting
+ *                      "Show the clock" = With the theme), rings = System Monitor draws CPU / RAM / disk rings, icons = own icon pack
+ *                      (js/launcher/icons.js). Owner rule 2026-11-12: a theme NEVER shows or hides a widget.
  *   Themes.current()   the active profile's theme id
  *   Themes.set(id)     saves it for this profile and applies it
  *   Themes.apply()     puts the class on <html> (Desktop.render calls it) */
@@ -19,9 +19,9 @@ var Themes = (function () {
         { id: 'android', wp: 'material' },
         { id: 'ios', wp: 'lagoon' },
         // owner request 2026-11-12: glass cards that glow on a night picture, a floating taskbar
-        { id: 'neon', wp: 'nightlake', clock: true, rings: true, widgets: ['weather', 'sysmon', 'quick'] },
+        { id: 'neon', wp: 'nightlake', rings: true, icons: true },
         // owner request 2026-11-12: an original look taken from game menus (slanted command bar, item slots, button hints)
-        { id: 'quest', wp: 'quest', clock: true, rings: true, widgets: ['weather', 'sysmon', 'quick'] }
+        { id: 'quest', wp: 'quest', rings: true, icons: true }
     ];
 
     function find(id) { for (var i = 0; i < LIST.length; i++) if (LIST[i].id === id) return LIST[i]; return null; }
@@ -59,10 +59,9 @@ var Themes = (function () {
         Store.set('theme', id);
         if (window.Desktop) Desktop.setWallpaper(th.wp);
         apply();
-        if (window.Widgets) {
-            (th.widgets || []).forEach(function (w) { var c = Widgets.conf(w); if (c && !c.show) Widgets.set(w, 'show', true); });
-            Widgets.render();                      // the theme draws some widgets its own way (clock, rings)
-        }
+        // icons (Neon night and Quest have their own pack, js/launcher/icons.js) and widgets drawn the theme's way (rings)
+        if (window.Desktop && document.getElementById('desk-icons')) Desktop.render();
+        else if (window.Widgets) Widgets.render();
     }
 
     return { LIST: LIST, current: current, set: set, apply: apply, find: find };
