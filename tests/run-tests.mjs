@@ -6577,6 +6577,20 @@ async function themeTests(browser, base) {
         await page.keyboard.press('Escape');
         await page.waitForTimeout(200);
     }
+    // owner report 2026-11-12: the loading screen of games and apps (the game page builds no desktop) follows the theme too
+    for (const t of ['neon', 'quest']) {
+        await page.evaluate((t) => Themes.set(t), t);
+        await page.route('**/games/jumper/index.html*', (r) => setTimeout(() => r.continue().catch(() => {}), 6000));
+        await page.goto(base + 'index.html?play=jumper');
+        await page.waitForSelector('#game-loading:not([hidden])', { timeout: 8000 }).catch(() => {});
+        const lt = await page.waitForFunction((t) => document.documentElement.classList.contains('th-' + t) && document.querySelector('#game-loading'), t, { timeout: 8000 }).then(() => true, () => false);
+        await page.evaluate(() => { document.getElementById('game-loading-fill').style.width = '62%'; });
+        check(lt && /gradient/.test(await page.evaluate(() => getComputedStyle(document.getElementById('game-loading')).backgroundImage)), t + ': the game page has the theme, its loading screen follows it');
+        if (shots) { await page.waitForTimeout(200); await page.screenshot({ path: path.join(shots, t + '-apps-6-loading.png') }); }
+        await page.unrouteAll({ behavior: 'ignoreErrors' });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
+    }
     // back to Windows 11: the hints go, the widgets stay as the profile left them, plain look again
     await page.evaluate(() => Themes.set('win11'));
     const w = await page.evaluate(() => ({ hints: !!document.getElementById('th-hints'), rings: document.querySelectorAll('#wdg-sysmon .wdg-ring').length, clock: !!document.querySelector('#wdg-weather .wdg-clock'), bar: !!document.querySelector('#wdg-sysmon .wdg-big') }));

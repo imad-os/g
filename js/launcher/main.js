@@ -270,6 +270,7 @@ var App = (function () {
     // game page: no desktop at all, only the game layer
     function startGame(id) {
         $('desktop').hidden = true;
+        if (window.Themes) Themes.apply();             // the game page builds no desktop: the profile's theme for the loading screen, My PC's menu, cards
         var go = function (g) {
             AppBoot.ready();
             if (!g) return goHome(id);                 // uninstalled or unknown: back to the desktop

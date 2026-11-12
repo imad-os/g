@@ -447,7 +447,6 @@ html.th-quest { --acc: #ffcc4d; --ink: #14110a; }
 .th-neon .set-wp.on { border-color: #9fc2ff; box-shadow: 0 0 16px rgba(110, 160, 255, 0.8); }
 .th-neon .mx-menu { background: linear-gradient(180deg, rgba(36, 44, 110, 0.98), rgba(14, 16, 50, 0.99)); border-color: rgba(124, 150, 255, 0.45); }
 .th-neon .pt { --pt-card: rgba(44, 54, 140, 0.32); --pt-line: rgba(140, 170, 255, 0.18); --pt-r: 20px; }
-.th-neon .game-loading { background: radial-gradient(circle at 50% 42%, #2a3290 0%, #0b0e30 62%); }
 /* bigger panels get the same glass as the widgets: the uneven rim and the corner blooms */
 .th-neon :is(.dialog, .pause-box, .dmenu, .nt, .cp-tile, .set-card) { border: 0; border-radius: 26px; isolation: isolate;
     background: linear-gradient(180deg, rgba(46, 56, 124, 0.9) 0%, rgba(18, 22, 64, 0.94) 45%, rgba(10, 12, 42, 0.96) 100%);
@@ -515,7 +514,6 @@ html.th-quest { --acc: #ffcc4d; --ink: #14110a; }
 .th-quest .set-wp { border-radius: 0; } .th-quest .set-wp.on { border-color: #ffcc4d; }
 .th-quest .mx-menu { border-radius: 0; background: #0b1118; border: 2px solid rgba(77, 225, 210, 0.5); }
 .th-quest .pt { --pt-card: rgba(18, 28, 38, 0.95); --pt-line: rgba(77, 225, 210, 0.18); --pt-r: 0; }
-.th-quest .game-loading { background: radial-gradient(circle at 50% 42%, #1a2632 0%, #070a0f 62%); }
 .th-quest .gl-icon { border-radius: 0; -webkit-clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
 /* dialogs, menus, My PC's menu: a HUD frame, gold top edge, notched corners */
 .th-quest :is(.dialog, .pause-box, .dmenu) { border: 0; border-radius: 0; background: linear-gradient(180deg, #121b25, #080c12);
@@ -548,3 +546,24 @@ html.th-quest :where(.mx-set-row, .wx-card) { border-radius: 0; background: line
 html.th-quest :where(.mx-nav, .mx-tile, .mx-row, .mx-set-row, .mx-cb, .mx-act:not(.mx-act-main), .mx-mini-open, .pt-game, .wx-chip, .wx-hour, .wx-day):focus {
     background: linear-gradient(90deg, rgba(255, 204, 77, 0.32), rgba(255, 204, 77, 0.07)); box-shadow: inset 0 0 0 2px #ffcc4d, inset 7px 0 0 #ffcc4d; color: #fff3cf; }
 html.th-quest .mx-art { border-radius: 0; }
+/* the loading screen of games and apps (game page, owner request 2026-11-12: "you forgot the loading screen") */
+.th-neon .game-loading { background: radial-gradient(900px 600px at 50% 42%, rgba(70, 82, 210, 0.55), rgba(70, 82, 210, 0) 70%),
+    radial-gradient(1000px 600px at 100% 100%, rgba(96, 34, 150, 0.45), rgba(96, 34, 150, 0) 70%), linear-gradient(160deg, #0d1240 0%, #080a26 60%, #120a30 100%); }
+.th-neon .gl-icon { border-radius: 40px; background: linear-gradient(180deg, rgba(60, 74, 170, 0.6), rgba(16, 20, 64, 0.85));
+    box-shadow: inset 0 0 0 2px rgba(170, 205, 255, 0.55), inset 0 0 26px rgba(90, 150, 255, 0.45), 0 0 34px rgba(110, 150, 255, 0.65); }
+.th-neon .gl-title { text-shadow: 0 0 18px rgba(130, 160, 255, 0.7); }
+.th-neon .gl-bar { height: 8px; border-radius: 4px; background: rgba(120, 150, 255, 0.18); box-shadow: inset 0 0 0 1px rgba(150, 180, 255, 0.3); }
+.th-neon .gl-bar .bar-fill { box-shadow: 0 0 12px rgba(140, 120, 255, 0.9); }
+.th-neon .gl-ring { border-color: rgba(120, 150, 255, 0.25); border-top-color: #8fb4ff; }
+.th-neon .gl-status { color: #c3cdff; }
+.th-neon .gl-brand { color: #9aa6e6; }
+.th-quest .game-loading { background: repeating-linear-gradient(0deg, rgba(77, 225, 210, 0.035) 0 1px, rgba(0, 0, 0, 0) 1px 48px),
+    repeating-linear-gradient(90deg, rgba(77, 225, 210, 0.035) 0 1px, rgba(0, 0, 0, 0) 1px 48px), radial-gradient(circle at 50% 42%, #1a2632 0%, #070a0f 62%); }
+.th-quest .gl-icon { background: #ffcc4d; box-shadow: none; padding: 8px; }
+.th-quest .gl-icon img, .th-quest .gl-icon svg { -webkit-clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); background: #121b25; }
+.th-quest .gl-title { color: #ffcc4d; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+.th-quest .gl-bar { height: 14px; border-radius: 0; background: rgba(77, 225, 210, 0.1); box-shadow: inset 0 0 0 2px rgba(77, 225, 210, 0.45); padding: 3px; }
+.th-quest .gl-bar .bar-fill { border-radius: 0; background: repeating-linear-gradient(90deg, #4de1d2 0 18px, rgba(0, 0, 0, 0) 18px 22px); }
+.th-quest .gl-ring { border-radius: 0; border-color: rgba(77, 225, 210, 0.3); border-top-color: #ffcc4d; }
+.th-quest .gl-status { color: #9fb3c4; text-transform: uppercase; letter-spacing: 0.1em; font-size: 22px; font-weight: 700; }
+.th-quest .gl-brand { color: #6f8494; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 700; }
