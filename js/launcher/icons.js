@@ -19,6 +19,18 @@ var Icons = (function () {
                 '<path d="M4 19a4 4 0 0 1 4-4h32a4 4 0 0 1 4 4v18a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z" fill="#ffd36b"/>',
         browser: '<circle cx="24" cy="24" r="19" fill="#1b9de2"/><path d="M24 5a19 19 0 0 1 0 38" fill="#36c6a3"/>' +
                  '<ellipse cx="24" cy="24" rx="8" ry="19" fill="none" stroke="#e9fbff" stroke-width="2.4"/><path d="M5 24h38M8 14h32M8 34h32" stroke="#e9fbff" stroke-width="2.4" fill="none"/>',
+        // Share to the TV: a phone with an arrow down into it (Receiver / Send to TV)
+        receiver: '<rect x="13" y="3" width="22" height="42" rx="5" fill="#2b3a55"/><rect x="16" y="8" width="16" height="30" rx="2" fill="#3fb7ff"/>' +
+                  '<path d="M24 12v15M18 21l6 6 6-6" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="20" y="40" width="8" height="2.4" rx="1.2" fill="#9fb4d6"/>',
+        // MyPhotos: a picture with a sun and hills
+        photos: '<rect x="4" y="8" width="40" height="32" rx="5" fill="#f2f4f8"/><rect x="8" y="12" width="32" height="24" rx="2" fill="#5fb8ff"/>' +
+                '<circle cx="31" cy="19" r="3.6" fill="#ffd54a"/><path d="M8 36l10-12 7 8 5-5 10 9z" fill="#2fbf71"/><path d="M8 36l10-12 7 8z" fill="#239a5a"/>',
+        // MyNotes: a yellow note with lines and a folded corner
+        notes: '<path d="M9 5h24l8 8v30H9z" fill="#ffd54a"/><path d="M33 5v8h8z" fill="#e6b32a"/>' +
+               '<path d="M15 19h20M15 25h20M15 31h14" stroke="#7a5a12" stroke-width="2.6" stroke-linecap="round"/>',
+        // MyVideos: a film frame with a play triangle
+        videos: '<rect x="4" y="9" width="40" height="30" rx="5" fill="#e8384f"/><g fill="#ffb3bd"><rect x="7" y="12" width="4" height="4" rx="1"/><rect x="7" y="22" width="4" height="4" rx="1"/><rect x="7" y="32" width="4" height="4" rx="1"/>' +
+                '<rect x="37" y="12" width="4" height="4" rx="1"/><rect x="37" y="22" width="4" height="4" rx="1"/><rect x="37" y="32" width="4" height="4" rx="1"/></g><path d="M20 16l11 8-11 8z" fill="#fff"/>',
         calculator: '<rect x="9" y="4" width="30" height="40" rx="5" fill="#3b3f4a"/><rect x="13" y="8" width="22" height="9" rx="2" fill="#9ad0ff"/>' +
                     '<g fill="#e6e6e6"><rect x="13" y="21" width="6" height="5" rx="1.5"/><rect x="21" y="21" width="6" height="5" rx="1.5"/><rect x="13" y="29" width="6" height="5" rx="1.5"/><rect x="21" y="29" width="6" height="5" rx="1.5"/><rect x="13" y="37" width="14" height="4" rx="1.5"/></g>' +
                     '<rect x="29" y="21" width="6" height="20" rx="1.5" fill="#4cc2ff"/>',
@@ -135,13 +147,18 @@ var Icons = (function () {
         controller: '<path d="M14 16h20a9 9 0 0 1 8.7 11.4l-1.8 6.4a4.5 4.5 0 0 1-7.8 1.5L30 32H18l-3.1 3.3a4.5 4.5 0 0 1-7.8-1.5l-1.8-6.4A9 9 0 0 1 14 16zM15 21v7M11.5 24.5h7M31 22h0M35 27h0"/>',
         settings: '<circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="13"/><path d="M24 5v6M24 37v6M5 24h6M37 24h6M10.6 10.6l4.2 4.2M33.2 33.2l4.2 4.2M10.6 37.4l4.2-4.2M33.2 14.8l4.2-4.2"/>',
         getapp: '<rect x="14" y="5" width="20" height="38" rx="4"/><path d="M24 13v16M18 23l6 6 6-6M21 38h6"/>',
+        receiver: '<rect x="14" y="5" width="20" height="38" rx="4"/><path d="M24 11v15M18 20l6 6 6-6M21 37h6"/>',
+        photos: '<rect x="6" y="10" width="36" height="28" rx="4"/><circle cx="31" cy="18" r="3"/><path d="M6 34l11-11 8 8 5-5 12 10"/>',
+        notes: '<path d="M10 6h22l6 6v30H10z"/><path d="M16 19h16M16 26h16M16 33h10"/>',
+        videos: '<rect x="6" y="10" width="36" height="28" rx="4"/><path d="M21 18l9 6-9 6z"/>',
         start: '<rect x="8" y="8" width="14" height="14" rx="3"/><rect x="26" y="8" width="14" height="14" rx="3"/><rect x="8" y="26" width="14" height="14" rx="3"/><rect x="26" y="26" width="14" height="14" rx="3"/>'
     };
     // neon: two colours per icon (gradient from, to)
     var NEON = { pc: ['#4fd8ff', '#7c6bff'], store: ['#ff6ad5', '#8a5cff'], browser: ['#3fe0ff', '#3d7bff'], calculator: ['#9be15d', '#00c2a8'],
                  calendar: ['#ff8a5c', '#ff4f9a'], weather: ['#ffd84d', '#ff8a3d'], memo: ['#ff5f7e', '#ff9a5c'], music: ['#ff5fc8', '#a95cff'],
                  hourglass: ['#b99cff', '#5ec8ff'], scores: ['#ffd84d', '#ff9f2e'], controller: ['#5effa8', '#2fc3ff'], settings: ['#c2d0ff', '#7c8cff'],
-                 getapp: ['#5effa8', '#18c9b0'], start: ['#5fd0ff', '#a65bff'] };
+                 getapp: ['#5effa8', '#18c9b0'],
+                 receiver: ['#5fd0ff', '#5effa8'], photos: ['#5effa8', '#ffd84d'], notes: ['#ffd84d', '#ff9f2e'], videos: ['#ff5f7e', '#ff5fc8'], start: ['#5fd0ff', '#a65bff'] };
     function neon(n) {
         var c = NEON[n], id = 'nG' + n;
         return '<defs><linearGradient id="' + id + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + c[0] + '"/><stop offset="1" stop-color="' + c[1] + '"/></linearGradient></defs>' +

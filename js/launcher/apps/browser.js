@@ -549,7 +549,8 @@
             window.addEventListener('blur', onWindowBlur);
             window.addEventListener('message', onMessage);
             // Win.open('browser', 'https://…'): opens on that page (a push notification's link)
-            if (typeof arg === 'string' && /^https:\/\//.test(arg)) { load(arg, true); return view; }
+            // (or a link sent from a phone, Receiver: http too)
+            if (typeof arg === 'string' && /^https?:\/\//.test(arg)) { load(arg, true); return view; }
             return start.querySelector('[data-focus]');
         },
         close: function () {

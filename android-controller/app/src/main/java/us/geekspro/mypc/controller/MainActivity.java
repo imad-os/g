@@ -8,6 +8,8 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
+import android.provider.OpenableColumns;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -35,6 +37,7 @@ import com.journeyapps.barcodescanner.CaptureActivity;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.util.ArrayList;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -61,6 +64,9 @@ import java.util.regex.Pattern;
  *   rotate  (pages before orient) on: both landscape sides follow the phone; off: held on the side it is on
  *   awake   off: the screen may turn off by itself while a controller is connected
  *   bg      off: no foreground service; with the screen off the page pauses and the link drops
+ * Share to the TV (owner request 2026-11-13): the app is in Android's share menu (images, videos, music, files, links, text).
+ * A share is kept by LanServer (port 47800 on the home network, no internet server) and the page opens its Send to TV screen
+ * (js/launcher/apps/receiver.js); the TV's Receiver app finds this phone on the network and takes the shares from it.
  */
 public final class MainActivity extends Activity {
     // the hosted My PC (GitHub Pages; imad-os.github.io/g redirects to the custom domain)
@@ -74,6 +80,8 @@ public final class MainActivity extends Activity {
     private boolean active, motion, playing;
     private boolean optRotate = true, optAwake = true, optBg = true;
     private String optOrient = "";
+    private LanServer lan;
+    private boolean pageReady, sharePending;
 
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     @Override protected void onCreate(Bundle state) {
@@ -88,12 +96,17 @@ public final class MainActivity extends Activity {
             web.post(() -> { if (web != null) web.evaluateJavascript(js, null); });
         });
 
+        startLan();
+
         web = new WebView(this);
         web.setBackgroundColor(getColor(R.color.bg));
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setMediaPlaybackRequiresUserGesture(false);
+ // the Receiver of a TV and the local rooms are plain http on the home network (http://192.168.x.x): the WebView only ever
+        // loads My PC's own pages (Client below hands every other link to the phone's browser)
+        s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         s.setTextZoom(100);                                      // the page sizes its own text for phones
         s.setUserAgentString(s.getUserAgentString() + " MyPCApp/2");
         web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);   // stays important with the screen off
@@ -104,7 +117,76 @@ public final class MainActivity extends Activity {
         web.setWebChromeClient(new Chrome());
         setContentView(web);
         immersive();
-        web.loadUrl(startUrl(getIntent()));
+        boolean shared = takeShare(getIntent());
+        web.loadUrl(shared ? HOME + "?share=1" : startUrl(getIntent()));
+    }
+
+    /* ---------- Share to the TV (LanServer) ---------- */
+
+    private void startLan() {
+        SharedPreferences p = getSharedPreferences("share", MODE_PRIVATE);
+        String id = p.getString("id", "");
+        if (id.isEmpty()) { id = Long.toHexString(new java.security.SecureRandom().nextLong()); p.edit().putString("id", id).apply(); }
+        String name = Build.MODEL == null ? "Android" : Build.MODEL;
+        if (Build.MANUFACTURER != null && !name.toLowerCase(Locale.ROOT).startsWith(Build.MANUFACTURER.toLowerCase(Locale.ROOT)))
+            name = Build.MANUFACTURER.substring(0, 1).toUpperCase(Locale.ROOT) + Build.MANUFACTURER.substring(1) + " " + name;
+        lan = new LanServer(name, id, p.getString("tv", ""), uri -> getContentResolver().openInputStream(Uri.parse(uri)), () -> {
+            String tv = lan.rememberedTv();
+            SharedPreferences sp = getSharedPreferences("share", MODE_PRIVATE);
+            if (!tv.equals(sp.getString("tv", ""))) sp.edit().putString("tv", tv).apply();
+            runOnUiThread(() -> { if (web != null && pageReady) web.evaluateJavascript("window.ShareOut&&ShareOut.changed()", null); });
+        });
+        lan.start();
+    }
+
+    LanServer lan() { return lan; }
+
+    /** true once after a share arrived (the page opens its Send to TV screen) */
+    boolean takePending() { boolean p = sharePending; sharePending = false; return p; }
+
+    // Android's share menu: ACTION_SEND (one text, link or file) / ACTION_SEND_MULTIPLE (several files)
+    @SuppressWarnings("deprecation")
+    private boolean takeShare(Intent i) {
+        if (i == null) return false;
+        String act = i.getAction();
+        if (!Intent.ACTION_SEND.equals(act) && !Intent.ACTION_SEND_MULTIPLE.equals(act)) return false;
+        ArrayList<Uri> uris = new ArrayList<>();
+        if (Intent.ACTION_SEND_MULTIPLE.equals(act)) {
+            ArrayList<Uri> l = i.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+            if (l != null) uris.addAll(l);
+        } else {
+            Uri u = i.getParcelableExtra(Intent.EXTRA_STREAM);
+            if (u != null) uris.add(u);
+        }
+        if (uris.isEmpty() && i.getClipData() != null)
+            for (int k = 0; k < i.getClipData().getItemCount(); k++) { Uri u = i.getClipData().getItemAt(k).getUri(); if (u != null) uris.add(u); }
+        int n = 0;
+        for (Uri u : uris) {
+            if (!"content".equals(u.getScheme()) && !"file".equals(u.getScheme())) continue;
+            String name = null, mime = getContentResolver().getType(u);
+            long size = -1;
+            try (Cursor c = getContentResolver().query(u, new String[] { OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE }, null, null, null)) {
+                if (c != null && c.moveToFirst()) {
+                    int a = c.getColumnIndex(OpenableColumns.DISPLAY_NAME), b = c.getColumnIndex(OpenableColumns.SIZE);
+                    if (a >= 0) name = c.getString(a);
+                    if (b >= 0 && !c.isNull(b)) size = c.getLong(b);
+                }
+            } catch (RuntimeException e) { /* a provider without those columns */ }
+            if (name == null) name = u.getLastPathSegment();
+            if (mime == null || "application/octet-stream".equals(mime)) mime = i.getType();
+            lan.addFile(u.toString(), mime, name, size);
+            n++;
+        }
+        CharSequence text = i.getCharSequenceExtra(Intent.EXTRA_TEXT);
+        if (n == 0 && text != null && text.length() > 0) {
+            String sub = i.getStringExtra(Intent.EXTRA_SUBJECT);
+            lan.addText(text.length() > 20000 ? text.subSequence(0, 20000).toString() : text.toString(), sub);
+            n++;
+        }
+        if (n == 0) return false;
+        sharePending = true;
+        if (!lan.listening()) lan.start();
+        return true;
     }
 
     /* ---------- what the page asks for (Bridge) ---------- */
@@ -237,6 +319,10 @@ public final class MainActivity extends Activity {
 
     @Override protected void onNewIntent(Intent i) {
         super.onNewIntent(i);
+        if (takeShare(i)) {
+            if (pageReady) web.evaluateJavascript("window.ShareOut?(ShareOut.arrived(),1):0", v -> { if (!"1".equals(v)) web.loadUrl(HOME + "?share=1"); });
+            return;
+        }
         Uri u = i.getData();
         if (u != null && u.getQueryParameter("pair") != null) pair(u.toString());
     }
@@ -253,12 +339,14 @@ public final class MainActivity extends Activity {
         @Override public void onPageStarted(WebView v, String url, android.graphics.Bitmap icon) {
             setMotion(false);                                    // a new page starts with no listeners
             setActive(false);
+            pageReady = false;
             playing = isOurs(url) && Uri.parse(url).getQueryParameter("play") != null;
             screenOn();
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) && isOurs(url)) v.evaluateJavascript(bridgeJs, null);
         }
 
         @Override public void onPageFinished(WebView v, String url) {
+            pageReady = isOurs(url);
             if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) && isOurs(url)) v.evaluateJavascript(bridgeJs, null);
         }
 
@@ -335,6 +423,7 @@ public final class MainActivity extends Activity {
     @Override protected void onDestroy() {
         hub.stop();
         LinkService.set(this, false);
+        if (lan != null) lan.stop();
         if (web != null) { web.destroy(); web = null; }
         super.onDestroy();
     }

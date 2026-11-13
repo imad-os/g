@@ -9,4 +9,5 @@
     <string name="scan_error">Could not open the QR scanner</string>
     <string name="scan_no_camera">My PC needs the camera to read the TV\'s QR code</string>
     <string name="retry">Try again</string>
+    <string name="share_label">Send to TV (My PC)</string>
 </resources>

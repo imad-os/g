@@ -401,6 +401,23 @@
   every other key of `getSupportedKeys()` (not volume / power / source / exit) is registered too and sent as `k<code>` with the TV's name as label; needs `app_keys` on.
   Docs GUIDE.md section 21. Tests: `MYPC_ONLY=video node tests/run-tests.mjs`; Speedy itself inside My PC (fake AVPlay + USB drive, the
   checkout `../g_iptv` or `SPEEDY_DIR`, skipped when missing): `MYPC_ONLY=speedy` (its browser tests: `node tests/run.mjs` in g_iptv).
+- **Share to the TV (owner request 2026-11-13, local network only, no Firebase)**: a TV web app cannot listen on a port, so the **phone
+  serves and the TV asks**. APK (MyPCNative 6, `android-controller/.../LanServer.java`, plain Java): My PC is in Android's share menu
+  ("Send to TV (My PC)", ACTION_SEND / SEND_MULTIPLE: pictures, videos, songs, files, links, text); the shares stay on the phone (content://,
+  not copied) and are served on port 47800: `GET /mypc/hello` (`{app:'mypc', share:1, db:1, id, name}`), `/mypc/inbox?tv=&name=&since=&wait=20`
+  (long poll; also tells the phone this TV's Receiver is open), `/mypc/file/<128-bit id>?tv=` (Range; only the TV it was sent to, from its
+  address), `POST /mypc/ack/<id>`, `POST /db` (the offline multiplayer's local rooms hub, `LanDb.java`, owned by that work), OPTIONS with
+  Private Network Access. A share waits until the user taps the TV on the phone's **Send to TV** screen (`sendtv`, `js/launcher/apps/receiver.js`,
+  opened by `?share=1` / `ShareOut.arrived()`), or goes by itself to the TV picked with "Always send to this TV" (SharedPreferences `share`).
+  The WebView allows mixed content (the hosted https page reaches http://192.168.x.x). TV: **Receiver** app (`receiver`) starts `ShareRx`
+  (`js/launcher/share-rx.js`): `Lan.scan` (`js/core/lan.js`: `Lan.ip` = webapis.network.getIp / systeminfo / WebRTC, or `arc_dev_lan_ip` set by
+  hand; asks the /24, 40 at a time, 700 ms each, phones found before first `arc_dev_rx_phones`), then one long poll per phone; keeps running on
+  the desktop page after the window closes (taskbar `#tray-share`, sessionStorage `rx_on` brings it back after a game). Opens: link -> **MyBrowser**
+  (the Browser's new name, also http), text -> **MyNotes** (`apps/notes.js`, profile key `notes`), picture -> **MyPhotos** (`apps/photos.js`,
+  shrunk once to 1920x1080 + 320x180 thumb, IndexedDB `mypc-photos` per profile, 200 max, not backed up), video -> **MyVideos** (`apps/videos.js`,
+  AVPlay through `AppVideo.attach` straight from the phone's URL; `<video>` without AVPlay; profile key `videos`), song -> **MyMusic** (MusicSrc
+  source `lan`). History per profile `rx_hist`. Strings `js/core/i18n-share.js` (keep `rxPrivacy` true). Tests: `MYPC_ONLY=share` (fake phone
+  `tests/lan-phone-mock.mjs` on 127.0.0.23, same protocol as LanServer).
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /
   start failures and timeouts from `game-host.js` (with why: no SDK answer, no `ready()`, given up), uncaught errors of built-in games, the
   SDK's reports (uncaught, rejections, failed files, handler throws, `MyPC.fail`, `MyPC.report`; sent even before `MyPC.init`), and My PC's

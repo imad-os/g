@@ -11,9 +11,10 @@ final class Bridge {
 
     Bridge(MainActivity app) { this.app = app; }
 
-    /** 5: settings() takes "orient" (any / landscape / portrait: My PC can turn upright); 4: the page may use the microphone (getUserMedia, Microphone mode); 3: + settings(); 2: native motion samples,
+    /** 6: Share to the TV (shareInfo / shareSend / shareRemove / shareForget / shareText / sharePending, LanServer on port 47800);
+     *  5: settings() takes "orient" (any / landscape / portrait: My PC can turn upright); 4: the page may use the microphone (getUserMedia, Microphone mode); 3: + settings(); 2: native motion samples,
      *  native QR scanner, link kept with the screen off, exit (1: no exit) */
-    @JavascriptInterface public int version() { return 5; }
+    @JavascriptInterface public int version() { return 6; }
 
     /** {"motion":true,"linear":true,"gyro":true}: which sensors this phone has */
     @JavascriptInterface public String caps() { return app.sensorCaps(); }
@@ -32,4 +33,24 @@ final class Bridge {
 
     /** the controller is connecting / connected (true) or stopped (false): screen on, link kept alive */
     @JavascriptInterface public void active(boolean on) { app.runOnUiThread(() -> app.setActive(on)); }
+
+    /* ---------- Share to the TV (6): the phone's side of the TV's Receiver app (js/launcher/apps/receiver.js) ---------- */
+
+    /** {"ip","port","listening","name","tv","tvs":[{id,name,ip,open}],"items":[{id,kind,mime,name,size,text,state,tv,at}]} */
+    @JavascriptInterface public String shareInfo() { return app.lan().info(); }
+
+    /** sends a waiting share (id "" = every waiting one) to that TV; remember = always send to it from now on */
+    @JavascriptInterface public void shareSend(String id, String tv, boolean remember) { app.lan().send(id == null ? "" : id, tv == null ? "" : tv, remember); }
+
+    /** removes a share from the list (id "" = all) */
+    @JavascriptInterface public void shareRemove(String id) { app.lan().remove(id == null ? "" : id); }
+
+    /** no TV gets the shares by itself any more */
+    @JavascriptInterface public void shareForget() { app.lan().forgetTv(); }
+
+    /** a text or a link typed in My PC on the phone */
+    @JavascriptInterface public void shareText(String text) { if (text != null && !text.trim().isEmpty()) app.lan().addText(text.length() > 20000 ? text.substring(0, 20000) : text, ""); }
+
+    /** true once after Android's share menu sent something (the page opens Send to TV) */
+    @JavascriptInterface public boolean sharePending() { return app.takePending(); }
 }

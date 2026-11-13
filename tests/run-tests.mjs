@@ -47,6 +47,8 @@ import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { startHub } from '../tools/lan-hub.mjs';
+import { execFileSync } from 'node:child_process';
+import { lanPhone } from './lan-phone-mock.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -399,6 +401,7 @@ async function main() {
     if (process.env.MYPC_ONLY === 'calendar') { await calendarTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'clock') { await clockTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'pads') { await padTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'share') { await shareTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'bookmarks') { await bookmarkTests(browser, base); await webTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'lan') { await lanTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'themes') { await themeTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
@@ -1090,7 +1093,7 @@ async function main() {
         check(/\d{1,2}:\d{2}/.test(await page.textContent('#tray-time')) && (await page.textContent('#tray-date')).length > 5, 'taskbar clock shows time and date (' + await page.textContent('#tray-time') + ')');
         check(await page.evaluate(() => document.querySelectorAll('#desk-icons [data-game]').length === 7 && !!document.querySelector('#desk-icons [data-app="explorer"]')), 'desktop icons: 7 games plus apps');
         await page.focus('#tb-start'); await key('Enter');
-        check(await page.evaluate(() => Desktop.startOpen() && document.querySelectorAll('#start-pinned [data-focus]').length === 18), 'Start menu lists 11 apps (with the App Store, Memo, Music, Playtime and Weather) and 7 games');
+        check(await page.evaluate(() => Desktop.startOpen() && document.querySelectorAll('#start-pinned [data-focus]').length === 22), 'Start menu lists 15 apps (with the App Store, Memo, Music, Playtime, Weather, MyVideos, MyPhotos, MyNotes and Receiver) and 7 games');
         await key('Escape');
         check(await page.evaluate(() => !Desktop.startOpen() && document.activeElement.id === 'tb-start'), 'Back closes Start');
         // shortcut menu: hold OK on a shortcut (a short press still opens it), a long press with the mouse or a finger, a right click
@@ -4855,6 +4858,7 @@ async function main() {
     await lanTests(browser, base);
     await videoTests(browser, base);
     await speedyTests(browser, base);
+    await shareTests(browser, base);
 
     await browser.close();
     srv.close();
@@ -7954,4 +7958,150 @@ async function lanTests(browser, base) {
     if (shots) await C.screenshot({ path: path.join(shots, 'net-7-no-hub.png') });
     await C.context().close();
     H.server.close();
+}
+
+// 53. Share to the TV (owner request 2026-11-13): the TV's Receiver finds a phone (the My PC app's LanServer, here
+// tests/lan-phone-mock.mjs on 127.0.0.23) by asking every address of its network, takes what the user sends and opens it:
+// a link in MyBrowser, a text in MyNotes, a picture in MyPhotos, a video in MyVideos (AVPlay, straight from the phone), a song in
+// MyMusic; nothing goes before the user picks the TV on the phone; the phone's Send to TV screen. MYPC_ONLY=share runs only these.
+async function shareTests(browser, base) {
+    console.log('53. Share to the TV: Receiver, MyBrowser / MyNotes / MyPhotos / MyVideos / MyMusic, Send to TV on the phone (local network only)');
+    const shots = process.env.MYPC_SHOTS;
+    const SITE = 'https://web.example.test/';
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mypc-share-'));
+    let webm = null, wav = null;
+    try {
+        execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=640x360:rate=25:duration=4', '-c:v', 'libvpx', '-b:v', '400k', path.join(tmp, 'clip.webm')]);
+        execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', path.join(tmp, 'tone.wav')]);
+        webm = fs.readFileSync(path.join(tmp, 'clip.webm')); wav = fs.readFileSync(path.join(tmp, 'tone.wav'));
+    } catch (e) { console.log('  (no ffmpeg: the video / song checks are skipped)'); }
+    let phone;
+    try { phone = await lanPhone({ host: '127.0.0.23', name: 'Pixel 8' }); } catch (e) { check(false, 'the fake phone could not listen on 127.0.0.23:47800 (' + e.message + ')'); return; }
+    const page = await newPage(browser, base, {});
+    await page.addInitScript(() => { try { localStorage.setItem('arc_dev_lan_ip', '127.0.0.1'); } catch (e) {} });
+    await page.route(SITE + '**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Shared</title><body style="margin:0;background:#fff;font:40px sans-serif">The page the phone shared</body>' }));
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.goto(base + 'index.html');
+    await page.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
+    check(await page.evaluate(() => !!document.querySelector('#desk-icons [data-app="receiver"]') && !document.querySelector('[data-app="sendtv"]')), 'the TV desktop has Receiver (and no Send to TV)');
+    check(await page.evaluate(() => I18n.t('browser') === 'MyBrowser' && I18n.t('music') === 'MyMusic' && I18n.t('photos') === 'MyPhotos' && I18n.t('notes') === 'MyNotes' && I18n.t('videos') === 'MyVideos'), 'the apps are called MyBrowser, MyMusic, MyPhotos, MyNotes, MyVideos');
+    await page.evaluate(() => document.querySelector('#desk-icons [data-app="receiver"]').click());
+    const t0 = Date.now();
+    const found = await page.waitForFunction(() => ShareRx.state().phones.length === 1, null, { timeout: 20000 }).then(() => true, () => false);
+    check(found && await page.evaluate(() => ShareRx.state().phones[0].ip === '127.0.0.23' && ShareRx.state().phones[0].name === 'Pixel 8'), 'Receiver finds the phone by asking the addresses of its network (' + (Date.now() - t0) + ' ms)');
+    await page.waitForFunction(() => /Ready for Pixel 8/.test(document.querySelector('.rx-status').textContent), null, { timeout: 5000 }).catch(() => {});
+    check(await page.evaluate(() => /Ready for Pixel 8/.test(document.querySelector('.rx-status').textContent) && !document.getElementById('tray-share').hidden), 'it says it is ready for the phone and the taskbar shows that Receiver is on');
+    await page.waitForTimeout(400);
+    const tv = phone.openTvs()[0];
+    check(!!tv && /^My PC/.test(tv.name), 'the phone sees this TV\'s Receiver open (' + (tv && tv.name) + ')');
+    if (shots) await page.screenshot({ path: shots + '/share-1-receiver.png' });
+    if (!tv) { await phone.close(); await page.context().close(); return; }
+    // a link waits on the phone until the user picks the TV
+    const l1 = phone.addText('Look at this ' + SITE + 'page');
+    await page.waitForTimeout(800);
+    check(await page.evaluate(() => Win.current() === 'receiver'), 'nothing reaches the TV before the user picks it on the phone');
+    phone.send('', tv.id, true);
+    const br = await page.waitForFunction(() => Win.current() === 'browser', null, { timeout: 8000 }).then(() => true, () => false);
+    check(br && await page.evaluate((u) => document.querySelector('.br-addr').textContent === u, SITE + 'page'), 'a shared link ("text + one address") opens in MyBrowser');
+    await page.waitForTimeout(300);
+    check(phone.state(l1) === 'taken', 'the TV tells the phone it opened it');
+    if (shots) await page.screenshot({ path: shots + '/share-2-link-browser.png' });
+    // "Always send to this TV": the next ones go by themselves
+    phone.addText('Shopping list\nmilk\neggs\nmint tea', 'Groceries');
+    const nt = await page.waitForFunction(() => Win.current() === 'notes', null, { timeout: 8000 }).then(() => true, () => false);
+    check(nt && await page.evaluate(() => /mint tea/.test(document.querySelector('.nt-text').textContent) && /Groceries/.test(document.querySelector('.nt-title').textContent) && /From Pixel 8/.test(document.querySelector('.nt-meta').textContent)), 'a text goes by itself to the remembered TV and opens in MyNotes');
+    if (shots) await page.screenshot({ path: shots + '/share-3-notes.png' });
+    // a picture: shrunk once to the screen, saved on the TV, shown in MyPhotos
+    const jpg = fs.readFileSync(path.join(ROOT, 'wallpapers', 'nightlake.jpg'));
+    const p1 = phone.addFile(jpg, 'image/jpeg', 'lake.jpg');
+    const ph = await page.waitForFunction(() => Win.current() === 'photos' && document.querySelector('.ph-full') && document.querySelector('.ph-full').naturalWidth > 0, null, { timeout: 10000 }).then(() => true, () => false);
+    check(ph && await page.evaluate(() => { const i = document.querySelector('.ph-full'); return i.naturalWidth <= 1920 && i.naturalHeight <= 1080 && /^blob:/.test(i.src); }), 'a picture opens in MyPhotos, kept on the TV at screen size (not the phone\'s file)');
+    await page.waitForTimeout(200);
+    check(phone.state(p1) === 'taken', 'the picture is marked opened on the phone');
+    if (shots) await page.screenshot({ path: shots + '/share-4-photo.png' });
+    phone.addFile(fs.readFileSync(path.join(ROOT, 'wallpapers', 'quest.jpg')), 'image/jpeg', 'quest.jpg');
+    await page.waitForFunction(() => Win.current() === 'photos' && /2$/.test(document.getElementById('win-title').textContent), null, { timeout: 10000 }).catch(() => {});
+    await page.keyboard.press('ArrowRight'); await page.waitForTimeout(300);
+    check(await page.evaluate(() => /2 \/ 2/.test(document.getElementById('win-title').textContent)), 'Right on the picture shows the other photo ' + await page.evaluate(() => document.getElementById('win-title').textContent));
+    await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+    check(await page.evaluate(() => document.querySelectorAll('.ph-tile img').length === 2), 'Back shows all the photos as thumbnails');
+    if (shots) await page.screenshot({ path: shots + '/share-5-photos-grid.png' });
+    if (webm) {
+        // a video: played straight from the phone (here a <video>: no TV player in this browser)
+        phone.addFile(webm, 'video/webm', 'Holiday clip.webm');
+        const vd = await page.waitForFunction(() => Win.current() === 'videos' && document.querySelector('.vd-video') && document.querySelector('.vd-video').currentTime > 0.3, null, { timeout: 12000 }).then(() => true, () => false);
+        check(vd && await page.evaluate(() => /^http:\/\/127\.0\.0\.23:47800\/mypc\/file\//.test(document.querySelector('.vd-video').src)), 'a video opens in MyVideos and plays straight from the phone (with Range)');
+        check(phone.log.some((l) => /GET \/mypc\/file\//.test(l)), 'the TV read the video from the phone');
+        await page.waitForTimeout(400);
+        if (shots) await page.screenshot({ path: shots + '/share-6-video.png' });
+        await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+        check(await page.evaluate(() => Win.current() === 'videos' && !document.querySelector('.vd-video') && document.querySelectorAll('.vd-open').length === 1), 'Back stops it and lists the shared videos');
+        // a song: MyMusic plays it from the phone
+        phone.addFile(wav, 'audio/wav', 'Tone 440.wav');
+        const mu = await page.waitForFunction(() => Win.current() === 'music' && Music.state().playing && Music.state().track && Music.state().track.s === 'lan', null, { timeout: 12000 }).then(() => true, () => false);
+        check(mu, 'a song plays in MyMusic, straight from the phone ' + await page.evaluate(() => JSON.stringify(Music.state().error || '')));
+        if (shots) await page.screenshot({ path: shots + '/share-7-song.png' });
+        await page.evaluate(() => Music.stop());
+    }
+    // Receiver lists what came; OK on one opens it again
+    await page.evaluate(() => Win.open('receiver'));
+    await page.waitForTimeout(300);
+    const hist = await page.evaluate(() => [...document.querySelectorAll('.rx-item .rx-it-n')].map((e) => e.textContent));
+    check(hist.length >= 4 && /^Text: Shopping/.test(hist.find((h) => /^Text/.test(h)) || '') && hist.some((h) => /^Link: https:\/\/web\.example\.test\/page$/.test(h)), 'Receiver lists what was received ' + JSON.stringify(hist));
+    if (shots) await page.screenshot({ path: shots + '/share-8-receiver-history.png' });
+    // closing Receiver keeps receiving on the desktop
+    await page.evaluate(() => Win.close());
+    phone.addText('https://web.example.test/second');
+    check(await page.waitForFunction(() => Win.current() === 'browser', null, { timeout: 8000 }).then(() => true, () => false), 'with the Receiver window closed, a link still opens');
+    // Stop receiving: the phone sees the TV leave (no more requests)
+    await page.evaluate(() => ShareRx.stop());
+    const n = phone.log.length; await page.waitForTimeout(1500);
+    check(phone.log.length === n && await page.evaluate(() => document.getElementById('tray-share').hidden), 'Stop receiving asks the phone nothing more and the taskbar mark goes');
+    check(!page.errors.length, 'no page errors ' + page.errors.join(' | '));
+    await page.context().close();
+
+    // MyVideos on the TV: AVPlay plays the phone's address, the window lets the picture through
+    if (webm) {
+        const tvp = await newPage(browser, base, {});
+        await tvp.addInitScript(FAKE_AVPLAY);
+        await tvp.setViewportSize({ width: 1920, height: 1080 });
+        await tvp.goto(base + 'index.html');
+        await tvp.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
+        await tvp.evaluate(() => { const id = Videos.add({ n: 'Clip', u: 'http://192.168.1.23:47800/mypc/file/abc?tv=x', from: 'Pixel 8', mime: 'video/mp4' }); Win.open('videos', id); });
+        await tvp.waitForFunction(() => window.__av && window.__av.state === 'PLAYING', null, { timeout: 5000 }).catch(() => {});
+        check(await tvp.evaluate(() => window.__av.url === 'http://192.168.1.23:47800/mypc/file/abc?tv=x' && document.documentElement.classList.contains('av-video') && getComputedStyle(document.getElementById('window')).backgroundColor === 'rgba(0, 0, 0, 0)'), 'on the TV MyVideos plays the phone\'s address with AVPlay, My PC\'s window lets the picture through');
+        await tvp.keyboard.press('Enter'); await tvp.waitForTimeout(100);
+        check(await tvp.evaluate(() => window.__av.state === 'PAUSED'), 'OK pauses it');
+        await tvp.keyboard.press('ArrowRight'); await tvp.waitForTimeout(100);
+        check(await tvp.evaluate(() => window.__av.log.some((l) => /^seek \d+/.test(l))), 'Right moves 10 s');
+        await tvp.keyboard.press('Escape'); await tvp.waitForTimeout(150);
+        check(await tvp.evaluate(() => window.__av.state === 'NONE' && !document.documentElement.classList.contains('av-video')), 'Back closes the TV\'s player');
+        await tvp.context().close();
+    }
+
+    // the phone (the My PC app, MyPCNative 6): Send to TV lists the shares and the TVs whose Receiver is open
+    const ph2 = await newPage(browser, base, {}, { phone: true });
+    await ph2.addInitScript(() => {
+        const s = { ip: '192.168.1.23', port: 47800, listening: true, name: 'Pixel 8', tv: '', tvs: [{ id: 'tv-1', name: 'My PC (QE55Q80)', ip: '192.168.1.40', open: true }],
+            items: [{ id: 'a1', kind: 'file', mime: 'image/jpeg', name: 'IMG_2041.jpg', size: 2400000, text: '', state: 'wait', tv: '', at: 1 },
+                    { id: 'a2', kind: 'text', mime: 'text/plain', name: '', size: 30, text: 'https://www.example.com/article', state: 'taken', tv: 'tv-1', at: 2 }] };
+        window.__sent = [];
+        window.MyPCNative = { version: () => 6, caps: () => '{}', motion() {}, settings() {}, active() {}, exit() {},
+            shareInfo: () => JSON.stringify(s), sharePending: () => !window.__took && (window.__took = true),
+            shareSend: (id, tv, rem) => { window.__sent.push([id, tv, rem]); s.items.forEach((x) => { if (x.state === 'wait') { x.state = 'sent'; x.tv = tv; } }); if (rem) s.tv = tv; window.ShareOut && ShareOut.changed(); },
+            shareRemove() {}, shareForget() {}, shareText(t) { window.__sent.push(['text', t]); } };
+    });
+    await ph2.goto(base + 'index.html');
+    const opened = await ph2.waitForFunction(() => window.Win && Win.current() === 'sendtv', null, { timeout: 15000 }).then(() => true, () => false);
+    check(opened && await ph2.evaluate(() => !!document.querySelector('[data-app="sendtv"]') && !document.querySelector('[data-app="receiver"]')), 'a share from Android\'s menu opens Send to TV on the phone (the desktop has Send to TV, no Receiver)');
+    check(await ph2.evaluate(() => /Send to My PC \(QE55Q80\)/.test(document.querySelector('.st-tv .rx-main').textContent) && [...document.querySelectorAll('.st-item')].some((e) => /IMG_2041\.jpg.*Waiting/.test(e.textContent))), 'it lists the TV with Receiver open and the photo waiting');
+    if (shots) await ph2.screenshot({ path: shots + '/share-9-phone-send.png' });
+    await ph2.evaluate(() => document.querySelector('.st-tv .rx-main').click());
+    await ph2.waitForTimeout(100);
+    check(await ph2.evaluate(() => JSON.stringify(window.__sent[0]) === '["","tv-1",true]' && /Goes to My PC/.test(document.querySelector('.st-tv').textContent)), 'Send to <TV> sends what waits and remembers that TV');
+    if (shots) await ph2.screenshot({ path: shots + '/share-10-phone-sent.png' });
+    check(!ph2.errors.length, 'no page errors on the phone ' + ph2.errors.join(' | '));
+    await ph2.context().close();
+    await phone.close();
+    fs.rmSync(tmp, { recursive: true, force: true });
 }

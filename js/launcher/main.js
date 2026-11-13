@@ -185,6 +185,7 @@ var App = (function () {
     // Play / Pause (and P), ⏭ ⏮ ⏩ ⏪ ⏹: the Music player, once it has songs. The Memo app keeps Play / Pause for its memos.
     function mediaKey(action, repeat) {
         if (typeof Music === 'undefined' || !Music.has() || Keyboard.isOpen()) return false;
+        if (Win.current() === 'videos') return false;           // MyVideos plays / pauses / seeks its own video
         if (action === 'pause') {
             if (Win.current() === 'memo') return false;
             if (!repeat) { Music.toggle(); toast(Music.state().playing ? '▶  ' + Music.state().title : '❚❚  ' + I18n.t('wgPause'), { id: 'music', kind: 'info', timeout: 2500 }); }
@@ -433,6 +434,12 @@ var App = (function () {
                 setTimeout(function () { Win.open('gamepad', { pair: pair.toLowerCase() }); }, 300);
             } else if (param('ctrl') === '1') {                   // the Android controller app (android-controller/) opens on it
                 setTimeout(function () { Win.open('gamepad'); }, 300);
+            }
+            ShareRx.resume();                                    // Receiver was on before a game / app page in this session
+            // a share from Android's share menu (the My PC app): its Send to TV screen
+            if (window.ShareOut && (param('share') === '1' || ShareOut.pending())) {
+                try { history.replaceState(null, '', page('')); } catch (e2) {}
+                setTimeout(function () { Win.open('sendtv'); }, 300);
             }
             if (!ProfilesUI.screenOpen()) Shortcuts.resume();         // a shortcut pressed in a game that asked to open something here
             Backup.start();

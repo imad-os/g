@@ -1,0 +1,127 @@
+/* Share to the TV (owner request 2026-11-13): Receiver / Send to TV (js/launcher/apps/receiver.js), MyNotes, MyPhotos, MyVideos.
+ * Light for small TVs: no blur, no shadows that move, transform / opacity only for what changes. */
+
+/* ---------- taskbar: Receiver is on ---------- */
+.tray-share { display: block; width: 30px; height: 30px; margin: 0 10px; color: #8a8a8a; }
+.tray-share.on { color: #4cc2ff; }
+.tray-share svg { display: block; width: 100%; height: 100%; }
+
+/* ---------- Receiver (TV) and Send to TV (phone) ---------- */
+.rx, .st { width: 1240px; max-width: calc(var(--sw) - 64px); height: 100%; margin: 0 auto; padding: 36px 0 40px; overflow-y: auto; }
+.rx-head { display: flex; align-items: center; gap: 32px; }
+.rx-art { flex: none; width: 120px; height: 120px; }
+.rx-art svg { width: 100%; height: 100%; }
+.rx-title { margin: 0 0 10px; font-size: 40px; font-weight: 600; }
+.rx-help { margin: 0; font-size: 26px; line-height: 1.4; color: #c8c8c8; }
+.rx-status { display: flex; align-items: center; gap: 16px; margin-top: 30px; padding: 20px 26px; border-radius: 12px; background: #2b2b2b; font-size: 28px; }
+.rx-dot { flex: none; width: 16px; height: 16px; border-radius: 50%; background: #777; }
+.rx-status.on .rx-dot, .st-tv .rx-dot { background: #3ccf7a; }
+.rx-prog { height: 8px; margin-top: 10px; border-radius: 4px; background: #333; overflow: hidden; }
+.rx-prog-f { width: 100%; height: 100%; background: #4cc2ff; transform-origin: 0 50%; transition: transform .3s linear; }
+[dir="rtl"] .rx-prog-f { transform-origin: 100% 50%; }
+.rx-addr { margin-top: 14px; font-size: 24px; color: #9a9a9a; direction: ltr; unicode-bidi: isolate; }
+.rx-note { margin: 12px 0 0; font-size: 22px; color: #9a9a9a; }
+.rx-bar { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 26px; }
+.rx-btn { padding: 16px 30px; border-radius: 40px; background: #333; color: #fff; font-size: 26px; white-space: nowrap; }
+.rx-btn:focus { background: #4a4a4a; box-shadow: 0 0 0 4px #fff; }
+.rx-main { background: #0f6cbd; }
+.rx-main:focus { background: #2a86d6; }
+.rx-sub { margin: 36px 0 14px; font-size: 28px; font-weight: 600; color: #ddd; }
+.rx-list { display: flex; flex-direction: column; gap: 10px; }
+.rx-item, .st-item { display: flex; align-items: center; gap: 20px; width: 100%; padding: 16px 24px; border-radius: 10px; background: #2b2b2b; font-size: 26px; text-align: start; }
+.rx-item:focus { background: #3a3a3a; box-shadow: 0 0 0 4px #fff; }
+.rx-ic { flex: none; width: 48px; height: 48px; }
+.rx-ic svg { width: 100%; height: 100%; }
+.rx-it { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.rx-it-n { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.rx-it-s { margin-top: 4px; font-size: 21px; color: #9a9a9a; }
+.rx-none { padding: 24px; font-size: 24px; color: #9a9a9a; }
+.rx-privacy { margin: 30px 0 0; font-size: 20px; color: #8a8a8a; }
+.st-tvs { display: flex; flex-direction: column; gap: 10px; }
+.st-tv { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; padding: 16px 24px; border-radius: 10px; background: #263445; font-size: 26px; }
+.st-tv-n { flex: 1; font-weight: 600; }
+.st-auto { font-size: 21px; color: #9fd6ff; }
+.st-check { display: block; position: static; width: auto; float: none; text-align: start; margin-top: 14px; padding: 10px 0; font-size: 26px; color: #ddd; background: none; }
+.st-check:focus { box-shadow: 0 0 0 4px #fff; border-radius: 8px; }
+.st-taken { color: #3ccf7a; }
+.st-failed { color: #ff7b7b; }
+.st-sent { color: #4cc2ff; }
+
+/* ---------- MyNotes ---------- */
+.nt { display: flex; height: 100%; }
+.nt-side { flex: none; width: 560px; padding: 28px 24px; border-inline-end: 1px solid #2d2d2d; display: flex; flex-direction: column; }
+.nt-new { padding: 16px 28px; border-radius: 40px; background: #e6b32a; color: #1a1400; font-size: 26px; font-weight: 600; align-self: flex-start; }
+.nt-new:focus { box-shadow: 0 0 0 4px #fff; }
+.nt-list { flex: 1; margin-top: 20px; overflow-y: auto; }
+.nt-item { display: flex; flex-direction: column; width: 100%; margin-bottom: 8px; padding: 14px 20px; border-radius: 10px; background: #2b2b2b; text-align: start; }
+.nt-item.on { background: #3b3420; }
+.nt-item:focus { box-shadow: 0 0 0 4px #fff; }
+.nt-it-t { font-size: 25px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.nt-it-s { margin-top: 4px; font-size: 19px; color: #9a9a9a; }
+.nt-main { flex: 1; min-width: 0; padding: 32px 48px; display: flex; flex-direction: column; }
+.nt-title { font-size: 34px; font-weight: 600; }
+.nt-meta { margin: 6px 0 18px; font-size: 21px; color: #9a9a9a; }
+.nt-text { flex: 1; padding: 24px 28px; border-radius: 12px; background: #fff8dc; color: #2b2410; font-size: 30px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; overflow-y: auto; }
+.nt-text:focus { box-shadow: 0 0 0 4px #e6b32a; }
+.nt-bar { display: flex; gap: 16px; margin-top: 20px; }
+.nt-btn { padding: 14px 28px; border-radius: 40px; background: #333; color: #fff; font-size: 25px; }
+.nt-btn:focus { background: #4a4a4a; box-shadow: 0 0 0 4px #fff; }
+.nt-link { background: #0f6cbd; }
+.nt-del:focus { background: #8a2b2b; }
+.nt-empty { margin: auto; max-width: 760px; font-size: 28px; color: #9a9a9a; text-align: center; }
+
+/* ---------- MyPhotos ---------- */
+.ph { height: 100%; padding: 26px 40px; overflow-y: auto; }
+.ph-count { margin-bottom: 16px; font-size: 24px; color: #9a9a9a; }
+.ph-grid { display: grid; grid-template-columns: repeat(5, 320px); gap: 20px; justify-content: center; }
+.ph-tile { width: 320px; height: 180px; padding: 0; border-radius: 10px; overflow: hidden; background: #2b2b2b; }
+.ph-tile img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ph-tile:focus { box-shadow: 0 0 0 5px #fff; transform: scale(1.04); }
+.ph-empty { margin: 160px auto 0; max-width: 900px; font-size: 28px; line-height: 1.4; color: #9a9a9a; text-align: center; }
+.ph-one { position: relative; width: 100%; height: 100%; background: #000; overflow: hidden; }
+.ph-stage { position: absolute; left: 0; top: 0; width: 100%; height: 100%; padding: 0; background: #000; }
+.ph-stage:focus { box-shadow: inset 0 0 0 4px rgba(255, 255, 255, .5); }
+.ph-full { display: block; width: 100%; height: 100%; object-fit: contain; transition: transform .25s; }
+.ph-cap { position: absolute; left: 32px; top: 20px; padding: 8px 18px; border-radius: 8px; background: rgba(0, 0, 0, .55); font-size: 22px; color: #eee; }
+.ph-bar { position: absolute; left: 0; right: 0; bottom: 60px; display: flex; justify-content: center; gap: 16px; }
+.ph-btn { padding: 14px 28px; border-radius: 40px; background: rgba(40, 40, 40, .85); color: #fff; font-size: 25px; }
+.ph-btn:focus { background: #fff; color: #111; }
+.ph-btn.on { background: #0f6cbd; }
+.ph-del:focus { background: #ff7b7b; color: #111; }
+.ph-hint { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; font-size: 20px; color: #aaa; }
+
+/* ---------- MyVideos ---------- */
+.vd { height: 100%; padding: 30px 0; overflow-y: auto; }
+.vd-list { width: 1240px; max-width: calc(var(--sw) - 64px); margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+.vd-item { display: flex; gap: 12px; }
+.vd-open { flex: 1; display: flex; align-items: center; gap: 20px; padding: 16px 24px; border-radius: 10px; background: #2b2b2b; font-size: 26px; text-align: start; min-width: 0; }
+.vd-open:focus, .vd-rm:focus { background: #3a3a3a; box-shadow: 0 0 0 4px #fff; }
+.vd-ic { flex: none; width: 52px; height: 52px; }
+.vd-ic svg { width: 100%; height: 100%; }
+.vd-tx { display: flex; flex-direction: column; min-width: 0; }
+.vd-n { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.vd-s { margin-top: 4px; font-size: 21px; color: #9a9a9a; }
+.vd-rm { padding: 0 26px; border-radius: 10px; background: #2b2b2b; font-size: 22px; color: #ccc; }
+.vd-play { position: relative; width: 100%; height: 100%; }
+.vd-video { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: #000; object-fit: contain; }
+.vd-busy { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); padding: 14px 30px; border-radius: 30px; background: rgba(0, 0, 0, .6); font-size: 28px; }
+.vd-bar { position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 60px 34px; background: linear-gradient(transparent, rgba(0, 0, 0, .8)); transition: opacity .3s; }
+.vd-bar.vd-hide { opacity: 0; }
+.vd-title { font-size: 30px; font-weight: 600; margin-bottom: 14px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.vd-track { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, .25); overflow: hidden; }
+.vd-fill { width: 100%; height: 100%; background: #e8384f; transform: scaleX(0); transform-origin: 0 50%; }
+[dir="rtl"] .vd-fill { transform-origin: 100% 50%; }
+.vd-row { display: flex; align-items: center; gap: 16px; margin-top: 18px; }
+.vd-btn { padding: 12px 26px; border-radius: 40px; background: rgba(60, 60, 60, .85); color: #fff; font-size: 25px; }
+.vd-btn:focus { background: #fff; color: #111; }
+.vd-main { min-width: 190px; }
+.vd-time { margin-inline-start: 14px; font-size: 25px; direction: ltr; }
+.vd-hint { margin-inline-start: auto; font-size: 20px; color: #aaa; }
+/* while a video plays: no title bar, and the TV's picture (AVPlay, behind the page) shows through My PC's window */
+html.vd-playing .win-bar { display: none; }
+html.vd-playing .app-videos { top: 0; height: var(--sh); }
+html.av-video .window, html.av-video .win-body, html.av-video .vd-play { background: transparent !important; }
+html.av-video .window:before, html.av-video .window:after { display: none !important; }
+/* a phone held upright (1080 wide) */
+.tall .ph-grid { grid-template-columns: repeat(3, 320px); }
+.tall .nt-side { width: 400px; }

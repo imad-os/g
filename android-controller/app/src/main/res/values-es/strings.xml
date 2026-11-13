@@ -9,4 +9,5 @@
     <string name="scan_error">No se pudo abrir el lector de QR</string>
     <string name="scan_no_camera">El mando My PC necesita la cámara para leer el código QR de la TV</string>
     <string name="retry">Reintentar</string>
+    <string name="share_label">Enviar a la TV (My PC)</string>
 </resources>

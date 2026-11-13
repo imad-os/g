@@ -9,4 +9,5 @@
     <string name="scan_error">تعذر فتح قارئ رمز QR</string>
     <string name="scan_no_camera">تحتاج وحدة التحكم My PC إلى الكاميرا لقراءة رمز QR على التلفاز</string>
     <string name="retry">إعادة المحاولة</string>
+    <string name="share_label">إرسال إلى التلفاز (My PC)</string>
 </resources>

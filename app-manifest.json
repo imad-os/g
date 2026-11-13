@@ -1,5 +1,5 @@
 {
-  "build": 173,
+  "build": 174,
   "version": "3.0.0",
   "shell": 1,
   "css": [
@@ -7,7 +7,8 @@
     "css/themes.css",
     "css/playtime.css",
     "css/weather.css",
-    "css/music.css"
+    "css/music.css",
+    "css/share.css"
   ],
   "js": [
     "js/core/clock.js",
@@ -23,6 +24,7 @@
     "js/core/lan-db.js",
     "js/core/rooms.js",
     "js/core/netlink.js",
+    "js/core/lan.js",
     "js/core/sensor-proto.js",
     "js/core/motion.js",
     "js/core/motion-train.js",
@@ -63,6 +65,7 @@
     "js/core/i18n-drive.js",
     "js/core/i18n-copy.js",
     "js/core/i18n-net.js",
+    "js/core/i18n-share.js",
     "js/core/a11y.js",
     "js/core/scores.js",
     "js/core/audio.js",
@@ -95,6 +98,11 @@
     "js/launcher/apps/music.js",
     "js/launcher/apps/playtime.js",
     "js/launcher/apps/weather.js",
+    "js/launcher/apps/notes.js",
+    "js/launcher/apps/photos.js",
+    "js/launcher/apps/videos.js",
+    "js/launcher/share-rx.js",
+    "js/launcher/apps/receiver.js",
     "js/core/music-viz.js",
     "js/launcher/music-saver.js",
     "js/launcher/apps/scores.js",
