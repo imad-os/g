@@ -821,12 +821,12 @@
     function asVal(g, k) {
         var v = GameHost.appPrefs(g.id)[k];
         if (v !== undefined) return v;
-        return k === 'bg' ? asBgDefault(g) : k === 'keys' ? Store.get('app_keys', true) !== false : k === 'direct';
+        return k === 'bg' ? asBgDefault(g) : k === 'keys' ? Store.get('app_keys', true) !== false : false;
     }
     function asSummary(g) {
         var o = GameHost.appPrefs(g.id), l = [];
         if (o.bg !== undefined) l.push(t('asBg') + ': ' + t(o.bg ? 'on' : 'off'));
-        if (o.direct === false) l.push(t('asDirect') + ': ' + t('asBlocked'));
+        if (o.direct === true) l.push(t('asDirect') + ': ' + t('asAllowed'));
         if (o.keys !== undefined) l.push(t('allKeys') + ': ' + t(o.keys ? 'on' : 'off'));
         if (o.quiet) l.push(t('asNotif') + ': ' + t('asHidden'));
         return l.length ? l.join(' \u00B7 ') : t('asDefault');
@@ -847,7 +847,7 @@
         function set(k, v, def) { GameHost.setAppPref(g.id, k, v === def ? null : v); }
         out.push({ kind: 'toggle', label: t('asBg'), desc: t('asBgDesc'), get: function () { return asVal(g, 'bg'); }, set: function (v) { set('bg', !!v, asBgDefault(g)); } });
         if (g.remote) {
-            out.push({ kind: 'toggle', label: t('asDirect'), desc: t('asDirectDesc'), get: function () { return asVal(g, 'direct'); }, set: function (v) { set('direct', !!v, true); } });
+            out.push({ kind: 'toggle', label: t('asDirect'), desc: t('asDirectDesc'), get: function () { return asVal(g, 'direct'); }, set: function (v) { set('direct', !!v, false); } });
             out.push({ kind: 'toggle', label: t('allKeys'), desc: t('allKeysDesc'), get: function () { return asVal(g, 'keys'); }, set: function (v) { set('keys', !!v, Store.get('app_keys', true) !== false); } });
         }
         out.push({ kind: 'toggle', label: t('asNotif'), desc: t('asNotifDesc'), get: function () { return !GameHost.appPrefs(g.id).quiet; }, set: function (v) { GameHost.setAppPref(g.id, 'quiet', v ? null : true); } });

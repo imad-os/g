@@ -357,9 +357,10 @@ make sure it still works with the other inputs. Players should never have to fig
   You still receive their button events, but don't give them an essential job of their own.
 - Never call `navigator.getGamepads()` or listen to `gamepadconnected` yourself: on the TV your page has no focus and gets
   nothing. The SDK does it for you (also standalone, where it reads the pads itself, so you can test with a pad on a PC).
-  **The player decides (API level 21):** My PC's menu > **App settings** > "Read the controllers directly" can be set to
-  Blocked for your app (per user); then `navigator.getGamepads()` gives no pads at all inside My PC and only `onInput` /
-  `MyPC.gamepad` work. When it is allowed, the pads it gives already follow the player's button map (Control Panel > Gaming >
+  **The player decides (API level 21):** My PC's menu > **App settings** > "Read the controllers directly" is **Blocked by
+  default** for every app (owner decision 2026-11-13); each player can allow it per app. While blocked,
+  `navigator.getGamepads()` gives no pads at all inside My PC and only `onInput` / `MyPC.gamepad` work, so an app that reads
+  the pads itself does not get them for most players. When it is allowed, the pads it gives already follow the player's button map (Control Panel > Gaming >
   Map the buttons, and the A ↔ B swap): `buttons[0]` is the button the player made A. Use `MyPC.gamepad` and nothing breaks.
 - Physical controllers only: the TV remote, the keyboard, the touch pad send actions (a phone in Buttons or Keyboard mode is a real gamepad: `MyPC.gamepad` sees it as a standard pad with 18 buttons like a Switch Pro controller, device `pad101` / `pad102`)
   (`onInput`), so the game must also be playable with `left right up down` + `confirm` (see the rules below).
@@ -397,7 +398,7 @@ get (`onInput`, `MyPC.gamepad`, `navigator.getGamepads()`) already follows that 
 
 **Per-user app settings (API level 21).** My PC's menu over your app has **App settings**, also in Control Panel > Gaming >
 Settings of each app and game: Run in the background (overrides your config's `allow_background_running`), Read the
-controllers directly (Allowed / Blocked), Every button goes to the app, and Notifications (Hidden = no cards over your app).
+controllers directly (Blocked by default / Allowed), Every button goes to the app, and Notifications (Hidden = no cards over your app).
 They are the player's choice: your app only needs to keep working through `onInput` / `MyPC.gamepad` and `onPause`.
 
 Button indices follow the W3C **standard** layout (by position, whatever is printed on the pad):

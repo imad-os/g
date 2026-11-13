@@ -545,7 +545,7 @@ var GameHost = (function () {
     /* ---------- the app's settings, per user (My PC's menu > App settings, owner request 2026-11-12) ----------
      * Profile key app_prefs { <app id>: { bg, direct, keys, quiet } }; a missing value = the default:
      *   bg      run in the background (default: the app's config allow_background_running, App Store Manager)
-     *   direct  the app may read the controllers itself (navigator.getGamepads; default yes). No: only through My PC
+     *   direct  the app may read the controllers itself (navigator.getGamepads; default NO, owner 2026-11-13). No: only through My PC
      *           (onInput, MyPC.gamepad), even if the app then cannot be played
      *   keys    every button goes to the app (default: Control Panel > Gaming's "Every button goes to the app")
      *   quiet   no notification cards over it (errors and controllers still show)                                      */
@@ -559,7 +559,7 @@ var GameHost = (function () {
         Store.set('app_prefs', all);
         if (game && game.id === id && api && api.prefs) api.prefs();       // the running app follows at once
     }
-    function directOk(id) { return pref(id, 'direct') !== false; }
+    function directOk(id) { return pref(id, 'direct') === true; }     // owner decision 2026-11-13: off by default, each user allows it per app
     function quiet() { return state !== 'idle' && !!game && pref(game.id, 'quiet') === true; }
 
     // My PC lost the focus (TV: another app or source; PC: window minimized or another window; phone: app switched):
@@ -654,7 +654,7 @@ var GameHost = (function () {
             var gid = game.id;
             var nv;     // a value equal to the default is not kept: the app follows the default again (config / Control Panel)
             if (id === '_s_bg') { nv = !runsInBackground(); setPref(gid, 'bg', nv === bgDefault() ? null : nv); }
-            else if (id === '_s_direct') setPref(gid, 'direct', directOk(gid) ? false : null);
+            else if (id === '_s_direct') setPref(gid, 'direct', directOk(gid) ? null : true);
             else if (id === '_s_keys') { nv = !allKeys(); setPref(gid, 'keys', nv === (Store.get('app_keys', true) !== false) ? null : nv); }
             else if (id === '_s_quiet') setPref(gid, 'quiet', pref(gid, 'quiet') ? null : true);
             else if (id === '_s_reset') { var all = prefs(); delete all[gid]; Store.set('app_prefs', all); if (api && api.prefs) api.prefs(); return pauseRedraw('_s_bg'); }

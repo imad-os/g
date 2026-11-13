@@ -6377,7 +6377,7 @@ async function flowTests(browser, base) {
     let o = await open('flow-good');
     const f = o.f;
     check(o.asked === 0 && await pg.evaluate((n) => AppBoot.build() === n, NEXT), `opening an app: no server round trip, same hosted build as the desktop (${o.ms} ms)`);
-    check(await f.evaluate(() => navigator.getGamepads()[0] && navigator.getGamepads()[0].id === 'Test pad' && !au.paused), 'running: the app reads its pad and plays its sound');
+    check(await f.evaluate(() => navigator.getGamepads().filter(Boolean).length === 0 && !au.paused), 'running: the app plays its sound; by default it cannot read the controllers itself (owner decision 2026-11-13)');
     // My PC's menu > App settings (owner request 2026-11-12): per user; "Read the controllers directly" = Blocked hides the pads from the app
     const menuOpen = async () => { await tvMenu(pg); await pg.waitForFunction(() => !document.getElementById('pause').hidden); await pg.waitForTimeout(650); };
     const menuItems = () => pg.evaluate(() => [...document.querySelectorAll('#pause-items button')].map((b) => b.textContent));
@@ -6387,28 +6387,30 @@ async function flowTests(browser, base) {
     await menuClick('_appset');
     const setItems = await menuItems();
     const setText = await pg.evaluate(() => document.getElementById('pause').innerText);
-    check(mainItems.indexOf('App settings') === mainItems.length - 2 && setItems.join('|') === 'Run in the background: Off|Read the controllers directly: Allowed|Every button goes to the app: On|Notifications: Shown|Back'
+    check(mainItems.indexOf('App settings') === mainItems.length - 2 && setItems.join('|') === 'Run in the background: Off|Read the controllers directly: Blocked|Every button goes to the app: On|Notifications: Shown|Back'
           && /Flow flow-good, for .+ only/.test(setText) && /keeps running when you switch/.test(setText),
         'My PC\'s menu has App settings (before Quit): background, read the controllers directly, every button, notifications, for this user only (' + setItems.join(' | ') + ')');
+    if (shots) await pg.screenshot({ path: path.join(shots, 'appset-0-default-blocked.png') });
     await menuClick('_s_direct');
     await menuClick('_s_bg');
     if (shots) await pg.screenshot({ path: path.join(shots, 'appset-1-menu.png') });
     const prefs1 = await pg.evaluate(() => ({ p: Store.get('app_prefs', {})['app-flow-good'], items: [...document.querySelectorAll('#pause-items button')].map((b) => b.textContent), tag: document.getElementById('pause-bg').textContent }));
-    check(prefs1.p && prefs1.p.direct === false && prefs1.p.bg === true && prefs1.items[0] === 'Run in the background: On' && prefs1.items[1] === 'Read the controllers directly: Blocked' && /on/i.test(prefs1.tag) && prefs1.items.indexOf('Back to the default settings') >= 0,
-        'toggling them saves this user\'s app_prefs (direct: false, bg: true); the menu\'s Background tag follows ' + JSON.stringify(prefs1));
+    check(prefs1.p && prefs1.p.direct === true && prefs1.p.bg === true && prefs1.items[0] === 'Run in the background: On' && prefs1.items[1] === 'Read the controllers directly: Allowed' && /on/i.test(prefs1.tag) && prefs1.items.indexOf('Back to the default settings') >= 0,
+        'toggling them saves this user\'s app_prefs (direct: true, bg: true); the menu\'s Background tag follows ' + JSON.stringify(prefs1));
     await pg.keyboard.press('Escape');
     await pg.waitForTimeout(100);
     check((await menuItems())[0] === 'Resume' && await pg.evaluate(() => !document.getElementById('pause').hidden), 'Back in App settings goes back to the menu (not to the app)');
     await menuClick('_resume');
     await pg.waitForFunction(() => GameHost.state() === 'running');
     await f.waitForTimeout(100);
-    check(await f.evaluate(() => navigator.getGamepads().filter(Boolean).length === 0), 'Blocked: navigator.getGamepads() gives the app no controller, even while it runs');
+    check(await f.evaluate(() => navigator.getGamepads()[0] && navigator.getGamepads()[0].buttons[0].value === 1), 'Allowed by the user: the app reads its pad itself');
     await menuOpen(); await menuClick('_appset'); await menuClick('_s_direct'); await menuClick('_s_bg'); await menuClick('_s_back'); await menuClick('_resume');
     await pg.waitForFunction(() => GameHost.state() === 'running');
     await f.waitForTimeout(100);
-    check(await f.evaluate(() => navigator.getGamepads()[0] && navigator.getGamepads()[0].buttons[0].value === 1) && await pg.evaluate(() => !Store.get('app_prefs', {})['app-flow-good']),
-        'Allowed again: the app reads its pad (nothing left in app_prefs once every setting is back to its default)');
-    // the button map reaches the app's own navigator.getGamepads() too (same object every call)
+    check(await f.evaluate(() => navigator.getGamepads().filter(Boolean).length === 0) && await pg.evaluate(() => !Store.get('app_prefs', {})['app-flow-good']),
+        'Blocked again: navigator.getGamepads() gives the app no controller, even while it runs (nothing left in app_prefs once every setting is back to its default)');
+    // the button map reaches the app's own navigator.getGamepads() too (same object every call), once the user allowed it
+    await pg.evaluate(() => GameHost.setAppPref('app-flow-good', 'direct', true));
     await pg.evaluate(() => { window.__tp = { index: 0, id: 'Pro Controller (STANDARD GAMEPAD Vendor: 057e Product: 2009)', connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons: Array.from({ length: 18 }, () => ({ pressed: false, value: 0 })) };
         window.__realGp = navigator.getGamepads; navigator.getGamepads = () => [window.__tp, null, null, null]; window.dispatchEvent(new Event('gamepadconnected'));
         Input.setPadMap('057e:2009', [3, 2, 1, 0]); });
@@ -6418,6 +6420,7 @@ async function flowTests(browser, base) {
     await pg.evaluate(() => { Input.setPadMap('057e:2009', null); navigator.getGamepads = window.__realGp; window.dispatchEvent(new Event('gamepaddisconnected')); });
     await f.waitForFunction(() => navigator.getGamepads()[0].buttons[0].value === 1, null, { timeout: 3000 }).catch(() => {});
     check(await f.evaluate(() => navigator.getGamepads()[0].buttons[0].value === 1), 'map removed: the app reads the pad as it is again');
+    await pg.evaluate(() => GameHost.resetAppPrefs('app-flow-good'));
     await f.evaluate(() => document.getElementById('t').click());          // a click puts the focus inside the app's frame (a PC)
     await tvMenu(pg);
     await pg.waitForFunction(() => !document.getElementById('pause').hidden);

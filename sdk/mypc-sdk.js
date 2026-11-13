@@ -67,11 +67,11 @@ var MyPC = (function () {
      * Apps with onPause stop their own loop and sound there (required, section 4 of the guide). */
     var frozen = false, frozenMedia = [], frozenCtx = [], heldRaf = [], media = [], ctxs = [];
     /* The player's settings reach navigator.getGamepads() too (API 21, owner request 2026-11-12):
-     *  - My PC's menu > App settings > "Read the controllers directly" = Blocked: no pads at all (the app only gets
+     *  - My PC's menu > App settings > "Read the controllers directly" = Blocked (the default, owner 2026-11-13): no pads at all (the app only gets
      *    them through onInput / MyPC.gamepad, which My PC sends);
      *  - Control Panel > Gaming > Map the buttons (or the A <-> B swap): the pads come with their buttons in that order, so
      *    buttons[0] is the button the player made A. Same objects every call (no allocation per frame). */
-    var padDirect = true, padMaps = {}, padWrap = {};
+    var padDirect = !framed(), padMaps = {}, padWrap = {};
     function mappedPads(list) {
         var out = list, i, p, m, w, j, n;
         for (i = 0; list && i < list.length; i++) {
