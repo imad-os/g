@@ -98,6 +98,17 @@ var App = (function () {
         showNet(online);
     }
     function watchNetwork() {
+        // network modes (owner request 2026-11-13, js/core/netmode.js): offline / home network only / online on the Wi-Fi icon,
+        // one card when the mode changes (none at start while online)
+        if (window.NetMode) {
+            NetMode.onChange(function (cur, old) {
+                if (old === cur || (old.mode === cur.mode && cur.mode !== 'local')) return;
+                if (!old.at && cur.mode === 'online') return;
+                if (window.Desktop && Desktop.netCard) Desktop.netCard();
+            });
+            NetMode.start();
+            return;
+        }
         window.addEventListener('offline', function () { netChange(false); });
         window.addEventListener('online', function () { netChange(true); });
         try {

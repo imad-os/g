@@ -7,7 +7,9 @@
  *   var c = Multiplayer.attach({ appId, send(type, data), hold(), release(token) });
  *   c.handle(op, args, reply)   ops: host join send closePeer closeSession; reply(errCode | null, result)
  *   c.destroy()                 the app was closed: rooms, connections and screens are removed
- * Errors: host -> cancelled offline denied unavailable; join -> cancelled denied gone timeout connect offline. */
+ * Errors: host -> cancelled offline denied unavailable; join -> cancelled denied gone timeout connect offline.
+ * Network modes (js/core/netmode.js): with the whole internet rooms are on Firestore; when it is missing or limited they are on
+ * a room hub on this Wi-Fi (My PC's Android app or tools/lan-hub.mjs, js/core/lan-db.js), found by asking the addresses of the network. */
 var Multiplayer = (function () {
     'use strict';
 
@@ -108,10 +110,35 @@ var Multiplayer = (function () {
         function releaseGame() { if (held !== null && !screenOpen()) { var h = held; held = null; opts.release(h); } }
         function ui(f) { holdGame(); f(); }
         function closeUI() { hidePanel(); hideAsk(); releaseGame(); }
-        function call(op, args, cb) { rs.call(op, args, cb); }
-        function rooms() {
-            if (!rs) rs = new Rooms.Session(opts.appId, profileName(), onRoomEvent);
-            return rs;
+        // rooms on Firestore (full internet) or on a room hub on this Wi-Fi (js/core/netmode.js, js/core/lan-db.js): cb(errCode | null, session)
+        var waiting = null;
+        function lan() { return !!(rs && rs.local) || (!rs && !!window.NetMode && NetMode.rooms() === 'lan'); }
+        function rooms(cb) {
+            if (rs) return cb(null, rs);
+            if (waiting) return waiting.push(cb);
+            waiting = [cb];
+            function done(err) { var l = waiting; waiting = null; for (var i = 0; i < l.length; i++) l[i](err, rs); }
+            function pick() {
+                if (dead) return;
+                if (!window.NetMode || !window.LanDb || NetMode.rooms() === 'cloud') { rs = new Rooms.Session(opts.appId, profileName(), onRoomEvent); return done(null); }
+                LanDb.find(function (err, db) {
+                    if (dead) return;
+                    if (err) return done('nohub');
+                    if (!rs) rs = new Rooms.Session(opts.appId, profileName(), onRoomEvent, db);
+                    done(null);
+                }, { scan: true });
+            }
+            if (window.NetMode) NetMode.check(false, pick); else pick();
+        }
+        function call(op, args, cb) {
+            rooms(function (err, s) {
+                if (dead) return;
+                if (err) return cb(err);
+                s.call(op, args, function (e2, r) {
+                    if (e2 === 'offline' && s.local && window.LanDb) LanDb.forget();     // the hub went away: look again next time
+                    cb(e2, r);
+                });
+            });
         }
 
         /* ----- peers (the connected devices) ----- */
@@ -168,7 +195,7 @@ var Multiplayer = (function () {
             hostBusy = true;
             ui(function () {
                 showPanel({
-                    title: t('mpOpenTitle'), text: t('mpOpenText').replace('%s', profileName()).replace('%n', max),
+                    title: t('mpOpenTitle'), text: t('mpOpenText').replace('%s', profileName()).replace('%n', max) + (lan() ? '\n' + t('mpLanNote') : ''),
                     buttons: [{ label: t('mpOpen'), primary: true, run: confirmHost }, { label: t('cancel'), run: cancel }], cancel: cancel
                 });
             });
@@ -179,7 +206,7 @@ var Multiplayer = (function () {
                     hostBusy = false;
                     closeUI();
                     if (dead) return;
-                    if (err) { toast(t(err === 'offline' ? 'mpErr_offline' : err === 'denied' ? 'mpErr_rate' : 'mpErr_service'), 'err'); return reply(err === 'offline' ? 'offline' : err === 'denied' ? 'denied' : 'unavailable'); }
+                    if (err) { toast(t(err === 'nohub' ? 'mpErr_nohub' : err === 'offline' ? (lan() ? 'mpErr_lanoff' : 'mpErr_offline') : err === 'denied' ? 'mpErr_rate' : 'mpErr_service'), 'err'); return reply(err === 'offline' || err === 'nohub' ? 'offline' : err === 'denied' ? 'denied' : 'unavailable'); }
                     queue = [];
                     session = { id: newId('s'), room: r.id, max: max, count: 0, pending: 0, peers: [], open: true };
                     reply(null, { session: session.id, max: max });
@@ -217,7 +244,8 @@ var Multiplayer = (function () {
                     for (i = 0; i < $('mp-list').children.length; i++) if ($('mp-list').children[i] === cur) idx = i;
                     for (i = 0; i < list.length; i++) items.push({ label: list[i].name, sub: t('mpPlayers').replace('%s', list[i].count), run: (function (r) { return function () { pick(r); }; })(list[i]) });
                     shownRooms = list;
-                    showPanel({ title: t('mpJoinTitle'), text: err ? t('mpErr_' + (CODES[err] || 'connect')) : t('mpJoinText'), items: items, empty: err ? '' : t('mpNoRooms'),
+                    var txt = err === 'nohub' ? t('mpErr_nohub') : err ? t(err === 'offline' && lan() ? 'mpErr_lanoff' : 'mpErr_' + (CODES[err] || 'connect')) : t('mpJoinText') + (lan() ? '\n' + t('mpLanNote') : '');
+                    showPanel({ title: t('mpJoinTitle'), text: txt, items: items, empty: err ? '' : t('mpNoRooms'),
                                 buttons: [{ label: t('cancel'), run: cancelJoin }], cancel: cancelJoin, keepIndex: idx });
                 });
             }
@@ -250,14 +278,16 @@ var Multiplayer = (function () {
                     });
                 }, function () { joinState && joinState.fail('connect'); });
             }
-            ui(function () { refresh(); });
+            ui(function () {
+                if (window.NetMode && NetMode.rooms() === 'lan' && !rs) showPanel({ title: t('mpJoinTitle'), text: t('mpLanLooking'), buttons: [{ label: t('cancel'), run: cancelJoin }], cancel: cancelJoin });
+                refresh();
+            });
             polling = setInterval(refresh, 3000);
         }
 
         /* ----- from the app ----- */
         function handle(op, args, reply) {
             if (dead) return reply('unavailable');
-            rooms();
             switch (op) {
                 case 'host': return host(args, reply);
                 case 'join': return join(args, reply);

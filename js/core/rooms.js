@@ -14,6 +14,7 @@
  * Rooms.status() -> [{ app, room, state: 'fast' | 'slow' | 'rest' | 'off', wait (ms to the next check), why, at (when `why` happened),
  *   polls (checks made), last (time of the last check) }] for every room this page hosts; Rooms.onStatus(fn) is called on every
  *   change (the taskbar's light, js/launcher/desktop.js). `why` is a key: open request left wake shown full hidden backoff rest.
+ * new Rooms.Session(appId, name, emit, LanDb hub) = the same rooms on a hub on this Wi-Fi (no Firestore; checks every 2 s, free).
  * Error codes: offline denied full gone invalid unavailable. */
 var Rooms = (function () {
     'use strict';
@@ -28,7 +29,7 @@ var Rooms = (function () {
         var out = [], i, r;
         for (i = 0; i < live.length; i++) {
             r = live[i];
-            out.push({ app: r.app, room: r.id, state: r.state, wait: r.curWait, why: r.why, who: r.who || '', at: r.whyAt, polls: r.polls, last: r.last });
+            out.push({ app: r.app, room: r.id, lan: r.lan, state: r.state, wait: r.curWait, why: r.why, who: r.who || '', at: r.whyAt, polls: r.polls, last: r.last });
         }
         return out;
     }
@@ -62,7 +63,7 @@ var Rooms = (function () {
     }
     function now() { return Cloud.now(); }                 // server time (the TV's clock may be wrong)
     // learns the server's time once (the rules compare `exp` with it): cb(errCode | null)
-    function sync(cb) {
+    function sync0(cb) {
         if (Cloud.synced()) return cb(null);
         Cloud.query('', { from: [{ collectionId: 'rooms' }], limit: 1 }, L.timeout, function (err) { cb(err ? code(err) : null); });
     }
@@ -70,9 +71,16 @@ var Rooms = (function () {
     function cleanName(v, def) { v = typeof v === 'string' ? v.replace(/\s+/g, ' ').replace(/^ | $/g, '').slice(0, L.name) : ''; return v || String(def || '').slice(0, L.name) || 'Player'; }
     function ms(t) { var n = typeof t === 'string' ? Date.parse(t) : +t; return isNaN(n) ? 0 : n; }
 
-    function Session(appId, profileName, emit) {
+    function Session(appId, profileName, emit, store) {
         var self = this, room = null, asking = {}, dead = false;
-        self.appId = appId;
+        var db = store || Cloud;                                     // Cloud (Firestore) or a room hub on this Wi-Fi (js/core/lan-db.js)
+        self.appId = appId; self.local = !!db.local;
+        function now() { return db.now(); }
+        function sync(cb) {
+            if (db.synced()) return cb(null);
+            if (db.local) return db.query('', { from: [{ collectionId: 'rooms' }], limit: 1 }, L.timeout, function (err) { cb(err ? code(err) : null); });
+            sync0(cb);
+        }
 
         function fire(ev, d) { if (!dead) { try { emit(ev, d); } catch (e) {} } }
 
@@ -85,7 +93,7 @@ var Rooms = (function () {
             room = null;
         }
         function beat(r) {
-            Cloud.patchMask('rooms/' + r.id, { exp: new Date(now() + L.ttl), n: r.n }, ['exp', 'n'], { exists: true }, L.timeout, function (err) {
+            db.patchMask('rooms/' + r.id, { exp: new Date(now() + L.ttl), n: r.n }, ['exp', 'n'], { exists: true }, L.timeout, function (err) {
                 if ((err === 'notfound' || err === 'conflict') && room === r) { stopRoom(); fire('closed', { room: r.id }); }
             });
         }
@@ -95,7 +103,8 @@ var Rooms = (function () {
             if (room !== r) return;
             clearTimeout(r.poll);
             var t = Date.now(), wait;
-            if (t < r.fastUntil) wait = L.poll;
+            if (db.local) wait = L.poll;                                     // a hub on this Wi-Fi: free, so always quick
+            else if (t < r.fastUntil) wait = L.poll;
             else if (t - r.actAt >= L.restAfter) wait = L.rest;              // 2 minutes with nothing happening: resting, 1 check a minute
             else wait = r.wait = Math.min(r.idle, Math.max(L.poll, Math.round((r.wait || L.poll) * 1.5)));
             r.curWait = wait;
@@ -115,7 +124,7 @@ var Rooms = (function () {
             if (room !== r || r.busy) return;
             if (r.n >= r.max || hidden()) return next(r);                    // full (asks are refused anyway) or nobody watching
             r.busy = true; r.polls++; r.last = Date.now();
-            Cloud.query('rooms/' + r.id, { from: [{ collectionId: 'reqs' }], limit: 25 }, L.timeout, function (err, docs) {
+            db.query('rooms/' + r.id, { from: [{ collectionId: 'reqs' }], limit: 25 }, L.timeout, function (err, docs) {
                 r.busy = false;
                 if (room !== r) return;
                 for (var i = 0; !err && i < docs.length; i++) {
@@ -130,11 +139,11 @@ var Rooms = (function () {
             });
         }
         function wipe(r, cb) {                       // deletes the requests, then the room
-            Cloud.query('rooms/' + r.id, { from: [{ collectionId: 'reqs' }], limit: 25 }, L.timeout, function (err, docs) {
+            db.query('rooms/' + r.id, { from: [{ collectionId: 'reqs' }], limit: 25 }, L.timeout, function (err, docs) {
                 var left = 1, i;
                 function one() { if (--left === 0 && cb) cb(); }
-                for (i = 0; !err && docs && i < docs.length; i++) { left++; Cloud.remove('rooms/' + r.id + '/reqs/' + docs[i].id, L.timeout, one); }
-                left++; Cloud.remove('rooms/' + r.id, L.timeout, one);
+                for (i = 0; !err && docs && i < docs.length; i++) { left++; db.remove('rooms/' + r.id + '/reqs/' + docs[i].id, L.timeout, one); }
+                left++; db.remove('rooms/' + r.id, L.timeout, one);
                 one();
             });
         }
@@ -146,11 +155,11 @@ var Rooms = (function () {
                 if (a.busy) return;
                 if (++a.n % 3 === 0) {                                       // the host's app may have closed: its room is gone
                     a.busy = true;
-                    return Cloud.get('rooms/' + a.room, L.timeout, function (err) { a.busy = false; if (err === 'notfound' && asking[a.id]) finish(a, 'gone', true); });
+                    return db.get('rooms/' + a.room, L.timeout, function (err) { a.busy = false; if (err === 'notfound' && asking[a.id]) finish(a, 'gone', true); });
                 }
                 if (Date.now() - a.at > L.askTtl) return finish(a, 'timeout', true);
                 a.busy = true;
-                Cloud.get('rooms/' + a.room + '/reqs/' + a.id, L.timeout, function (err, d) {
+                db.get('rooms/' + a.room + '/reqs/' + a.id, L.timeout, function (err, d) {
                     a.busy = false;
                     if (!asking[a.id]) return;
                     if (err === 'notfound') return finish(a, 'gone', false);
@@ -163,7 +172,7 @@ var Rooms = (function () {
         function finish(a, why, del) {
             clearInterval(a.timer);
             delete asking[a.id];
-            if (del) Cloud.remove('rooms/' + a.room + '/reqs/' + a.id, L.timeout, function () {});
+            if (del) db.remove('rooms/' + a.room + '/reqs/' + a.id, L.timeout, function () {});
             if (why) fire('denied', { req: a.id, why: why });
         }
 
@@ -179,7 +188,7 @@ var Rooms = (function () {
                 idle = Math.max(L.poll, Math.min(L.pollMaxIdle, idle));
                 var r = { id: fixed || id(8), name: cleanName(args.name, profileName), max: max, n: 1, seen: {}, busy: false, beat: 0, poll: 0,
                           idle: idle, wait: 0, fastUntil: Date.now() + L.fastFor, actAt: Date.now(),
-                          app: appId, state: 'fast', curWait: L.poll, why: 'open', who: '', whyAt: Date.now(), polls: 0, last: 0 };
+                          app: appId, lan: !!db.local, state: 'fast', curWait: L.poll, why: 'open', who: '', whyAt: Date.now(), polls: 0, last: 0 };
                 room = r;                                                    // reserved while the write is in flight
                 sync(function (e0) {
                     if (room !== r) return;
@@ -202,9 +211,9 @@ var Rooms = (function () {
                         }
                         cb(null, { id: r.id, name: r.name, max: r.max });
                     }
-                    Cloud.patch('rooms/' + r.id, { app: appId, name: r.name, max: r.max, n: 1, at: now(), exp: new Date(now() + L.ttl) }, { exists: false }, L.timeout, function (err) {
+                    db.patch('rooms/' + r.id, { app: appId, name: r.name, max: r.max, n: 1, at: now(), exp: new Date(now() + L.ttl) }, { exists: false }, L.timeout, function (err) {
                         // the previous page of this TV left the room behind: take it over (only `exp` and `n` may change)
-                        if (err === 'conflict' && fixed) return Cloud.patchMask('rooms/' + r.id, { exp: new Date(now() + L.ttl), n: 1 }, ['exp', 'n'], { exists: true }, L.timeout, created);
+                        if (err === 'conflict' && fixed) return db.patchMask('rooms/' + r.id, { exp: new Date(now() + L.ttl), n: 1 }, ['exp', 'n'], { exists: true }, L.timeout, created);
                         created(err);
                     });
                 });
@@ -241,10 +250,10 @@ var Rooms = (function () {
                 }
                 var byApp = { fieldFilter: { field: { fieldPath: 'app' }, op: 'EQUAL', value: { stringValue: appId } } };
                 var live = { fieldFilter: { field: { fieldPath: 'exp' }, op: 'GREATER_THAN', value: { timestampValue: new Date(t0).toISOString() } } };
-                Cloud.query('', { from: [{ collectionId: 'rooms' }], where: { compositeFilter: { op: 'AND', filters: [byApp, live] } },
+                db.query('', { from: [{ collectionId: 'rooms' }], where: { compositeFilter: { op: 'AND', filters: [byApp, live] } },
                                   orderBy: [{ field: { fieldPath: 'exp' }, direction: 'DESCENDING' }], limit: 50 }, L.timeout, function (err, docs) {
                     if (err === 'http 400' || err === 'conflict') {          // the (app, exp) index is not created yet: simpler query, filtered here
-                        return Cloud.query('', { from: [{ collectionId: 'rooms' }], where: byApp, limit: 50 }, L.timeout, done);
+                        return db.query('', { from: [{ collectionId: 'rooms' }], where: byApp, limit: 50 }, L.timeout, done);
                     }
                     done(err, docs);
                 });
@@ -254,14 +263,14 @@ var Rooms = (function () {
                 if (!str(rid, 32) || !/^[a-z0-9]+$/.test(rid) || !str(args.offer, L.payload)) return cb('invalid');
                 if (room && room.id === rid) return cb('invalid');
                 if (!rate(asks, L.asksPerMin)) return cb('denied');
-                sync(function (e0) { if (e0) return cb(e0); Cloud.get('rooms/' + rid, L.timeout, function (err, d) {
+                sync(function (e0) { if (e0) return cb(e0); db.get('rooms/' + rid, L.timeout, function (err, d) {
                     if (err) return cb(code(err));
                     if (!d || d.app !== appId || ms(d.exp) < now()) return cb('gone');
                     if ((d.n | 0) >= (d.max | 0)) return cb('full');
                     var a = { id: id(10), room: rid, at: Date.now(), busy: false, timer: 0 };      // local clock: only for the 60 s wait
-                    Cloud.patch('rooms/' + rid + '/reqs/' + a.id, { name: cleanName(args.name, profileName), offer: args.offer, exp: new Date(now() + L.askTtl + 10000) }, { exists: false }, L.timeout, function (err2) {
+                    db.patch('rooms/' + rid + '/reqs/' + a.id, { name: cleanName(args.name, profileName), offer: args.offer, exp: new Date(now() + L.askTtl + 10000) }, { exists: false }, L.timeout, function (err2) {
                         if (err2) return cb(code(err2));
-                        if (dead) { Cloud.remove('rooms/' + rid + '/reqs/' + a.id, L.timeout, function () {}); return cb('gone'); }
+                        if (dead) { db.remove('rooms/' + rid + '/reqs/' + a.id, L.timeout, function () {}); return cb('gone'); }
                         asking[a.id] = a;
                         watch(a);
                         cb(null, { id: a.id });
@@ -279,10 +288,10 @@ var Rooms = (function () {
                 if (!r || r.id !== args.room) return cb('gone');
                 if (!str(args.req, 32) || !/^[a-z0-9]+$/.test(args.req) || !str(args.answer, L.payload)) return cb('invalid');
                 if (r.n >= r.max) {
-                    Cloud.patchMask('rooms/' + r.id + '/reqs/' + args.req, { no: true }, ['no'], { exists: true }, L.timeout, function () {});
+                    db.patchMask('rooms/' + r.id + '/reqs/' + args.req, { no: true }, ['no'], { exists: true }, L.timeout, function () {});
                     return cb('full');
                 }
-                Cloud.patchMask('rooms/' + r.id + '/reqs/' + args.req, { answer: args.answer }, ['answer'], { exists: true }, L.timeout, function (err) {
+                db.patchMask('rooms/' + r.id + '/reqs/' + args.req, { answer: args.answer }, ['answer'], { exists: true }, L.timeout, function (err) {
                     if (err) return cb(code(err));
                     if (room === r) { r.n++; beat(r); }
                     cb(null, true);
@@ -292,7 +301,7 @@ var Rooms = (function () {
                 var r = room;
                 if (!r || r.id !== args.room) return cb('gone');
                 if (!str(args.req, 32) || !/^[a-z0-9]+$/.test(args.req)) return cb('invalid');
-                Cloud.patchMask('rooms/' + r.id + '/reqs/' + args.req, { no: true }, ['no'], { exists: true }, L.timeout, function (err) { cb(err ? code(err) : null, true); });
+                db.patchMask('rooms/' + r.id + '/reqs/' + args.req, { no: true }, ['no'], { exists: true }, L.timeout, function (err) { cb(err ? code(err) : null, true); });
             },
             close: function (args, cb) {
                 var r = room;
@@ -316,9 +325,9 @@ var Rooms = (function () {
             dead = true;
             stopRoom();
             // the page is about to change (the app closes by loading the desktop): keepalive deletes finish anyway
-            for (k in asking) { clearInterval(asking[k].timer); Cloud.removeKeep('rooms/' + asking[k].room + '/reqs/' + asking[k].id); }
+            for (k in asking) { clearInterval(asking[k].timer); db.removeKeep('rooms/' + asking[k].room + '/reqs/' + asking[k].id); }
             asking = {};
-            if (r) { for (k in r.seen) Cloud.removeKeep('rooms/' + r.id + '/reqs/' + k); Cloud.removeKeep('rooms/' + r.id); }
+            if (r) { for (k in r.seen) db.removeKeep('rooms/' + r.id + '/reqs/' + k); db.removeKeep('rooms/' + r.id); }
         };
     }
 

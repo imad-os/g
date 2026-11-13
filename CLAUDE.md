@@ -247,6 +247,19 @@
   peers; never room ids, offers or Firebase. **Firestore cost** (owner complaint 2026-11-04): a host polls its requests every 2 s only for a minute after open /
   a request / a player leaving / `wake` (pairing screen), then backs off to `idle` (5 s multiplayer, 10 s phone controller room), 2 min after the last of those rests at 1 check / 60 s (grey light, owner request 2026-11-09), and not at all
   while full or `document.hidden`; never add a fixed fast `setInterval` on Firestore. The taskbar light next to the clock (`#tray-poll`, `Rooms.status()` / `onStatus`) shows it: green = every 2 s, orange = slowed, grey = resting (1 / min) / stopped / no room; its title (hover, OK = toast) says the room and why. `game-host.js` relays peers over postMessage (`mp`).
+- **Network modes + rooms on this Wi-Fi** (owner request 2026-11-13, build 173): `js/core/netmode.js` (`NetMode`) = `offline` (no network:
+  TV `webapis.network` gateway / navigator.onLine), `local` "Home network only" (network but no internet `noinet`, Facebook + Instagram both
+  blocked `blocked`, Firestore unreachable `nocloud`), `online`. Probes = no-cors fetches (5 s; a DNS / HTTPS block page can not pass): gstatic
+  generate_204 / pc.geekspro.us, firestore.googleapis.com, facebook / instagram favicon (social retried once). 2 s after start, on network
+  change, every 10 min while shown; cache `arc_dev_netmode`. The taskbar's Wi-Fi icon `#tray-net` (a button: OK checks again + card) =
+  wifi / `wifiLocal` (orange house badge) / wifiOff; one Notify card `net` per change. Control Panel > System: mode, Check now, "Multiplayer
+  rooms" Automatic / This Wi-Fi only / Internet (`arc_dev_netpref`, `NetMode.rooms()`). In `local` mode **multiplayer rooms live on a room hub
+  on the Wi-Fi, never Firestore**: `js/core/lan-db.js` (`LanDb`: Cloud-like client, `multi` = every hub found, rooms listed from all;
+  `Rooms.Session(app, name, emit, db)` runs unchanged on it, checks every 2 s since it is free; `Rooms.status()` marks them `lan`, the
+  Firestore light ignores them). **A Samsung TV web app can not listen on a port**, so the hub is the Android app (`LanDb.java` in its
+  `LanServer` on port 47800, `POST /db`, discovery `GET /mypc/hello` with `db: 1`; shared with the phone-to-TV sharing work) or a PC running
+  `node tools/lan-hub.mjs` (same protocol; the tests use it). Hubs are found at 127.0.0.1, the saved ones (`arc_dev_lanhubs`), then a /24
+  scan (`Lan.scan`, js/core/lan.js). No hub = "No room host on this Wi-Fi" card, `offline` to the app. Tests: `MYPC_ONLY=lan`.
 - **Touch controls**: on phones / tablets the shell draws the virtual pad (`js/launcher/touchpad.js`, library `js/core/virtual-pad.js`)
   above every app, feeding `Input.touch` (device `'touch'`). Per-app config: `touch` in `mypc-app.json` / the Firestore `apps` doc,
   `MyPC.init({ pad })`, `MyPC.pad` in the SDK. The library's one source is `sdk/pad/virtual-pad.js` (from github.com/imad-os/g_rpg `pad/`,

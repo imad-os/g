@@ -306,6 +306,12 @@ What My PC does for you:
   (`onClose`).
 - **Everything is torn down when the app closes**: rooms, requests, connections and screens.
 - One open room per TV and 5 join attempts per minute (`denied`).
+- **Works without the internet too** (My PC 3.0, build 173): when the internet is missing or limited (a Wi-Fi that blocks
+  Facebook and other social sites, or has no internet at all; the taskbar's Wi-Fi icon shows "Home network only"), My PC keeps
+  the rooms on **this Wi-Fi** instead of the internet. Nothing changes for your game: same calls, same screens (they say "Home
+  network only"). The rooms need a **room host on the Wi-Fi**: a phone with the My PC Android app open, or a computer running
+  `node tools/lan-hub.mjs` (a TV can not host it: Samsung TV apps can not listen on the network). With none, `host()` /
+  `join()` reject with `offline` after My PC told the player to open My PC on a phone on the same Wi-Fi.
 
 Rules for app authors:
 - **Do not build your own lobby, codes, signalling or Firebase.** The checklist item below is a MUST.

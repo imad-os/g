@@ -66,7 +66,14 @@
             out.push({ kind: 'select', label: t('graphics'), desc: t('graphicsDesc'), value: function () { return t(GFX_KEYS[Perf.setting()]); },
                        adjust: function (d) { var i2 = (GFX.indexOf(Perf.setting()) + d + GFX.length) % GFX.length; Perf.setSetting(GFX[i2]); } });
             out.push({ kind: 'info', label: t('device'), value: Perf.describe() });
-            out.push({ kind: 'info', label: t('network'), value: t(navigator.onLine === false ? 'netOffShort' : 'netOnShort') });
+            if (window.NetMode) {
+                // network modes (owner request 2026-11-13, js/core/netmode.js) and where multiplayer rooms go
+                var ni = NetMode.info();
+                out.push({ kind: 'info', label: t('network'), value: t('nm_' + ni.mode) + '. ' + t('nmWhy_' + (ni.mode === 'online' ? '' : ni.why || 'noinet')) });
+                out.push({ kind: 'action', label: t('nmCheck'), run: function () { App.toast(t('nmChecking'), { id: 'net', kind: 'info', silent: true }); NetMode.check(true, function () { Desktop.netCard(); if (Win.current() === 'settings') { var f = renderMain(1); if (f) Focus.focus(f); } }); } });
+                out.push({ kind: 'select', label: t('nmPref'), desc: t('nmPrefDesc'), value: function () { return t('nmPref_' + NetMode.pref()); },
+                           adjust: function (d) { var l = ['auto', 'lan', 'cloud'], i2 = (l.indexOf(NetMode.pref()) + d + l.length) % l.length; NetMode.setPref(l[i2]); } });
+            } else out.push({ kind: 'info', label: t('network'), value: t(navigator.onLine === false ? 'netOffShort' : 'netOnShort') });
             out.push({ kind: 'info', label: t('storage'), value: storageText() });
         } else if (id === 'display') {
             displayRows(out);

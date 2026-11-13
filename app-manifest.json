@@ -1,5 +1,5 @@
 {
-  "build": 172,
+  "build": 173,
   "version": "3.0.0",
   "shell": 1,
   "css": [
@@ -19,6 +19,8 @@
     "js/core/cloud.js",
     "js/core/reports.js",
     "js/core/global-settings.js",
+    "js/core/netmode.js",
+    "js/core/lan-db.js",
     "js/core/rooms.js",
     "js/core/netlink.js",
     "js/core/sensor-proto.js",
@@ -60,6 +62,7 @@
     "js/core/i18n-shortcuts.js",
     "js/core/i18n-drive.js",
     "js/core/i18n-copy.js",
+    "js/core/i18n-net.js",
     "js/core/a11y.js",
     "js/core/scores.js",
     "js/core/audio.js",

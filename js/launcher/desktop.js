@@ -280,6 +280,13 @@ var Desktop = (function () {
             box.appendChild(b);
         }
         $('tray-clock').onclick = function () { Win.open('calendar'); };
+        // network mode (owner request 2026-11-13, js/core/netmode.js): offline / home network only / online; OK checks again and says it
+        $('tray-net').onclick = function () {
+            if (!window.NetMode) return;
+            App.toast(I18n.t('nmChecking'), { id: 'net', kind: 'info', title: I18n.t('nmTitle'), silent: true });
+            NetMode.check(true, function () { netCard(); });
+        };
+        if (window.NetMode) NetMode.onChange(function () { updateTray(); });
         // Manual screen rotation (Control Panel > Display, js/core/rotation.js): this button turns the phone's screen
         $('tray-rot').onclick = function () { rotateScreen(); };
         if (window.Rotation) Rotation.onChange(updateTray);
@@ -292,7 +299,8 @@ var Desktop = (function () {
         updateTray();
     }
     function pollState() {
-        var st = window.Rooms && Rooms.status ? Rooms.status() : [], s = 'off', i;
+        var all = window.Rooms && Rooms.status ? Rooms.status() : [], st = [], s = 'off', i;
+        for (i = 0; i < all.length; i++) if (!all[i].lan) st.push(all[i]);          // rooms on this Wi-Fi's hub cost nothing: not Firestore checks
         for (i = 0; i < st.length; i++) { if (st[i].state === 'fast') s = 'fast'; else if (st[i].state === 'slow' && s !== 'fast') s = 'slow'; else if (st[i].state === 'rest' && s === 'off') s = 'rest'; }
         return { s: s, list: st };
     }
@@ -321,6 +329,17 @@ var Desktop = (function () {
         if (el.getAttribute('aria-label') !== label) el.setAttribute('aria-label', label);
         el.title = pollText();
     }
+    function netText() {
+        if (!window.NetMode) return I18n.t('nmTitle');
+        var i = NetMode.info();
+        return I18n.t('nmTitle') + ': ' + I18n.t('nm_' + i.mode) + '. ' + I18n.t('nmWhy_' + (i.mode === 'online' ? '' : i.why || 'noinet'));
+    }
+    // the one network card (Notify id 'net'): green online, orange home network only, red no network
+    function netCard() {
+        var i = NetMode.info(), txt = I18n.t('nmWhy_' + (i.mode === 'online' ? '' : i.why || 'noinet'));
+        if (i.mode === 'local') txt += ' ' + I18n.t('nmLocalMp');
+        App.toast(txt, { id: 'net', kind: i.mode === 'online' ? 'ok' : i.mode === 'local' ? 'warn' : 'err', title: I18n.t('nm_' + i.mode), timeout: i.mode === 'online' ? 4000 : 9000 });
+    }
     function rotateScreen() {
         if (!Rotation.turn()) App.toast(I18n.t('rotUpdate'));
     }
@@ -329,7 +348,13 @@ var Desktop = (function () {
         var d = Input.device();
         Icons.put($('input-indicator'), d === 'pad' ? 'gamepad' : d === 'keyboard' ? 'keyboard' : d === 'mouse' ? 'mouse' : 'remote');
         $('input-indicator').setAttribute('aria-label', I18n.t(d === 'pad' ? 'inputPad' : d === 'keyboard' ? 'inputKeys' : d === 'mouse' ? 'inputMouse' : 'inputRemote'));
-        Icons.put($('tray-net'), navigator.onLine === false ? 'wifiOff' : 'wifi');
+        var nm = window.NetMode ? NetMode.mode() : navigator.onLine === false ? 'offline' : 'online', ne = $('tray-net');
+        if (ne.getAttribute('data-nm') !== nm) {
+            ne.setAttribute('data-nm', nm);
+            Icons.put(ne, nm === 'offline' ? 'wifiOff' : nm === 'local' ? 'wifiLocal' : 'wifi');
+        }
+        var nl = netText();
+        if (ne.getAttribute('aria-label') !== nl) { ne.setAttribute('aria-label', nl); ne.title = nl; }
         Icons.put($('tray-vol'), AudioPrefs.music() + AudioPrefs.sfx() ? 'volume' : 'mute');
         var rot = $('tray-rot'), man = !!window.Rotation && Rotation.phone() && Rotation.mode() === 'manual';
         if (rot.hidden === man) {
@@ -604,7 +629,7 @@ var Desktop = (function () {
         releaseImages: releaseImages, restoreImages: restoreImages, tileFor: tileFor, iconForApp: iconForApp,
         startOpen: startOpen, openStart: openStart, closeStart: closeStart, profileChanged: profileChanged,
         onHome: onHome, setOnHome: setOnHome, openMenu: openMenu, closeMenu: closeMenu, menuOpen: menuOpen,
-        updateTray: updateTray, tick: tick, wallpaper: wallpaper, setWallpaper: setWallpaper, wallpapers: wallpapers, paintWallpaper: paintWallpaper, WALLPAPERS: WALLPAPERS,
+        updateTray: updateTray, netCard: netCard, tick: tick, wallpaper: wallpaper, setWallpaper: setWallpaper, wallpapers: wallpapers, paintWallpaper: paintWallpaper, WALLPAPERS: WALLPAPERS,
         APPS: APPS, appById: appById, coverUrl: coverUrl, dateText: dateText, timeText: timeText, locale: locale,
         setInstalled: setInstalled, fromCloud: fromCloud,
         games: all, builtIn: function () { return games; }, installed: function () { return installed; },

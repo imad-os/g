@@ -46,6 +46,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { startHub } from '../tools/lan-hub.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -336,6 +337,13 @@ async function newPage(browser, base, db, opts) {
         if (/googleapis/.test(u)) return db.cal ? json({ items: db.cal }) : r.fulfill({ status: 403, body: '{}' });
         return db.ics ? r.fulfill({ status: 200, contentType: 'text/calendar', body: db.ics }) : r.fulfill({ status: 404, body: '' });
     });
+    // the network mode checks (js/core/netmode.js): never the real sites; db.net = { inet: false } (no internet) / { social: false } (Facebook blocked)
+    await ctx.route(/^https:\/\/(www\.gstatic\.com\/generate_204|www\.facebook\.com\/favicon\.ico|www\.instagram\.com\/favicon\.ico|pc\.geekspro\.us\/manifest\.webmanifest)\?nm=/, (r) => {
+        const u = r.request().url(), n = db.net || {};
+        (db.probes = db.probes || []).push(u);
+        const ok = /facebook|instagram/.test(u) ? n.social !== false && n.inet !== false : n.inet !== false;
+        return ok ? r.fulfill({ status: /generate_204/.test(u) ? 204 : 200, body: '' }) : r.abort('connectionrefused');
+    });
     // the cloud map of Earth now (js/launcher/dynwall.js clouds()): never the real one in tests (db.noClouds: no internet there)
     await ctx.route(/^https:\/\/clouds\.matteason\.co\.uk\//, (r) => {
         (db.clouds = db.clouds || []).push(r.request().url());
@@ -392,6 +400,7 @@ async function main() {
     if (process.env.MYPC_ONLY === 'clock') { await clockTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'pads') { await padTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'bookmarks') { await bookmarkTests(browser, base); await webTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'lan') { await lanTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'themes') { await themeTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'ring') { await ringTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'flow') { await flowTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
@@ -783,8 +792,10 @@ async function main() {
         check(!!off && /No network/.test(off), 'network loss during a game shows a popup: "' + off + '"');
         check(await page.evaluate(() => window.GameHost.state()) === 'running', 'the game keeps running offline');
         await page.context().setOffline(false);
-        await page.waitForTimeout(200);
-        check(/Network connected/.test(await page.evaluate(() => { const e = document.querySelector('#toast .nt-ok'); return e ? e.textContent : ''; })), 'reconnecting shows "Network connected" (green)');
+        // back online: the network mode is checked again (js/core/netmode.js), then the green card says it
+        await page.waitForFunction(() => /Online/.test((document.querySelector('#toast .nt-ok') || {}).textContent || ''), null, { timeout: 10000 }).catch(() => {});
+        check(/Online/.test(await page.evaluate(() => { const e = document.querySelector('#toast .nt-ok'); return e ? e.textContent : ''; })), 'reconnecting shows "Online" (green) once the network mode is checked again');
+        await page.waitForTimeout(500);
         check(await page.evaluate(() => document.querySelectorAll('#toast .nt:not(.out)').length) === 1, 'the network notice is updated in place, not stacked');
         // the one notification look: bottom right, rises in, slides down on timeout, same id updates, 3 at most
         const nt = await page.evaluate(async () => {
@@ -4841,6 +4852,7 @@ async function main() {
     await themeTests(browser, base);
     await bookmarkTests(browser, base);
     await webTests(browser, base);
+    await lanTests(browser, base);
     await videoTests(browser, base);
     await speedyTests(browser, base);
 
@@ -7814,4 +7826,132 @@ async function speedyTests(browser, base) {
     check(stats.live >= 0, 'requests: ' + JSON.stringify({ api: stats.api, film: stats.film }));
     check(!page.errors.length, 'no page errors ' + page.errors.join(' | '));
     await page.context().close();
+}
+
+// 52. Network modes on the Wi-Fi icon (js/core/netmode.js) and multiplayer rooms on this Wi-Fi (js/core/lan-db.js + the room hub
+// tools/lan-hub.mjs, the same protocol as the Android app's LanDb.java): with the internet limited, two TVs play through the hub,
+// Firestore is never asked. MYPC_ONLY=lan runs only these (MYPC_SHOTS=<folder> saves screenshots).
+async function lanTests(browser, base) {
+    console.log('52. Network modes (Wi-Fi icon) and multiplayer rooms on this Wi-Fi (room hub, no Firestore)');
+    const shots = process.env.MYPC_SHOTS;
+    const H = await startHub({ port: 0, host: '127.0.0.1', name: 'Test phone' });
+    const HUB = 'http://127.0.0.1:' + H.port;
+    const call = (o) => JSON.parse(JSON.stringify(H.hub.handle(JSON.stringify(o))));
+    const soon = () => new Date(Date.now() + 45000).toISOString();
+    check(!call({ op: 'set', path: 'rooms/abc', data: { app: 'x', n: 1, exp: soon() }, exists: false }).err && call({ op: 'set', path: 'rooms/abc', data: { a: 1 }, exists: false }).err === 'conflict'
+          && call({ op: 'merge', path: 'rooms/zzz', data: { n: 1 }, fields: ['n'], exists: true }).err === 'notfound', 'hub: a room is created once (conflict after); merge with exists needs the document');
+    call({ op: 'merge', path: 'rooms/abc', data: { n: 2 }, fields: ['n'], exists: true });
+    check(call({ op: 'get', path: 'rooms/abc' }).data.n === 2 && call({ op: 'get', path: 'rooms/abc' }).data.app === 'x', 'hub: merge changes only the listed fields');
+    call({ op: 'set', path: 'rooms/old', data: { exp: Date.now() - 1 } });
+    call({ op: 'set', path: 'rooms/abc/reqs/r1', data: { offer: 'o', exp: soon() } });
+    check(call({ op: 'list', parent: '', coll: 'rooms' }).docs.map((d) => d.id).join() === 'abc' && call({ op: 'list', parent: 'rooms/abc', coll: 'reqs' }).docs.length === 1, 'hub: expired documents are gone; list gives one collection (not the sub-collections)');
+    call({ op: 'del', path: 'rooms/abc' });
+    check(H.hub.size() === 0 && call({ op: 'get', path: '../etc' }).err === 'invalid' && call({ op: 'set', path: 'rooms/big', data: { s: 'x'.repeat(9000) } }).err === 'invalid', 'hub: deleting a room deletes its requests; bad paths and documents over 8 KB are refused');
+    const hello = await fetch(HUB + '/mypc/hello').then((r) => r.json());
+    check(hello.app === 'mypc' && hello.db === 1 && hello.name === 'Test phone', 'hub: GET /mypc/hello says who it is (what the scan matches)');
+
+    // the three modes on the taskbar's Wi-Fi icon
+    const modePage = async (net, why) => {
+        const pg = await newPage(browser, base, { net, down: !!(net && net.inet === false) });
+        await routeHosted(pg, { offline: true });
+        await pg.goto(base + 'index.html');
+        await pg.waitForFunction(() => window.NetMode && NetMode.info().at > 0 && document.getElementById('tray-net').getAttribute('data-nm'), null, { timeout: 15000 });
+        return pg;
+    };
+    const trayShot = async (pg, name) => { if (shots) await pg.locator('.tray').screenshot({ path: path.join(shots, name) }); };
+    let pg = await modePage({});
+    check(await pg.evaluate(() => NetMode.mode() === 'online' && document.getElementById('tray-net').getAttribute('data-nm') === 'online' && /Online/.test(document.getElementById('tray-net').getAttribute('aria-label'))), 'whole internet: "Online" on the Wi-Fi icon');
+    check(await pg.evaluate(() => NetMode.rooms() === 'cloud'), 'online: multiplayer rooms stay on Firestore');
+    await trayShot(pg, 'net-1-online.png');
+    await pg.context().close();
+    pg = await modePage({ social: false });
+    check(await pg.evaluate(() => NetMode.info().mode === 'local' && NetMode.info().why === 'blocked' && document.getElementById('tray-net').getAttribute('data-nm') === 'local'), 'Facebook / Instagram blocked: "Home network only" (why: blocked) on the Wi-Fi icon');
+    check(await pg.evaluate(() => NetMode.rooms() === 'lan'), 'internet limited: multiplayer rooms go to this Wi-Fi');
+    await pg.waitForFunction(() => /Facebook/.test(document.getElementById('toast').textContent), null, { timeout: 5000 }).catch(() => {});
+    check(await pg.evaluate(() => /Home network only/.test(document.getElementById('toast').textContent) && /Facebook/.test(document.getElementById('toast').textContent)), 'one card says the internet is limited on this Wi-Fi and multiplayer uses rooms on it');
+    await trayShot(pg, 'net-2-local.png');
+    if (shots) await pg.screenshot({ path: path.join(shots, 'net-2-local-card.png') });
+    // OK on the icon checks again and tells
+    await pg.evaluate(() => { document.getElementById('tray-net').click(); });
+    check(await pg.waitForFunction(() => /Facebook/.test(document.getElementById('toast').textContent) && !/Checking/.test(document.getElementById('toast').textContent), null, { timeout: 8000 }).then(() => true, () => false), 'OK on the Wi-Fi icon checks the network again and says the mode');
+    // the Wi-Fi goes away
+    await pg.context().setOffline(true);
+    check(await pg.waitForFunction(() => NetMode.mode() === 'offline' && document.getElementById('tray-net').getAttribute('data-nm') === 'offline', null, { timeout: 8000 }).then(() => true, () => false), 'no network: "No network" (crossed Wi-Fi) at once');
+    await trayShot(pg, 'net-3-offline.png');
+    await pg.context().setOffline(false);
+    await pg.context().close();
+    pg = await modePage({ inet: false });
+    check(await pg.evaluate(() => NetMode.info().mode === 'local' && NetMode.info().why === 'noinet'), 'Wi-Fi without internet: "Home network only" (why: noinet)');
+    await pg.context().close();
+
+    // two TVs, internet limited: rooms on the hub of this Wi-Fi, never Firestore
+    const APP = 'https://apps.example.test/mp/';
+    const db = { net: { social: false } };
+    db.apps = { 'ping-friends': { id: 'ping-friends', name: 'Ping Friends', description: 'x', url: APP, entry: APP + 'multiplayer.html', icon: '', type: 'game', version: '1.0.0', enabled: true, order: 0, config: {} } };
+    const setup = async (hubs) => {
+        const p = await newPage(browser, base, db);
+        await routeHosted(p, { offline: true });
+        await p.route(OLD_HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+        await p.context().route(APP + '**', (r) => {
+            const rel = r.request().url().slice(APP.length).split('?')[0] || 'multiplayer.html';
+            const f = path.join(ROOT, 'sdk/example', rel);
+            if (!fs.existsSync(f)) return r.fulfill({ status: 404, body: '' });
+            r.fulfill({ status: 200, contentType: TYPES[path.extname(f)] || 'text/plain', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(f) });
+        });
+        await p.addInitScript((h) => {
+            if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'ping-friends', at: 1 }]));
+            localStorage.setItem('arc_dev_lanhubs', JSON.stringify(h));
+        }, hubs);
+        return p;
+    };
+    const openApp = async (p) => {
+        await p.goto(base + 'index.html');
+        await p.waitForSelector('#desk-icons [data-game="app-ping-friends"]', { timeout: 8000 });
+        await p.focus('#desk-icons [data-game="app-ping-friends"]'); await p.keyboard.press('Enter');
+        await p.waitForFunction(() => window.GameHost && window.GameHost.state() === 'running', null, { timeout: 10000 });
+        const f = p.frames().find((x) => x.url().indexOf(APP) === 0);
+        await f.waitForFunction(() => window.MyPC && MyPC.info());
+        await p.waitForFunction(() => NetMode.info().at > 0 && NetMode.mode() === 'local', null, { timeout: 15000 });
+        return f;
+    };
+    const screen = (p, title) => p.waitForFunction((t) => { const e = document.getElementById('mp'); return e && !e.hidden && document.getElementById('mp-title').textContent === t; }, title, { timeout: 10000 }).then(() => true, () => false);
+    const hidden = (p) => p.waitForFunction(() => document.getElementById('mp').hidden && document.getElementById('mp-ask').hidden, null, { timeout: 8000 }).then(() => true, () => false);
+    const A = await setup([HUB]), B = await setup([HUB]);
+    const fa = await openApp(A), fb = await openApp(B);
+    await fa.evaluate(() => { window.hp = MyPC.multiplayer.host({ max: 1 }).then((s) => { window.S = s; s.onPeer((p) => { window.PA = p; window.msgsA = []; p.onMessage((m) => msgsA.push(m)); }); return 'ok'; }, (e) => e.code); });
+    check(await screen(A, 'Open a room') && await A.evaluate(() => /Home network only/.test(document.getElementById('mp-text').textContent)), 'host(): "Open a room" says the room is on this Wi-Fi only');
+    await A.keyboard.press('Enter');
+    check(await fa.evaluate(() => window.hp) === 'ok', 'host(): the room opens on the hub');
+    const rooms = call({ op: 'list', parent: '', coll: 'rooms' }).docs;
+    check(rooms.length === 1 && rooms[0].data.app === 'app-ping-friends' && rooms[0].data.name === 'Player 1' && !Object.keys(db.rooms || {}).length, 'the room is on the hub of this Wi-Fi, none in Firestore');
+    check(await A.evaluate(() => Rooms.status().length === 1 && Rooms.status()[0].lan === true && !/fast|slow|rest/.test(document.getElementById('tray-poll').className)), 'a room on the hub is not a Firestore check: the taskbar light stays off');
+    await fb.evaluate(() => { window.jp = MyPC.multiplayer.join().then((p) => { window.PB = p; window.msgsB = []; p.onMessage((m) => msgsB.push(m)); return 'ok'; }, (e) => e.code); });
+    await screen(B, 'Join a friend');
+    check(await B.waitForFunction(() => document.querySelectorAll('#mp-list .mp-room').length === 1, null, { timeout: 10000 }).then(() => true, () => false)
+          && await B.evaluate(() => /Player 1/.test(document.querySelector('#mp-list .mp-room').textContent) && /Home network only/.test(document.getElementById('mp-text').textContent)), 'join(): the other TV finds the room on this Wi-Fi');
+    if (shots) await B.screenshot({ path: path.join(shots, 'net-4-join-local.png') });
+    await B.keyboard.press('Enter');
+    await A.waitForFunction(() => !document.getElementById('mp-ask').hidden, null, { timeout: 10000 });
+    if (shots) await A.screenshot({ path: path.join(shots, 'net-5-ask-local.png') });
+    await A.keyboard.press('Enter');
+    check(await fa.evaluate(() => new Promise((r) => { const t = setInterval(() => { if (window.PA) { clearInterval(t); r(true); } }, 50); setTimeout(() => r(false), 15000); })) && await fb.evaluate(() => window.jp) === 'ok', 'Accept: the two TVs are connected (WebRTC on the Wi-Fi, signalled through the hub)');
+    await fb.evaluate(() => PB.send('hi from B')); await fa.evaluate(() => PA.send({ n: 2 }));
+    check(await fa.waitForFunction(() => window.msgsA.length === 1, null, { timeout: 5000 }).then(() => true, () => false) && await fb.waitForFunction(() => window.msgsB.length === 1, null, { timeout: 5000 }).then(() => true, () => false), 'messages arrive both ways');
+    check(await hidden(A) && await hidden(B), 'screens closed, both games resume');
+    await A.waitForTimeout(600);
+    check(call({ op: 'list', parent: '', coll: 'rooms' }).docs.length === 0, 'full: the room closes by itself on the hub');
+    check(!(db.log || []).some((l) => /\/rooms/.test(l)), 'Firestore was never asked about rooms');
+    if (shots) await A.screenshot({ path: path.join(shots, 'net-6-playing.png') });
+    await A.context().close(); await B.context().close();
+
+    // no hub on this Wi-Fi: My PC says what to do
+    const C = await setup(['http://127.0.0.1:9']);
+    const fc = await openApp(C);
+    await fc.evaluate(() => { window.hp = MyPC.multiplayer.host({ max: 1 }).then(() => 'ok', (e) => e.code); });
+    await screen(C, 'Open a room'); await C.keyboard.press('Enter');
+    const hr = await fc.evaluate(() => window.hp);
+    check(hr === 'offline' && await C.evaluate(() => /No room host on this Wi-Fi/.test(document.getElementById('toast').textContent)), 'no hub found: host() rejects "offline" and a card says to open My PC on a phone on this Wi-Fi');
+    if (shots) await C.screenshot({ path: path.join(shots, 'net-7-no-hub.png') });
+    await C.context().close();
+    H.server.close();
 }
