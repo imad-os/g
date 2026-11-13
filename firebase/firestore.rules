@@ -283,6 +283,16 @@ service cloud.firestore {
       }
     }
 
+    // The TVs of a player account (Share to the TV): a TV's Receiver signed in with the account writes its code here, so the
+    // same account's phones and PCs find it without typing the code. Only that account reads or writes.
+    match /players/{uid}/tvs/{tv} {
+      allow get, list, delete: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid && tv.matches('^[A-Za-z0-9_-]{1,60}$')
+          && request.resource.data.keys().hasOnly(['code', 'name', 'at']) && request.resource.data.keys().hasAll(['code', 'name', 'at'])
+          && request.resource.data.code is string && request.resource.data.code.matches('^[2-9A-HJ-NP-Z]{10}$')
+          && shortText(request.resource.data.name, 60) && request.resource.data.at is int;
+    }
+
     // Player accounts (js/core/accounts.js): a profile signed in with Firebase Authentication (username@players.mypc.app
     // + password). Only that account reads or writes its own copy: settings, saves and picture of the profile.
     // data.<game id>.<key> = a game's saves, settings.<key> = the rest. The old whole-profile blob string is refused

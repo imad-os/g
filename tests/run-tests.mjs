@@ -179,7 +179,7 @@ async function fakeFirestore(ctx, db) {
         db.log.push(method + ' ' + p);
         // a player's own document: only with that account's ID token (firebase/firestore.rules)
         if (p.indexOf('/players/') === 0) {
-            const tok = (req.headers()['authorization'] || '').replace('Bearer ', ''), uid = p.split('/')[2];
+            const tok = (req.headers()['authorization'] || '').replace('Bearer ', ''), uid = p.split('/')[2].split(':')[0];
             db.playerAuth = db.playerAuth || []; db.playerAuth.push(tok);
             if (tok.split('-')[1] !== uid) return json(403, { error: { code: 403, status: 'PERMISSION_DENIED' } });
             // rules not published again after a change of shape: data / settings are refused
@@ -205,7 +205,7 @@ async function fakeFirestore(ctx, db) {
         }
         // rooms: any depth (rooms/<id>/reqs/<id>), runQuery, updateMask, currentDocument.exists
         const segs = p.split('/').filter(Boolean);
-        if (segs[0] === 'rooms' || segs[0] === 'inbox' || segs[0] === 'subs' || segs[0] === 'gauth' || segs[0] === 'share' || p === ':runQuery') {
+        if (segs[0] === 'rooms' || segs[0] === 'inbox' || segs[0] === 'subs' || segs[0] === 'gauth' || segs[0] === 'share' || (segs[0] === 'players' && (segs.length > 2 || /:runQuery$/.test(p))) || p === ':runQuery') {
             if (segs[0] === 'inbox' || segs[0] === 'subs') { db.pushAuth = db.pushAuth || []; db.pushAuth.push(method + ' ' + p + ' ' + (req.headers()['authorization'] || '')); }
             const last = segs[segs.length - 1];
             if (last.endsWith(':runQuery')) {
@@ -1095,7 +1095,7 @@ async function main() {
         check(/\d{1,2}:\d{2}/.test(await page.textContent('#tray-time')) && (await page.textContent('#tray-date')).length > 5, 'taskbar clock shows time and date (' + await page.textContent('#tray-time') + ')');
         check(await page.evaluate(() => document.querySelectorAll('#desk-icons [data-game]').length === 7 && !!document.querySelector('#desk-icons [data-app="explorer"]')), 'desktop icons: 7 games plus apps');
         await page.focus('#tb-start'); await key('Enter');
-        check(await page.evaluate(() => Desktop.startOpen() && document.querySelectorAll('#start-pinned [data-focus]').length === 22), 'Start menu lists 15 apps (with the App Store, Memo, Music, Playtime, Weather, MyVideos, MyPhotos, MyNotes and Receiver) and 7 games');
+        check(await page.evaluate(() => Desktop.startOpen() && document.querySelectorAll('#start-pinned [data-focus]').length === 23), 'Start menu lists 16 apps (with the App Store, Memo, Music, Playtime, Weather, MyVideos, MyPhotos, MyNotes, Receiver and Send to TV) and 7 games');
         await key('Escape');
         check(await page.evaluate(() => !Desktop.startOpen() && document.activeElement.id === 'tb-start'), 'Back closes Start');
         // shortcut menu: hold OK on a shortcut (a short press still opens it), a long press with the mouse or a finger, a right click
@@ -8046,7 +8046,7 @@ async function shareTests(browser, base) {
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.goto(base + 'index.html');
     await page.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
-    check(await page.evaluate(() => !!document.querySelector('#desk-icons [data-app="receiver"]') && !document.querySelector('[data-app="sendtv"]')), 'the TV desktop has Receiver (and no Send to TV)');
+    check(await page.evaluate(() => !!document.querySelector('#desk-icons [data-app="receiver"]') && !!document.querySelector('#desk-icons [data-app="sendtv"]')), 'the TV desktop has Receiver and Send to TV');
     check(await page.evaluate(() => I18n.t('browser') === 'MyBrowser' && I18n.t('music') === 'MyMusic' && I18n.t('photos') === 'MyPhotos' && I18n.t('notes') === 'MyNotes' && I18n.t('videos') === 'MyVideos'), 'the apps are called MyBrowser, MyMusic, MyPhotos, MyNotes, MyVideos');
     await page.evaluate(() => document.querySelector('#desk-icons [data-app="receiver"]').click());
     const t0 = Date.now();
@@ -8156,7 +8156,7 @@ async function shareTests(browser, base) {
     });
     await ph2.goto(base + 'index.html');
     const opened = await ph2.waitForFunction(() => window.Win && Win.current() === 'sendtv', null, { timeout: 15000 }).then(() => true, () => false);
-    check(opened && await ph2.evaluate(() => !!document.querySelector('[data-app="sendtv"]') && !document.querySelector('[data-app="receiver"]')), 'a share from Android\'s menu opens Send to TV on the phone (the desktop has Send to TV, no Receiver)');
+    check(opened && await ph2.evaluate(() => !!document.querySelector('[data-app="sendtv"]')), 'a share from Android\'s menu opens Send to TV on the phone');
     check(await ph2.evaluate(() => /Send to My PC \(QE55Q80\)/.test(document.querySelector('.st-tv .rx-main').textContent) && [...document.querySelectorAll('.st-item')].some((e) => /IMG_2041\.jpg.*Waiting/.test(e.textContent))), 'it lists the TV with Receiver open and the photo waiting');
     if (shots) await ph2.screenshot({ path: shots + '/share-9-phone-send.png' });
     await ph2.evaluate(() => document.querySelector('.st-tv .rx-main').click());
@@ -8197,6 +8197,50 @@ async function shareNetTests(browser, base) {
     await tvp.evaluate(() => document.querySelector('[data-k="via-cloud"]').click());
     await tvp.waitForTimeout(300);
     check(await tvp.evaluate(() => ShareRx.via() === 'cloud' && ShareRx.state().mode === 'cloud' && !!document.querySelector('.rx-code')), 'Internet picked by hand listens over the internet whatever the network mode');
+
+    // the same player account: the TV's Receiver lists itself under the account, a PC signed in with it sees the TV without a code
+    await tvp.evaluate(() => new Promise((r) => Accounts.signUp('imad12', 'Secret#1', Profiles.current().id, r)));
+    await tvp.evaluate(() => { ShareRx.stop(); ShareRx.start(); });
+    const listed = await tvp.waitForFunction(() => /Signed in as imad12/.test(document.querySelector('.rx-code') ? document.querySelector('.rx-code').textContent : ''), null, { timeout: 8000 }).then(() => true, () => false);
+    await tvp.waitForTimeout(500);
+    const mineDoc = Object.values(db['players/uid1/tvs'] || {})[0];
+    check(listed && mineDoc && mineDoc.code === code, 'a signed-in TV lists itself under the player account (players/<uid>/tvs) and says so');
+    const pa = await newPage(browser, base, db, { desktop: true });
+    await pa.goto(base + 'index.html');
+    await pa.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
+    const pid = await pa.evaluate(() => new Promise((r) => Accounts.signIn('imad12', 'Secret#1', (e, p) => r(p))));
+    await pa.evaluate((p) => localStorage.setItem('arc_profile', JSON.stringify(p)), pid);
+    await pa.reload();
+    await pa.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
+    await pa.evaluate(() => Win.open('sendtv'));
+    const seen = await pa.waitForSelector('[data-k="wt' + code + '"]', { timeout: 8000 }).then(() => true, () => false);
+    check(seen && await pa.evaluate(() => /Your TV/.test(document.querySelector('.st-tv').textContent) && !document.querySelector('[data-k^="rmtv"]')), 'the same account on a PC sees its TV in Send to TV without typing a code');
+    if (shots) await pa.screenshot({ path: shots + '/share-net-0b-same-account.png' });
+    check(!pa.errors.length, 'no page errors (same account) ' + pa.errors.join(' | '));
+    await pa.context().close();
+
+    // a computer (no TV, no Android app) has Send to TV too and sends to the TV with its code
+    const pc = await newPage(browser, base, db, { desktop: true });
+    await pc.goto(base + 'index.html');
+    await pc.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
+    await pc.evaluate(() => document.querySelector('#desk-icons [data-app="sendtv"]').click());
+    await pc.waitForSelector('[data-k="addcode"]', { timeout: 5000 }).catch(() => {});
+    await pc.evaluate(() => document.querySelector('[data-k="addcode"]').click());
+    await pc.waitForTimeout(150);
+    await pc.evaluate((c) => { Keyboard.setText(c.slice(0, 5) + '-' + c.slice(5).toLowerCase()); Keyboard.submit(); }, code);
+    const pcAdded = await pc.waitForSelector('[data-k="wt' + code + '"]', { timeout: 8000 }).then(() => true, () => false);
+    check(pcAdded, 'a PC opens Send to TV from its desktop and adds the TV by its typed code');
+    if (pcAdded) {
+        await pc.evaluate((c) => document.querySelector('[data-k="wt' + c + '"]').click(), code);
+        await pc.waitForTimeout(150);
+        await pc.evaluate(() => { Keyboard.setText('https://web.example.test/from-pc'); Keyboard.submit(); });
+        const brp = await tvp.waitForFunction(() => Win.current() === 'browser', null, { timeout: 10000 }).then(() => true, () => false);
+        check(brp && await tvp.evaluate(() => /from-pc/.test(document.querySelector('.br-addr').textContent)), 'a link sent from the PC opens in MyBrowser on the TV');
+        if (shots) await pc.screenshot({ path: shots + '/share-net-0-pc.png' });
+        await tvp.evaluate(() => Win.open('receiver'));
+    }
+    check(!pc.errors.length, 'no page errors on the PC ' + pc.errors.join(' | '));
+    await pc.context().close();
 
     // a phone's browser (no My PC app) opens the QR code's link: Send to TV adds that TV
     const ph = await newPage(browser, base, db, { phone: true });

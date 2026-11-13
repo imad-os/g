@@ -101,6 +101,7 @@
             big.setAttribute('aria-label', s.code.split('').join(' '));
             ct.appendChild(big);
             ct.appendChild(el('p', 'rx-note', t('rxCodeHelp')));
+            if (s.account) ct.appendChild(el('p', 'rx-note rx-mine', t('rxMine').replace('%s', s.account)));
             var nc = btn('rx-btn', t('rxNewCode'), function () { ShareRx.renewCode(); });
             nc.setAttribute('data-k', 'newcode');
             ct.appendChild(nc);
@@ -206,6 +207,29 @@
         Store.rawSet(NETS, nets().filter(function (x) { return x.code !== code; }));
         if (nativeOk()) { var s = info(); if (s.tv === 'net:' + code) N().shareForget(); }
         stDraw();
+    }
+    // the TVs of the same player account (their Receiver wrote players/<uid>/tvs): no code needed
+    function myTvs() {
+        if (typeof Accounts === 'undefined' || !Accounts.uid) return;
+        var pid = Store.profile(), uid = Accounts.uid(pid), own = '';
+        if (!uid) return;
+        try { own = ShareRx.tvKey(); } catch (e) {}
+        Accounts.token(pid, function (e, tok) {
+            if (e) return;
+            Cloud.query('players/' + uid, { from: [{ collectionId: 'tvs' }], limit: 20 }, 8000, function (e2, docs) {
+                if (e2 || !docs) return;
+                var l = nets().filter(function (x) { return !x.mine; }), got = [];
+                docs.forEach(function (d) {
+                    var c = d.data && d.data.code;
+                    if (!CODE_RE.test(c || '') || d.id === own) return;
+                    l = l.filter(function (x) { return x.code !== c; });
+                    got.push({ code: c, name: String(d.data.name || 'TV').slice(0, 60), mine: 1, tv: d.id });
+                });
+                Store.rawSet(NETS, got.concat(l).slice(0, 12));
+                netCheck();
+                stDraw();
+            }, tok);
+        });
     }
     // every 15 s while this screen shows: which TVs listen, and which sent items the TV took (it deletes them)
     function netCheck() {
@@ -353,7 +377,7 @@
         for (var i = 0; i < open.length; i++) row(open[i].id, open[i].name, t('stWifi'), true);
         l.forEach(function (n) {
             var on = tvOpen(n.code);
-            row('net:' + n.code, n.name, t('stNet') + ' · ' + t(on ? 'stNetOn' : pres[n.code] === undefined ? 'stNetAsk' : 'stNetOff'), on, function (r) {
+            row('net:' + n.code, n.name, (n.mine ? t('stMine') + ' · ' : '') + t('stNet') + ' · ' + t(on ? 'stNetOn' : pres[n.code] === undefined ? 'stNetAsk' : 'stNetOff'), on, function (r) {
                 if (!nat) {
                     var tx = btn('rx-btn rx-main', t('stTypeText'), function () {
                         Keyboard.open({ title: t('stTypeText'), max: 2000, mode: 'title' }, function (v) { if (String(v || '').trim()) webSend(n.code, 'text', String(v)); });
@@ -362,6 +386,7 @@
                     var ph = btn('rx-btn', t('stPhotos'), function () { pickPhotos(n.code); });
                     ph.setAttribute('data-k', 'wp' + n.code); r.appendChild(ph);
                 }
+                if (n.mine) return;                        // the account's own TVs come back by themselves
                 var rm = btn('rx-btn', t('stForgetTv'), function () { forgetTv(n.code); });
                 rm.setAttribute('data-k', 'rmtv' + n.code); r.appendChild(rm);
             });
@@ -440,6 +465,7 @@
             if (nativeOk()) stTimer = setInterval(stDraw, 2000);
             netTimer = setInterval(netCheck, 15000);
             netCheck();
+            myTvs();
             var add = arg && typeof arg === 'object' && arg.add ? codeIn(arg.add) : '';
             if (add) addTvAsk(add);
             return b.querySelector('.rx-main') || b.querySelector('[data-focus]');

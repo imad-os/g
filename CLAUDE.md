@@ -425,7 +425,9 @@
   TTL = the `items` policy of SETUP 4c): text / link, a photo shrunk on the phone (base64 JPEG <= 700 000 chars; the app reads it from its own
   server at 127.0.0.1), a bigger file = only the phone's address `u` (the TV says "needs the same Wi-Fi" when it can not reach it; Firebase has
   no free file storage). The TV lists (limit 10; 3 s for a minute after activity, 8 s window open, 30 / 60 s closed, never hidden), opens and
-  deletes (taken) or marks `no` (failed); `share/<code>` { name, at, open } every 5 min. A phone browser without the app sends texts, links, photos.
+  deletes (taken) or marks `no` (failed); `share/<code>` { name, at, open } every 5 min. A phone browser without the app sends texts, links, photos. Receiver and Send to TV are on every My PC (owner 2026-11-13: "I can send from the PC to the TV too"). **Same player account = no code**
+  (owner request 2026-11-13): a signed-in TV's Receiver writes `players/<uid>/tvs/<tv>` { code, name, at } with the account's token; Send to TV
+  signed in with the same account lists them by itself ("Your TV", no Remove); the code is only for other users.
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /
   start failures and timeouts from `game-host.js` (with why: no SDK answer, no `ready()`, given up), uncaught errors of built-in games, the
   SDK's reports (uncaught, rejections, failed files, handler throws, `MyPC.fail`, `MyPC.report`; sent even before `MyPC.init`), and My PC's

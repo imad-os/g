@@ -34,9 +34,8 @@ var Desktop = (function () {
     // the Game controller is for phones and tablets (the TV is what it controls)
     if (window.tizen) APPS = APPS.filter(function (a) { return a.id !== 'gamepad'; });
     else PINNED.splice(5, 0, 'gamepad');
-    // Share to the TV: the TV (and a computer) receives, the My PC app on a phone sends (Android's share menu, MyPCNative 6+)
-    var SENDS = !window.tizen && !!window.MyPCNative && (function () { try { return MyPCNative.version() >= 6; } catch (e) { return false; } })();
-    APPS = APPS.filter(function (a) { return a.id !== (SENDS ? 'receiver' : 'sendtv'); });
+    // Share to the TV: Receiver and Send to TV are on every My PC (owner 2026-11-13: "I can send from the PC to the TV too");
+    // without the Android app, Send to TV sends texts, links and photos over the internet with the TV's code
     var WALLPAPERS = ['bloom', 'aurora', 'sunset', 'night', 'aero', 'hills', 'dunes', 'material', 'lagoon', 'nightlake', 'quest'];   // the last seven go with the themes (js/launcher/themes.js)
 
     function $(id) { return document.getElementById(id); }
@@ -139,7 +138,7 @@ var Desktop = (function () {
         add('app', appById('browser'));
         add('app', appById('store'));
         add('app', appById('receiver'));         // Share to the TV: the TV's side
-        add('app', appById('sendtv'));           // and the phone's (the My PC app)
+        add('app', appById('sendtv'));           // and the sending side (a phone, a PC, any My PC)
         add('app', appById('gamepad'));          // phones and tablets only
         box.appendChild(apkButton());
         for (i = 0; i < games.length; i++) add('game', games[i]);

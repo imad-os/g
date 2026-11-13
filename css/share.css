@@ -49,6 +49,7 @@
 .rx-code-l { font-size: 24px; color: #c8c8c8; }
 .rx-code-v { margin: 6px 0 4px; font-size: 64px; font-weight: 700; letter-spacing: 6px; color: #fff; direction: ltr; unicode-bidi: isolate; font-family: Consolas, 'DejaVu Sans Mono', monospace; }
 .rx-code .rx-btn { margin-top: 14px; }
+.rx-mine { color: #9fd6ff; }
 .st-how { display: block; margin-top: 2px; font-size: 20px; font-weight: 400; color: #9fd6ff; }
 .st-tv-off { background: #2b2b2b; }
 .st-tv-off .rx-dot { background: #777; }

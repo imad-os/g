@@ -272,8 +272,25 @@ var ShareRx = (function () {
         if (on && mode === 'cloud') { Cloud.remove('share/' + old, 5000, function () {}); net.presAt = 0; net.seen = {}; netFast(); }
         emit();
     }
+    // a TV for the Firestore document name of the account's list
+    function tvKey() { return String(tvId()).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 60) || 'tv'; }
+    function account() {
+        if (typeof Accounts === 'undefined' || !Accounts.uid) return null;
+        var pid = Store.profile(), uid = Accounts.uid(pid), p = Profiles.find(pid);
+        return uid ? { pid: pid, uid: uid, user: (p && p.user) || '' } : null;
+    }
+    // the same player account on a phone / PC finds this TV without the code: players/<uid>/tvs/<tv> { code, name, at }
+    function mine() {
+        var a = account();
+        if (!a) return;
+        Accounts.token(a.pid, function (e, tok) {
+            if (e) return;
+            Cloud.patch('players/' + a.uid + '/tvs/' + tvKey(), { code: code(), name: tvName().slice(0, 60), at: Cloud.now() }, null, 6000, function () {}, tok);
+        });
+    }
     function presence(open) {
         net.presAt = Date.now();
+        if (open) mine();
         Cloud.patch('share/' + code(), { name: tvName().slice(0, 60), at: Cloud.now(), open: !!open }, null, 6000, function () {});
     }
     function netDelay() {
@@ -370,7 +387,7 @@ var ShareRx = (function () {
     function state() {
         var l = [];
         for (var id in phones) l.push({ id: id, name: phones[id].name, ip: phones[id].ip });
-        return { on: on, ip: ip, noNet: noNet, scanning: !!scanner, progress: progress, phones: l, via: viaPref(), mode: mode || viaNow(), code: code(), netOk: net.ok, netErr: net.err, online: typeof NetMode === 'undefined' || NetMode.mode() === 'online' };
+        return { on: on, ip: ip, noNet: noNet, scanning: !!scanner, progress: progress, phones: l, via: viaPref(), mode: mode || viaNow(), code: code(), netOk: net.ok, netErr: net.err, online: typeof NetMode === 'undefined' || NetMode.mode() === 'online', account: (account() || {}).user || '' };
     }
 
     // a song sent from a phone: MyMusic plays it straight from the phone (Range), its tags read in pieces the same way
@@ -394,7 +411,7 @@ var ShareRx = (function () {
             if (v && on && mode === 'lan' && !scanner && !Object.keys(phones).length) scan();
             if (v && on && mode === 'cloud') netFast();
         },
-        setVia: setVia, via: viaPref, code: code, renewCode: renewCode, link: function () { return 'https://pc.geekspro.us/?sendto=' + code(); },
+        setVia: setVia, via: viaPref, code: code, tvKey: tvKey, renewCode: renewCode, link: function () { return 'https://pc.geekspro.us/?sendto=' + code(); },
         onChange: function (fn) { listeners.push(fn); }, offChange: function (fn) { var i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); },
         addPhone: addPhone, history: history, open: open, kindOf: kindOf, label: label, linkIn: linkIn, tvId: tvId, tvName: tvName
     };
