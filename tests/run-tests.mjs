@@ -4977,12 +4977,17 @@ async function widgetTests(browser, base) {
         // a match card (Football Live, owner request 2026-11-13): competition logo + name, then home flag  0 - 0  away flag, then the start time
         const koraCode = "export default async function () { return { view: { title: 'Africa Cup of Nations - Qualification', icon: 'https://flags.test/caf.svg', big: '0 - 0', " +
             "versus: { left: 'https://flags.test/ma.svg', right: 'https://flags.test/ne.svg' }, sub: 'Starts at 20:00', accent: '#e50914' } }; }";
+        const kora2Code = "export default async function () { return { view: { title: 'Football Live', matches: [" +
+            "{ icon: 'https://flags.test/caf.svg', left: 'https://flags.test/ma.svg', score: '0 - 0', right: 'https://flags.test/ne.svg', info: '20:00' }," +
+            "{ icon: 'https://flags.test/caf.svg', left: 'https://flags.test/ne.svg', score: '2 - 1', right: 'https://flags.test/ma.svg', info: \"67'\" }," +
+            "{ icon: '🏆', left: '⚽', score: '1 - 1', right: '⚽', info: 'FT' }], accent: '#4cd964' } }; }";
         const kw = { id: 'scores', title: 'Football Live', file: 'https://kora.example/widgets/scores.js', size: 'medium', every: 15, background: false };
         const db = { apps: { stars: app([Object.assign({ sha }, w)]), pending: Object.assign(app([w]), { id: 'pending', name: 'Pending' }),
-            kora: Object.assign(app([Object.assign({ sha }, kw)]), { id: 'kora', name: 'Football Live' }) },
-            widgets: { stars__stars: { app: 'stars', widget: 'stars', code, sha, at: 1 }, kora__scores: { app: 'kora', widget: 'scores', code: koraCode, sha, at: 1 } } };
+            kora: Object.assign(app([Object.assign({ sha }, kw)]), { id: 'kora', name: 'Football Live' }),
+            kora2: Object.assign(app([Object.assign({ sha }, kw, { file: 'https://kora2.example/widgets/scores.js' })]), { id: 'kora2', name: 'Football Live 2', url: 'https://kora2.example/', entry: 'https://kora2.example/index.html' }) },
+            widgets: { stars__stars: { app: 'stars', widget: 'stars', code, sha, at: 1 }, kora__scores: { app: 'kora', widget: 'scores', code: koraCode, sha, at: 1 }, kora2__scores: { app: 'kora2', widget: 'scores', code: kora2Code, sha, at: 1 } } };
         const page = await newPage(browser, base, db);
-        await page.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'stars', at: 1 }, { id: 'pending', at: 1 }, { id: 'kora', at: 1 }])); });
+        await page.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'stars', at: 1 }, { id: 'pending', at: 1 }, { id: 'kora', at: 1 }, { id: 'kora2', at: 1 }])); });
         const flag = (body) => ({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 20">' + body + '</svg>' });
         await page.route('https://flags.test/**', (r) => r.fulfill(flag({
             'ma.svg': '<rect width="30" height="20" fill="#c1272d"/><path d="M15 6l1.2 3.6h3.8l-3 2.2 1.1 3.6-3.1-2.2-3.1 2.2 1.1-3.6-3-2.2h3.8z" fill="none" stroke="#006233" stroke-width=".8"/>',
@@ -5012,7 +5017,7 @@ async function widgetTests(browser, base) {
         check(await page.evaluate(() => [...document.querySelectorAll('#desk-widgets .wdg')].map((c) => c.id).join() === 'wdg-weather' &&
             ['playtime', 'sysmon', 'music', 'stars__stars'].every((id) => Widgets.conf(id).show === false) && Widgets._timers().join() === 'weather'),
             'a new profile shows only the Weather widget; the others are off and run nothing');
-        await page.evaluate(() => ['playtime', 'sysmon', 'music', 'stars__stars', 'kora__scores'].forEach((id) => Widgets.set(id, 'show', true)));
+        await page.evaluate(() => ['playtime', 'sysmon', 'music', 'stars__stars', 'kora__scores', 'kora2__scores'].forEach((id) => Widgets.set(id, 'show', true)));
         await page.waitForFunction(() => /21/.test((document.getElementById('wdg-weather') || {}).textContent || ''), null, { timeout: 8000 }).catch(() => {});
         await page.waitForFunction(() => /Morning Pixels/.test((document.getElementById('wdg-music') || {}).textContent || ''), null, { timeout: 5000 }).catch(() => {});
         const cards = await page.evaluate(() => [...document.querySelectorAll('#desk-widgets .wdg')].map((c) => c.id + ':' + c.textContent));
@@ -5039,8 +5044,18 @@ async function widgetTests(browser, base) {
         });
         check(kora.head === 'caf.svg' && /Africa Cup/.test(kora.title) && kora.imgs.join() === 'ma.svg,ne.svg' && kora.big === '0 - 0' && kora.sub === 'Starts at 20:00' && kora.oneLine && kora.order && kora.noSideImage,
             'a match card: competition logo + name, then home flag  0 - 0  away flag on one line, then the start time ' + JSON.stringify(kora));
+        await page.waitForFunction(() => document.querySelectorAll('#wdg-kora2__scores .wdg-m').length === 3, null, { timeout: 8000 }).catch(() => {});
+        const k2 = await page.evaluate(() => {
+            const c = document.getElementById('wdg-kora2__scores'), card = c && c.getBoundingClientRect();
+            const lines = c ? [...c.querySelectorAll('.wdg-m')] : [];
+            return { n: lines.length, text: lines.map((l) => l.textContent).join(' | '), imgs: lines[0] ? lines[0].querySelectorAll('img').length : 0,
+                inside: lines.every((l) => l.getBoundingClientRect().bottom <= card.bottom + 1) };
+        });
+        check(k2.n === 3 && /0 - 0.*20:00/.test(k2.text) && /2 - 1.*67'/.test(k2.text) && /1 - 1.*FT/.test(k2.text) && k2.imgs === 3 && k2.inside,
+            'up to 3 matches: one line each (competition, home flag, score, away flag, minute / time), all inside the card ' + JSON.stringify(k2));
         if (process.env.MYPC_SHOTS) { await page.evaluate(() => Notify.clear()); await page.waitForTimeout(900); }
         if (process.env.MYPC_SHOTS) await page.locator('#wdg-kora__scores').screenshot({ path: path.join(process.env.MYPC_SHOTS, 'widget-match.png') });
+        if (process.env.MYPC_SHOTS) await page.locator('#wdg-kora2__scores').screenshot({ path: path.join(process.env.MYPC_SHOTS, 'widget-matches.png') });
         await page.click('#wdg-stars__stars .wdg-btn');
         await page.waitForFunction(() => /1 \/ 50/.test(document.getElementById('wdg-stars__stars').textContent), null, { timeout: 5000 }).catch(() => {});
         check(await page.evaluate(() => /1 \/ 50/.test(document.getElementById('wdg-stars__stars').textContent)), 'a card button runs the widget again with ctx.action and keeps its state');

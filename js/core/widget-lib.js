@@ -115,7 +115,7 @@
     }
 
     // what a widget returned -> the view My PC draws (anything else is dropped). Also used for the built-in widgets.
-    //   { title, icon, big, sub, text, image, versus: { left, right }, progress (0..1), rows: [{ label, value }], buttons: [{ id, label, icon }],
+    //   { title, icon, big, sub, text, image, versus: { left, right }, matches: [{ icon, left, score, right, info }] (3), progress (0..1), rows: [{ label, value }], buttons: [{ id, label, icon }],
     //     accent '#rrggbb', link '<path>' (opens the app there on OK) }
     function cleanView(v, builtIn) {
         if (!isObject(v)) return { text: '' };
@@ -132,6 +132,14 @@
             var side = function (x) { x = str(x); return x && (https(x) || (!/^[a-z]+:/i.test(x) && x.length <= 4)) ? x : ''; };
             var vl = side(v.versus.left), vr = side(v.versus.right);
             if (vl || vr) out.versus = { left: vl, right: vr };
+        }
+        // up to 3 compact lines (matches): small icon, a picture, the score, a picture, a short info on the right
+        if (Array.isArray(v.matches)) {
+            var pic = function (x) { x = str(x); return x && (https(x) || (!/^[a-z]+:/i.test(x) && x.length <= 4)) ? x : ''; };
+            out.matches = v.matches.filter(isObject).map(function (m) {
+                return { icon: pic(m.icon), left: pic(m.left), right: pic(m.right), score: cut(m.score, 12), info: cut(m.info, 16) };
+            }).filter(function (m) { return m.score || m.left || m.right; }).slice(0, 3);
+            if (!out.matches.length) delete out.matches;
         }
         var p = +v.progress;
         if (v.progress !== undefined && v.progress !== null && isFinite(p)) out.progress = Math.max(0, Math.min(1, p));

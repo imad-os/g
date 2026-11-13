@@ -98,7 +98,8 @@ export function initWidgets(env) {
     const ic = v.icon ? (/^https:/.test(v.icon) ? '<img src="' + esc(v.icon) + '" alt="">' : esc(v.icon)) : '';
     return '<div class="wg-card wg-' + esc(w.size) + '" style="border-top-color:' + esc(v.accent || '#4fc3ff') + '">' +
       '<div class="wg-head"><span class="wg-ic">' + ic + '</span>' + esc(v.title || pick(w.title) || w.id) + '</div>' +
-      (v.versus ? '<div class="wg-vs">' + side(v.versus.left) + '<div class="wg-big">' + esc(v.big || '') + '</div>' + side(v.versus.right) + '</div>'
+      (v.matches ? v.matches.map((m) => '<div class="wg-vs wg-m"><span class="wg-ic">' + (/^https:/.test(m.icon || '') ? '<img src="' + esc(m.icon) + '" alt="">' : esc(m.icon || '')) + '</span>' + side(m.left) + '<b class="wg-ms">' + esc(m.score || '') + '</b>' + side(m.right) + '<span class="wg-sub" style="margin-left:auto">' + esc(m.info || '') + '</span></div>').join('') : '') +
+      (v.matches ? '' : v.versus ? '<div class="wg-vs">' + side(v.versus.left) + '<div class="wg-big">' + esc(v.big || '') + '</div>' + side(v.versus.right) + '</div>'
         : v.big ? '<div class="wg-big">' + esc(v.big) + '</div>' : '') + (v.sub ? '<div class="wg-sub">' + esc(v.sub) + '</div>' : '') +
       (v.text ? '<div class="wg-text">' + esc(v.text) + '</div>' : '') +
       (v.progress !== undefined ? '<div class="wg-bar"><i style="width:' + Math.round(v.progress * 100) + '%;background:' + esc(v.accent || '#4fc3ff') + '"></i></div>' : '') +

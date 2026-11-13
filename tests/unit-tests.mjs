@@ -488,6 +488,8 @@ console.log('8. Desktop widgets (js/core/widget-lib.js), Music, Playtime');
         !v.accent && v.link === 'level/3' && !v.html, 'views: numbers become text, long text cut, no script / http pictures, progress 0..1, empty rows and buttons dropped, unknown fields dropped');
     const vs = W.cleanView({ big: '0 - 0', versus: { left: 'https://x.y/h.png', right: 'javascript:alert(1)' } });
     check(vs.versus && vs.versus.left === 'https://x.y/h.png' && vs.versus.right === '' && !W.cleanView({ versus: { left: 'http://x/a.png' } }).versus, 'widget view: versus pictures cleaned');
+    const ms = W.cleanView({ matches: [{ icon: 'https://x.y/l.png', left: 'https://x.y/h.png', right: '⚽', score: '1 - 0', info: "67'" }, { left: 'javascript:x', score: '' }, 3, {}, { score: 'a' }, { score: 'b' }, { score: 'c' }] });
+    check(ms.matches.length === 3 && ms.matches[2].score === 'b' && ms.matches[0].left === 'https://x.y/h.png' && ms.matches[0].right === '⚽' && ms.matches[0].info === "67'" && ms.matches[1].score === 'a', 'widget view: matches cleaned (3 at most, bad pictures dropped)');
     check(W.cleanView({ icon: '⭐' }).icon === '⭐' && W.cleanView({ icon: 'https://x.y/i.png' }).icon === 'https://x.y/i.png' && W.cleanView({ icon: 'i:sun' }, true).icon === 'i:sun' && !W.cleanView({ icon: 'i:sun' }).icon,
         'icons: an emoji, an https picture; a built-in icon (i:...) only for My PC\'s own widgets');
     const r = W.result({ view: { big: 'x' }, state: { n: 1 } }), r2 = W.result({ big: 'y' }), r3 = W.result('no'), r4 = W.result({ view: {}, state: 'x'.repeat(5000) });

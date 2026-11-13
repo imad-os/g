@@ -460,6 +460,7 @@ var Widgets = (function () {
     function label(d, v) {
         var p = [d.title()];
         ['big', 'sub', 'text'].forEach(function (k) { if (v[k]) p.push(v[k]); });
+        (v.matches || []).forEach(function (m) { p.push(m.score + (m.info ? ' ' + m.info : '')); });
         (v.alerts || []).forEach(function (a) { p.push(a.text); });
         (v.events || []).forEach(function (e) { p.push((e.when ? e.when + ': ' : '') + e.text); });
         (v.rows || []).forEach(function (r) { p.push(r.label + ' ' + r.value); });
@@ -493,7 +494,7 @@ var Widgets = (function () {
         head.appendChild(iconEl(v.icon, d.icon));
         head.appendChild(el('span', 'wdg-title', v.title || d.title()));
         c.appendChild(head);
-        if (v.image && !v.versus && d.size !== 'small') { var im = el('img', 'wdg-img'); im.alt = ''; im.src = v.image; im.onerror = function () { this.remove(); }; c.appendChild(im); }
+        if (v.image && !v.versus && !v.matches && d.size !== 'small') { var im = el('img', 'wdg-img'); im.alt = ''; im.src = v.image; im.onerror = function () { this.remove(); }; c.appendChild(im); }
         if (v.page) {
             // the day's names on the left, a tear-off calendar page on the right (Calendar)
             var hero2 = el('div', 'wdg-hero'), col2 = el('div', 'wdg-col'), pg = el('div', 'wdg-page');
@@ -554,6 +555,20 @@ var Widgets = (function () {
                 c.appendChild(duo);
                 tick();
             } else c.appendChild(hero);
+        } else if (v.matches) {
+            // up to 3 lines: competition icon, home picture, score, away picture, minute / start time (Football Live)
+            var ms = el('div', 'wdg-ms');
+            v.matches.forEach(function (m) {
+                var x = el('div', 'wdg-m');
+                var ic = sideEl(m.icon); ic.className = 'wdg-m-ic'; x.appendChild(ic);
+                x.appendChild(sideEl(m.left));
+                x.appendChild(el('b', 'wdg-m-s', m.score || ''));
+                x.appendChild(sideEl(m.right));
+                x.appendChild(el('span', 'wdg-m-i', m.info || ''));
+                ms.appendChild(x);
+            });
+            c.appendChild(ms);
+            if (v.sub) c.appendChild(el('div', 'wdg-sub', v.sub));
         } else if (v.versus) {
             // a picture, the big value, a picture on one line (a match: home flag, score, away flag), then the line under it
             var vs = el('div', 'wdg-vs');
