@@ -305,7 +305,7 @@
   (`pads` message carries `i` + `map`; same wrapper objects every call).
 - **App settings per user (owner request 2026-11-12, build 161, API 21)**: My PC's menu over an app / game has **App settings** (sub-page of the
   pause menu, Back returns to the menu), also Control Panel > Gaming > Settings of each app and game. Profile key `app_prefs` { <id>: { bg, direct,
-  keys, quiet } }, a value equal to the default is not kept: `bg` overrides config `allow_background_running`; `direct` is OFF by default (owner decision 2026-11-13, build 170: `direct: true` = the user allowed it); off = the app cannot read
+  keys, quiet } }, a value equal to the default is not kept: `bg` overrides config `allow_background_running`; `direct` is OFF by default (owner decision 2026-11-13, build 171: `direct: true` = the user allowed it); off = the app cannot read
   the controllers itself (SDK `navigator.getGamepads()` returns no pads, message `gp` `{ e: 'direct' }`, and the iframe `allow` loses `gamepad` at the
   next open); `keys` overrides Control Panel's "Every button goes to the app" for that app; `quiet` = no Notify cards over it (errors and
   pad / ctrl / net cards still show, `GameHost.quiet()`). API: `GameHost.appPrefs(id)` / `setAppPref(id, k, v|null)` / `resetAppPrefs(id)`. Tests:
