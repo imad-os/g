@@ -391,7 +391,7 @@ async function main() {
     if (process.env.MYPC_ONLY === 'calendar') { await calendarTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'clock') { await clockTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'pads') { await padTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
-    if (process.env.MYPC_ONLY === 'bookmarks') { await bookmarkTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'bookmarks') { await bookmarkTests(browser, base); await webTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'themes') { await themeTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'ring') { await ringTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'flow') { await flowTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
@@ -1227,7 +1227,7 @@ async function main() {
         await key('Enter'); await page.keyboard.type('example.com');
         await page.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
         check(await page.evaluate(() => document.querySelectorAll('.br-frame').length === 1 && document.activeElement.className.indexOf('br-view') >= 0), 'browser loads the address and focuses the page');
-        await key('Escape', 'Escape');
+        await key('Escape'); await page.waitForTimeout(600); await key('Escape');    // Back: the start page (one Back at a time: two quick ones = the browser buttons)
         check(await page.evaluate(() => document.querySelectorAll('iframe').length === 0 && document.getElementById('window').hidden), 'closing the browser removes its page');
         // open/close every app 5 times: nothing left behind
         for (let i = 0; i < 5; i++) for (const a of ['explorer', 'browser', 'calculator', 'calendar', 'settings', 'scores']) { await page.evaluate((x) => Win.open(x), a); await page.evaluate(() => Win.close()); }
@@ -1880,7 +1880,8 @@ async function main() {
         });
         await routeHosted(page, { offline: true });
         // a web app that keeps grabbing the keyboard and is much taller than the screen
-        await page.route(SITE + '**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body:
+        // a site My PC can not read itself (a browser, no relay): the plain frame with its remote / mouse modes
+        await page.route(SITE + '**', (r) => r.request().resourceType() === 'fetch' ? r.abort('failed') : r.fulfill({ status: 200, contentType: 'text/html', body:
             '<!doctype html><title>Fake web app</title><body style="margin:0"><input id="i" autofocus><div style="height:6000px;background:linear-gradient(#fff,#08f)">tall page</div>' +
             '<script>setInterval(function(){document.getElementById("i").focus();},300)<\/script>' }));
         await page.goto(base + 'index.html');
@@ -3394,7 +3395,7 @@ async function main() {
         await ph.keyboard.type('org');
         await ph.keyboard.press('Enter');
         await tv.waitForFunction(() => !Keyboard.isOpen(), null, { timeout: 5000 }).catch(() => {});
-        check(await tv.evaluate(() => !Keyboard.isOpen() && /wikipedia\.org/.test((document.querySelector('.br-frame') || {}).src || '')), 'Enter on the phone = Send: the Browser goes to the address');
+        check(await tv.evaluate(() => !Keyboard.isOpen() && /wikipedia\.org/.test(document.querySelector('.br-addr').textContent)), 'Enter on the phone = Send: the Browser goes to the address');
         await ph.waitForFunction(() => !document.querySelector('.gc-tinto').classList.contains('on'), null, { timeout: 5000 }).catch(() => {});
         check(await ph.evaluate(() => !document.querySelector('.gc-tinto').classList.contains('on') && document.querySelector('.gc-tin').value === ''), 'the keyboard closed on the TV: the phone shows no field and its box is empty again');
         // Send mode (Live off): nothing reaches the TV until Send
@@ -3407,7 +3408,7 @@ async function main() {
         check(await tv.evaluate(() => Keyboard.isOpen() && document.getElementById('namer-text').textContent !== 'example.com'), 'Live off: typing on the phone does not change the TV field yet');
         await ph.click('.gc-tsend');
         await tv.waitForFunction(() => !Keyboard.isOpen(), null, { timeout: 5000 }).catch(() => {});
-        check(await tv.evaluate(() => /example\.com/.test(document.querySelector('.br-frame').src)), 'Send puts the text in the field and presses OK (the Browser opens example.com)');
+        check(await tv.evaluate(() => /example\.com/.test(document.querySelector('.br-addr').textContent)), 'Send puts the text in the field and presses OK (the Browser opens example.com)');
         // a text field of My PC itself (input with the focus): its text comes to the phone, Send writes it and presses Enter
         await tv.evaluate(() => { Win.close(); const i = document.createElement('input'); i.id = '__f'; i.value = 'old'; i.setAttribute('aria-label', 'Note'); window.__enter = 0; i.addEventListener('keydown', (e) => { if (e.keyCode === 13) __enter++; }); document.body.appendChild(i); i.focus(); });
         await ph.waitForFunction(() => /Note/.test(document.querySelector('.gc-tinto').textContent), null, { timeout: 5000 });
@@ -4838,6 +4839,8 @@ async function main() {
     await flowTests(browser, base);
     await ringTests(browser, base);
     await themeTests(browser, base);
+    await bookmarkTests(browser, base);
+    await webTests(browser, base);
     await videoTests(browser, base);
     await speedyTests(browser, base);
 
@@ -6557,6 +6560,7 @@ async function bookmarkTests(browser, base) {
         window.__pad = (b, on) => { window.__pads[0].buttons[b].pressed = on; window.__pads[0].buttons[b].value = on ? 1 : 0; };
     });
     await page.route(SITE + '**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Fake</title><body style="margin:0;background:#fff;font:40px sans-serif">A web page</body>' }));
+    await page.route(/(youtube|facebook)\.com/, (r) => r.abort('failed'));          // like a browser where they allow no CORS and no relay is set
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.goto(base + 'index.html');
     await page.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
@@ -6603,7 +6607,7 @@ async function bookmarkTests(browser, base) {
     const star = () => page.evaluate(() => { const b = document.querySelector('.br-bar [aria-pressed]'); return b.getAttribute('aria-pressed') + '|' + b.getAttribute('aria-label'); });
     check(await star() === 'false|Add this page to bookmarks', 'the star on the toolbar offers to save the page');
     await page.evaluate(() => document.querySelector('.br-bar [aria-pressed]').click());
-    check(await star() === 'true|Remove this page from bookmarks' && await page.evaluate(() => Store.get('br_marks').some((m) => m.u === 'https://web.example.test' && m.n === 'Web.example.test')), 'the star saves it (name from the address) ' + JSON.stringify(await page.evaluate(() => Store.get('br_marks'))));
+    check(await star() === 'true|Remove this page from bookmarks' && await page.evaluate(() => Store.get('br_marks').some((m) => /^https:\/\/web\.example\.test\/?$/.test(m.u) && m.n === 'Fake')), 'the star saves it (named after the page title) ' + JSON.stringify(await page.evaluate(() => Store.get('br_marks'))));
     if (shots) await page.screenshot({ path: shots + '/bm-3-star.png' });
     await page.evaluate(() => window.__plug()); await page.waitForTimeout(300);
     await pad(9);                                                            // + (Start)
@@ -6613,12 +6617,12 @@ async function bookmarkTests(browser, base) {
     // back on the start page: the new tile; + on a tile = its menu; Remove
     await page.evaluate(() => document.querySelector('.br-bar [aria-label="Home"]').click());
     await page.waitForTimeout(100);
-    check((await tiles()).indexOf('Web.example.test') === 4, 'the saved page is a tile on the start page ' + JSON.stringify(await tiles()));
+    check((await tiles()).indexOf('Fake') === 4, 'the saved page is a tile on the start page ' + JSON.stringify(await tiles()));
     await page.evaluate(() => document.querySelectorAll('.br-link')[4].focus());
     await pad(9);
     check(await page.evaluate(() => !!document.querySelector('.br-menu')), '+ on a bookmark opens its menu');
     await page.evaluate(() => [...document.querySelectorAll('.br-menu .dm-item')].pop().click());
-    check((await tiles()).indexOf('Web.example.test') < 0 && await page.evaluate(() => !document.querySelector('.br-menu')), 'Remove takes it away and closes the menu');
+    check((await tiles()).indexOf('Fake') < 0 && await page.evaluate(() => !document.querySelector('.br-menu')), 'Remove takes it away and closes the menu');
     // Add bookmark tile: one step, the address
     await page.evaluate(() => document.querySelector('.br-add').click());
     await page.keyboard.type('news.example.test');
@@ -6641,6 +6645,107 @@ async function bookmarkTests(browser, base) {
     await page.evaluate(() => Win.close());
     check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
     await page.context().close();
+}
+
+async function webTests(browser, base) {
+    console.log('52. Browser drives web pages: My PC reads the page itself, arrows move between links, OK opens, Back / Back twice, typing, relay only after CORS');
+    const shots = process.env.MYPC_SHOTS;
+    const SITE = 'https://site.example.test/';
+    const page = await newPage(browser, base, {});
+    const origin = new URL(base).origin;
+    const cors = { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Credentials': 'true' };
+    const html = (title, body) => '<!doctype html><html><head><title>' + title + '</title><style>body{font:28px sans-serif;margin:30px;background:#fff;color:#111}a{display:inline-block;margin:10px 0}</style></head><body>' + body + '</body></html>';
+    let asked = [];
+    await page.route(SITE + '**', (r) => {
+        const u = new URL(r.request().url());
+        asked.push(u.pathname + u.search);
+        if (u.pathname === '/') return r.fulfill({ status: 200, headers: Object.assign({ 'Content-Type': 'text/html; charset=utf-8' }, cors), body: html('Home of the site',
+            '<h1>Site home</h1><p><a href="/news">News</a></p><p><a href="page2.html">Second page</a></p>' +
+            '<form action="/search"><input name="q" placeholder="Search the site"><button>Go</button></form>' +
+            '<p><select id="s"><option>Red</option><option>Green</option><option>Blue</option></select></p>' + '<div style="height:2400px"></div><p><a href="/bottom">Bottom link</a></p>') });
+        return r.fulfill({ status: 200, headers: Object.assign({ 'Content-Type': 'text/html' }, cors), body: html('Page ' + u.pathname, '<h1>Page ' + u.pathname + u.search + '</h1><p><a href="/">Home</a></p>') });
+    });
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.goto(base + 'index.html');
+    await page.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
+    const key = async (...ks) => { for (const k of ks) { await page.keyboard.press(k); await page.waitForTimeout(80); } };
+    const site = async () => { const h = await page.$('.br-frame'); return h ? h.contentFrame() : null; };
+    const ring = async () => { try { const f = await site(); return f ? await f.evaluate(() => { const e = document.querySelector('.__mypc_f'); return e ? e.textContent.trim() || e.getAttribute('placeholder') || e.tagName : ''; }) : 'no frame'; } catch (e) { return 'loading'; } };
+    const heading = async () => { try { const f = await site(); return f ? await f.evaluate(() => (document.querySelector('h1') || {}).textContent || '') : ''; } catch (e) { return ''; } };   // the copy is being replaced
+    const where = () => page.evaluate(() => { const a = document.activeElement; return a.tagName === 'IFRAME' ? 'page' : a.closest('.br-bar') ? 'toolbar' : a.classList.contains('br-view') ? 'view' : a.className; });
+    const waitPage = async (h) => { for (let i = 0; i < 40; i++) { if ((await heading()) === h) return true; await page.waitForTimeout(100); } return false; };
+    await page.evaluate(() => Win.open('browser'));
+    await key('Enter');
+    await page.keyboard.type('site.example.test');
+    await page.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
+    check(await waitPage('Site home'), 'My PC read the page itself and shows its copy');
+    const fr = await page.evaluate(() => { const f = document.querySelector('.br-frame'); return { sb: f.getAttribute('sandbox'), src: f.hasAttribute('srcdoc'), title: document.querySelector('.br-addr').textContent }; });
+    check(fr.sb === 'allow-scripts allow-forms' && fr.src && fr.title === 'https://site.example.test/', 'the copy runs sandboxed with no same-origin (the site never reaches My PC\'s storage) ' + JSON.stringify(fr));
+    check(await where() === 'view', 'My PC keeps the keyboard focus (so it always hears Back)');
+    await key('ArrowDown');
+    check(await ring() === 'News', 'Down puts a focus ring on the first link (' + await ring() + ')');
+    await key('ArrowDown');
+    check(await ring() === 'Second page', 'Down again: the next link');
+    if (shots) await page.screenshot({ path: shots + '/web-1-focus-ring.png' });
+    await key('Enter');
+    check(await waitPage('Page /page2.html'), 'OK opens the link inside My PC (relative address resolved) ' + await heading());
+    check(await page.evaluate(() => document.querySelector('.br-addr').textContent) === 'https://site.example.test/page2.html', 'the address bar follows');
+    // Back once: the page before
+    await key('Escape');
+    await page.waitForTimeout(600);
+    check(await waitPage('Site home'), 'Back once goes to the page before');
+    // Back twice quickly: the browser buttons; Back there: the page again
+    await page.keyboard.press('Escape'); await page.waitForTimeout(120); await page.keyboard.press('Escape'); await page.waitForTimeout(600);
+    check(await where() === 'toolbar' && await heading() === 'Site home', 'Back twice quickly shows the browser buttons and stays on the page');
+    if (shots) await page.screenshot({ path: shots + '/web-2-buttons.png' });
+    await key('Escape');
+    check(await where() === 'view', 'Back on the buttons goes back to the page');
+    // a text field: My PC's keyboard types into it, OK sends the form (GET) inside My PC
+    for (let i = 0; i < 6 && (await ring()) !== 'Search the site'; i++) await key('ArrowDown');
+    check(await ring() === 'Search the site', 'the arrows reach the text field');
+    await key('Enter');
+    check(await page.evaluate(() => Keyboard.isOpen()), 'OK on a text field opens My PC\'s keyboard');
+    await page.keyboard.type('hello');
+    await page.evaluate(() => [...document.querySelectorAll('#namer-keys button')].pop().click());
+    check(await waitPage('Page /search?q=hello'), 'the form is sent and its answer shows inside My PC ' + await heading());
+    await key('Escape'); await page.waitForTimeout(600);
+    await waitPage('Site home');
+    // a list (<select>): My PC's menu
+    for (let i = 0; i < 8 && (await ring()) !== 'RedGreenBlue'; i++) await key('ArrowDown');
+    await key('Enter');
+    const opts = await page.evaluate(() => [...document.querySelectorAll('.br-pick .dm-item')].map((b) => b.textContent).join());
+    check(opts === 'Red,Green,Blue', 'OK on a list shows its choices in My PC\'s menu ' + opts);
+    await page.evaluate(() => [...document.querySelectorAll('.br-pick .dm-item')][2].click());
+    await page.waitForTimeout(150);
+    check(await (await site()).evaluate(() => document.getElementById('s').value) === 'Blue', 'the choice reaches the page');
+    // far down: Down scrolls when nothing is near
+    await key('ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown');
+    check(await (await site()).evaluate(() => scrollY > 500), 'Down scrolls the page when no link is near');
+    // bookmark of a read page: named after its title
+    await page.evaluate(() => document.querySelector('.br-bar [aria-pressed]').click());
+    check(await page.evaluate(() => Store.get('br_marks').some((m) => m.n === 'Home of the site')), 'a bookmark of the page takes the page\'s title');
+    await page.evaluate(() => Win.close());
+    check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+    await page.context().close();
+
+    // in a browser (not the TV): a site that allows no CORS goes once through the relay set in the App Store Manager
+    const p2 = await newPage(browser, base, {});
+    await p2.addInitScript(() => { try { delete window.tizen.application; } catch (e) {} window.tizen.application = undefined; });
+    let relayAsked = '';
+    await p2.route('https://plain.example.test/**', (r) => r.request().resourceType() === 'fetch' ? r.abort('failed') : r.fulfill({ status: 200, contentType: 'text/html', body: html('No CORS', '<h1>direct</h1>') }));   // a CORS refusal looks like this to the page
+    await p2.route('https://relay.example.test/**', (r) => { relayAsked = new URL(r.request().url()).searchParams.get('url'); r.fulfill({ status: 200, headers: { 'Content-Type': 'text/html', 'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'x-final-url', 'x-final-url': 'https://plain.example.test/home' }, body: html('Via relay', '<h1>Through the relay</h1><a href="next">Next</a>') }); });
+    await p2.setViewportSize({ width: 1920, height: 1080 });
+    await p2.goto(base + 'index.html');
+    await p2.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
+    await p2.evaluate(() => { localStorage.setItem('arc_dev_global', JSON.stringify({ webRelay: 'https://relay.example.test/fetch' })); GlobalSettings._reset(); Win.open('browser', 'https://plain.example.test/'); });
+    let h2 = '';
+    for (let i = 0; i < 40 && h2 !== 'Through the relay'; i++) { await p2.waitForTimeout(100); const fh = await p2.$('.br-frame'), f = fh && await fh.contentFrame(); h2 = f && await fh.getAttribute('srcdoc') ? await f.evaluate(() => (document.querySelector('h1') || {}).textContent || '').catch(() => '') : ''; }
+    check(h2 === 'Through the relay' && relayAsked === 'https://plain.example.test/' && await p2.evaluate(() => document.querySelector('.br-addr').textContent) === 'https://plain.example.test/home', 'a CORS error in a browser: the page comes once through the relay (' + relayAsked + ')');
+    await p2.evaluate(() => { localStorage.removeItem('arc_dev_global'); GlobalSettings._reset(); Win.close(); Win.open('browser', 'https://plain.example.test/'); });
+    await p2.waitForTimeout(800);
+    check(await p2.evaluate(() => { const f = document.querySelector('.br-frame'); return !f.hasAttribute('srcdoc') && /plain\.example\.test/.test(f.src); }), 'no relay set: the site itself in the plain frame, as before');
+    check(p2.errors.length === 0, 'no page errors ' + p2.errors.join('; '));
+    await p2.context().close();
 }
 
 async function themeTests(browser, base) {

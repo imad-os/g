@@ -55,6 +55,9 @@ var GlobalSettings = (function () {
             var u = String(fl[i] || '').toLowerCase().replace(/\s+/g, '');
             if (USER.test(u) && u.indexOf('..') < 0 && out.notifyFast.indexOf(u) < 0) out.notifyFast.push(u);
         }
+        // the Browser's relay for pages that refuse other sites (CORS), used only in a browser / the phone app, never on the TV
+        var wr = str(d.webRelay, MAX_URL);
+        out.webRelay = /^https:\/\/[^\s"'<>]+$/.test(wr) ? wr : '';
         // events every calendar shows (App Store Manager > Settings > Events)
         out.events = [];
         var el = Array.isArray(d.events) ? d.events : [];
@@ -109,9 +112,10 @@ var GlobalSettings = (function () {
         });
     }
 
+    function webRelay() { return load().webRelay || ''; }
     function notifyFast(user) { return !!user && load().notifyFast.indexOf(String(user).toLowerCase()) >= 0; }
 
-    return { events: function () { return load().events || []; }, parseEventLine: parseEventLine, eventLine: eventLine, wallpapers: wallpapers, defaultWallpaper: defaultWallpaper, notifyFast: notifyFast, sync: sync, clean: clean, titleFromUrl: titleFromUrl,
+    return { events: function () { return load().events || []; }, parseEventLine: parseEventLine, eventLine: eventLine, wallpapers: wallpapers, defaultWallpaper: defaultWallpaper, notifyFast: notifyFast, webRelay: webRelay, sync: sync, clean: clean, titleFromUrl: titleFromUrl,
              _reset: function () { data = null; } };
 })();
 if (typeof module !== 'undefined') module.exports = GlobalSettings;

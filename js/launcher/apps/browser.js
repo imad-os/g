@@ -13,8 +13,14 @@
  * Bookmarks (per profile, key br_marks, backed up like every profile key): tiles on the start page, YouTube / Facebook /
  * Wikipedia / OpenStreetMap until the user changes them. Save one with the star on the toolbar or the + button while a page
  * shows, or the "Add bookmark" tile. Hold OK, + , a long press or a right click on a tile: Open / Rename / Change the address /
- * Move / Remove. Sites known to refuse frames (YouTube, Facebook...) can not show in any app's frame: a card says so, and My PC is
- * never left (owner rule 2026-11-12: no TV browser, no YouTube app). */
+ * Move / Remove. My PC is never left (owner rule 2026-11-12: no TV browser, no YouTube app).
+ *
+ * Pages driven like an app (owner request 2026-11-13): My PC reads the page itself (js/launcher/web-bridge.js: no CORS on the TV,
+ * no server; elsewhere an optional relay only after a CORS error) and shows that copy with its own small script, in a sandboxed
+ * frame with no same-origin. The remote and the controller then drive the page: arrows move a focus ring between links, buttons
+ * and fields, OK clicks / types with My PC's keyboard, CH + / CH − a page. Back once = the page before (the first: the start page),
+ * Back twice quickly = the buttons on top (back, forward, reload, home, bookmark, address = new website); Back there = the page.
+ * A page My PC can not read (a browser without the relay) falls back to the plain frame and its remote / mouse modes above. */
 (function () {
     'use strict';
 
@@ -37,7 +43,10 @@
     var PAGE_H = 4000, STEP = 300;
 
     var body, bar, addr, view, frame, start, back, fwd, modeBtn, starBtn, grid, menuWrap = null, holdTimer = 0, holdEl = null, swallow = false,
-        hist = [], pos = -1, scrollY = 0, native = false, pointerIn = false;
+        hist = [], titles = [], pos = -1, scrollY = 0, native = false, pointerIn = false, bridged = false, loadSeq = 0, backTimer = 0;
+    var DOUBLE_MS = 450;
+    // keys a page that has the focus (a mouse click) may hand back: moving, OK, Back, pages, Guide; never a shortcut or media key
+    var PAGE_KEYS = { 37: 1, 38: 1, 39: 1, 40: 1, 13: 1, 10009: 1, 27: 1, 8: 1, 427: 1, 428: 1, 33: 1, 34: 1, 117: 1, 458: 1 };
 
     function el(tag, cls, text) {
         var e = document.createElement(tag);
@@ -97,7 +106,7 @@
             var n = list[i].n;
             list.splice(i, 1); saveMarks(list);
             App.toast(tf('brUnmarked', n), { kind: 'info' });
-        } else addMark(url);
+        } else addMark(url, (titles[pos] || '').replace(/\s+/g, ' ').trim().slice(0, 40));
         updateButtons();
         renderMarks();
     }
@@ -110,7 +119,6 @@
     }
     // every page the user asks for goes through here
     function go(url) {
-        if (NO_FRAME.test(hostOf(url))) { refused(url); return; }
         load(url, true);
         Focus.focus(view);
     }
@@ -134,7 +142,11 @@
         }
         if (!frame) return;
         scrollY = 0;
-        if (native) {
+        if (bridged) {                                               // My PC's copy: it scrolls itself, the mouse may click (keys come back)
+            frame.style.height = view.offsetHeight + 'px';
+            frame.style.pointerEvents = '';
+            frame.setAttribute('tabindex', '-1');
+        } else if (native) {
             frame.style.height = view.offsetHeight + 'px';           // the page scrolls itself (mouse wheel, touch)
             frame.style.pointerEvents = '';
             frame.setAttribute('tabindex', '0');
@@ -166,8 +178,9 @@
         addr.className = 'br-addr' + (pos >= 0 ? '' : ' br-addr-empty');
     }
 
-    function load(url, push) {
-        if (push) { hist.length = pos + 1; hist.push(url); pos = hist.length - 1; }
+    // post: the body of a form sent with POST (the page that answers is shown, the address stays in the history)
+    function load(url, push, post) {
+        if (push) { hist.length = pos + 1; titles.length = pos + 1; hist.push(url); titles.push(''); pos = hist.length - 1; }
         start.hidden = true;
         view.hidden = false;
         scrollY = 0;
@@ -175,28 +188,75 @@
         if (!frame) {
             frame = document.createElement('iframe');
             frame.className = 'br-frame';
-            frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
             frame.setAttribute('referrerpolicy', 'no-referrer');
             frame.addEventListener('mouseenter', function () { pointerIn = true; });
             frame.addEventListener('mouseleave', function () { pointerIn = false; });
             view.insertBefore(frame, view.firstChild);
         }
-        applyMode();
-        frame.src = url;
         updateButtons();
+        view.classList.add('br-loading');
         A11y.announce(t('loading') + ' ' + url);
+        var seq = ++loadSeq, at = pos;
+        WebBridge.fetch(url, post ? { method: 'POST', body: post } : null, function (err, r) {
+            if (seq !== loadSeq || !frame) return;
+            view.classList.remove('br-loading');
+            if (!err && r && r.html) {
+                if (r.url && r.url !== url && hist[at] === url) { hist[at] = r.url; updateButtons(); }
+                bridged = true;
+                frame.setAttribute('sandbox', 'allow-scripts allow-forms');   // an opaque origin: the site never reaches My PC's storage
+                frame.removeAttribute('src');
+                frame.srcdoc = WebBridge.page(r.html, r.url || url);
+                applyMode();
+                if (document.activeElement === view || Focus.current() === view) Focus.focus(view);
+                if (!Store.get('br_hint', false)) { Store.set('br_hint', true); App.toast(t('brHowTo'), { kind: 'info', timeout: 9000 }); }
+                return;
+            }
+            // My PC could not read it (a browser that the site does not allow, no relay set): a site that refuses frames too says so
+            if (NO_FRAME.test(hostOf(url))) {
+                refused(url);
+                if (push && hist[at] === url) { hist.splice(at, 1); titles.splice(at, 1); pos = at - 1; }
+                if (pos < 0) { showStart(); Focus.focus(start.querySelector('[data-focus]')); } else if (push) load(hist[pos], false);
+                return;
+            }
+            // a picture, a PDF... or a page My PC could not read: the site itself in the frame (remote / mouse modes)
+            bridged = false;
+            frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
+            frame.removeAttribute('srcdoc');
+            applyMode();
+            frame.src = (r && r.url) || url;
+        });
+    }
+
+    function post(m) { if (frame && bridged && frame.contentWindow) { m.mypcweb = 1; frame.contentWindow.postMessage(m, '*'); } }
+
+    // what the page's own script asks (web-bridge.js BRIDGE)
+    function onMessage(e) {
+        var m = e.data;
+        if (!frame || !bridged || e.source !== frame.contentWindow || !m || m.mypcweb !== 1) return;
+        if (m.t === 'nav' && /^https?:/i.test(m.url)) { load(m.url, true); Focus.focus(view); }
+        else if (m.t === 'post' && /^https?:/i.test(m.url)) { load(m.url, true, String(m.body || '')); Focus.focus(view); }
+        else if (m.t === 'text') {
+            var mode = m.type === 'password' ? 'password' : m.type === 'url' ? 'url' : m.type === 'email' ? 'code' : 'title';
+            Keyboard.open({ title: String(m.label || t('brTypeHere')).slice(0, 60), text: String(m.value || ''), max: 500, mode: mode, ok: m.multi ? t('save') : t('go') },
+                function (v) { post({ set: String(v || ''), submit: !m.multi }); });
+        } else if (m.t === 'select' && Array.isArray(m.options)) {
+            pickMenu(String(m.label || ''), m.options.slice(0, 200).map(function (o) { return String(o); }), m.index, function (i) { post({ sel: i }); });
+        } else if (m.t === 'key' && PAGE_KEYS[m.code] && document.activeElement === frame) {
+            Input.onKey({ keyCode: m.code, repeat: !!m.repeat, target: document.body, preventDefault: function () {} }, !!m.down);
+        } else if (m.t === 'ready') { if (hist[pos]) titles[pos] = String(m.title || '').slice(0, 200); }
+        else if (m.t === 'focus' && m.label) A11y.announce(String(m.label));
     }
 
     function showStart() {
-        pos = -1; hist.length = 0;
-        if (frame) { frame.src = 'about:blank'; }
+        pos = -1; hist.length = 0; titles.length = 0; loadSeq++; bridged = false;
+        if (frame) { frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; }
         view.hidden = true;
         start.hidden = false;
         updateButtons();
     }
 
     function scroll(d, page) {
-        if (native || !frame) return false;
+        if (native || bridged || !frame) return false;
         var max = PAGE_H - view.offsetHeight;
         var y = Math.max(0, Math.min(max, scrollY + d * (page ? Math.round(view.offsetHeight * 0.85) : STEP)));
         if (y === scrollY) return false;
@@ -303,6 +363,30 @@
         Focus.push(box, box.querySelector('.dm-item'));
         A11y.announce(m.n);
     }
+    // a list to pick from (a page's <select>): same look as the bookmark menu
+    function pickMenu(title, opts, sel, cb) {
+        closeMenu();
+        menuWrap = el('div', 'dmenu-wrap br-menu-wrap');
+        var box = el('div', 'dmenu br-menu br-pick');
+        box.setAttribute('role', 'menu');
+        box.setAttribute('data-scroll', 'y');
+        if (title) box.appendChild(el('div', 'dm-title', title));
+        var first = null;
+        opts.forEach(function (o, i) {
+            var x = el('button', 'dm-item', o);
+            x.setAttribute('data-focus', '');
+            x.setAttribute('role', 'menuitemradio');
+            x.setAttribute('aria-checked', i === sel ? 'true' : 'false');
+            x.onclick = function () { closeMenu(); Focus.focus(view); cb(i); };
+            box.appendChild(x);
+            if (i === sel || !first) first = i === sel ? x : first || x;
+        });
+        menuWrap.appendChild(box);
+        menuWrap.addEventListener('pointerdown', function (e) { if (e.target === menuWrap) { closeMenu(); Focus.focus(view); } });
+        body.appendChild(menuWrap);
+        Focus.push(box, first);
+        if (first && first.scrollIntoView) first.scrollIntoView(false);
+    }
     function isMark(n) { return !!n && n.hasAttribute && n.hasAttribute('data-mark'); }
     function holdEnd() {
         if (!holdTimer) return;
@@ -345,7 +429,7 @@
         renderMarks();
         start.appendChild(grid);
         start.appendChild(el('p', 'br-note', t('brMarkHint')));
-        start.appendChild(el('p', 'br-note br-note2', t('frameNote')));
+        start.appendChild(el('p', 'br-note br-note2', t('brHowTo')));
         return start;
     }
 
@@ -362,7 +446,7 @@
     // a page script took the keyboard from My PC (autofocus, focus()): take it back, unless the user clicked the page
     function onWindowBlur() {
         setTimeout(function () {
-            if (!frame || native || pointerIn || document.activeElement !== frame) return;
+            if (!frame || (native && !bridged) || pointerIn || document.activeElement !== frame) return;
             Focus.focus(view);
         }, 0);
     }
@@ -385,6 +469,24 @@
                 holdTimer = setTimeout(function () { holdTimer = 0; var x = holdEl; holdEl = null; if (x && x.parentNode) openMenu(x); }, HOLD_MS);
             }
             return true;
+        }
+        // Back on the page: once = the page before (the first one: the start page), twice quickly = the buttons on top
+        if ((a === 'back' || a === 'cancel') && shown && inView()) {
+            if (repeat) return true;
+            if (backTimer) { clearTimeout(backTimer); backTimer = 0; Focus.focus(toolbarTarget()); return true; }
+            backTimer = setTimeout(function () {
+                backTimer = 0;
+                if (!view || !inView()) return;
+                backKey();
+            }, DOUBLE_MS);
+            return true;
+        }
+        // Back on the buttons on top while a page shows: back to the page
+        if ((a === 'back' || a === 'cancel') && shown && inToolbar()) { if (!repeat) Focus.focus(view); return true; }
+        // My PC's copy of the page: the arrows, OK and CH + / CH − drive the page itself
+        if (bridged && shown && inView()) {
+            if (a === 'up' || a === 'down' || a === 'left' || a === 'right' || a === 'pageUp' || a === 'pageDown') { if (dev !== 'mouse') post({ k: a }); return true; }
+            if (a === 'confirm') { if (!repeat) post({ k: 'ok' }); return true; }
         }
         // Guide / F6: to the buttons on top, and back to the page from there
         if (a === 'guide') {
@@ -419,7 +521,7 @@
         icon: 'browser',
         title: function () { return t('browser'); },
         open: function (b, arg) {
-            body = b; hist = []; pos = -1; native = wantNative();
+            body = b; hist = []; titles = []; pos = -1; native = wantNative(); bridged = false;
             bar = el('div', 'br-bar');
             back = iconBtn('back', t('back'), function () { backKey(); });
             fwd = iconBtn('forward', t('forward'), function () { if (pos < hist.length - 1) { pos++; load(hist[pos], false); } });
@@ -445,20 +547,20 @@
             applyMode();
             updateButtons();
             window.addEventListener('blur', onWindowBlur);
+            window.addEventListener('message', onMessage);
             // Win.open('browser', 'https://…'): opens on that page (a push notification's link)
-            if (typeof arg === 'string' && /^https:\/\//.test(arg)) {
-                if (!NO_FRAME.test(hostOf(arg))) { load(arg, true); return view; }
-                refused(arg);
-            }
+            if (typeof arg === 'string' && /^https:\/\//.test(arg)) { load(arg, true); return view; }
             return start.querySelector('[data-focus]');
         },
         close: function () {
             window.removeEventListener('blur', onWindowBlur);
+            window.removeEventListener('message', onMessage);
+            clearTimeout(backTimer); backTimer = 0; loadSeq++; bridged = false;
             clearTimeout(holdTimer); holdTimer = 0; holdEl = null;
             if (menuWrap) closeMenu();
             // free the page completely
             if (frame) { try { frame.src = 'about:blank'; } catch (e) {} if (frame.parentNode) frame.parentNode.removeChild(frame); }
-            frame = null; body = bar = addr = view = start = back = fwd = modeBtn = starBtn = grid = null; hist = []; pos = -1; pointerIn = false;
+            frame = null; body = bar = addr = view = start = back = fwd = modeBtn = starBtn = grid = null; hist = []; titles = []; pos = -1; pointerIn = false;
         },
         action: action,
         release: function (a) { if (a === 'confirm') holdEnd(); },

@@ -216,7 +216,17 @@
   address; name from the host, Rename in the menu). Save the page shown: the toolbar star (`staro` / `star`) or the controller's **+** (`menu`). Hold OK /
   + / long press / right click on a tile = Open / Rename / Change the address / Move / Remove (`.dmenu` look). Max 24. **Sites that refuse frames**
   (`NO_FRAME`: YouTube, Facebook, Instagram, X, Google, Netflix...) can not show in any app's frame: a card says so (`brRefused`).
-  **Owner rule (2026-11-12, build 169): the browser NEVER leaves My PC** (no TV browser, no YouTube app; build 168 did, imad: "fix this"). Tests: `MYPC_ONLY=bookmarks`.
+  **Owner rule (2026-11-12, build 169): the browser NEVER leaves My PC** (no TV browser, no YouTube app; build 168 did, imad: "fix this").
+  **Pages driven like an app (owner request 2026-11-13, build 172)**: `js/launcher/web-bridge.js` (`WebBridge.fetch` / `page`): My PC reads the page
+  ITSELF (on the TV the packaged app has no CORS: **no server on the TV**, owner rule) and shows the copy (`srcdoc` + `<base>` + its script `BRIDGE`) in a
+  frame sandboxed `allow-scripts allow-forms` with NO same-origin (the site never reaches My PC's storage). Arrows = focus ring between links / buttons /
+  fields (scrolls when nothing is near), OK = click, text field = My PC's Keyboard, `<select>` = a My PC menu, links / forms come back as `nav` / `post`
+  (history, bookmark named after the page title). My PC keeps the focus; a page focused by a mouse click hands back only moving / OK / Back / page keys
+  (`PAGE_KEYS`). Back once = page before (the first: the start page, then Back closes), Back twice in 450 ms = the buttons on top, Back there = the page. **Relay only as a
+  CORS fallback, never on the TV** (owner rule 2026-11-13): App Store Manager > Settings > Web relay (`settings/mypc.webRelay`, `GlobalSettings.webRelay()`,
+  rules `validMyPc`), Worker code `tools/web-relay-worker.js`. Not readable (a browser, no relay): the plain frame + remote / mouse modes as before; a
+  `NO_FRAME` site then shows the `brRefused` card. Tests: `MYPC_ONLY=bookmarks` (sections 51 + 52; Playwright's route answers skip CORS, so tests that
+  need "not readable" abort `fetch` requests).
 - `apps/store.js`: the App Store app (Home / Games / Apps / Library / Search, Install / Open / Uninstall).
 - **Settings of every My PC** (owner decision): App Store Manager > Settings writes Firestore `settings/mypc` (admins only, read by
   every TV): backgrounds (`wallpapers: [{ url, title, thumb }]`, an empty title is taken from the address) and the background of new

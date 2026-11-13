@@ -93,7 +93,8 @@ service cloud.firestore {
     // Settings for every My PC (App Store Manager > Settings, js/core/global-settings.js): backgrounds added by admins
     // and the one new profiles get. Read by every TV at start.
     function validMyPc(d) {
-      return d.keys().hasOnly(['wallpapers', 'wallpaper', 'notifyFast', 'events', 'updatedAt', 'updatedBy'])
+      return d.keys().hasOnly(['wallpapers', 'wallpaper', 'notifyFast', 'events', 'webRelay', 'updatedAt', 'updatedBy'])
+          && (!('webRelay' in d) || (d.webRelay is string && d.webRelay.size() <= 1000))          // the Browser's relay (web / phone only)
           && d.wallpapers is list && d.wallpapers.size() <= 40
           && (!('events' in d) || (d.events is list && d.events.size() <= 100))                // events on every calendar
           && (!('notifyFast' in d) || (d.notifyFast is list && d.notifyFast.size() <= 200))      // push notifications every 2 min

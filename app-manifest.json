@@ -1,5 +1,5 @@
 {
-  "build": 171,
+  "build": 172,
   "version": "3.0.0",
   "shell": 1,
   "css": [
@@ -84,6 +84,7 @@
     "js/launcher/updater.js",
     "js/launcher/apps/settings.js",
     "js/launcher/apps/explorer.js",
+    "js/launcher/web-bridge.js",
     "js/launcher/apps/browser.js",
     "js/launcher/apps/calculator.js",
     "js/launcher/apps/calendar.js",

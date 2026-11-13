@@ -516,6 +516,14 @@
         <textarea id="gs-fast" spellcheck="false" rows="4" style="min-height:96px" aria-label="Usernames with fast notifications" placeholder="imad12&#10;sara.k"></textarea>
         <div class="row"><span id="gs-fast-count" class="muted small grow"></span><button id="nt-open">Send a test notification</button></div>
       </div>
+      <div class="card">
+        <h2>Web relay for the Browser (optional)</h2>
+        <p class="muted small" style="margin:0 0 8px">The Browser reads web pages itself so the remote and the controller can drive them. On the TV no relay is
+          ever used (a TV app has no CORS limit). In a web browser or the phone app, a site that refuses other sites (CORS error) is asked once more through
+          this address, if you set one: deploy <code>tools/web-relay-worker.js</code> as a Cloudflare Worker and paste its address here
+          (https://…workers.dev). Leave it empty for no relay: those sites then show as before.</p>
+        <input id="gs-relay" type="url" spellcheck="false" style="width:100%" aria-label="Web relay address" placeholder="https://web-relay.example.workers.dev">
+      </div>
     </section>
 
     <!-- World records -->
@@ -1312,10 +1320,12 @@
       '</div>').join('') : '<div class="empty">No background added yet. Every My PC shows its built-in ones.</div>';
     renderGsDefault();
     if (document.activeElement !== $('gs-fast')) $('gs-fast').value = (gs.notifyFast || []).join('\n');
+    if (document.activeElement !== $('gs-relay')) $('gs-relay').value = gs.webRelay || '';
     if (document.activeElement !== $('gs-events')) $('gs-events').value = (gs.events || []).map(GlobalSettings.eventLine).join('\n');
     $('gs-events-count').textContent = (gs.events || []).length + ' / 100 events';
     $('gs-fast-count').textContent = (gs.notifyFast || []).length + ' / 200 accounts every 2 minutes';
   }
+  $('gs-relay').addEventListener('input', () => { gs.webRelay = $('gs-relay').value.trim(); gsChanged(); });
   $('gs-fast').addEventListener('input', () => { gs.notifyFast = $('gs-fast').value.split(/[\s,;]+/).filter(Boolean); gsChanged(); });
   $('gs-events').addEventListener('input', () => {
     const lines = $('gs-events').value.split('\n').filter((l) => l.trim());
@@ -1399,10 +1409,11 @@
     try {
       // an empty title is filled from the address, so every My PC shows the same name
       if ((gs.badEvents || []).length) { $('gs-save').disabled = false; return say('gs-msg', 'Event not understood: "' + gs.badEvents[0] + '". Write a date (YYYY-MM-DD), then the title.', 'err'); }
-      const clean = GlobalSettings.clean({ wallpapers: list, wallpaper: gs.wallpaper, notifyFast: gs.notifyFast || [], events: gs.events || [] });
+      const clean = GlobalSettings.clean({ wallpapers: list, wallpaper: gs.wallpaper, notifyFast: gs.notifyFast || [], events: gs.events || [], webRelay: gs.webRelay || '' });
+      if ((gs.webRelay || '') && !clean.webRelay) { $('gs-save').disabled = false; return say('gs-msg', 'The web relay address must start with https:// (no spaces or quotes).', 'err'); }
       const badUser = (gs.notifyFast || []).map((u) => u.toLowerCase()).filter((u) => clean.notifyFast.indexOf(u) < 0);
       if (badUser.length) { $('gs-save').disabled = false; return say('gs-msg', 'Not a username: ' + badUser.slice(0, 5).join(', ') + ' (3 to 16 letters, digits, _ or .).', 'err'); }
-      await setDoc(doc(db, 'settings', 'mypc'), { wallpapers: clean.wallpapers, wallpaper: clean.wallpaper, notifyFast: clean.notifyFast, events: clean.events, updatedAt: serverTimestamp(), updatedBy: (user && user.email) || '' });
+      await setDoc(doc(db, 'settings', 'mypc'), { wallpapers: clean.wallpapers, wallpaper: clean.wallpaper, notifyFast: clean.notifyFast, events: clean.events, webRelay: clean.webRelay, updatedAt: serverTimestamp(), updatedBy: (user && user.email) || '' });
       gs = clean; gsDirty = false;
       renderGs();
       say('gs-msg', 'Saved. Each My PC uses it from its next start (or when Settings > Personalization opens).', 'ok');
