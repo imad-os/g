@@ -125,17 +125,34 @@
     // a widget as mypc-app.json describes it (without the approval the Manager adds)
     function plainWidget(w) { var o = {}, k; for (k in w) if (k !== 'sha' && k !== 'approvedAt') o[k] = w[k]; return o; }
 
-    // installed list + a catalog app -> 'new' | 'installed' | 'update' (same id, other version or address)
-    function status(installed, app) {
-        for (var i = 0; i < (installed || []).length; i++) {
-            var a = installed[i];
-            if (a.id === app.id || a.url === app.url) return a.version === app.version && a.entry === app.entry && a.name === app.name && a.icon === app.icon && JSON.stringify(a.services || []) === JSON.stringify(app.services || []) &&
-                   JSON.stringify((a.widgets || []).map(plainWidget)) === JSON.stringify((app.widgets || []).map(plainWidget)) ? 'installed' : 'update';
-        }
-        return 'new';
+    // JSON with sorted keys: Firestore gives maps back with their keys sorted, so a plain JSON.stringify of the stored
+    // services / widgets never matched the manifest's order and such an app (Football Live) always showed "Update"
+    function canon(v) {
+        if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+        if (v && typeof v === 'object') return '{' + Object.keys(v).sort().filter(function (k) { return v[k] !== undefined; }).map(function (k) { return JSON.stringify(k) + ':' + canon(v[k]); }).join(',') + '}';
+        return JSON.stringify(v === undefined ? null : v);
     }
 
-    var api = { MANIFEST: MANIFEST, MAX_CONFIG: MAX_CONFIG, locate: locate, toApp: toApp, parseConfig: parseConfig, catalog: catalog, status: status };
+    // what differs between the store's copy and the app's mypc-app.json -> [{ field, from, to }] (empty = up to date)
+    function diff(a, app) {
+        var out = [];
+        ['version', 'name', 'entry', 'icon'].forEach(function (k) { if ((a[k] || '') !== (app[k] || '')) out.push({ field: k, from: a[k] || '', to: app[k] || '' }); });
+        if (canon(a.services || []) !== canon(app.services || [])) out.push({ field: 'services' });
+        if (canon((a.widgets || []).map(plainWidget)) !== canon((app.widgets || []).map(plainWidget))) out.push({ field: 'widgets' });
+        return out;
+    }
+    function find(installed, app) {
+        for (var i = 0; i < (installed || []).length; i++) if (installed[i].id === app.id || installed[i].url === app.url) return installed[i];
+        return null;
+    }
+
+    // installed list + a catalog app -> 'new' | 'installed' | 'update' (same id, other version or address)
+    function status(installed, app) {
+        var a = find(installed, app);
+        return !a ? 'new' : diff(a, app).length ? 'update' : 'installed';
+    }
+
+    var api = { MANIFEST: MANIFEST, MAX_CONFIG: MAX_CONFIG, locate: locate, toApp: toApp, parseConfig: parseConfig, catalog: catalog, status: status, diff: diff, find: find, canon: canon };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.InstallerLib = api;
 })(this);

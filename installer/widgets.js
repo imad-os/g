@@ -91,13 +91,15 @@ export function initWidgets(env) {
   }
 
   // a preview of the card, drawn like the TV draws it (js/launcher/widgets.js)
+  function side(x) { return '<span class="wg-vs-side">' + (/^https:/.test(x || '') ? '<img src="' + esc(x) + '" alt="">' : esc(x || '')) + '</span>'; }
   function preview(v, w) {
     const rows = (v.rows || []).map((r) => '<div class="wg-row"><span>' + esc(r.label) + '</span><b>' + esc(r.value) + '</b></div>').join('');
     const btns = (v.buttons || []).map((b) => '<span class="wg-b">' + esc(b.label) + '</span>').join('');
     const ic = v.icon ? (/^https:/.test(v.icon) ? '<img src="' + esc(v.icon) + '" alt="">' : esc(v.icon)) : '';
     return '<div class="wg-card wg-' + esc(w.size) + '" style="border-top-color:' + esc(v.accent || '#4fc3ff') + '">' +
       '<div class="wg-head"><span class="wg-ic">' + ic + '</span>' + esc(v.title || pick(w.title) || w.id) + '</div>' +
-      (v.big ? '<div class="wg-big">' + esc(v.big) + '</div>' : '') + (v.sub ? '<div class="wg-sub">' + esc(v.sub) + '</div>' : '') +
+      (v.versus ? '<div class="wg-vs">' + side(v.versus.left) + '<div class="wg-big">' + esc(v.big || '') + '</div>' + side(v.versus.right) + '</div>'
+        : v.big ? '<div class="wg-big">' + esc(v.big) + '</div>' : '') + (v.sub ? '<div class="wg-sub">' + esc(v.sub) + '</div>' : '') +
       (v.text ? '<div class="wg-text">' + esc(v.text) + '</div>' : '') +
       (v.progress !== undefined ? '<div class="wg-bar"><i style="width:' + Math.round(v.progress * 100) + '%;background:' + esc(v.accent || '#4fc3ff') + '"></i></div>' : '') +
       rows + (btns ? '<div class="wg-btns">' + btns + '</div>' : '') + '</div>';

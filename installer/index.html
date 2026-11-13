@@ -101,9 +101,12 @@
   .modal .box.wide { width: min(900px, 100%); }
   #sv-mbody table { margin-bottom: 12px; }
   /* Widgets: a preview of the card as the TVs draw it (js/launcher/widgets.js) */
+  .cat-actions { position: sticky; top: 0; z-index: 2; padding: 12px 18px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; gap: 10px; }
+  .app .why { color: #ffb86b; }
   .wg-card { width: 400px; max-width: 100%; margin: 10px 0; padding: 14px 18px; border-radius: 14px; background: #1c1c20; border: 1px solid #333; border-top: 4px solid #4fc3ff; }
   .wg-card.wg-small { min-height: 120px; } .wg-card.wg-medium { min-height: 190px; } .wg-card.wg-large { min-height: 270px; }
   .wg-head { display: flex; gap: 8px; align-items: center; color: #c8c8d0; font-size: 14px; } .wg-ic img { width: 22px; height: 22px; border-radius: 4px; }
+  .wg-vs { display: flex; align-items: center; gap: 12px; } .wg-vs-side { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 28px; } .wg-vs-side img { max-width: 100%; max-height: 100%; object-fit: contain; }
   .wg-big { font-size: 34px; font-weight: 600; } .wg-sub { color: #b8b8c2; font-size: 13px; } .wg-text { font-size: 15px; margin-top: 4px; }
   .wg-bar { height: 6px; margin: 8px 0; border-radius: 3px; background: #333; overflow: hidden; } .wg-bar i { display: block; height: 100%; }
   .wg-row { display: flex; justify-content: space-between; font-size: 13px; color: #b8b8c2; } .wg-row b { color: #fff; }
@@ -335,17 +338,19 @@
     <!-- Add apps -->
     <section data-view="add" hidden>
       <div class="head"><div class="grow"><h1>Add apps</h1><p>Publish apps and games built with the My PC SDK.</p></div></div>
-      <div class="card flush cat">
+      <div class="card flush cat" style="overflow:visible">
         <div class="card-head"><div class="grow"><h2>Apps from <span id="owner"></span></h2>
           <span class="muted small">GitHub repositories of <b id="owner2"></b> named <code id="prefix"></code> with GitHub Pages. Apps already in the store are marked; new versions can be updated.</span></div>
           <button id="btn-scan">Refresh</button></div>
         <p id="scan-msg" class="small" style="padding:0 18px"></p>
-        <div id="catalog"></div>
-        <div id="catalog-actions" class="row" style="padding:12px 18px;border-top:1px solid var(--line)" hidden>
+        <div id="catalog-actions" class="row cat-actions" hidden>
           <label class="row small" style="margin:0"><input type="checkbox" id="sel-all"> Select all</label>
+          <span id="cat-sum" class="muted small"></span>
           <span class="grow"></span>
+          <button id="btn-update-all" class="primary" hidden>Update all</button>
           <button id="btn-install-sel" class="primary" disabled>Add selected to the store</button>
         </div>
+        <div id="catalog"></div>
       </div>
       <div class="card">
         <h2>Add from another address</h2>
@@ -879,7 +884,7 @@
       }
       const st = InstallerLib.status(apps, f.app);
       row.innerHTML = '<input type="checkbox"><img alt=""><div class="grow"><div><span class="name"></span><span class="tag type"></span><span class="tag st"></span>' +
-        ' <span class="muted small ver"></span></div><div class="muted desc"></div><div class="muted small url"></div></div><button class="act"></button>';
+        ' <span class="muted small ver"></span></div><div class="muted desc"></div><div class="small why" hidden></div><div class="muted small url"></div></div><button class="act"></button>';
       const cb = row.querySelector('input');
       cb.disabled = st === 'installed';
       cb.checked = !!f.selected && !cb.disabled;
@@ -891,6 +896,13 @@
       row.querySelector('.st').textContent = st === 'new' ? 'Not in store' : st === 'update' ? 'Update available' : 'In store';
       row.querySelector('.st').className = 'tag st ' + st;
       row.querySelector('.ver').textContent = 'v' + f.app.version;
+      if (st === 'update') {
+        // say what changed, so an "Update" that never goes away shows its reason
+        const d = InstallerLib.diff(InstallerLib.find(apps, f.app), f.app);
+        const why = row.querySelector('.why');
+        why.hidden = false;
+        why.textContent = 'Changed: ' + d.map((x) => x.field === 'version' ? 'version ' + x.from + ' → ' + x.to : x.field === 'widgets' ? 'widgets (approve them again in Widgets if their code changed)' : x.field).join(', ');
+      }
       row.querySelector('.desc').textContent = f.app.description;
       row.querySelector('.url').textContent = f.c.repo + ' · ' + f.app.url;
       const act = row.querySelector('.act');
@@ -901,6 +913,11 @@
       box.appendChild(row);
     });
     $('catalog-actions').hidden = !selectable;
+    const ups = found.filter((f) => f.app && InstallerLib.status(apps, f.app) === 'update').length;
+    const news = found.filter((f) => f.app && InstallerLib.status(apps, f.app) === 'new').length;
+    $('btn-update-all').hidden = !ups;
+    $('btn-update-all').textContent = 'Update all (' + ups + ')';
+    $('cat-sum').textContent = [news ? news + ' not in store' : '', ups ? ups + ' with an update' : ''].filter(Boolean).join(' · ');
     updateSel();
   }
 
@@ -920,6 +937,11 @@
     const list = found.filter((f) => f.selected && f.app && InstallerLib.status(apps, f.app) !== 'installed').map((f) => f.app);
     $('btn-install-sel').disabled = true;
     await installMany(list);
+  };
+  $('btn-update-all').onclick = async () => {
+    $('btn-update-all').disabled = true;
+    try { await installMany(found.filter((f) => f.app && InstallerLib.status(apps, f.app) === 'update').map((f) => f.app)); }
+    finally { $('btn-update-all').disabled = false; }
   };
   $('btn-scan').onclick = scan;
 

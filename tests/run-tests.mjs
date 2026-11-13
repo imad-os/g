@@ -393,6 +393,7 @@ async function main() {
     const base = `http://localhost:${srv.address().port}/`;
     const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--autoplay-policy=no-user-gesture-required', '--disable-features=WebRtcHideLocalIpsWithMdns', '--js-flags=--expose-gc', '--enable-precise-memory-info', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
     // MYPC_ONLY=music node tests/run-tests.mjs: only the Music app's checks (quick while working on it)
+    if (process.env.MYPC_ONLY === 'manager') { await managerTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'widgets') { await widgetTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'wall') { await wallTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'speedy') { await speedyTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
@@ -1471,6 +1472,12 @@ async function main() {
         check(cat.length === 2 && cat[0].base === 'https://imad-os.github.io/g_a/' && cat[1].manifest === 'https://imad-os.github.io/G_B/mypc-app.json', 'catalog: g_ repos with Pages -> their app addresses');
         check(lib.status([{ id: 'a', url: 'u', version: '1', entry: 'e', name: 'n', icon: '' }], { id: 'a', url: 'u', version: '2', entry: 'e', name: 'n', icon: '' }) === 'update' &&
               lib.status([], { id: 'a' }) === 'new', 'status: new / update');
+        // Firestore gives maps back with sorted keys: an app with services / widgets must still read "In store" (Football Live always showed Update)
+        const kApp = { id: 'k', url: 'u', version: '1', entry: 'e', name: 'n', icon: '', services: [{ id: 's', file: 'f', every: 5, title: 't' }], widgets: [{ id: 'w', title: 'T', file: 'f', size: 'medium', every: 5 }] };
+        const kStored = { id: 'k', url: 'u', version: '1', entry: 'e', name: 'n', icon: '', services: [{ every: 5, file: 'f', id: 's', title: 't' }], widgets: [{ every: 5, file: 'f', id: 'w', sha: 'x', size: 'medium', title: 'T' }] };
+        const kDiff = lib.diff(Object.assign({}, kStored, { version: '0', widgets: [] }), kApp);
+        check(lib.status([kStored], kApp) === 'installed' && kDiff.map((x) => x.field).join() === 'version,widgets' && kDiff[0].from === '0',
+            'status ignores the key order Firestore stores; diff names what changed ' + JSON.stringify(kDiff));
         check(JSON.stringify(a.config) === '{"speed":1}', 'the manifest\'s "config" becomes the app\'s default config');
         let cErr = [];
         for (const t of ['[1,2]', 'nope', '"text"', 'null', '{"big":"' + 'x'.repeat(9000) + '"}']) { try { lib.parseConfig(t); cErr.push('accepted ' + t.slice(0, 10)); } catch (e) { /* refused */ } }
@@ -1479,301 +1486,7 @@ async function main() {
         check(bad.every((m) => { try { lib.toApp(m, 'https://a.b/'); return false; } catch (e) { return !!e.message; } }), 'invalid manifests are refused with a message');
     }
 
-    console.log('18. installer page: catalog of the owner\'s g_ repositories');
-    {
-        const page = await newPage(browser, base);
-        const GS = 'https://www.gstatic.com/firebasejs/12.0.0/';
-        // stand-ins for the Firebase modules (signed in as an admin, in-memory Firestore)
-        const FAKE = {
-            'firebase-app.js': 'export function initializeApp() { return {}; }',
-            'firebase-auth.js': `export function getAuth() { return {}; }
-                export function onAuthStateChanged(a, cb) { setTimeout(() => cb({ uid: 'U1', email: 'owner@example.com' }), 0); }
-                export class GoogleAuthProvider {}
-                export function signInWithPopup() {} export function signInWithEmailAndPassword() {} export function createUserWithEmailAndPassword() {}
-                export function signOut() {} export function sendPasswordResetEmail() {}`,
-            'firebase-firestore.js': `const db = window.__db;
-                export function getFirestore() { return {}; }
-                export function collection(d, name) { return { name }; }
-                export function doc(d, col, id) { return { col, id }; }
-                export async function getDoc(r) { return { exists: () => !!(db[r.col] && db[r.col][r.id]), data: () => db[r.col][r.id] }; }
-                export async function getDocs(c) {
-                    let docs = Object.entries(db[c.name] || {}).map(([id, x]) => ({ id, data: () => x }));
-                    for (const o of c.ops || []) {
-                        if (o.w) docs = docs.filter((d) => d.data()[o.w] === o.v);
-                        if (o.by) docs.sort((a, b) => (a.data()[o.by] < b.data()[o.by] ? -1 : 1) * (o.dir === 'desc' ? -1 : 1));
-                        if (o.lim) docs = docs.slice(0, o.lim);
-                    }
-                    return { docs };
-                }
-                export function query(c, ...ops) { return { name: c.name, ops }; }
-                export function where(w, op, v) { return { w, v }; }
-                export function orderBy(by, dir) { return { by, dir }; }
-                export function limit(lim) { return { lim }; }
-                export async function setDoc(r, data) { (db[r.col] = db[r.col] || {})[r.id] = data; }
-                export async function updateDoc(r, f) { Object.assign(db[r.col][r.id], f); }
-                export async function deleteDoc(r) { delete db[r.col][r.id]; }
-                export function serverTimestamp() { return 'now'; }`
-        };
-        await page.addInitScript(() => {
-            const now = Date.now();
-            window.__db = { admins: { U1: { name: 'owner' } },
-                appstats: { 'old-game': { installs: 4, opens: 11 } },
-                tvs: { 'tv-aaaabbbbccccddddeeeeffff0000': { tv: 'tv-aaaabbbbccccddddeeeeffff0000', model: 'QE55Q80D', version: '2.9.0', build: 17, lang: 'fr', src: 'duid',
-                         firstSeen: now - 20 * 86400000, lastSeen: now - 3600000, profiles: 2, names: ['Ana', 'Sam'], installed: ['old-game'], top: { jumper: { n: 'Ana', s: 4321 } }, size: 2048,
-                         blob: JSON.stringify({ arc_dev_installed: JSON.stringify([{ id: 'old-game', at: Date.UTC(2026, 8, 14, 12) }]),
-                                                arc_profiles: JSON.stringify([{ id: 'p1', name: 'Ana', color: '#ffd23f' }, { id: 'p2', name: 'Sam', color: '#4cd97b' }]) }) },
-                       'tv-1111222233334444555566667777': { tv: 'tv-1111222233334444555566667777', model: 'Browser', version: '2.8.0', build: 16, lang: 'en', src: 'random',
-                         firstSeen: now - 90 * 86400000, lastSeen: now - 30 * 86400000, profiles: 1, names: ['Player 1'], installed: [], top: {}, blob: '{}', size: 512 } },
-                records: { jumper: { list: [{ n: 'Ana', s: 4321, d: 1, tv: 'tv-a' }, { n: 'Leo', s: 999, d: 2, tv: 'tv-b' }], updatedAt: 1 } },
-                errors: {
-                    e1: { app: 'app-old-game', kind: 'load', msg: 'timeout: the SDK never answered in 20 s', n: 1, at: now - 3600000, tv: 'tv-aaaabbbbccccddddeeeeffff0000', model: 'QE55Q80D', ver: '2.19.0', build: 67, appv: '1.0.0', user: 'Ana', where: 'tv', stage: 'loading' },
-                    e2: { app: 'app-old-game', kind: 'load', msg: 'timeout: the SDK never answered in 20 s', n: 2, at: now - 7200000, tv: 'tv-1111222233334444555566667777', model: 'Browser', ver: '2.18.0', build: 66, appv: '1.0.0', where: 'web' },
-                    e3: { app: 'jumper', kind: 'error', msg: 'TypeError: x is undefined', src: 'games/jumper/js/game.js:10:5', stack: 'TypeError: x is undefined\n    at step (game.js:10:5)', n: 5, at: now - 60000, tv: 'tv-aaaabbbbccccddddeeeeffff0000', model: 'QE55Q80D', ver: '2.19.0', where: 'tv' },
-                    e4: { app: 'jumper', kind: 'error', msg: 'old one', n: 1, at: now - 20 * 86400000, tv: 'tv-a', where: 'tv' } },
-                apps: {
-                'old-game': { id: 'old-game', name: 'Old Game', url: 'https://imad-os.github.io/g_oldgame/', entry: 'https://imad-os.github.io/g_oldgame/index.html', icon: '', type: 'game', version: '1.0.0', enabled: true, order: 0 } } };
-        });
-        await page.route(GS + '**', (r) => { const f = r.request().url().slice(GS.length); r.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: FAKE[f] || '' }); });
-        await page.route('https://api.github.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify([
-            { name: 'g_star', has_pages: true }, { name: 'g_oldgame', has_pages: true }, { name: 'g_broken', has_pages: true },
-            { name: 'g_nopages', has_pages: false }, { name: 'speedy', has_pages: true }, { name: 'g_archived', has_pages: true, archived: true }]) }));
-        const ex = JSON.parse(fs.readFileSync(path.join(ROOT, 'sdk/example/mypc-app.json'), 'utf8'));
-        let starVersion = ex.version;
-        await page.route('https://imad-os.github.io/**', (r) => {
-            const u = r.request().url();
-            const send = (o) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(o) });
-            if (u.indexOf('/g_star/mypc-app.json') > 0) return send(Object.assign({}, ex, { version: starVersion }));
-            if (u.indexOf('/g_oldgame/mypc-app.json') > 0) return send({ mypc: 1, id: 'old-game', name: 'Old Game', type: 'game', version: '1.0.0' });
-            r.fulfill({ status: 404, body: '' });
-        });
-        await page.goto(base + 'installer/index.html#add');
-        await page.waitForSelector('#catalog .app', { timeout: 8000 });
-        const go = async (h) => { await page.evaluate((x) => { location.hash = x; }, h); await page.waitForTimeout(80); };
-        const rows = await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].map((r) => r.textContent));
-        check(rows.length === 3 && !rows.some((t) => /speedy|nopages|archived/.test(t)), 'only g_ repositories with GitHub Pages are listed (' + rows.length + ')');
-        check(rows.some((t) => /Star Catcher.*Not in store/.test(t)) && rows.some((t) => /Old Game.*In store/.test(t)) && rows.some((t) => /g_broken.*not a My PC app/.test(t)),
-            'each app shows its status: not in the store, in the store, or not a My PC app');
-        check(/App Store Manager/.test(await page.title()) && /App Store Manager/.test(await page.textContent('.brand')), 'the installer is now the App Store Manager');
-        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,AI services,Google Drive,Services,Widgets,Settings,Devices,World records,Errors,Stream lists'
-            && document.querySelector('.nav a.on').dataset.page === 'add' && !document.querySelector('[data-view="add"]').hidden && document.querySelector('[data-view="overview"]').hidden),
-            'a menu with one page each: Overview, Apps, Add apps, AI services, Google Drive, Services, Widgets, Settings, Devices, World records, Errors (+ the Stream lists link)');
-        check(await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].find((r) => /Old Game/.test(r.textContent)).querySelector('input').disabled), 'installed apps cannot be selected again');
-        await page.check('#sel-all');
-        await page.click('#btn-install-sel');
-        await page.waitForFunction(() => window.__db.apps['star-catcher'], null, { timeout: 5000 }).catch(() => {});
-        const db = await page.evaluate(() => window.__db.apps);
-        check(db['star-catcher'] && db['star-catcher'].order === 1 && db['star-catcher'].url === 'https://imad-os.github.io/g_star/' && db['star-catcher'].installedBy === 'U1' && Object.keys(db).length === 2,
-            '"Add selected to the store" publishes the new app only, after the ones already there');
-        await page.waitForFunction(() => /Star Catcher.*In store/.test(document.getElementById('catalog').textContent) && !/Not in store/.test(document.getElementById('catalog').textContent));
-        check(true, 'after adding, the catalog marks it in the store');
-        // Overview: totals, most installed apps, recent TVs
-        await go('#overview');
-        const sum = await page.textContent('#tv-summary');
-        check(/2\s*TVs with My PC/.test(sum) && /1\s*used in the last 7 days/.test(sum) && /4\s*installs/.test(sum) && /11\s*apps opened/.test(sum), 'Overview: TVs, active TVs, installs and opens (' + sum + ')');
-        check(/Old Game\s*4/.test(await page.textContent('#top-apps')) && /QE55Q80D/.test(await page.textContent('#recent')), 'Overview: most installed apps and recently active TVs');
-        // Devices: one row per TV, newest activity first; a TV's page lists its profiles and apps with install dates
-        await go('#devices');
-        const tvText = await page.evaluate(() => [...document.querySelectorAll('#tvs .tv')].map((r) => r.textContent));
-        check(tvText.length === 2 && /QE55Q80D/.test(tvText[0]) && /Ana, Sam/.test(tvText[0]) && /Super Jumper: Ana 4321/.test(tvText[0]),
-            'Devices lists each TV: model, profiles and best scores (newest first)');
-        await page.click('#tvs .tv:has-text("QE55Q80D")');
-        await page.waitForFunction(() => !document.querySelector('[data-view="device"]').hidden);
-        const dev = await page.evaluate(() => ({ apps: document.getElementById('dd-apps').textContent, prof: document.getElementById('dd-profiles').textContent }));
-        check(/Old Game/.test(dev.apps) && /2026/.test(dev.apps) && /Ana/.test(dev.prof) && /Sam/.test(dev.prof), 'a device page shows its profiles and its apps with the install date (' + dev.apps + ')');
-        // Errors: one row per problem (same app + kind + message), newest first; a row opens every report with its device and stack
-        await go('#errors');
-        await page.waitForFunction(() => document.querySelectorAll('#er-groups tr[data-err]').length > 0, null, { timeout: 4000 }).catch(() => {});
-        const eg = await page.evaluate(() => [...document.querySelectorAll('#er-groups tr[data-err]')].map((r) => r.textContent));
-        check(eg.length === 2 && /x is undefined/.test(eg[0]) && /Super Jumper/.test(eg[0]) && /SDK never answered/.test(eg[1]) && /Old Game/.test(eg[1]) && /could not open/.test(eg[1]) && /Old Game\s*3\s*2/.test(eg[1]),
-            'Errors groups the reports of the last 7 days by problem: the same timeout on 2 TVs is one row (3 times, 2 TVs); a 20-day-old one is not shown (' + eg.join(' | ') + ')');
-        await page.click('#er-groups tr[data-err]:has-text("x is undefined")');
-        const det = await page.textContent('#er-occ');
-        check(/QE55Q80D/.test(det) && /game\.js:10:5/.test(det) && /at step/.test(det) && /5 times/.test(det) && /2\.19\.0/.test(det), 'a problem shows each report: time, device, My PC version, place, count and stack');
-        await page.selectOption('#er-when', '30');
-        check(await page.evaluate(() => document.querySelectorAll('#er-groups tr[data-err]').length) === 3, 'the period filter shows older reports (30 days)');
-        await go('#app/old-game');
-        check(await page.getAttribute('#ad-errors', 'href') === '#errors/app-old-game', 'an app page links to its errors');
-        await go('#errors/app-old-game');
-        await page.waitForFunction(() => document.querySelectorAll('#er-groups tr[data-err]').length === 1 && document.getElementById('er-app').value === 'app-old-game', null, { timeout: 4000 }).catch(() => {});
-        check(await page.evaluate(() => document.querySelectorAll('#er-groups tr[data-err]').length === 1 && document.getElementById('er-app').value === 'app-old-game'), 'Errors for one app: only its reports, the app chosen in the filter');
-        page.once('dialog', (d) => d.accept());
-        await page.click('#er-groups tr[data-err]');
-        await page.click('#er-del');
-        await page.waitForFunction(() => !window.__db.errors.e1 && !window.__db.errors.e2, null, { timeout: 4000 }).catch(() => {});
-        check(await page.evaluate(() => !window.__db.errors.e1 && !window.__db.errors.e2 && !!window.__db.errors.e3), 'Delete these reports removes that problem\'s reports only');
-        await go('#records');
-        check(/Super Jumper.*Ana – 4321.*Leo – 999/.test(await page.textContent('#records')), 'World records are listed per game');
-        // Apps: counters per app; an app's page lists the devices that installed it
-        await go('#apps');
-        check(/4 installs · 11 opens · on 1 device/.test(await page.textContent('#list')), 'each app in the store shows its installs, opens and devices');
-        await page.click('#list .app:has-text("Old Game") a.name');
-        await page.waitForFunction(() => !document.querySelector('[data-view="app"]').hidden);
-        const devRows = await page.evaluate(() => [...document.querySelectorAll('#app-devices tr')].map((r) => r.textContent));
-        check(devRows.length === 1 && /QE55Q80D/.test(devRows[0]) && /2026/.test(devRows[0]) && /Ana/.test(devRows[0]) && /Sam/.test(devRows[0]),
-            'an app\'s page lists the devices that installed it, with the date and their profiles (' + devRows.join(' | ') + ')');
-        await go('#apps');
-        check(JSON.stringify(db['star-catcher'].config) === '{"speed":1}', 'a new app starts with the default config from its manifest');
-        // the config editor
-        const row = (name) => '#list .app:has-text("' + name + '")';
-        await page.click(row('Old Game') + ' button.cfg');
-        check(await page.evaluate(() => !document.getElementById('cfg-modal').hidden) && /Old Game/.test(await page.textContent('#cfg-title')), 'the Config button opens the editor for that app');
-        await page.fill('#cfg-text', '{ "speed": 2, ');
-        await page.click('#cfg-save');
-        check(/Not valid JSON/.test(await page.textContent('#cfg-msg')) && await page.evaluate(() => window.__db.apps['old-game'].config === undefined && !document.getElementById('cfg-modal').hidden), 'invalid JSON is refused with a message and nothing is saved');
-        await page.fill('#cfg-text', '[1, 2]');
-        await page.click('#cfg-save');
-        check(/JSON object/.test(await page.textContent('#cfg-msg')), 'a config that is not an object is refused');
-        await page.fill('#cfg-text', '{ "speed": 2, "levels": [1, 2], "nested": { "on": true } }');
-        await page.click('#cfg-save');
-        await page.waitForFunction(() => document.getElementById('cfg-modal').hidden);
-        check(await page.evaluate(() => JSON.stringify(window.__db.apps['old-game'].config)) === '{"speed":2,"levels":[1,2],"nested":{"on":true}}', 'Save writes the config object into the app\'s document');
-        check(/3 settings/.test(await page.textContent(row('Old Game'))), 'the app row shows how many settings it has');
-        await page.click(row('Old Game') + ' button.cfg');
-        check(JSON.parse(await page.inputValue('#cfg-text')).nested.on === true, 'the editor shows the saved config again');
-        await page.keyboard.press('Escape');
-        // an update keeps the config the owner set (the app's default does not overwrite it)
-        await page.click(row('Star Catcher') + ' button.cfg');
-        await page.fill('#cfg-text', '{ "speed": 9 }'); await page.click('#cfg-save');
-        await page.waitForFunction(() => window.__db.apps['star-catcher'].config.speed === 9);
-        starVersion = '1.0.1';
-        await page.evaluate(() => { window.__db['subs/star-catcher/users'] = { sara: { at: 1, app: 'star-catcher' } }; });
-        await go('#add');
-        await page.click('#btn-scan');
-        await page.waitForFunction(() => /Update available/.test(document.getElementById('catalog').textContent));
-        await page.click('#catalog .app:has-text("Star Catcher") button.act');
-        await page.waitForFunction(() => window.__db.apps['star-catcher'].version === '1.0.1');
-        const upd = await page.evaluate(() => window.__db.apps['star-catcher']);
-        check(upd.config.speed === 9 && upd.order === 1, 'updating an app keeps its config and its position');
-        await page.waitForFunction(() => Object.keys(window.__db['inbox/sara/items'] || {}).length === 1, null, { timeout: 4000 }).catch(() => {});
-        const upn = await page.evaluate(() => Object.values(window.__db['inbox/sara/items'] || {}));
-        check(upn.length === 1 && upn[0].title === 'Star Catcher was updated' && /1\.0\.1/.test(upn[0].text) && upn[0].app === 'star-catcher' && upn[0].link === 'app',
-            'App updates (built in): a new version notifies the players who allowed the app (' + JSON.stringify(upn) + ')');
-        check(await page.evaluate(() => !!document.getElementById('url') && !!document.getElementById('btn-fetch')), 'the manual address section is still there for apps outside imad-os');
-        // AI services: set once here for every My PC (Firestore settings/ai)
-        await go('#ai');
-        check(/No AI service yet/.test(await page.textContent('#ai-list')) && await page.evaluate(() => document.getElementById('ai-save').disabled), 'AI services: empty at first, nothing to save');
-        await page.selectOption('#ai-preset', 'nvidia'); await page.click('#ai-add');
-        await page.selectOption('#ai-preset', 'gemini'); await page.click('#ai-add');
-        check(await page.evaluate(() => document.activeElement.id === 'ai-1-key' && document.getElementById('ai-0-speechUrl').value === '877104f7-e885-42b9-8de8-f6e4c6303969' && !document.getElementById('ai-1-speechUrl')),
-            'adding a service puts the cursor in its API key; NVIDIA shows its Magpie function, already filled in');
-        await page.fill('#ai-0-key', 'nvapi-xyz'); await page.fill('#ai-1-key', 'GK'); await page.fill('#ai-0-model', 'meta/llama-3.1-8b-instruct');
-        check(await page.getAttribute('#ai-0-key', 'type') === 'password', 'keys are hidden while typed');
-        await page.click('#ai-list button[data-def="1"]');
-        await page.click('#ai-save');
-        await page.waitForFunction(() => window.__db.settings && window.__db.settings.ai);
-        const sa = await page.evaluate(() => window.__db.settings.ai);
-        check(sa.list.length === 2 && sa.list[0].id === 'nvidia' && sa.list[0].key === 'nvapi-xyz' && sa.list[0].model === 'meta/llama-3.1-8b-instruct' && sa.list[0].speechUrl && sa.list[1].preset === 'gemini' &&
-            sa.def === 'gemini' && sa.updatedBy === 'owner@example.com' && /Saved/.test(await page.textContent('#ai-msg')), 'Save writes the services, their keys and the default into settings/ai');
-        page.once('dialog', (d) => d.accept());
-        await page.click('#ai-list button[data-del="0"]'); await page.click('#ai-save');
-        await page.waitForFunction(() => window.__db.settings.ai.list.length === 1);
-        check(await page.evaluate(() => window.__db.settings.ai.def === 'gemini'), 'Remove (after a question) takes a service out for every My PC');
-        // Settings of every My PC (Firestore settings/mypc): backgrounds
-        await page.route('https://pics.example/**', (r) => r.fulfill({ status: 404, body: '' }));
-        await go('#settings');
-        check(await page.evaluate(() => !document.querySelector('[data-view="settings"]').hidden && document.querySelector('.nav a.on').dataset.page === 'settings' &&
-            /No background added yet/.test(document.getElementById('gs-wps').textContent) && document.getElementById('gs-save').disabled), 'Settings: a page of its own, no background yet, nothing to save');
-        await page.click('#gs-add');
-        check(await page.evaluate(() => document.activeElement.id === 'gs-0-url'), 'Add background puts the cursor in its address');
-        await page.fill('#gs-0-url', 'https://pics.example/walls/blue-lake_at-night.jpg?w=1920');
-        check(await page.getAttribute('#gs-0-title', 'placeholder') === 'Blue lake at night', 'an empty title shows the one taken from the address');
-        await page.click('#gs-add');
-        await page.fill('#gs-1-url', 'https://pics.example/dunes.png'); await page.fill('#gs-1-title', 'Golden dunes'); await page.fill('#gs-1-thumb', 'https://pics.example/dunes-small.png');
-        await page.click('#gs-add');
-        await page.fill('#gs-2-url', 'http://pics.example/x.jpg');
-        await page.click('#gs-save');
-        check(/https/.test(await page.textContent('#gs-msg')) && !(await page.evaluate(() => window.__db.settings.mypc)), 'an address that is not https:// is refused before saving');
-        page.once('dialog', (d) => d.accept());
-        await page.click('.wp-row[data-i="2"] button[data-del]');
-        await page.selectOption('#gs-default', 'u:https://pics.example/dunes.png');
-        await page.click('.wp-row[data-i="1"] button[data-mv="-1"]');
-        await page.fill('#gs-fast', 'Imad12, bad name!');
-        await page.click('#gs-save');
-        check(/Not a username: name!/.test(await page.textContent('#gs-msg')) && !(await page.evaluate(() => window.__db.settings.mypc)), 'Fast push notifications: a wrong username is refused before saving');
-        await page.fill('#gs-fast', 'Imad12\nsara.k, imad12');
-        await page.click('#gs-save');
-        await page.waitForFunction(() => window.__db.settings.mypc);
-        const gm = await page.evaluate(() => window.__db.settings.mypc);
-        check(gm.wallpapers.length === 2 && gm.wallpapers[0].title === 'Golden dunes' && gm.wallpapers[0].thumb === 'https://pics.example/dunes-small.png' &&
-            gm.wallpapers[1].title === 'Blue lake at night' && gm.wallpaper === 'u:https://pics.example/dunes.png' && gm.updatedBy === 'owner@example.com' && /Saved/.test(await page.textContent('#gs-msg')),
-            'Save writes the backgrounds in their order (empty titles filled from the address) and the one of new profiles into settings/mypc');
-        check(JSON.stringify(gm.notifyFast) === '["imad12","sara.k"]' && /2 \/ 200/.test(await page.textContent('#gs-fast-count')), 'and the accounts with fast push notifications (lower case, once each): ' + JSON.stringify(gm.notifyFast));
-        // Send a test notification: a form with default values, written into that account's inbox
-        await page.click('#nt-open');
-        const ntv = await page.evaluate(() => ['to', 't', 'm', 'i', 'l'].map((k) => document.getElementById('nt-' + k).value));
-        check(!(await page.evaluate(() => document.getElementById('nt-modal').hidden)) && ntv[0] === 'imad12' && ntv[1] === 'Test notification' && /^https:\/\//.test(ntv[3]) && /^https:\/\//.test(ntv[4]),
-            'Send a test notification opens a form filled with default values, to the first fast account: ' + JSON.stringify(ntv));
-        await page.fill('#nt-to', 'no!'); await page.click('#nt-send');
-        check(/username/.test(await page.textContent('#nt-msg')), 'a wrong username is refused');
-        await page.fill('#nt-to', 'Tester'); await page.fill('#nt-i', 'http://x.com/a.png'); await page.click('#nt-send');
-        check(/https/.test(await page.textContent('#nt-msg')) && !(await page.evaluate(() => window.__db['inbox/tester/items'])), 'a picture that is not https is refused');
-        await page.fill('#nt-i', ''); await page.fill('#nt-t', 'Hello TV'); await page.click('#nt-send');
-        await page.waitForFunction(() => window.__db['inbox/tester/items'], null, { timeout: 4000 }).catch(() => {});
-        const ntd = await page.evaluate(() => Object.values(window.__db['inbox/tester/items'] || {}));
-        check(ntd.length === 1 && ntd[0].title === 'Hello TV' && ntd[0].app === 'mypc' && ntd[0].name === 'My PC' && /App Store Manager/.test(ntd[0].text) && !ntd[0].image && /^https:/.test(ntd[0].link) && /Sent to tester/.test(await page.textContent('#nt-msg')),
-            'Send writes it into inbox/<username>/items like a service would: ' + JSON.stringify(ntd));
-        await page.click('#nt-cancel');
-        // Services: push notification services of the store apps (installer/services.js)
-        let svcCode = "export default async function (ctx) { return { notifications: [{ username: '*', title: 'Goal! Raja', message: 'origin ' + self.origin + ' ' + (() => { try { indexedDB.open('x'); return 'idb-open'; } catch (e) { return 'idb-blocked'; } })() + ' ' + (ctx.state ? ctx.state.n : 0), link: 'app?match=7' }, { username: 'stranger', title: 'No' }], state: { n: ((ctx.state && ctx.state.n) || 0) + 1 } }; }";
-        await page.route('https://imad-os.github.io/g_soccer/services/notify.js', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: svcCode }));
-        await page.evaluate(() => {
-            window.__db.apps.soccer = { id: 'soccer', name: 'Soccer Live', url: 'https://imad-os.github.io/g_soccer/', entry: 'https://imad-os.github.io/g_soccer/index.html', icon: '', type: 'app', version: '1.0.0', enabled: true, order: 5,
-                services: [{ id: 'goals', file: 'https://imad-os.github.io/g_soccer/services/notify.js', every: 5, title: 'Goal alerts' }] };
-            window.__db['subs/soccer/users'] = { imad12: { at: 1, app: 'soccer' }, 'sara.k': { at: 2, app: 'soccer' } };
-        });
-        await page.evaluate(() => document.getElementById('btn-reload').click());
-        await go('#services');
-        await page.waitForFunction(() => /Soccer Live/.test(document.getElementById('sv-list').textContent), null, { timeout: 5000 });
-        const svRow = 'tr[data-k="soccer__goals"]';
-        check(/Goal alerts/.test(await page.textContent(svRow)) && /Waiting for approval/.test(await page.textContent(svRow)) && /\b2\b/.test(await page.textContent(svRow + ' td.num')) &&
-            await page.evaluate(() => document.querySelector('tr[data-k="soccer__goals"] button[data-act="now"]').disabled) && /App updates/.test(await page.textContent('#sv-list')),
-            'Services lists an app\'s service waiting for approval, how many players allowed the app, and the built-in App updates');
-        const svHidden = await page.evaluate(() => ({ others: Object.keys(window.__db.apps).filter((id) => id !== 'soccer' && !(window.__db.apps[id].services || []).length),
-            rows: [...document.querySelectorAll('#sv-list tr')].map((tr) => tr.dataset.k) }));
-        check(svHidden.others.length > 0 && svHidden.rows.length === 2 && svHidden.rows.every((k) => k.startsWith('soccer__')),
-            'Services hides the apps with no service of their own, like Widgets (' + svHidden.others.join() + ' hidden; rows ' + svHidden.rows.join() + ')');
-        if (process.env.MYPC_SHOTS) await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'manager-services.png') });
-        check(/Services run in this tab/.test(await page.textContent('#sv-runner')) && await page.evaluate(() => !!window.__db.services._runner), 'this tab holds the runner lease');
-        await page.click(svRow + ' button[data-act="review"]');
-        await page.waitForFunction(() => !document.getElementById('sv-modal').hidden);
-        check(/Goal! Raja/.test(await page.textContent('#sv-mbody')) && /SHA-256 [0-9a-f]{64}/.test(await page.textContent('#sv-mbody')), 'Review shows the code and its SHA-256 before approval');
-        await page.click('#sv-approve');
-        await page.waitForFunction(() => window.__db.services.soccer__goals && window.__db.services.soccer__goals.hash);
-        await page.waitForFunction(() => document.querySelector('tr[data-k="soccer__goals"] .tag').textContent === 'On', null, { timeout: 3000 }).catch(() => {});
-        check(await page.evaluate(() => window.__db.services.soccer__goals.enabled === true && window.__db.services.soccer__goals.every === 5) && await page.textContent(svRow + ' .tag') === 'On', 'Approve turns it on, every 5 minutes');
-        await page.click(svRow + ' button[data-act="test"]');
-        await page.waitForFunction(() => /would be sent/.test(document.getElementById('sv-mbody').textContent), null, { timeout: 8000 });
-        const tb = await page.textContent('#sv-mbody');
-        check(/2 notification\(s\) would be sent, 1 dropped/.test(tb) && /Nothing was sent/.test(tb) && /did not allow/.test(tb) && !(await page.evaluate(() => window.__db['inbox/imad12/items'])),
-            'Test runs it and shows the rows (the user who did not allow the app is dropped), nothing is sent: ' + tb.slice(0, 160));
-        await page.click('#sv-close');
-        await page.click(svRow + ' button[data-act="now"]');
-        await page.waitForFunction(() => window.__db['inbox/imad12/items'] && window.__db.services.soccer__goals.lastRun, null, { timeout: 8000 });
-        const inb = await page.evaluate(() => ({ a: Object.values(window.__db['inbox/imad12/items']), b: Object.values(window.__db['inbox/sara.k/items'] || {}), s: window.__db['inbox/stranger/items'], d: window.__db.services.soccer__goals }));
-        check(inb.a.length === 1 && inb.b.length === 1 && !inb.s && inb.a[0].title === 'Goal! Raja' && inb.a[0].name === 'Soccer Live' && inb.a[0].link === 'app?match=7' && inb.a[0].exp instanceof Object,
-            'Run now writes one inbox item per opted-in player, none for the others');
-        check(/^origin null idb-blocked 0$/.test(inb.a[0].text), 'the service runs in an opaque origin with no access to the page\'s storage (' + inb.a[0].text + ')');
-        check(inb.d.lastSent === 2 && inb.d.lastDropped === 1 && inb.d.state === '{"n":1}' && inb.d.log.length === 1 && /2 sent, 1 dropped/.test(await page.textContent(svRow)), 'the run is logged and its state saved for the next run');
-        await page.evaluate(() => { window.__db.services.soccer__goals.lastRun = Date.now() - 6 * 60000; });
-        await page.evaluate(() => { location.hash = '#services'; });
-        svcCode = svcCode.replace('Goal! Raja', 'Changed');
-        await page.click(svRow + ' button[data-act="now"]');
-        await page.waitForFunction(() => /approve the new code/.test(document.querySelector('tr[data-k="soccer__goals"]').textContent), null, { timeout: 8000 });
-        check(/Code changed: approve again/.test(await page.textContent(svRow)) && await page.evaluate(() => Object.keys(window.__db['inbox/imad12/items']).length === 1),
-            'a changed file is not run: it waits for a new approval');
-        // phone sized: a top bar with the tabs, nothing wider than the screen
-        await page.setViewportSize({ width: 390, height: 844 });
-        let wide = [];
-        for (const h of ['#overview', '#apps', '#add', '#ai', '#services', '#settings', '#devices', '#records', '#errors']) {
-            await go(h);
-            if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)) wide.push(h);
-        }
-        check(wide.length === 0 && await page.evaluate(() => { const r = document.querySelector('.nav').getBoundingClientRect(); return r.top < 140 && r.width >= 380; }),
-            'on a phone every page fits the screen width and the tabs are a row at the top (' + wide.join() + ')');
-        await page.setViewportSize({ width: 1280, height: 800 });
-        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
-        await page.context().close();
-    }
+    await managerTests(browser, base);
 
     console.log('19. smart startup: slow server -> last known online build');
     {
@@ -4946,6 +4659,312 @@ async function drivePhoneTests(browser, base) {
 
 // 44. Google Drive in the SDK (MyPC.drive, API 14): one sign-in per profile in My PC, every request sent by My PC.
 // MYPC_ONLY=drive node tests/run-tests.mjs runs just these.
+async function managerTests(browser, base) {
+    console.log('18. installer page: catalog of the owner\'s g_ repositories');
+    {
+        const page = await newPage(browser, base);
+        const GS = 'https://www.gstatic.com/firebasejs/12.0.0/';
+        // stand-ins for the Firebase modules (signed in as an admin, in-memory Firestore)
+        const FAKE = {
+            'firebase-app.js': 'export function initializeApp() { return {}; }',
+            'firebase-auth.js': `export function getAuth() { return {}; }
+                export function onAuthStateChanged(a, cb) { setTimeout(() => cb({ uid: 'U1', email: 'owner@example.com' }), 0); }
+                export class GoogleAuthProvider {}
+                export function signInWithPopup() {} export function signInWithEmailAndPassword() {} export function createUserWithEmailAndPassword() {}
+                export function signOut() {} export function sendPasswordResetEmail() {}`,
+            'firebase-firestore.js': `const db = window.__db;
+                export function getFirestore() { return {}; }
+                export function collection(d, name) { return { name }; }
+                export function doc(d, col, id) { return { col, id }; }
+                export async function getDoc(r) { return { exists: () => !!(db[r.col] && db[r.col][r.id]), data: () => db[r.col][r.id] }; }
+                export async function getDocs(c) {
+                    let docs = Object.entries(db[c.name] || {}).map(([id, x]) => ({ id, data: () => x }));
+                    for (const o of c.ops || []) {
+                        if (o.w) docs = docs.filter((d) => d.data()[o.w] === o.v);
+                        if (o.by) docs.sort((a, b) => (a.data()[o.by] < b.data()[o.by] ? -1 : 1) * (o.dir === 'desc' ? -1 : 1));
+                        if (o.lim) docs = docs.slice(0, o.lim);
+                    }
+                    return { docs };
+                }
+                export function query(c, ...ops) { return { name: c.name, ops }; }
+                export function where(w, op, v) { return { w, v }; }
+                export function orderBy(by, dir) { return { by, dir }; }
+                export function limit(lim) { return { lim }; }
+                export async function setDoc(r, data) { (db[r.col] = db[r.col] || {})[r.id] = data; }
+                export async function updateDoc(r, f) { Object.assign(db[r.col][r.id], f); }
+                export async function deleteDoc(r) { delete db[r.col][r.id]; }
+                export function serverTimestamp() { return 'now'; }`
+        };
+        await page.addInitScript(() => {
+            const now = Date.now();
+            window.__db = { admins: { U1: { name: 'owner' } },
+                appstats: { 'old-game': { installs: 4, opens: 11 } },
+                tvs: { 'tv-aaaabbbbccccddddeeeeffff0000': { tv: 'tv-aaaabbbbccccddddeeeeffff0000', model: 'QE55Q80D', version: '2.9.0', build: 17, lang: 'fr', src: 'duid',
+                         firstSeen: now - 20 * 86400000, lastSeen: now - 3600000, profiles: 2, names: ['Ana', 'Sam'], installed: ['old-game'], top: { jumper: { n: 'Ana', s: 4321 } }, size: 2048,
+                         blob: JSON.stringify({ arc_dev_installed: JSON.stringify([{ id: 'old-game', at: Date.UTC(2026, 8, 14, 12) }]),
+                                                arc_profiles: JSON.stringify([{ id: 'p1', name: 'Ana', color: '#ffd23f' }, { id: 'p2', name: 'Sam', color: '#4cd97b' }]) }) },
+                       'tv-1111222233334444555566667777': { tv: 'tv-1111222233334444555566667777', model: 'Browser', version: '2.8.0', build: 16, lang: 'en', src: 'random',
+                         firstSeen: now - 90 * 86400000, lastSeen: now - 30 * 86400000, profiles: 1, names: ['Player 1'], installed: [], top: {}, blob: '{}', size: 512 } },
+                records: { jumper: { list: [{ n: 'Ana', s: 4321, d: 1, tv: 'tv-a' }, { n: 'Leo', s: 999, d: 2, tv: 'tv-b' }], updatedAt: 1 } },
+                errors: {
+                    e1: { app: 'app-old-game', kind: 'load', msg: 'timeout: the SDK never answered in 20 s', n: 1, at: now - 3600000, tv: 'tv-aaaabbbbccccddddeeeeffff0000', model: 'QE55Q80D', ver: '2.19.0', build: 67, appv: '1.0.0', user: 'Ana', where: 'tv', stage: 'loading' },
+                    e2: { app: 'app-old-game', kind: 'load', msg: 'timeout: the SDK never answered in 20 s', n: 2, at: now - 7200000, tv: 'tv-1111222233334444555566667777', model: 'Browser', ver: '2.18.0', build: 66, appv: '1.0.0', where: 'web' },
+                    e3: { app: 'jumper', kind: 'error', msg: 'TypeError: x is undefined', src: 'games/jumper/js/game.js:10:5', stack: 'TypeError: x is undefined\n    at step (game.js:10:5)', n: 5, at: now - 60000, tv: 'tv-aaaabbbbccccddddeeeeffff0000', model: 'QE55Q80D', ver: '2.19.0', where: 'tv' },
+                    e4: { app: 'jumper', kind: 'error', msg: 'old one', n: 1, at: now - 20 * 86400000, tv: 'tv-a', where: 'tv' } },
+                apps: {
+                'old-game': { id: 'old-game', name: 'Old Game', url: 'https://imad-os.github.io/g_oldgame/', entry: 'https://imad-os.github.io/g_oldgame/index.html', icon: '', type: 'game', version: '1.0.0', enabled: true, order: 0 } } };
+        });
+        await page.route(GS + '**', (r) => { const f = r.request().url().slice(GS.length); r.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: FAKE[f] || '' }); });
+        await page.route('https://api.github.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify([
+            { name: 'g_star', has_pages: true }, { name: 'g_oldgame', has_pages: true }, { name: 'g_broken', has_pages: true },
+            { name: 'g_nopages', has_pages: false }, { name: 'speedy', has_pages: true }, { name: 'g_archived', has_pages: true, archived: true }]) }));
+        const ex = JSON.parse(fs.readFileSync(path.join(ROOT, 'sdk/example/mypc-app.json'), 'utf8'));
+        let starVersion = ex.version;
+        await page.route('https://imad-os.github.io/**', (r) => {
+            const u = r.request().url();
+            const send = (o) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(o) });
+            if (u.indexOf('/g_star/mypc-app.json') > 0) return send(Object.assign({}, ex, { version: starVersion }));
+            if (u.indexOf('/g_oldgame/mypc-app.json') > 0) return send({ mypc: 1, id: 'old-game', name: 'Old Game', type: 'game', version: '1.0.0' });
+            r.fulfill({ status: 404, body: '' });
+        });
+        await page.goto(base + 'installer/index.html#add');
+        await page.waitForSelector('#catalog .app', { timeout: 8000 });
+        const go = async (h) => { await page.evaluate((x) => { location.hash = x; }, h); await page.waitForTimeout(80); };
+        const rows = await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].map((r) => r.textContent));
+        check(rows.length === 3 && !rows.some((t) => /speedy|nopages|archived/.test(t)), 'only g_ repositories with GitHub Pages are listed (' + rows.length + ')');
+        check(rows.some((t) => /Star Catcher.*Not in store/.test(t)) && rows.some((t) => /Old Game.*In store/.test(t)) && rows.some((t) => /g_broken.*not a My PC app/.test(t)),
+            'each app shows its status: not in the store, in the store, or not a My PC app');
+        check(/App Store Manager/.test(await page.title()) && /App Store Manager/.test(await page.textContent('.brand')), 'the installer is now the App Store Manager');
+        check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,AI services,Google Drive,Services,Widgets,Settings,Devices,World records,Errors,Stream lists'
+            && document.querySelector('.nav a.on').dataset.page === 'add' && !document.querySelector('[data-view="add"]').hidden && document.querySelector('[data-view="overview"]').hidden),
+            'a menu with one page each: Overview, Apps, Add apps, AI services, Google Drive, Services, Widgets, Settings, Devices, World records, Errors (+ the Stream lists link)');
+        check(await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].find((r) => /Old Game/.test(r.textContent)).querySelector('input').disabled), 'installed apps cannot be selected again');
+        await page.check('#sel-all');
+        await page.click('#btn-install-sel');
+        await page.waitForFunction(() => window.__db.apps['star-catcher'], null, { timeout: 5000 }).catch(() => {});
+        const db = await page.evaluate(() => window.__db.apps);
+        check(db['star-catcher'] && db['star-catcher'].order === 1 && db['star-catcher'].url === 'https://imad-os.github.io/g_star/' && db['star-catcher'].installedBy === 'U1' && Object.keys(db).length === 2,
+            '"Add selected to the store" publishes the new app only, after the ones already there');
+        await page.waitForFunction(() => /Star Catcher.*In store/.test(document.getElementById('catalog').textContent) && !/Not in store/.test(document.getElementById('catalog').textContent));
+        check(true, 'after adding, the catalog marks it in the store');
+        // Overview: totals, most installed apps, recent TVs
+        await go('#overview');
+        const sum = await page.textContent('#tv-summary');
+        check(/2\s*TVs with My PC/.test(sum) && /1\s*used in the last 7 days/.test(sum) && /4\s*installs/.test(sum) && /11\s*apps opened/.test(sum), 'Overview: TVs, active TVs, installs and opens (' + sum + ')');
+        check(/Old Game\s*4/.test(await page.textContent('#top-apps')) && /QE55Q80D/.test(await page.textContent('#recent')), 'Overview: most installed apps and recently active TVs');
+        // Devices: one row per TV, newest activity first; a TV's page lists its profiles and apps with install dates
+        await go('#devices');
+        const tvText = await page.evaluate(() => [...document.querySelectorAll('#tvs .tv')].map((r) => r.textContent));
+        check(tvText.length === 2 && /QE55Q80D/.test(tvText[0]) && /Ana, Sam/.test(tvText[0]) && /Super Jumper: Ana 4321/.test(tvText[0]),
+            'Devices lists each TV: model, profiles and best scores (newest first)');
+        await page.click('#tvs .tv:has-text("QE55Q80D")');
+        await page.waitForFunction(() => !document.querySelector('[data-view="device"]').hidden);
+        const dev = await page.evaluate(() => ({ apps: document.getElementById('dd-apps').textContent, prof: document.getElementById('dd-profiles').textContent }));
+        check(/Old Game/.test(dev.apps) && /2026/.test(dev.apps) && /Ana/.test(dev.prof) && /Sam/.test(dev.prof), 'a device page shows its profiles and its apps with the install date (' + dev.apps + ')');
+        // Errors: one row per problem (same app + kind + message), newest first; a row opens every report with its device and stack
+        await go('#errors');
+        await page.waitForFunction(() => document.querySelectorAll('#er-groups tr[data-err]').length > 0, null, { timeout: 4000 }).catch(() => {});
+        const eg = await page.evaluate(() => [...document.querySelectorAll('#er-groups tr[data-err]')].map((r) => r.textContent));
+        check(eg.length === 2 && /x is undefined/.test(eg[0]) && /Super Jumper/.test(eg[0]) && /SDK never answered/.test(eg[1]) && /Old Game/.test(eg[1]) && /could not open/.test(eg[1]) && /Old Game\s*3\s*2/.test(eg[1]),
+            'Errors groups the reports of the last 7 days by problem: the same timeout on 2 TVs is one row (3 times, 2 TVs); a 20-day-old one is not shown (' + eg.join(' | ') + ')');
+        await page.click('#er-groups tr[data-err]:has-text("x is undefined")');
+        const det = await page.textContent('#er-occ');
+        check(/QE55Q80D/.test(det) && /game\.js:10:5/.test(det) && /at step/.test(det) && /5 times/.test(det) && /2\.19\.0/.test(det), 'a problem shows each report: time, device, My PC version, place, count and stack');
+        await page.selectOption('#er-when', '30');
+        check(await page.evaluate(() => document.querySelectorAll('#er-groups tr[data-err]').length) === 3, 'the period filter shows older reports (30 days)');
+        await go('#app/old-game');
+        check(await page.getAttribute('#ad-errors', 'href') === '#errors/app-old-game', 'an app page links to its errors');
+        await go('#errors/app-old-game');
+        await page.waitForFunction(() => document.querySelectorAll('#er-groups tr[data-err]').length === 1 && document.getElementById('er-app').value === 'app-old-game', null, { timeout: 4000 }).catch(() => {});
+        check(await page.evaluate(() => document.querySelectorAll('#er-groups tr[data-err]').length === 1 && document.getElementById('er-app').value === 'app-old-game'), 'Errors for one app: only its reports, the app chosen in the filter');
+        page.once('dialog', (d) => d.accept());
+        await page.click('#er-groups tr[data-err]');
+        await page.click('#er-del');
+        await page.waitForFunction(() => !window.__db.errors.e1 && !window.__db.errors.e2, null, { timeout: 4000 }).catch(() => {});
+        check(await page.evaluate(() => !window.__db.errors.e1 && !window.__db.errors.e2 && !!window.__db.errors.e3), 'Delete these reports removes that problem\'s reports only');
+        await go('#records');
+        check(/Super Jumper.*Ana – 4321.*Leo – 999/.test(await page.textContent('#records')), 'World records are listed per game');
+        // Apps: counters per app; an app's page lists the devices that installed it
+        await go('#apps');
+        check(/4 installs · 11 opens · on 1 device/.test(await page.textContent('#list')), 'each app in the store shows its installs, opens and devices');
+        await page.click('#list .app:has-text("Old Game") a.name');
+        await page.waitForFunction(() => !document.querySelector('[data-view="app"]').hidden);
+        const devRows = await page.evaluate(() => [...document.querySelectorAll('#app-devices tr')].map((r) => r.textContent));
+        check(devRows.length === 1 && /QE55Q80D/.test(devRows[0]) && /2026/.test(devRows[0]) && /Ana/.test(devRows[0]) && /Sam/.test(devRows[0]),
+            'an app\'s page lists the devices that installed it, with the date and their profiles (' + devRows.join(' | ') + ')');
+        await go('#apps');
+        check(JSON.stringify(db['star-catcher'].config) === '{"speed":1}', 'a new app starts with the default config from its manifest');
+        // the config editor
+        const row = (name) => '#list .app:has-text("' + name + '")';
+        await page.click(row('Old Game') + ' button.cfg');
+        check(await page.evaluate(() => !document.getElementById('cfg-modal').hidden) && /Old Game/.test(await page.textContent('#cfg-title')), 'the Config button opens the editor for that app');
+        await page.fill('#cfg-text', '{ "speed": 2, ');
+        await page.click('#cfg-save');
+        check(/Not valid JSON/.test(await page.textContent('#cfg-msg')) && await page.evaluate(() => window.__db.apps['old-game'].config === undefined && !document.getElementById('cfg-modal').hidden), 'invalid JSON is refused with a message and nothing is saved');
+        await page.fill('#cfg-text', '[1, 2]');
+        await page.click('#cfg-save');
+        check(/JSON object/.test(await page.textContent('#cfg-msg')), 'a config that is not an object is refused');
+        await page.fill('#cfg-text', '{ "speed": 2, "levels": [1, 2], "nested": { "on": true } }');
+        await page.click('#cfg-save');
+        await page.waitForFunction(() => document.getElementById('cfg-modal').hidden);
+        check(await page.evaluate(() => JSON.stringify(window.__db.apps['old-game'].config)) === '{"speed":2,"levels":[1,2],"nested":{"on":true}}', 'Save writes the config object into the app\'s document');
+        check(/3 settings/.test(await page.textContent(row('Old Game'))), 'the app row shows how many settings it has');
+        await page.click(row('Old Game') + ' button.cfg');
+        check(JSON.parse(await page.inputValue('#cfg-text')).nested.on === true, 'the editor shows the saved config again');
+        await page.keyboard.press('Escape');
+        // an update keeps the config the owner set (the app's default does not overwrite it)
+        await page.click(row('Star Catcher') + ' button.cfg');
+        await page.fill('#cfg-text', '{ "speed": 9 }'); await page.click('#cfg-save');
+        await page.waitForFunction(() => window.__db.apps['star-catcher'].config.speed === 9);
+        starVersion = '1.0.1';
+        await page.evaluate(() => { window.__db['subs/star-catcher/users'] = { sara: { at: 1, app: 'star-catcher' } }; });
+        await go('#add');
+        await page.click('#btn-scan');
+        await page.waitForFunction(() => /Update available/.test(document.getElementById('catalog').textContent));
+        const top = await page.evaluate(() => {
+            const bar = document.getElementById('catalog-actions'), up = document.getElementById('btn-update-all'), cat = document.getElementById('catalog');
+            const why = [...cat.querySelectorAll('.app')].find((r) => /Star Catcher/.test(r.textContent)).querySelector('.why');
+            return { above: bar.getBoundingClientRect().bottom <= cat.getBoundingClientRect().top + 1, sticky: getComputedStyle(bar).position, up: !up.hidden && up.textContent, why: why && !why.hidden && why.textContent };
+        });
+        check(top.above && top.sticky === 'sticky' && top.up === 'Update all (1)' && /version 1\.0\.0 → 1\.0\.1/.test(top.why),
+            'Add apps: the actions (Select all, Update all, Add selected) stay on top; an update says what changed ' + JSON.stringify(top));
+        if (process.env.MYPC_SHOTS) await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'manager-add-update.png') });
+        await page.click('#catalog .app:has-text("Star Catcher") button.act');
+        await page.waitForFunction(() => window.__db.apps['star-catcher'].version === '1.0.1');
+        const upd = await page.evaluate(() => window.__db.apps['star-catcher']);
+        check(upd.config.speed === 9 && upd.order === 1, 'updating an app keeps its config and its position');
+        await page.waitForFunction(() => Object.keys(window.__db['inbox/sara/items'] || {}).length === 1, null, { timeout: 4000 }).catch(() => {});
+        const upn = await page.evaluate(() => Object.values(window.__db['inbox/sara/items'] || {}));
+        check(upn.length === 1 && upn[0].title === 'Star Catcher was updated' && /1\.0\.1/.test(upn[0].text) && upn[0].app === 'star-catcher' && upn[0].link === 'app',
+            'App updates (built in): a new version notifies the players who allowed the app (' + JSON.stringify(upn) + ')');
+        check(await page.evaluate(() => !!document.getElementById('url') && !!document.getElementById('btn-fetch')), 'the manual address section is still there for apps outside imad-os');
+        // AI services: set once here for every My PC (Firestore settings/ai)
+        await go('#ai');
+        check(/No AI service yet/.test(await page.textContent('#ai-list')) && await page.evaluate(() => document.getElementById('ai-save').disabled), 'AI services: empty at first, nothing to save');
+        await page.selectOption('#ai-preset', 'nvidia'); await page.click('#ai-add');
+        await page.selectOption('#ai-preset', 'gemini'); await page.click('#ai-add');
+        check(await page.evaluate(() => document.activeElement.id === 'ai-1-key' && document.getElementById('ai-0-speechUrl').value === '877104f7-e885-42b9-8de8-f6e4c6303969' && !document.getElementById('ai-1-speechUrl')),
+            'adding a service puts the cursor in its API key; NVIDIA shows its Magpie function, already filled in');
+        await page.fill('#ai-0-key', 'nvapi-xyz'); await page.fill('#ai-1-key', 'GK'); await page.fill('#ai-0-model', 'meta/llama-3.1-8b-instruct');
+        check(await page.getAttribute('#ai-0-key', 'type') === 'password', 'keys are hidden while typed');
+        await page.click('#ai-list button[data-def="1"]');
+        await page.click('#ai-save');
+        await page.waitForFunction(() => window.__db.settings && window.__db.settings.ai);
+        const sa = await page.evaluate(() => window.__db.settings.ai);
+        check(sa.list.length === 2 && sa.list[0].id === 'nvidia' && sa.list[0].key === 'nvapi-xyz' && sa.list[0].model === 'meta/llama-3.1-8b-instruct' && sa.list[0].speechUrl && sa.list[1].preset === 'gemini' &&
+            sa.def === 'gemini' && sa.updatedBy === 'owner@example.com' && /Saved/.test(await page.textContent('#ai-msg')), 'Save writes the services, their keys and the default into settings/ai');
+        page.once('dialog', (d) => d.accept());
+        await page.click('#ai-list button[data-del="0"]'); await page.click('#ai-save');
+        await page.waitForFunction(() => window.__db.settings.ai.list.length === 1);
+        check(await page.evaluate(() => window.__db.settings.ai.def === 'gemini'), 'Remove (after a question) takes a service out for every My PC');
+        // Settings of every My PC (Firestore settings/mypc): backgrounds
+        await page.route('https://pics.example/**', (r) => r.fulfill({ status: 404, body: '' }));
+        await go('#settings');
+        check(await page.evaluate(() => !document.querySelector('[data-view="settings"]').hidden && document.querySelector('.nav a.on').dataset.page === 'settings' &&
+            /No background added yet/.test(document.getElementById('gs-wps').textContent) && document.getElementById('gs-save').disabled), 'Settings: a page of its own, no background yet, nothing to save');
+        await page.click('#gs-add');
+        check(await page.evaluate(() => document.activeElement.id === 'gs-0-url'), 'Add background puts the cursor in its address');
+        await page.fill('#gs-0-url', 'https://pics.example/walls/blue-lake_at-night.jpg?w=1920');
+        check(await page.getAttribute('#gs-0-title', 'placeholder') === 'Blue lake at night', 'an empty title shows the one taken from the address');
+        await page.click('#gs-add');
+        await page.fill('#gs-1-url', 'https://pics.example/dunes.png'); await page.fill('#gs-1-title', 'Golden dunes'); await page.fill('#gs-1-thumb', 'https://pics.example/dunes-small.png');
+        await page.click('#gs-add');
+        await page.fill('#gs-2-url', 'http://pics.example/x.jpg');
+        await page.click('#gs-save');
+        check(/https/.test(await page.textContent('#gs-msg')) && !(await page.evaluate(() => window.__db.settings.mypc)), 'an address that is not https:// is refused before saving');
+        page.once('dialog', (d) => d.accept());
+        await page.click('.wp-row[data-i="2"] button[data-del]');
+        await page.selectOption('#gs-default', 'u:https://pics.example/dunes.png');
+        await page.click('.wp-row[data-i="1"] button[data-mv="-1"]');
+        await page.fill('#gs-fast', 'Imad12, bad name!');
+        await page.click('#gs-save');
+        check(/Not a username: name!/.test(await page.textContent('#gs-msg')) && !(await page.evaluate(() => window.__db.settings.mypc)), 'Fast push notifications: a wrong username is refused before saving');
+        await page.fill('#gs-fast', 'Imad12\nsara.k, imad12');
+        await page.click('#gs-save');
+        await page.waitForFunction(() => window.__db.settings.mypc);
+        const gm = await page.evaluate(() => window.__db.settings.mypc);
+        check(gm.wallpapers.length === 2 && gm.wallpapers[0].title === 'Golden dunes' && gm.wallpapers[0].thumb === 'https://pics.example/dunes-small.png' &&
+            gm.wallpapers[1].title === 'Blue lake at night' && gm.wallpaper === 'u:https://pics.example/dunes.png' && gm.updatedBy === 'owner@example.com' && /Saved/.test(await page.textContent('#gs-msg')),
+            'Save writes the backgrounds in their order (empty titles filled from the address) and the one of new profiles into settings/mypc');
+        check(JSON.stringify(gm.notifyFast) === '["imad12","sara.k"]' && /2 \/ 200/.test(await page.textContent('#gs-fast-count')), 'and the accounts with fast push notifications (lower case, once each): ' + JSON.stringify(gm.notifyFast));
+        // Send a test notification: a form with default values, written into that account's inbox
+        await page.click('#nt-open');
+        const ntv = await page.evaluate(() => ['to', 't', 'm', 'i', 'l'].map((k) => document.getElementById('nt-' + k).value));
+        check(!(await page.evaluate(() => document.getElementById('nt-modal').hidden)) && ntv[0] === 'imad12' && ntv[1] === 'Test notification' && /^https:\/\//.test(ntv[3]) && /^https:\/\//.test(ntv[4]),
+            'Send a test notification opens a form filled with default values, to the first fast account: ' + JSON.stringify(ntv));
+        await page.fill('#nt-to', 'no!'); await page.click('#nt-send');
+        check(/username/.test(await page.textContent('#nt-msg')), 'a wrong username is refused');
+        await page.fill('#nt-to', 'Tester'); await page.fill('#nt-i', 'http://x.com/a.png'); await page.click('#nt-send');
+        check(/https/.test(await page.textContent('#nt-msg')) && !(await page.evaluate(() => window.__db['inbox/tester/items'])), 'a picture that is not https is refused');
+        await page.fill('#nt-i', ''); await page.fill('#nt-t', 'Hello TV'); await page.click('#nt-send');
+        await page.waitForFunction(() => window.__db['inbox/tester/items'], null, { timeout: 4000 }).catch(() => {});
+        const ntd = await page.evaluate(() => Object.values(window.__db['inbox/tester/items'] || {}));
+        check(ntd.length === 1 && ntd[0].title === 'Hello TV' && ntd[0].app === 'mypc' && ntd[0].name === 'My PC' && /App Store Manager/.test(ntd[0].text) && !ntd[0].image && /^https:/.test(ntd[0].link) && /Sent to tester/.test(await page.textContent('#nt-msg')),
+            'Send writes it into inbox/<username>/items like a service would: ' + JSON.stringify(ntd));
+        await page.click('#nt-cancel');
+        // Services: push notification services of the store apps (installer/services.js)
+        let svcCode = "export default async function (ctx) { return { notifications: [{ username: '*', title: 'Goal! Raja', message: 'origin ' + self.origin + ' ' + (() => { try { indexedDB.open('x'); return 'idb-open'; } catch (e) { return 'idb-blocked'; } })() + ' ' + (ctx.state ? ctx.state.n : 0), link: 'app?match=7' }, { username: 'stranger', title: 'No' }], state: { n: ((ctx.state && ctx.state.n) || 0) + 1 } }; }";
+        await page.route('https://imad-os.github.io/g_soccer/services/notify.js', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: svcCode }));
+        await page.evaluate(() => {
+            window.__db.apps.soccer = { id: 'soccer', name: 'Soccer Live', url: 'https://imad-os.github.io/g_soccer/', entry: 'https://imad-os.github.io/g_soccer/index.html', icon: '', type: 'app', version: '1.0.0', enabled: true, order: 5,
+                services: [{ id: 'goals', file: 'https://imad-os.github.io/g_soccer/services/notify.js', every: 5, title: 'Goal alerts' }] };
+            window.__db['subs/soccer/users'] = { imad12: { at: 1, app: 'soccer' }, 'sara.k': { at: 2, app: 'soccer' } };
+        });
+        await page.evaluate(() => document.getElementById('btn-reload').click());
+        await go('#services');
+        await page.waitForFunction(() => /Soccer Live/.test(document.getElementById('sv-list').textContent), null, { timeout: 5000 });
+        const svRow = 'tr[data-k="soccer__goals"]';
+        check(/Goal alerts/.test(await page.textContent(svRow)) && /Waiting for approval/.test(await page.textContent(svRow)) && /\b2\b/.test(await page.textContent(svRow + ' td.num')) &&
+            await page.evaluate(() => document.querySelector('tr[data-k="soccer__goals"] button[data-act="now"]').disabled) && /App updates/.test(await page.textContent('#sv-list')),
+            'Services lists an app\'s service waiting for approval, how many players allowed the app, and the built-in App updates');
+        const svHidden = await page.evaluate(() => ({ others: Object.keys(window.__db.apps).filter((id) => id !== 'soccer' && !(window.__db.apps[id].services || []).length),
+            rows: [...document.querySelectorAll('#sv-list tr')].map((tr) => tr.dataset.k) }));
+        check(svHidden.others.length > 0 && svHidden.rows.length === 2 && svHidden.rows.every((k) => k.startsWith('soccer__')),
+            'Services hides the apps with no service of their own, like Widgets (' + svHidden.others.join() + ' hidden; rows ' + svHidden.rows.join() + ')');
+        if (process.env.MYPC_SHOTS) await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'manager-services.png') });
+        check(/Services run in this tab/.test(await page.textContent('#sv-runner')) && await page.evaluate(() => !!window.__db.services._runner), 'this tab holds the runner lease');
+        await page.click(svRow + ' button[data-act="review"]');
+        await page.waitForFunction(() => !document.getElementById('sv-modal').hidden);
+        check(/Goal! Raja/.test(await page.textContent('#sv-mbody')) && /SHA-256 [0-9a-f]{64}/.test(await page.textContent('#sv-mbody')), 'Review shows the code and its SHA-256 before approval');
+        await page.click('#sv-approve');
+        await page.waitForFunction(() => window.__db.services.soccer__goals && window.__db.services.soccer__goals.hash);
+        await page.waitForFunction(() => document.querySelector('tr[data-k="soccer__goals"] .tag').textContent === 'On', null, { timeout: 3000 }).catch(() => {});
+        check(await page.evaluate(() => window.__db.services.soccer__goals.enabled === true && window.__db.services.soccer__goals.every === 5) && await page.textContent(svRow + ' .tag') === 'On', 'Approve turns it on, every 5 minutes');
+        await page.click(svRow + ' button[data-act="test"]');
+        await page.waitForFunction(() => /would be sent/.test(document.getElementById('sv-mbody').textContent), null, { timeout: 8000 });
+        const tb = await page.textContent('#sv-mbody');
+        check(/2 notification\(s\) would be sent, 1 dropped/.test(tb) && /Nothing was sent/.test(tb) && /did not allow/.test(tb) && !(await page.evaluate(() => window.__db['inbox/imad12/items'])),
+            'Test runs it and shows the rows (the user who did not allow the app is dropped), nothing is sent: ' + tb.slice(0, 160));
+        await page.click('#sv-close');
+        await page.click(svRow + ' button[data-act="now"]');
+        await page.waitForFunction(() => window.__db['inbox/imad12/items'] && window.__db.services.soccer__goals.lastRun, null, { timeout: 8000 });
+        const inb = await page.evaluate(() => ({ a: Object.values(window.__db['inbox/imad12/items']), b: Object.values(window.__db['inbox/sara.k/items'] || {}), s: window.__db['inbox/stranger/items'], d: window.__db.services.soccer__goals }));
+        check(inb.a.length === 1 && inb.b.length === 1 && !inb.s && inb.a[0].title === 'Goal! Raja' && inb.a[0].name === 'Soccer Live' && inb.a[0].link === 'app?match=7' && inb.a[0].exp instanceof Object,
+            'Run now writes one inbox item per opted-in player, none for the others');
+        check(/^origin null idb-blocked 0$/.test(inb.a[0].text), 'the service runs in an opaque origin with no access to the page\'s storage (' + inb.a[0].text + ')');
+        check(inb.d.lastSent === 2 && inb.d.lastDropped === 1 && inb.d.state === '{"n":1}' && inb.d.log.length === 1 && /2 sent, 1 dropped/.test(await page.textContent(svRow)), 'the run is logged and its state saved for the next run');
+        await page.evaluate(() => { window.__db.services.soccer__goals.lastRun = Date.now() - 6 * 60000; });
+        await page.evaluate(() => { location.hash = '#services'; });
+        svcCode = svcCode.replace('Goal! Raja', 'Changed');
+        await page.click(svRow + ' button[data-act="now"]');
+        await page.waitForFunction(() => /approve the new code/.test(document.querySelector('tr[data-k="soccer__goals"]').textContent), null, { timeout: 8000 });
+        check(/Code changed: approve again/.test(await page.textContent(svRow)) && await page.evaluate(() => Object.keys(window.__db['inbox/imad12/items']).length === 1),
+            'a changed file is not run: it waits for a new approval');
+        // phone sized: a top bar with the tabs, nothing wider than the screen
+        await page.setViewportSize({ width: 390, height: 844 });
+        let wide = [];
+        for (const h of ['#overview', '#apps', '#add', '#ai', '#services', '#settings', '#devices', '#records', '#errors']) {
+            await go(h);
+            if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)) wide.push(h);
+        }
+        check(wide.length === 0 && await page.evaluate(() => { const r = document.querySelector('.nav').getBoundingClientRect(); return r.top < 140 && r.width >= 380; }),
+            'on a phone every page fits the screen width and the tabs are a row at the top (' + wide.join() + ')');
+        await page.setViewportSize({ width: 1280, height: 800 });
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+}
+
 async function widgetTests(browser, base) {
     console.log('42. desktop widgets: Weather, Playtime, System Monitor, Music Player; Control Panel > Widgets; paused while an app runs; app widgets');
     {
