@@ -34,40 +34,40 @@ var Notes = (function () {
         if (cur && !find(cur)) cur = null;
         if (!cur && l.length) cur = l[0].id;
         body.innerHTML = '';
-        var box = el('div', 'nt'), side = el('div', 'nt-side'), main = el('div', 'nt-main');
-        var add1 = btn('nt-new', '+ ' + t('ntNew'), function () {
-            Keyboard.open({ title: t('ntNew'), max: 2000, mode: 'title' }, function (s) { if (String(s || '').trim()) { cur = add(s, ''); render('.nt-item.on'); } });
+        var box = el('div', 'mn'), side = el('div', 'mn-side'), main = el('div', 'mn-main');
+        var add1 = btn('mn-new', '+ ' + t('ntNew'), function () {
+            Keyboard.open({ title: t('ntNew'), max: 2000, mode: 'title' }, function (s) { if (String(s || '').trim()) { cur = add(s, ''); render('.mn-item.on'); } });
         });
         side.appendChild(add1);
-        var items = el('div', 'nt-list');
+        var items = el('div', 'mn-list');
         items.setAttribute('role', 'list');
         for (var i = 0; i < l.length; i++) {
-            var n = l[i], b = btn('nt-item' + (n.id === cur ? ' on' : ''), '');
+            var n = l[i], b = btn('mn-item' + (n.id === cur ? ' on' : ''), '');
             b.setAttribute('role', 'listitem');
-            b.appendChild(el('span', 'nt-it-t', firstLine(n)));
-            b.appendChild(el('span', 'nt-it-s', (n.from ? t('ntFrom').replace('%s', n.from) : t('ntMine')) + ' · ' + when(n.at)));
-            b.onclick = (function (id) { return function () { cur = id; delArm = 0; render('.nt-item.on'); }; })(n.id);
+            b.appendChild(el('span', 'mn-it-t', firstLine(n)));
+            b.appendChild(el('span', 'mn-it-s', (n.from ? t('ntFrom').replace('%s', n.from) : t('ntMine')) + ' · ' + when(n.at)));
+            b.onclick = (function (id) { return function () { cur = id; delArm = 0; render('.mn-item.on'); }; })(n.id);
             items.appendChild(b);
         }
         side.appendChild(items);
         box.appendChild(side);
         var n0 = cur ? find(cur) : null;
-        if (!n0) main.appendChild(el('div', 'nt-empty', t('ntNone')));
+        if (!n0) main.appendChild(el('div', 'mn-empty', t('ntNone')));
         else {
-            if (n0.title) main.appendChild(el('div', 'nt-title', n0.title));
-            main.appendChild(el('div', 'nt-meta', (n0.from ? t('ntFrom').replace('%s', n0.from) : t('ntMine')) + ' · ' + when(n0.at)));
-            var txt = el('div', 'nt-text', n0.text);
+            if (n0.title) main.appendChild(el('div', 'mn-title', n0.title));
+            main.appendChild(el('div', 'mn-meta', (n0.from ? t('ntFrom').replace('%s', n0.from) : t('ntMine')) + ' · ' + when(n0.at)));
+            var txt = el('div', 'mn-text', n0.text);
             txt.setAttribute('tabindex', '0');
             txt.setAttribute('data-focus', '');
             main.appendChild(txt);
-            var bar = el('div', 'nt-bar'), link = ShareRx.linkIn(n0.text) || ((n0.text.match(/https?:\/\/[^\s]+/i) || [])[0] || '');
-            if (link) bar.appendChild(btn('nt-btn nt-link', t('ntOpenLink'), function () { Win.open('browser', link); }));
-            bar.appendChild(btn('nt-btn', t('ntEdit'), function () {
-                Keyboard.open({ title: t('ntEdit'), max: 2000, mode: 'title', text: n0.text.slice(0, 2000) }, function (s) { if (s !== null && s !== undefined) { update(n0.id, s); render('.nt-item.on'); } });
+            var bar = el('div', 'mn-bar'), link = ShareRx.linkIn(n0.text) || ((n0.text.match(/https?:\/\/[^\s]+/i) || [])[0] || '');
+            if (link) bar.appendChild(btn('mn-btn mn-link', t('ntOpenLink'), function () { Win.open('browser', link); }));
+            bar.appendChild(btn('mn-btn', t('ntEdit'), function () {
+                Keyboard.open({ title: t('ntEdit'), max: 2000, mode: 'title', text: n0.text.slice(0, 2000) }, function (s) { if (s !== null && s !== undefined) { update(n0.id, s); render('.mn-item.on'); } });
             }));
-            var del = btn('nt-btn nt-del', t('ntDelete'), function () {
+            var del = btn('mn-btn mn-del', t('ntDelete'), function () {
                 if (Date.now() - delArm > 4000) { delArm = Date.now(); del.textContent = t('ntDelSure'); A11y.announce(t('ntDelSure')); return; }
-                delArm = 0; remove(n0.id); cur = null; A11y.announce(t('ntDeleted')); render('.nt-item.on');
+                delArm = 0; remove(n0.id); cur = null; A11y.announce(t('ntDeleted')); render('.mn-item.on');
             });
             bar.appendChild(del);
             main.appendChild(bar);
@@ -77,7 +77,7 @@ var Notes = (function () {
         I18n.apply(body);
         var f = focusSel ? body.querySelector(focusSel) : null;
         if (f) Focus.focus(f);
-        return f || body.querySelector('.nt-item.on') || add1;
+        return f || body.querySelector('.mn-item.on') || add1;
     }
 
     Win.register('notes', {
@@ -88,7 +88,7 @@ var Notes = (function () {
         action: function (a, repeat) {
             // the note's text scrolls with Up / Down while it has the focus
             var f = Focus.current();
-            if (f && f.classList && f.classList.contains('nt-text') && (a === 'up' || a === 'down')) {
+            if (f && f.classList && f.classList.contains('mn-text') && (a === 'up' || a === 'down')) {
                 var before = f.scrollTop;
                 f.scrollTop += a === 'down' ? 120 : -120;
                 if (f.scrollTop !== before) return true;

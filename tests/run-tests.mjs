@@ -8009,7 +8009,7 @@ async function shareTests(browser, base) {
     // "Always send to this TV": the next ones go by themselves
     phone.addText('Shopping list\nmilk\neggs\nmint tea', 'Groceries');
     const nt = await page.waitForFunction(() => Win.current() === 'notes', null, { timeout: 8000 }).then(() => true, () => false);
-    check(nt && await page.evaluate(() => /mint tea/.test(document.querySelector('.nt-text').textContent) && /Groceries/.test(document.querySelector('.nt-title').textContent) && /From Pixel 8/.test(document.querySelector('.nt-meta').textContent)), 'a text goes by itself to the remembered TV and opens in MyNotes');
+    check(nt && await page.evaluate(() => /mint tea/.test(document.querySelector('.mn-text').textContent) && /Groceries/.test(document.querySelector('.mn-title').textContent) && /From Pixel 8/.test(document.querySelector('.mn-meta').textContent)), 'a text goes by itself to the remembered TV and opens in MyNotes');
     if (shots) await page.screenshot({ path: shots + '/share-3-notes.png' });
     // a picture: shrunk once to the screen, saved on the TV, shown in MyPhotos
     const jpg = fs.readFileSync(path.join(ROOT, 'wallpapers', 'nightlake.jpg'));

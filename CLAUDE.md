@@ -413,7 +413,7 @@
   (`js/launcher/share-rx.js`): `Lan.scan` (`js/core/lan.js`: `Lan.ip` = webapis.network.getIp / systeminfo / WebRTC, or `arc_dev_lan_ip` set by
   hand; asks the /24, 40 at a time, 700 ms each, phones found before first `arc_dev_rx_phones`), then one long poll per phone; keeps running on
   the desktop page after the window closes (taskbar `#tray-share`, sessionStorage `rx_on` brings it back after a game). Opens: link -> **MyBrowser**
-  (the Browser's new name, also http), text -> **MyNotes** (`apps/notes.js`, profile key `notes`), picture -> **MyPhotos** (`apps/photos.js`,
+  (the Browser's new name, also http), text -> **MyNotes** (`apps/notes.js`, profile key `notes`, CSS classes `mn-*`: never `nt-*`, those are the Notify cards), picture -> **MyPhotos** (`apps/photos.js`,
   shrunk once to 1920x1080 + 320x180 thumb, IndexedDB `mypc-photos` per profile, 200 max, not backed up), video -> **MyVideos** (`apps/videos.js`,
   AVPlay through `AppVideo.attach` straight from the phone's URL; `<video>` without AVPlay; profile key `videos`), song -> **MyMusic** (MusicSrc
   source `lan`). History per profile `rx_hist`. Strings `js/core/i18n-share.js` (keep `rxPrivacy` true). Tests: `MYPC_ONLY=share` (fake phone
