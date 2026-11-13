@@ -222,14 +222,15 @@ Start (`menu`) and **Home** is the Guide button. Defaults: **A B X Y**, **L R**,
 
 ```json
 "touch": {
-  "buttons": [ { "label": "A", "action": "b", "place": "right" }, { "label": "B", "action": "ok", "place": "bottom" } ],
-  "catalog": [ { "label": "A", "action": "b", "place": "right" }, { "label": "B", "action": "ok", "place": "bottom" }, { "label": "X", "action": "run", "place": "top" }, { "label": "Y", "action": "run", "place": "left" } ],
+  "buttons": [ { "label": "A", "action": "ok", "place": "right" }, { "label": "B", "action": "b", "place": "bottom" } ],
+  "catalog": [ { "label": "A", "action": "ok", "place": "right" }, { "label": "B", "action": "b", "place": "bottom" }, { "label": "X", "action": "run", "place": "top" }, { "label": "Y", "action": "run", "place": "left" } ],
   "scale": { "stick": 1, "btn": 1 }
 }
 ```
 - `buttons` = shown at first, `catalog` = everything the player may add (8 entries at most each), `label` 3 characters at most,
   `action` one of `ok` `b` (run + cancel) `run` `cancel` `menu`, `place` one of `right` `bottom` `top` `left` (the Nintendo diamond), `scale` = starting size multipliers (0.5 to 2.5; use about 1.3 for a game that is only played
-  with the pad). Invalid entries are ignored (the App Store Manager refuses them when you add the app).
+  with the pad). Keep **A = `ok`** (OK / Select) and **B = Back** (`b`, or `cancel` when your app uses `run` for something else) like every
+  controller in My PC. Invalid entries are ignored (the App Store Manager refuses them when you add the app).
 - **`"touch": false`**: your app has its **own touch UI**: My PC draws nothing.
 - The same can be said from code: `MyPC.init({ pad: false | { buttons, catalog, scale } })`; it wins over the manifest.
   `pad: true` means "no preference". In a browser outside My PC (standalone) `MyPC.init({ pad: true })` shows the pad on touch devices,
