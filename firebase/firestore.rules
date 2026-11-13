@@ -198,6 +198,25 @@ service cloud.firestore {
       allow read, delete: if isAdmin();
     }
 
+    // Bug reports (js/core/bugs.js, MyPC.bug): what a player saw in an app (a note, the app's log, a screenshot), sent only when
+    // the player asks. Readable by anyone (the developer reads them with the web key): no TV code, no profile, nothing private.
+    function validBug(d) {
+      return d.keys().hasAll(['app', 'at', 'exp'])
+          && d.keys().hasOnly(['app', 'appv', 'note', 'data', 'img', 'at', 'exp', 'model', 'ver', 'build', 'lang', 'where'])
+          && shortText(d.app, 40) && d.app.size() > 0 && (!('appv' in d) || shortText(d.appv, 20))
+          && (!('note' in d) || shortText(d.note, 500)) && (!('data' in d) || shortText(d.data, 300000))
+          && (!('img' in d) || shortText(d.img, 600000))
+          && d.at is timestamp && d.exp is timestamp && d.exp < request.time + duration.value(32, 'd')
+          && (!('model' in d) || shortText(d.model, 60)) && (!('ver' in d) || shortText(d.ver, 20))
+          && (!('build' in d) || d.build is int) && (!('lang' in d) || shortText(d.lang, 5))
+          && (!('where' in d) || d.where in ['tv', 'apk', 'web']);
+    }
+    match /bugs/{bugId} {
+      allow create: if bugId.matches('^[a-z0-9]{20}$') && validBug(request.resource.data);
+      allow get, list: if true;
+      allow delete: if isAdmin();
+    }
+
     // Rooms (lobbies) for apps and games: MyPC.rooms in the SDK. ONLY the My PC shell writes here (js/core/rooms.js);
     // apps never hold keys. There is no sign-in, so these documents are open to anyone who knows the project's web
     // config: keep them tiny, short-lived (every document has an `exp` timestamp, at most 90 s ahead, removed by TTL

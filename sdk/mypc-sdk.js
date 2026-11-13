@@ -37,7 +37,7 @@
 var MyPC = (function () {
     'use strict';
 
-    var VERSION = 1, API = 21, HELLO_WAIT = 1200;
+    var VERSION = 1, API = 22, HELLO_WAIT = 1200;
     var handlers = {}, info = null, data = {}, started = false, destroyed = false, isReady = false;
     var hosted = false, hostWin = null, hostOrigin = '*', helloTimer = 0;
     var down = {};                       // action -> number of keys / buttons holding it
@@ -284,6 +284,7 @@ var MyPC = (function () {
             case 'copy': copy._message(d); break;
             case 'video': video._message(d); break;
             case 'kb': kb._message(d); break;
+            case 'bug': bug._message(d); break;
         }
     }
 
@@ -2276,9 +2277,32 @@ var MyPC = (function () {
     })();
     text.keyboard = kb.open;
 
+    // MyPC.bug(note, data, image): a bug the player reports (a button in the app), saved by My PC for the app's developer
+    // (Firestore "bugs", readable by id). data = any JSON value (a log of what happened), image = a JPEG data URL (canvas
+    // toDataURL('image/jpeg', 0.7) of a small canvas). Resolves with the report's id (show it to the player). API 22.
+    var bug = (function () {
+        var n = 0, waiting = {};
+        function send(note, d, img) {
+            var text = '';
+            if (d !== undefined && d !== null) { try { text = typeof d === 'string' ? d : JSON.stringify(d); } catch (e) { text = String(d); } }
+            if (!hosted) { try { console.warn('[MyPC] bug (standalone, not sent): ' + note, d); } catch (e) {} return Promise.reject(bridgeError({ code: 'standalone', message: 'Bug reports are sent only inside My PC.' })); }
+            return new Promise(function (resolve, reject) {
+                var rid = ++n;
+                waiting[rid] = { resolve: resolve, reject: reject };
+                setTimeout(function () { if (waiting[rid]) { delete waiting[rid]; reject(bridgeError({ code: 'timeout', message: 'My PC did not answer (too old, or offline).' })); } }, 40000);
+                post('bug', { rid: rid, note: String(note || '').slice(0, 500), data: text, img: typeof img === 'string' ? img : '' });
+            });
+        }
+        send._message = function (d) {
+            var w = waiting[d && d.rid]; if (!w) return; delete waiting[d.rid];
+            if (d.error) w.reject(bridgeError({ code: String(d.error), message: 'The bug report was not sent: ' + d.error })); else w.resolve(d.result);
+        };
+        return send;
+    })();
+
     var pub = {
         version: VERSION,
-        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy, 17 MyPC.video + MyPC.back + init keys + MyPC.text.keyboard, 18 every button to the app: onInput returning false for 'cancel' = nothing to close (My PC's menu), 19 MyPC.buttons (init keys 'buttons': the remote's buttons by name) (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy, 17 MyPC.video + MyPC.back + init keys + MyPC.text.keyboard, 18 every button to the app: onInput returning false for 'cancel' = nothing to close (My PC's menu), 19 MyPC.buttons (init keys 'buttons': the remote's buttons by name), 22 MyPC.bug (a bug report with a log and a screenshot) (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,
@@ -2308,6 +2332,7 @@ var MyPC = (function () {
         progress: function (p) { if (hosted) post('progress', { p: Math.max(0, Math.min(1, +p || 0)) }); },
         fail: function (reason) { if (hosted) post('failed', { reason: String(reason || '') }); else try { console.error('[MyPC] ' + reason); } catch (e) {} },
         // an error the app caught itself, saved by My PC with the device, versions and time (App Store Manager > Errors)
+        bug: bug,
         report: function (error, data) { try { console.warn('[MyPC] report: ' + (error && error.stack || error)); } catch (e) {} report(error, data); },
         info: function () { return info; },
         isDown: function (action) { return (down[action] || 0) > 0; },

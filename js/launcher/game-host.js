@@ -300,6 +300,10 @@ var GameHost = (function () {
                     if (!said.sdk && +d.sdk) said.sdk = +d.sdk;
                     report({ kind: String(d.kind || 'error'), msg: String(d.msg || ''), stack: String(d.stack || ''), src: String(d.src || ''), n: +d.n || 1 });
                     break;
+                case 'bug':                                                    // MyPC.bug(note, data, image): what the player saw, for the app's developer (js/core/bugs.js)
+                    if (e.origin !== origin || typeof d.rid !== 'number' || typeof Bugs === 'undefined') break;
+                    Bugs.send(game.id, { note: d.note, data: d.data, img: d.img, appv: appVersion() }, function (err, bid) { send('bug', { rid: d.rid, error: err || undefined, result: bid || null }); });
+                    break;
                 case 'menu':
                     items = [];
                     for (var i = 0; d.items && i < d.items.length && i < 6; i++) {

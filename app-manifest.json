@@ -1,5 +1,5 @@
 {
-  "build": 181,
+  "build": 182,
   "version": "3.0.0",
   "shell": 1,
   "css": [
@@ -19,6 +19,7 @@
     "js/core/rotation.js",
     "js/core/cloud.js",
     "js/core/reports.js",
+    "js/core/bugs.js",
     "js/core/global-settings.js",
     "js/core/netmode.js",
     "js/core/lan-db.js",

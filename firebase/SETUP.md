@@ -115,6 +115,7 @@ Google Drive; the Music app and every app (`MyPC.drive`, sdk/GUIDE.md section 19
 | `tvs` | `tv-<hash of the TV's own id>` | the TV, a little after something changes | only that shape, backup ≤ 900 KB; anyone can `get`/`delete` one document by id, only admins can list them |
 | `records` | game id: `{ list: [{ n, s, d, tv }], updatedAt }` | a TV, after a new record | at most 10 small entries |
 | `errors` | random id: one error report (`app, kind, msg, stack, src, stage, appv, sdk, n, at, exp, tv, model, ver, build, lang, user, where, ua, url`) | any My PC, when an app (or My PC) fails to load, to start, or throws | only that shape, small fields; only admins read or delete (App Store Manager > Errors) |
+| `bugs` | random id: one bug report (`app, appv, note, data, img, at, exp, model, ver, build, lang, where`) | any My PC, when a player reports a bug in an app (`MyPC.bug`) | only that shape (data up to 300 000 characters, img a JPEG up to 600 000); anyone reads (the developer, with the web key: no TV code or profile in it); only admins delete |
 
 The TV id is a hash of the Samsung DUID (`webapis.productinfo.getDuid()`, needs the `productinfo`
 privilege in `config.xml`, so package 1.3.0 or newer); the DUID itself never leaves the TV. It stays
@@ -213,6 +214,7 @@ My PC saves why an app could not open or start, and what an app threw (`js/core/
    reads the newest reports of every app and filters them itself.
 2. **TTL policy** so reports go away by themselves after 30 days: collection group `errors`, timestamp field `exp`.
    (CLI: `gcloud firestore fields ttls update exp --collection-group=errors --enable-ttl`.)
+3. **TTL policy** for bug reports too: collection group `bugs`, timestamp field `exp` (CLI: `gcloud firestore fields ttls update exp --collection-group=bugs --enable-ttl`).
 
 Cost: nothing while apps work. A TV sends at most 8 reports per app per page and 60 per day, the same error only once
 (repeats are a count), batched in one request a few seconds after it happens.

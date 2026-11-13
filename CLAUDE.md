@@ -433,6 +433,11 @@
   SDK's reports (uncaught, rejections, failed files, handler throws, `MyPC.fail`, `MyPC.report`; sent even before `MyPC.init`), and My PC's
   own errors (`mypc`). Deduped (one report + count), 8 per app per page, 60 per TV per day, batched, offline queue. Switch: Settings >
   Privacy & security > Send error reports. Dashboard: App Store Manager > Errors (`#errors/<app id>`, store apps are `app-<id>`).
+- **Bug reports (API 22, owner request 2026-11-13, for Tangier TAXI)**: `MyPC.bug(note, data, image)` = a report the PLAYER asks for (an app's
+  button, e.g. the controller's Capture 17): note 500, data JSON 300 000 chars, JPEG data URL 600 000; `js/core/bugs.js` writes Firestore
+  `bugs/<20 char id>` (app, appv, note, data, img, at, exp 30 d, model, ver, build, lang, where; **no TV code, no profile: the rules let
+  anyone get / list them** so the developer (and Claude) read them with the web key); 10 per page, 50 per TV per day; the id comes back
+  to the app. Privacy line in `privacyText` (4 languages). GUIDE.md section 15b. Test in section 38.
 - `sdk/`: `mypc-sdk.js` (protocol `{ mypc: 1, type, data }`), `GUIDE.md` (for building new apps
   in other repos), `example/`.
   **`sdk/GUIDE.md` is the one source of truth for app makers**: every change to the SDK, the protocol, the controller,

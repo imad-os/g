@@ -3913,12 +3913,21 @@ async function main() {
         const loop = by('error', /loop error/);
         check(loop && loop.n === 5 && reps.filter((r) => /loop error/.test(r.msg)).length === 1, 'the same error 5 times is one report with n = 5 (' + (loop && loop.n) + ')');
         const one = by('error', /boom/) || {};
-        check(one.appv === '2.0.1' && one.sdk === 21 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
+        check(one.appv === '2.0.1' && one.sdk === 22 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
             'each report has the app version, SDK level, TV id and model, My PC version and build, language, place, address, time and a 30-day expiry (' + JSON.stringify(one) + ')');
         const keys = new Set(reps.flatMap((r) => Object.keys(r)));
         const allowed = ['app', 'kind', 'msg', 'stack', 'src', 'stage', 'appv', 'sdk', 'n', 'at', 'exp', 'tv', 'model', 'ver', 'build', 'lang', 'user', 'where', 'ua', 'url'];
         const rules = fs.readFileSync(path.join(ROOT, 'firebase/firestore.rules'), 'utf8');
         check([...keys].every((k) => allowed.includes(k) && rules.includes("'" + k + "'")), 'reports only use the fields the Firestore rules allow (' + [...keys].join(',') + ')');
+        // MyPC.bug (API 22): a player's bug report with a log and a screenshot, saved in bugs/<id>, the id comes back
+        const bugId = await frame.evaluate(() => { const c = document.createElement('canvas'); c.width = 64; c.height = 36; c.getContext('2d').fillRect(0, 0, 10, 10);
+            return MyPC.bug('car sinks here', { log: [{ t: 1, x: 2 }], me: 'x' }, c.toDataURL('image/jpeg', 0.7)).then((id) => id, (e) => 'ERR ' + e.code); });
+        const bug = page.fs.bugs && page.fs.bugs[bugId] || Object.values(page.fs.bugs || {})[0] || {};
+        check(/^[a-z0-9]{20}$/.test(bugId) && bug.app === 'app-buggy' && bug.note === 'car sinks here' && JSON.parse(bug.data).log[0].x === 2 && /^data:image\/jpeg;base64,/.test(bug.img)
+            && bug.appv === '2.0.1' && !('tv' in bug) && !('user' in bug) && Date.parse(bug.exp) - Date.parse(bug.at) === 30 * 86400000,
+            'MyPC.bug saves the note, the log and the screenshot in bugs/<id> (no TV code, no profile) and answers the id (' + bugId + ')');
+        const bugAllowed = ['app', 'appv', 'note', 'data', 'img', 'at', 'exp', 'model', 'ver', 'build', 'lang', 'where'];
+        check(Object.keys(bug).every((k) => bugAllowed.includes(k) && rules.includes("'" + k + "'")) && rules.includes('match /bugs/{bugId}'), 'bug reports only use the fields the Firestore rules allow (' + Object.keys(bug).join(',') + ')');
         await frame.evaluate(() => MyPC.exit());
         await page.waitForFunction(() => window.GameHost && window.GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon'), null, { timeout: 8000 });
         // an app whose page never answers: given up after 8 s with Back, the report says why

@@ -334,6 +334,7 @@ Rules for app authors:
 | `MyPC.ready()` | **MUST** be called once, when the first screen can be shown. Then `onStart` comes. |
 | `MyPC.fail(reason)` | loading failed: My PC shows Retry / Back (and saves `reason` as an error report, section 15) |
 | `MyPC.report(error, data)` | an error you caught yourself: My PC saves it with the device, versions and time for the App Store Manager (section 15); `data` = a small JSON value |
+| `MyPC.bug(note, data, image)` | a bug the PLAYER reports (your own button, e.g. the controller's Capture button 17): a note, a log of what happened (JSON) and a screenshot (JPEG data URL); resolves with the report's id (API 22, section 15b) |
 | `MyPC.isDown(action)` | `true` while an action is held (read it in your fixed-step update) |
 | `MyPC.save(key, value)` | save JSON data (per My PC profile; 64 KB per app in total) |
 | `MyPC.load(key, default)` | read saved data (synchronous; available from `onInit`) |
@@ -956,6 +957,33 @@ Rules, to stay cheap on small TVs (the SDK and My PC enforce them):
 Protocol (for reference): app → My PC `{ mypc: 1, type: 'err', data: { kind, msg, stack, src, n, sdk } }`, sent even
 before `hello` (to `location.ancestorOrigins[0]`); `hello` carries `sdkApi`. My PC side: `js/core/reports.js` (Firestore
 `errors`, rules in `firebase/firestore.rules`), `js/launcher/game-host.js`; dashboard: `installer/index.html#errors`.
+
+## 15b. Bug reports from the player: `MyPC.bug` (API level 22)
+
+When the player sees something wrong ("the car sinks into the road here"), let them report it from the app with one
+button, and send what you know with it: the developer then reads the report with the log and the picture.
+
+```js
+// the controller's Capture button (raw button 17) or a "Report a bug" item in your menu
+renderer.render(scene, camera);                       // draw first: the canvas is read right after a frame
+const small = document.createElement('canvas'); small.width = 960; small.height = 540;
+small.getContext('2d').drawImage(renderer.domElement, 0, 0, 960, 540);
+MyPC.bug('Capture button', { log: lastSeconds, state: now }, small.toDataURL('image/jpeg', 0.7))
+    .then(id => toast('Bug saved: ' + id))            // show the id: the player tells the developer which one
+    .catch(e => toast('Not sent: ' + e.code));        // 'limit' | 'big' | 'network' | 'busy' | 'timeout' | 'standalone'
+```
+
+- `note`: up to 500 characters. `data`: any JSON value, up to 300 000 characters once in JSON (keep a ring buffer of the
+  last seconds, a few numbers per step). `image`: a JPEG data URL of at most 600 000 characters (960x540 at 0.7 is ~100 KB).
+- Only when the player asks: never send them by yourself. At most 10 per page and 50 per TV per day; they expire after 30 days.
+- Saved in Firestore `bugs/<id>` with the app, its version, the device model, My PC's version and build, the language
+  and the time; no TV code and no profile. **Anyone with the id (or the web key) can read a report: never put personal
+  data in it.** The developer reads them with Firestore's REST API (`GET .../documents/bugs?key=<web key>`, or one by id).
+- WebGL: read the canvas in the same task as the frame you drew (or create the renderer with `preserveDrawingBuffer`).
+- Opened standalone the promise rejects with `standalone` (nothing is sent).
+
+Protocol: app → My PC `{ type: 'bug', data: { rid, note, data, img } }`, answer `{ type: 'bug', data: { rid, result: id | null, error } }`.
+My PC side: `js/core/bugs.js`, `js/launcher/game-host.js`, rules in `firebase/firestore.rules`.
 
 ## 16. Push notifications: services, `MyPC.notify`, `MyPC.launch` (API level 12)
 
