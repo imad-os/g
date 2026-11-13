@@ -6411,15 +6411,19 @@ async function flowTests(browser, base) {
         'Blocked again: navigator.getGamepads() gives the app no controller, even while it runs (nothing left in app_prefs once every setting is back to its default)');
     // the button map reaches the app's own navigator.getGamepads() too (same object every call), once the user allowed it
     await pg.evaluate(() => GameHost.setAppPref('app-flow-good', 'direct', true));
+    await f.waitForFunction(() => !!navigator.getGamepads()[0], null, { timeout: 3000 }).catch(() => {});
     await pg.evaluate(() => { window.__tp = { index: 0, id: 'Pro Controller (STANDARD GAMEPAD Vendor: 057e Product: 2009)', connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons: Array.from({ length: 18 }, () => ({ pressed: false, value: 0 })) };
         window.__realGp = navigator.getGamepads; navigator.getGamepads = () => [window.__tp, null, null, null]; window.dispatchEvent(new Event('gamepadconnected'));
         Input.setPadMap('057e:2009', [3, 2, 1, 0]); });
-    await f.waitForFunction(() => navigator.getGamepads()[0].buttons[0].value === 0.4, null, { timeout: 3000 }).catch(() => {});
+    await f.waitForFunction(() => navigator.getGamepads()[0] && navigator.getGamepads()[0].buttons[0].value === 0.4, null, { timeout: 3000 }).catch(() => {});
     const mapped = await f.evaluate(() => { const a = navigator.getGamepads()[0], b = navigator.getGamepads()[0]; return { v: [0, 1, 2, 3].map((i) => a.buttons[i].value), id: a.id, same: a === b, n: a.buttons.length }; });
     check(mapped.v.join() === '0.4,0.3,0.2,1' && mapped.id === 'Test pad' && mapped.same && mapped.n === 4, 'the player\'s button map (Control Panel > Gaming) is applied to the app\'s own navigator.getGamepads() ' + JSON.stringify(mapped));
     await pg.evaluate(() => { Input.setPadMap('057e:2009', null); navigator.getGamepads = window.__realGp; window.dispatchEvent(new Event('gamepaddisconnected')); });
-    await f.waitForFunction(() => navigator.getGamepads()[0].buttons[0].value === 1, null, { timeout: 3000 }).catch(() => {});
-    check(await f.evaluate(() => navigator.getGamepads()[0].buttons[0].value === 1), 'map removed: the app reads the pad as it is again');
+    // the controller going away opens My PC's menu (padLost): resume first
+    await pg.waitForFunction(() => GameHost.state() === 'paused', null, { timeout: 1500 }).catch(() => {});
+    if (await pg.evaluate(() => GameHost.state() === 'paused')) { await pg.waitForTimeout(650); await menuClick('_resume'); await pg.waitForFunction(() => GameHost.state() === 'running'); }
+    await f.waitForFunction(() => navigator.getGamepads()[0] && navigator.getGamepads()[0].buttons[0].value === 1, null, { timeout: 3000 }).catch(() => {});
+    check(await f.evaluate(() => !!navigator.getGamepads()[0] && navigator.getGamepads()[0].buttons[0].value === 1), 'map removed: the app reads the pad as it is again');
     await pg.evaluate(() => GameHost.resetAppPrefs('app-flow-good'));
     await f.evaluate(() => document.getElementById('t').click());          // a click puts the focus inside the app's frame (a PC)
     await tvMenu(pg);
