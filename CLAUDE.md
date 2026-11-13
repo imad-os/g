@@ -156,7 +156,7 @@
   phase (NASA public-domain photos `wallpapers/*.jpg`, read only while drawing) and **real clouds** (owner request 2026-11-12, build 166: "see the storms coming"; **no text on it**):
   `clouds.matteason.co.uk/images/<2048x1024|1024x512>/clouds.jpg` (free live-cloud-maps, EUMETSAT geostationary data, a new map every 3 h, CC0, CORS;
   credit "Contains modified EUMETSAT data" = `dwCloudCredit` in Control Panel, privacy line `dwCloudPrivacy`), asked at most once an hour (`?h=<hour>`),
-  kept as 1 byte / pixel, a 1024 px grey JPEG copy in `arc_dev_dwclouds` (not backed up, used up to 12 h when offline); no copy + no internet = no clouds. Drawn ONCE on a canvas (stage size x 1 / 0.75 / 0.5 by Perf tier)
+  kept as 1 byte / pixel, a 1024 px grey JPEG copy in `arc_dev_dwclouds` (not backed up, used up to 12 h when offline); no copy + no internet = no clouds. Owner request 2026-11-13 (build 170): per profile `dynwall.every` = Draw again every 1 / 5 / 10 (default) / 30 min (at 5 min or less the photos stay decoded between drawings, `texKeep`) and `dynwall.clouds` = Real clouds (on by default; off = no map asked, none kept); the cloud map stays at most once an hour whatever the rhythm. Drawn ONCE on a canvas (stage size x 1 / 0.75 / 0.5 by Perf tier)
   when what it shows changes (checked every 10 min, 30 on an event day); no timer while an app / game is open (Desktop.hide), on the game page or
   in the background. While it asks for data the taskbar shows a turning icon next to the clock (`#tray-wp`, at least 1 s). The last picture
   is kept on the device (`arc_dev_dwlast`: id, profile, state key, caption, JPEG; not in the backup; owner request 2026-11-09: it opened on a default

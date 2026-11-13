@@ -12,7 +12,7 @@
  * game page (no desktop there) or when My PC is in the background. The only thing that can move is the optional rain / snow layer
  * (profile setting, off by default): one tile slid by a CSS transform, composited, paused with the desktop. While it asks the internet
  * for new data, a small icon turns beside the clock (#tray-wp, owner request 2026-11-09).
- * Per profile (key dynwall: { motion, caption, weather }); the events' country and football switch are Events.prefs(). */
+ * Per profile (key dynwall: { motion, caption, weather, glass, style; Earth now: every (min), clouds }); the events' country and football switch are Events.prefs(). */
 var DynWall = (function () {
     'use strict';
 
@@ -22,7 +22,10 @@ var DynWall = (function () {
     function t(k) { return I18n.t(k); }
     function is(id) { return IDS.indexOf(id) >= 0; }
     function el(tag, cls) { var e = document.createElement(tag); e.className = cls; return e; }
-    function prefs() { var p = Store.get('dynwall', null) || {}; return { motion: !!p.motion, caption: p.caption !== false, weather: p.weather !== false, glass: GLASS_LV.indexOf(p.glass) >= 0 ? p.glass : 'medium', style: STYLES.indexOf(p.style) >= 0 ? p.style : 'cartoon' }; }
+    function prefs() { var p = Store.get('dynwall', null) || {}; return { motion: !!p.motion, caption: p.caption !== false, weather: p.weather !== false, glass: GLASS_LV.indexOf(p.glass) >= 0 ? p.glass : 'medium', style: STYLES.indexOf(p.style) >= 0 ? p.style : 'cartoon',
+                 every: EVERY.indexOf(p.every) >= 0 ? p.every : 10, clouds: p.clouds !== false }; }
+    // Earth now (owner request 2026-11-13): drawn again every 1 / 5 / 10 / 30 min, real clouds on (default) or off
+    var EVERY = [1, 5, 10, 30];
     // Horizon's look (owner request 2026-11-09): drawn, realistic (built-in photos), game style (pixel art), custom (the profile's own photos)
     var STYLES = ['cartoon', 'real', 'pixel', 'custom'], photoSeq = 0;
     var GLASS_LV = ['off', 'low', 'medium', 'high'];        // raindrops on the glass, when it rains (owner request 2026-11-09)
@@ -86,7 +89,7 @@ var DynWall = (function () {
         schedule(30);
     }
     function stop() {
-        clearTimeout(timer); timer = 0;
+        clearTimeout(timer); timer = 0; texKeep = null;
         if (cv) { cv.width = cv.height = 0; if (cv.parentNode) cv.parentNode.removeChild(cv); }
         if (cap && cap.parentNode) cap.parentNode.removeChild(cap);
         setFx('');
@@ -323,27 +326,36 @@ var DynWall = (function () {
         }, true);
     }
     function flat(rgb) { return { w: 1, h: 1, d: new Uint8ClampedArray([rgb[0], rgb[1], rgb[2], 255]) }; }
+    // with a refresh of 5 min or less the photos stay decoded between drawings (no decoding every minute); otherwise read for
+    // one drawing only, then dropped (8 MB of pixels at 2048 px). Freed when the background changes (stop) or the setting grows.
+    var texKeep = null;
     function tickAstro(done) {
-        var now = Date.now(), slot = Math.floor(now / 600000), loc = place();
-        var k = ['a', slot, Math.round(loc.lat), Math.round(loc.lon)].join(',');
+        var pr = prefs(), P = pr.every * 60000, now = Date.now(), slot = Math.floor(now / P), loc = place();
+        var k = ['a', pr.every + 'm', slot, Math.round(loc.lat), Math.round(loc.lon), pr.clouds ? 'c' : 'n'].join(',');
         setCaption('', '');                                  // no text over the Earth (owner request 2026-11-12)
         var ss = stageSize();
-        if (key.indexOf(k + '|') === 0 && key === k + '|' + Math.round(ss.w * scale()) + 'x' + Math.round(ss.h * scale())) return done(600000 - now % 600000 + 1000);
-        // the photos are read for this one drawing only, then dropped (8 MB of pixels at 2048 px)
-        var tw = scale() === 1 ? 2048 : scale() === 0.75 ? 1536 : 1024, got = {}, left = 4;
-        function one(n, w, name) { texture(name, w, function (tx) { got[n] = tx; if (--left === 0) { busy(false); draw(); } }); }
+        if (key.indexOf(k + '|') === 0 && key === k + '|' + Math.round(ss.w * scale()) + 'x' + Math.round(ss.h * scale())) return done(P - now % P + 1000);
+        var tw = scale() === 1 ? 2048 : scale() === 0.75 ? 1536 : 1024, keep = pr.every <= 5, got = {}, left = pr.clouds ? 4 : 3;
+        if (!keep || (texKeep && texKeep.w !== tw)) texKeep = null;
+        function fin() { if (--left === 0) { busy(false); draw(); } }
+        function one(n, w, name) {
+            if (texKeep && texKeep[n]) { got[n] = texKeep[n]; return fin(); }
+            texture(name, w, function (tx) { got[n] = tx; if (keep && tx) { texKeep = texKeep || { w: tw }; texKeep[n] = tx; } fin(); });
+        }
         function draw() {
             if (cur !== 'dyn_astro') return;
             var dayT = got.day || flat([24, 60, 120]), nightT = got.night || flat([4, 6, 14]);
             paint(k, function (c, W, H) {
-                DynArt.earth(c, W, H, dayT, nightT, got.moon, { lat: Math.max(-40, Math.min(40, loc.lat * 0.6)), lon: loc.lon, at: now, here: Store.get('weather_loc', null) ? loc : null, clouds: got.clouds });
+                DynArt.earth(c, W, H, dayT, nightT, got.moon, { lat: Math.max(-40, Math.min(40, loc.lat * 0.6)), lon: loc.lon, at: now, here: Store.get('weather_loc', null) ? loc : null, clouds: pr.clouds ? got.clouds : null });
             });
             got = null;
-            done(600000 - Date.now() % 600000 + 1000);
+            done(P - Date.now() % P + 1000);
         }
         busy(true);
         one('day', tw, 'earth-day.jpg'); one('night', tw, 'earth-night.jpg'); one('moon', 512, 'moon.jpg');
-        clouds(scale() === 0.5 ? 1024 : 2048, function (tx) { got.clouds = tx; if (--left === 0) { busy(false); draw(); } });
+        // the cloud map is still asked at most once an hour (a new one every 3 h), whatever the refresh
+        if (pr.clouds) clouds(scale() === 0.5 ? 1024 : 2048, function (tx) { got.clouds = tx; fin(); });
+        else cloudMem = null;                                 // clouds off: nothing kept in memory
     }
 
     /* ---------------- Holidays and events ---------------- */
@@ -389,6 +401,6 @@ var DynWall = (function () {
         setCaption(title, sub);
     }
 
-    return { IDS: IDS, OLD: OLD, GLASS_LV: GLASS_LV, STYLES: STYLES, is: is, start: start, stop: stop, pause: pause, resume: resume, refresh: refresh, prefs: prefs, setPref: setPref,
+    return { IDS: IDS, OLD: OLD, EVERY: EVERY, GLASS_LV: GLASS_LV, STYLES: STYLES, is: is, start: start, stop: stop, pause: pause, resume: resume, refresh: refresh, prefs: prefs, setPref: setPref,
              current: function () { return cur; }, _clouds: function () { return cloudMem; }, _cloudsReset: function () { cloudMem = null; cloudTry = 0; }, _key: function () { return key; }, _timer: function () { return timer; }, _pick: pick };
 })();

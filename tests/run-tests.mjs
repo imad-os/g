@@ -6151,8 +6151,19 @@ async function wallTests(browser, base) {
         // 10 minutes later: drawn again, the map NOT asked again (once an hour at most)
         await page.clock.setFixedTime(new Date('2026-11-05T17:41:00Z'));
         await page.evaluate(() => DynWall.refresh());
-        check(await painted(page, 'a,' + Math.floor(Date.parse('2026-11-05T17:41:00Z') / 600000)) && db0.clouds.length === 1, 'redrawn 10 min later from the clouds in memory (asked ' + db0.clouds.length + ' time)');
+        check(await painted(page, 'a,10m,' + Math.floor(Date.parse('2026-11-05T17:41:00Z') / 600000)) && db0.clouds.length === 1, 'redrawn 10 min later from the clouds in memory (asked ' + db0.clouds.length + ' time)');
         await shot(page, 'earth-now');
+        // owner request 2026-11-13: every 1 min (the photos stay decoded, the cloud map is not asked again), clouds off
+        await page.evaluate(() => DynWall.setPref('every', 1));
+        check(await painted(page, 'a,1m,' + Math.floor(Date.parse('2026-11-05T17:41:00Z') / 60000)), 'Draw again every 1 min: drawn at once with the new rhythm');
+        const t1 = await page.evaluate(() => DynWall._timer() > 0);
+        await page.clock.setFixedTime(new Date('2026-11-05T17:42:05Z'));
+        await page.evaluate(() => DynWall.refresh());
+        check(t1 && await painted(page, 'a,1m,' + Math.floor(Date.parse('2026-11-05T17:42:05Z') / 60000)) && db0.clouds.length === 1, 'a minute later drawn again, the cloud map still asked once (' + db0.clouds.length + ')');
+        await page.evaluate(() => DynWall.setPref('clouds', false));
+        check(await painted(page, 'a,1m,') && await page.evaluate(() => /,n\|/.test(DynWall._key()) && DynWall._clouds() === null) && db0.clouds.length === 1, 'Real clouds off: drawn without clouds, nothing kept, nothing asked');
+        await shot(page, 'earth-now-no-clouds');
+        await page.evaluate(() => { DynWall.setPref('clouds', true); DynWall.setPref('every', 10); });
         check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
         await page.context().close();
     }
@@ -6225,7 +6236,8 @@ async function wallTests(browser, base) {
         await page.waitForTimeout(200);
         const txt2 = await page.textContent('.set-main');
         check(await page.evaluate(() => Desktop.wallpaper() === 'dyn_astro' && document.activeElement.getAttribute('data-wp') === 'dyn_astro') &&
-              /Earth now: the Earth seen from space/.test(txt2) && /real clouds/.test(txt2) && /EUMETSAT/.test(txt2) && !/Moon’s phase|Holidays of|Moving rain/.test(txt2), 'OK on Earth now: it is used at once, its details and the clouds\' credit show (no title switch any more), focus stays on it');
+              /Earth now: the Earth seen from space/.test(txt2) && /real clouds/.test(txt2) && /EUMETSAT/.test(txt2) && /Draw again every[^‹]*‹\s*10 min/.test(txt2) && /Real clouds/.test(txt2) && !/Moon’s phase|Holidays of|Moving rain/.test(txt2), 'OK on Earth now: it is used at once, its details and the clouds\' credit show (no title switch any more), focus stays on it');
+        if (shots) { await page.evaluate(() => { const r = [...document.querySelectorAll('.set-main *')].find((e) => /^Real clouds/.test(e.textContent || '') && !e.children.length); if (r) r.scrollIntoView({ block: 'center' }); }); await shot(page, 'earth-settings'); }
         await page.focus('.set-wps:not(.set-wps-live) .set-wp[data-wp="aurora"]');
         await page.keyboard.press('Enter');
         await page.waitForTimeout(200);

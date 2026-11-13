@@ -3,8 +3,9 @@
     'use strict';
     var S = {
         en: {
-            dwAbout_dyn_astro: 'the Earth seen from space over your place, with the real line between day and night, city lights on the night side, the real clouds (storms included) and the Moon in its phase. The clouds come from the weather satellites, a new map every 3 hours; the picture is drawn again every 10 minutes while the desktop is on screen.',
+            dwAbout_dyn_astro: 'the Earth seen from space over your place, with the real line between day and night, city lights on the night side, the real clouds (storms included) and the Moon in its phase. The clouds come from the weather satellites, a new map every 3 hours; the picture is drawn again every 1 to 30 minutes (your choice below) while the desktop is on screen.',
             dwCloudCredit: 'Clouds: contains modified EUMETSAT data (live-cloud-maps, CC0). Earth and Moon: NASA.',
+            dwEvery: 'Draw again every', dwEveryN: '%n min', dwEveryDesc: 'How often the day and night line moves on. More often uses a little more of the TV.', dwClouds: 'Real clouds', dwCloudsDesc: 'The clouds seen by the weather satellites, a new map every 3 hours (asked at most once an hour).',
             dwCloudPrivacy: 'Earth now background: the cloud map comes from clouds.matteason.co.uk (satellite data from EUMETSAT) at most once an hour; nothing about you is sent. Choose another background to stop it.',
             dwAbout_dyn_horizon: 'the weather, the holidays and the big football nights in one picture. On a holiday or a match day it shows that day (the evening before, it already shows it); on other days it shows the sky of your place right now: sun, clouds, rain, snow, fog or storm, dawn, day, dusk and night, the season and the temperature. Checked again every 10 minutes while the desktop is on screen.',
             wp_dyn_horizon: 'Horizon', wp_dyn_astro: 'Earth now',
@@ -43,8 +44,9 @@
             evPrivacy: 'Horizon background: the public holidays come from My PC’s own website (a weekly copy of Google Calendar’s) or from Google Calendar (google.com) and the football matches from ESPN (espn.com); nothing about you is sent. Its weather uses the weather service below. Choose another background to stop it.'
         },
         fr: {
-            dwAbout_dyn_astro: 'la Terre vue de l’espace au-dessus de votre lieu, avec la vraie limite entre le jour et la nuit, les lumières des villes côté nuit, les vrais nuages (tempêtes comprises) et la Lune dans sa phase. Les nuages viennent des satellites météo, une nouvelle carte toutes les 3 heures ; l’image est redessinée toutes les 10 minutes quand le bureau est affiché.',
+            dwAbout_dyn_astro: 'la Terre vue de l’espace au-dessus de votre lieu, avec la vraie limite entre le jour et la nuit, les lumières des villes côté nuit, les vrais nuages (tempêtes comprises) et la Lune dans sa phase. Les nuages viennent des satellites météo, une nouvelle carte toutes les 3 heures ; l’image est redessinée toutes les 1 à 30 minutes (au choix ci-dessous) quand le bureau est affiché.',
             dwCloudCredit: 'Nuages : contient des données EUMETSAT modifiées (live-cloud-maps, CC0). Terre et Lune : NASA.',
+            dwEvery: 'Redessiner toutes les', dwEveryN: '%n min', dwEveryDesc: 'À quelle fréquence la limite du jour et de la nuit avance. Plus souvent utilise un peu plus le téléviseur.', dwClouds: 'Vrais nuages', dwCloudsDesc: 'Les nuages vus par les satellites météo, une nouvelle carte toutes les 3 heures (demandée au plus une fois par heure).',
             dwCloudPrivacy: 'Arrière-plan La Terre en direct : la carte des nuages vient de clouds.matteason.co.uk (données satellite d’EUMETSAT), au plus une fois par heure ; rien sur vous n’est envoyé. Choisissez un autre arrière-plan pour l’arrêter.',
             dwAbout_dyn_horizon: 'la météo, les fêtes et les grandes soirées de football dans une seule image. Un jour de fête ou de match, elle montre ce jour (dès la veille au soir) ; les autres jours, le ciel de votre lieu en ce moment : soleil, nuages, pluie, neige, brouillard ou orage, l’aube, le jour, le crépuscule et la nuit, la saison et la température. Mise à jour toutes les 10 minutes quand le bureau est affiché.',
             wp_dyn_horizon: 'Horizon', wp_dyn_astro: 'La Terre en direct',
@@ -83,8 +85,9 @@
             evPrivacy: 'Arrière-plan Horizon : les jours fériés viennent du site de My PC (une copie hebdomadaire de Google Agenda) ou de Google Agenda (google.com) et les matchs de football d’ESPN (espn.com) ; rien sur vous n’est envoyé. Sa météo utilise le service météo ci-dessous. Choisissez un autre arrière-plan pour l’arrêter.'
         },
         es: {
-            dwAbout_dyn_astro: 'la Tierra vista desde el espacio sobre tu lugar, con la línea real entre el día y la noche, las luces de las ciudades en el lado de noche, las nubes reales (tormentas incluidas) y la Luna en su fase. Las nubes vienen de los satélites meteorológicos, un mapa nuevo cada 3 horas; la imagen se vuelve a dibujar cada 10 minutos mientras se ve el escritorio.',
+            dwAbout_dyn_astro: 'la Tierra vista desde el espacio sobre tu lugar, con la línea real entre el día y la noche, las luces de las ciudades en el lado de noche, las nubes reales (tormentas incluidas) y la Luna en su fase. Las nubes vienen de los satélites meteorológicos, un mapa nuevo cada 3 horas; la imagen se vuelve a dibujar cada 1 a 30 minutos (a elegir abajo) mientras se ve el escritorio.',
             dwCloudCredit: 'Nubes: contiene datos modificados de EUMETSAT (live-cloud-maps, CC0). Tierra y Luna: NASA.',
+            dwEvery: 'Volver a dibujar cada', dwEveryN: '%n min', dwEveryDesc: 'Cada cuánto avanza la línea entre el día y la noche. Más a menudo usa un poco más el televisor.', dwClouds: 'Nubes reales', dwCloudsDesc: 'Las nubes que ven los satélites meteorológicos, un mapa nuevo cada 3 horas (pedido como mucho una vez por hora).',
             dwCloudPrivacy: 'Fondo La Tierra ahora: el mapa de nubes viene de clouds.matteason.co.uk (datos de satélite de EUMETSAT) como mucho una vez por hora; no se envía nada sobre ti. Elige otro fondo para detenerlo.',
             dwAbout_dyn_horizon: 'el tiempo, las fiestas y las grandes noches de fútbol en una sola imagen. Un día de fiesta o de partido muestra ese día (ya desde la víspera por la noche); los demás días, el cielo de tu lugar ahora mismo: sol, nubes, lluvia, nieve, niebla o tormenta, el amanecer, el día, el atardecer y la noche, la estación y la temperatura. Se actualiza cada 10 minutos mientras se ve el escritorio.',
             wp_dyn_horizon: 'Horizon', wp_dyn_astro: 'La Tierra ahora',
@@ -123,8 +126,9 @@
             evPrivacy: 'Fondo Horizon: los festivos vienen del sitio de My PC (una copia semanal de Google Calendar) o de Google Calendar (google.com) y los partidos de fútbol de ESPN (espn.com); no se envía nada sobre ti. Su tiempo usa el servicio del tiempo de abajo. Elige otro fondo para detenerlo.'
         },
         ar: {
-            dwAbout_dyn_astro: 'الأرض من الفضاء فوق مكانك، مع الخط الحقيقي بين الليل والنهار وأضواء المدن في جانب الليل والسحب الحقيقية (بما فيها العواصف) والقمر في طوره. تأتي السحب من أقمار الطقس الصناعية، خريطة جديدة كل 3 ساعات؛ وتُرسم الصورة من جديد كل 10 دقائق ما دام سطح المكتب ظاهراً.',
+            dwAbout_dyn_astro: 'الأرض من الفضاء فوق مكانك، مع الخط الحقيقي بين الليل والنهار وأضواء المدن في جانب الليل والسحب الحقيقية (بما فيها العواصف) والقمر في طوره. تأتي السحب من أقمار الطقس الصناعية، خريطة جديدة كل 3 ساعات؛ وتُرسم الصورة من جديد كل 1 إلى 30 دقيقة (حسب اختيارك أدناه) ما دام سطح المكتب ظاهراً.',
             dwCloudCredit: 'السحب: تحتوي على بيانات معدّلة من EUMETSAT ‏(live-cloud-maps، CC0). الأرض والقمر: NASA.',
+            dwEvery: 'إعادة الرسم كل', dwEveryN: '%n د', dwEveryDesc: 'كم مرة يتقدم الخط بين الليل والنهار. الأكثر تكراراً يستهلك من التلفاز قليلاً أكثر.', dwClouds: 'سحب حقيقية', dwCloudsDesc: 'السحب كما تراها أقمار الطقس الصناعية، خريطة جديدة كل 3 ساعات (تُطلب مرة في الساعة على الأكثر).',
             dwCloudPrivacy: 'خلفية الأرض الآن: تأتي خريطة السحب من clouds.matteason.co.uk (بيانات أقمار EUMETSAT) مرة في الساعة على الأكثر؛ لا يُرسل أي شيء عنك. اختر خلفية أخرى لإيقاف ذلك.',
             dwAbout_dyn_horizon: 'الطقس والأعياد وأمسيات كرة القدم الكبرى في صورة واحدة. في يوم عيد أو مباراة تُظهر ذلك اليوم (منذ مساء اليوم السابق)، وفي باقي الأيام سماء مكانك الآن: شمس، غيوم، مطر، ثلج، ضباب أو عاصفة، والفجر والنهار والغروب والليل، والفصل ودرجة الحرارة. تتحدث كل 10 دقائق ما دام سطح المكتب ظاهراً.',
             wp_dyn_horizon: 'الأفق', wp_dyn_astro: 'الأرض الآن',

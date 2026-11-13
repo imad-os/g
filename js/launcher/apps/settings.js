@@ -80,6 +80,10 @@
             if (window.DynWall && DynWall.is(cw)) {
                 out.push({ kind: 'text', value: t('wp_' + cw) + ': ' + t('dwAbout_' + cw) });
                 if (cw === 'dyn_astro') {
+                    // owner request 2026-11-13: how often it is drawn again, and the real clouds (on by default)
+                    out.push({ kind: 'select', label: t('dwEvery'), desc: t('dwEveryDesc'), value: function () { return t('dwEveryN').replace('%n', DynWall.prefs().every); },
+                               adjust: function (d) { var l = DynWall.EVERY, i2 = (l.indexOf(DynWall.prefs().every) + d + l.length) % l.length; DynWall.setPref('every', l[i2]); } });
+                    out.push({ kind: 'toggle', label: t('dwClouds'), desc: t('dwCloudsDesc'), get: function () { return DynWall.prefs().clouds; }, set: function (v) { DynWall.setPref('clouds', v); } });
                     out.push({ kind: 'text', value: t('dwCloudCredit') });          // no text on the picture itself (owner request 2026-11-12)
                 } else {
                     // Horizon: its look, weather, then holidays, then football (with its rules written out), then the name on screen
