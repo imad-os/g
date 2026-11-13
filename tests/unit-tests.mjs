@@ -486,6 +486,8 @@ console.log('8. Desktop widgets (js/core/widget-lib.js), Music, Playtime');
         buttons: [{ id: 'add', label: '+1', icon: 'play' }, { id: 'x' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C' }], accent: 'red', link: 'level/3', html: '<script>' });
     check(v.big === '21' && v.text.length === 160 && !v.icon && !v.image && v.progress === 1 && v.rows.length === 1 && v.rows[0].value === '1' && v.buttons.length === 2 && !v.buttons[0].icon &&
         !v.accent && v.link === 'level/3' && !v.html, 'views: numbers become text, long text cut, no script / http pictures, progress 0..1, empty rows and buttons dropped, unknown fields dropped');
+    const vs = W.cleanView({ big: '0 - 0', versus: { left: 'https://x.y/h.png', right: 'javascript:alert(1)' } });
+    check(vs.versus && vs.versus.left === 'https://x.y/h.png' && vs.versus.right === '' && !W.cleanView({ versus: { left: 'http://x/a.png' } }).versus, 'widget view: versus pictures cleaned');
     check(W.cleanView({ icon: '⭐' }).icon === '⭐' && W.cleanView({ icon: 'https://x.y/i.png' }).icon === 'https://x.y/i.png' && W.cleanView({ icon: 'i:sun' }, true).icon === 'i:sun' && !W.cleanView({ icon: 'i:sun' }).icon,
         'icons: an emoji, an https picture; a built-in icon (i:...) only for My PC\'s own widgets');
     const r = W.result({ view: { big: 'x' }, state: { n: 1 } }), r2 = W.result({ big: 'y' }), r3 = W.result('no'), r4 = W.result({ view: {}, state: 'x'.repeat(5000) });

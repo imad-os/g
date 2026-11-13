@@ -466,6 +466,12 @@ var Widgets = (function () {
         (v.launch || []).forEach(function (b) { p.push(b.label); });
         return p.join('. ');
     }
+    function sideEl(x) {
+        var b = el('span', 'wdg-vs-side');
+        if (/^https:\/\//.test(x || '')) { var im = el('img'); im.alt = ''; im.src = x; im.onerror = function () { this.remove(); }; b.appendChild(im); }
+        else if (x) b.textContent = x;
+        return b;
+    }
     // draws a view into its card, only when it changed
     function paint(id, v) {
         if (!box || headless) return;
@@ -487,7 +493,7 @@ var Widgets = (function () {
         head.appendChild(iconEl(v.icon, d.icon));
         head.appendChild(el('span', 'wdg-title', v.title || d.title()));
         c.appendChild(head);
-        if (v.image && d.size !== 'small') { var im = el('img', 'wdg-img'); im.alt = ''; im.src = v.image; im.onerror = function () { this.remove(); }; c.appendChild(im); }
+        if (v.image && !v.versus && d.size !== 'small') { var im = el('img', 'wdg-img'); im.alt = ''; im.src = v.image; im.onerror = function () { this.remove(); }; c.appendChild(im); }
         if (v.page) {
             // the day's names on the left, a tear-off calendar page on the right (Calendar)
             var hero2 = el('div', 'wdg-hero'), col2 = el('div', 'wdg-col'), pg = el('div', 'wdg-page');
@@ -548,6 +554,15 @@ var Widgets = (function () {
                 c.appendChild(duo);
                 tick();
             } else c.appendChild(hero);
+        } else if (v.versus) {
+            // a picture, the big value, a picture on one line (a match: home flag, score, away flag), then the line under it
+            var vs = el('div', 'wdg-vs');
+            vs.appendChild(sideEl(v.versus.left));
+            vs.appendChild(el('div', 'wdg-big', v.big || ''));
+            vs.appendChild(sideEl(v.versus.right));
+            c.appendChild(vs);
+            if (v.sub) c.appendChild(el('div', 'wdg-sub', v.sub));
+            if (v.text) c.appendChild(el('div', 'wdg-text', v.text));
         } else {
             if (v.big) c.appendChild(el('div', 'wdg-big', v.big));
             // no big value: the text leads (a song title, then its artist)

@@ -1215,6 +1215,7 @@ The **view** (anything else is dropped; text is plain text, never HTML):
 | `big` / `sub` | a big value (24 characters) and a line under it (60); without `big`, `sub` goes under `text` |
 | `text` | up to two lines (160 characters) |
 | `image` | an `https://` picture on the right (medium and large cards) |
+| `versus` | `{ left, right }`: an `https://` picture (or an emoji) on each side of `big`, on one line (a match: home flag, score, away flag); `image` is not drawn with it |
 | `progress` | a bar, `0` to `1` |
 | `rows` | up to 5 `{ label, value }` lines (24 / 40 characters); a small card has room for about 2 |
 | `buttons` | up to 3 `{ id, label }` at the bottom; pressing one refreshes the widget with `ctx.action = id` |

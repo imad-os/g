@@ -115,7 +115,7 @@
     }
 
     // what a widget returned -> the view My PC draws (anything else is dropped). Also used for the built-in widgets.
-    //   { title, icon, big, sub, text, image, progress (0..1), rows: [{ label, value }], buttons: [{ id, label, icon }],
+    //   { title, icon, big, sub, text, image, versus: { left, right }, progress (0..1), rows: [{ label, value }], buttons: [{ id, label, icon }],
     //     accent '#rrggbb', link '<path>' (opens the app there on OK) }
     function cleanView(v, builtIn) {
         if (!isObject(v)) return { text: '' };
@@ -127,6 +127,12 @@
         var ic = str(v.icon);
         if (ic && (https(ic) || (builtIn && /^i:[a-zA-Z0-9]{1,20}$/.test(ic)) || (!/^(i:|[a-z]+:)/i.test(ic) && ic.length <= 4))) out.icon = ic;
         if (https(v.image)) out.image = v.image;
+        // two sides around the big value (a match: home flag, score, away flag); each an https:// picture or 1-4 characters
+        if (isObject(v.versus)) {
+            var side = function (x) { x = str(x); return x && (https(x) || (!/^[a-z]+:/i.test(x) && x.length <= 4)) ? x : ''; };
+            var vl = side(v.versus.left), vr = side(v.versus.right);
+            if (vl || vr) out.versus = { left: vl, right: vr };
+        }
         var p = +v.progress;
         if (v.progress !== undefined && v.progress !== null && isFinite(p)) out.progress = Math.max(0, Math.min(1, p));
         if (Array.isArray(v.rows)) {

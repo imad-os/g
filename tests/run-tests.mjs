@@ -393,6 +393,7 @@ async function main() {
     const base = `http://localhost:${srv.address().port}/`;
     const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--autoplay-policy=no-user-gesture-required', '--disable-features=WebRtcHideLocalIpsWithMdns', '--js-flags=--expose-gc', '--enable-precise-memory-info', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
     // MYPC_ONLY=music node tests/run-tests.mjs: only the Music app's checks (quick while working on it)
+    if (process.env.MYPC_ONLY === 'widgets') { await widgetTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'wall') { await wallTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'speedy') { await speedyTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'video') { await videoTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
@@ -4422,136 +4423,7 @@ async function main() {
         await page.context().close();
     }
 
-    console.log('42. desktop widgets: Weather, Playtime, System Monitor, Music Player; Control Panel > Widgets; paused while an app runs; app widgets');
-    {
-        const code = "export default async function (ctx) { const st = ctx.state || { n: 0 }; if (ctx.action === 'add') st.n++; " +
-            "return { view: { big: st.n + ' / ' + ctx.settings.goal, sub: 'stars', icon: '⭐', buttons: [{ id: 'add', label: '+1' }], link: 'level/2', html: '<b>no</b>' }, state: st }; }";
-        const sha = 'a'.repeat(64);
-        const app = (widgets) => ({ id: 'stars', name: 'Star Catcher', url: 'https://stars.example/', entry: 'https://stars.example/index.html', icon: '', type: 'game', version: '1.0.0', enabled: true, order: 0, widgets });
-        const w = { id: 'stars', title: 'Stars', file: 'https://stars.example/widgets/stars.js', size: 'medium', every: 15, background: false,
-            settings: [{ id: 'goal', label: 'Daily goal', type: 'select', default: '50', options: [{ value: '20', label: '20' }, { value: '50', label: '50' }] }] };
-        const db = { apps: { stars: app([Object.assign({ sha }, w)]), pending: Object.assign(app([w]), { id: 'pending', name: 'Pending' }) },
-            widgets: { stars__stars: { app: 'stars', widget: 'stars', code, sha, at: 1 } } };
-        const page = await newPage(browser, base, db);
-        await page.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'stars', at: 1 }, { id: 'pending', at: 1 }])); });
-        // the TV's player (plays by the clock) and a test source of 5 songs for the Music Player card
-        await page.addInitScript(() => {
-            const av = { state: 'NONE', cur: 0, t: 0, l: null };
-            window.webapis = window.webapis || {};
-            window.webapis.avplay = {
-                open: () => { av.state = 'IDLE'; av.cur = 0; }, setListener: (l) => { av.l = l; }, setDisplayRect() {},
-                prepareAsync: (ok) => setTimeout(() => { av.state = 'READY'; ok(); }, 10),
-                play: () => { av.state = 'PLAYING'; av.t = Date.now(); }, pause: () => { if (av.state === 'PLAYING') av.cur += Date.now() - av.t; av.state = 'PAUSED'; },
-                stop: () => { av.state = 'IDLE'; }, close: () => { av.state = 'NONE'; }, seekTo: (ms, ok) => { av.cur = ms; av.t = Date.now(); if (ok) setTimeout(ok, 1); },
-                getCurrentTime: () => av.state === 'PLAYING' ? av.cur + Date.now() - av.t : av.cur, getDuration: () => 200000, getState: () => av.state
-            };
-        });
-        await routeHosted(page, { offline: true });
-        await page.goto(base + 'index.html');
-        await page.waitForSelector('#desk-icons .dicon');
-        await page.evaluate(() => {
-            MusicSrc.add('t', { list: (d, cb) => cb({ code: 'unsupported' }), read: (e, a, l, cb) => cb({ code: 'unsupported' }), url: (e, cb) => cb(null, { url: 'https://music.test/' + e.n, path: '/t/' + e.n }) });
-            Music.playList(['Morning Pixels', 'Neon Avenue', 'Level Two', 'Night Drive', 'Last Boss'].map((t, i) => ({ s: 't', p: '/t/' + i + '.mp3', n: i + '.mp3', t, a: 'Lab' })), 0);
-            Music.pause();
-        });
-        // owner decision 2026-11-05: only Weather is on by default; the others (and app widgets) are turned on by the user
-        check(await page.evaluate(() => [...document.querySelectorAll('#desk-widgets .wdg')].map((c) => c.id).join() === 'wdg-weather' &&
-            ['playtime', 'sysmon', 'music', 'stars__stars'].every((id) => Widgets.conf(id).show === false) && Widgets._timers().join() === 'weather'),
-            'a new profile shows only the Weather widget; the others are off and run nothing');
-        await page.evaluate(() => ['playtime', 'sysmon', 'music', 'stars__stars'].forEach((id) => Widgets.set(id, 'show', true)));
-        await page.waitForFunction(() => /21/.test((document.getElementById('wdg-weather') || {}).textContent || ''), null, { timeout: 8000 }).catch(() => {});
-        await page.waitForFunction(() => /Morning Pixels/.test((document.getElementById('wdg-music') || {}).textContent || ''), null, { timeout: 5000 }).catch(() => {});
-        const cards = await page.evaluate(() => [...document.querySelectorAll('#desk-widgets .wdg')].map((c) => c.id + ':' + c.textContent));
-        check(['wdg-weather', 'wdg-playtime', 'wdg-sysmon', 'wdg-music'].every((id) => cards.some((c) => c.indexOf(id + ':') === 0)) && cards.some((c) => /wdg-weather:.*21°.*Casablanca.*Partly cloudy/.test(c)) &&
-            cards.some((c) => /wdg-sysmon:.*(Memory|My PC memory)/.test(c)) && cards.some((c) => /wdg-music:.*Morning Pixels/.test(c)) && cards.some((c) => /wdg-playtime:.*0 min/.test(c)),
-            'the desktop shows Weather (place from the internet address), Playtime, System Monitor and Music Player: ' + JSON.stringify(cards).slice(0, 400));
-        const layout = await page.evaluate(() => { const i = document.getElementById('desk-icons').getBoundingClientRect(), w = document.getElementById('desk-widgets').getBoundingClientRect(); return { iconsRight: i.right, wLeft: w.left, h: w.bottom, bar: document.getElementById('taskbar').getBoundingClientRect().top }; });
-        check(layout.iconsRight <= layout.wLeft + 1 && layout.h <= layout.bar, 'the widgets sit on the right, beside the icons and above the taskbar ' + JSON.stringify(layout));
-        // the approved app widget ran in its Worker; the one waiting for approval did not
-        await page.waitForFunction(() => /0 \/ 50/.test((document.getElementById('wdg-stars__stars') || {}).textContent || ''), null, { timeout: 8000 }).catch(() => {});
-        const st = await page.evaluate(() => ({ t: (document.getElementById('wdg-stars__stars') || {}).textContent || '', html: /&lt;b&gt;|<b>no<\/b>/.test(document.getElementById('wdg-stars__stars').innerHTML),
-            pending: !!document.getElementById('wdg-pending__stars'), code: !!(JSON.parse(localStorage.getItem('arc_dev_wcode') || '{}').stars__stars) }));
-        check(/Stars/.test(st.t) && /0 \/ 50/.test(st.t) && /stars/.test(st.t) && !st.html && !st.pending && st.code,
-            'an approved app widget runs its approved code (default settings, no HTML); one waiting for approval is not shown; the code is kept on the TV: ' + JSON.stringify(st));
-        await page.click('#wdg-stars__stars .wdg-btn');
-        await page.waitForFunction(() => /1 \/ 50/.test(document.getElementById('wdg-stars__stars').textContent), null, { timeout: 5000 }).catch(() => {});
-        check(await page.evaluate(() => /1 \/ 50/.test(document.getElementById('wdg-stars__stars').textContent)), 'a card button runs the widget again with ctx.action and keeps its state');
-        const reads = db.log.filter((x) => /widgets\/stars__stars/.test(x)).length;
-        await page.evaluate(() => Widgets.refreshNow('stars__stars'));
-        await page.waitForTimeout(400);
-        check(db.log.filter((x) => /widgets\/stars__stars/.test(x)).length === reads && reads === 1, 'the approved code is read from Firestore once, then from the TV');
-
-        // refreshing: every shown widget has its timer on the desktop; an open app stops them all but the background ones
-        await page.evaluate(() => Music.play());
-        await page.waitForTimeout(100);
-        const onDesk = await page.evaluate(() => Widgets._timers());
-        await page.evaluate(() => Win.open('calculator'));
-        await page.waitForTimeout(200);
-        const inApp = await page.evaluate(() => Widgets._timers());
-        check(onDesk.indexOf('sysmon') >= 0 && onDesk.indexOf('weather') >= 0 && onDesk.indexOf('music') >= 0 && onDesk.indexOf('stars__stars') >= 0 && inApp.join() === 'music',
-            'refresh timers: all on the desktop ' + onDesk + '; only Music (background by default) while an app is open: ' + inApp);
-        const before = await page.evaluate(() => Music.state().pos);
-        await page.waitForTimeout(1200);
-        check(await page.evaluate((b) => Music.state().playing && Music.state().pos >= b + 1, before), 'the music keeps playing while the app is open');
-        await page.evaluate(() => Win.close());
-        await page.waitForTimeout(200);
-        check((await page.evaluate(() => Widgets._timers())).indexOf('sysmon') >= 0, 'back on the desktop the widgets refresh again');
-
-        // Control Panel > Widgets: the list, then a page per widget (show, refresh rate, background, own settings)
-        await page.evaluate(() => Win.open('settings', 'widgets'));
-        await page.waitForTimeout(200);
-        const cp = await page.textContent('.set-main');
-        check(/Show widgets on the desktop/.test(cp) && /Weather/.test(cp) && /Playtime/.test(cp) && /System Monitor/.test(cp) && /MyMusic|Music Player/.test(cp) && /Stars/.test(cp) && /every 30 min/.test(cp) && /every 5 s/.test(cp),
-            'Control Panel > Widgets lists every widget with its state and refresh rate');
-        await page.evaluate(() => { const b = [...document.querySelectorAll('.set-main .set-row')].find((x) => /System Monitor/.test(x.textContent)); b.click(); });
-        await page.waitForTimeout(200);
-        const sp = await page.textContent('.set-main');
-        check(/Show on the desktop/.test(sp) && /Refresh/.test(sp) && /Run in the background/.test(sp) && /Refresh now/.test(sp) && /Move up/.test(sp), 'a widget\'s page: show, refresh rate, background, refresh now, order');
-        // the refresh rate changes with the arrows
-        await page.evaluate(() => { const b = [...document.querySelectorAll('.set-main .set-row')].find((x) => /^Refresh/.test(x.textContent) && !/now/.test(x.textContent)); b.focus(); });
-        await page.keyboard.press('ArrowRight');
-        check(await page.evaluate(() => Widgets.conf('sysmon').every) === 10 && /every 10 s/.test(await page.textContent('.set-main')), 'Right picks the next refresh rate (5 s -> 10 s)');
-        await page.evaluate(() => Widgets.set('sysmon', 'bg', true));
-        await page.evaluate(() => Widgets.set('sysmon', 'show', false));
-        await page.keyboard.press('Escape');
-        await page.waitForTimeout(150);
-        check(await page.evaluate(() => !!document.querySelector('.set-main') && /Show widgets/.test(document.querySelector('.set-main').textContent)), 'Back returns to the list');
-        await page.evaluate(() => Win.close());
-        await page.waitForTimeout(200);
-        check(await page.evaluate(() => !document.getElementById('wdg-sysmon') && Widgets._timers().indexOf('sysmon') < 0), 'a hidden widget has no card and no timer');
-        await page.evaluate(() => { Widgets.set('sysmon', 'show', true); Win.open('calculator'); });
-        await page.waitForTimeout(200);
-        check((await page.evaluate(() => Widgets._timers())).indexOf('sysmon') >= 0, 'with "Run in the background" on, it keeps refreshing while an app is open');
-        await page.evaluate(() => Win.close());
-
-        // Weather: a typed place, units
-        await page.evaluate(() => { Widgets.setSetting('weather', 'units', 'c'); Widgets.setSetting('weather', 'place', 'Paris'); });
-        await page.waitForFunction(() => /12°.*Paris/.test(document.getElementById('wdg-weather').textContent), null, { timeout: 5000 }).catch(() => {});
-        check(await page.evaluate(() => /12°.*Paris/.test(document.getElementById('wdg-weather').textContent)) && db.weather.some((u) => /geocoding.*name=Paris/.test(u)), 'Weather: a typed city is looked up (Open-Meteo geocoding) and shown');
-        await page.evaluate(() => Widgets.setSetting('weather', 'units', 'f'));
-        await page.waitForTimeout(500);
-        check(db.weather.some((u) => /temperature_unit=fahrenheit/.test(u)), 'Weather: Fahrenheit asks the forecast in °F');
-
-        // per profile: another profile has its own widgets
-        const other = await page.evaluate(() => { const mine = Store.get('widgets'); const p2 = Profiles.create('Sara'); Store.setProfile(p2.id); const o = Store.get('widgets', null); const c = Widgets.conf('sysmon').every; Store.setProfile('p1'); return { mine: !!mine, other: o, every: c }; });
-        check(other.mine && other.other === null && other.every === 5, 'widget settings are per profile: a new profile starts from the defaults ' + JSON.stringify(other));
-        // master switch
-        await page.evaluate(() => Widgets.setOn(false));
-        check(await page.evaluate(() => document.getElementById('desk-widgets').hidden && Widgets._timers().length === 0 && !document.getElementById('desktop').classList.contains('has-wdg')), 'Show widgets off: no cards, no timers, the icons get the whole desktop');
-        await page.evaluate(() => Widgets.setOn(true));
-        // Music app and the card's buttons
-        await page.evaluate(() => Win.open('music'));
-        await page.waitForTimeout(150);
-        await page.waitForSelector('.mx-np:not([hidden])', { timeout: 3000 }).catch(() => {});
-        check(await page.evaluate(() => /Morning Pixels|Neon Avenue|Level Two|Night Drive|Last Boss/.test(document.querySelector('.mx-np').textContent)), 'the Music app opens on Now playing while a song plays');
-        await page.evaluate(() => Win.close());
-        await page.waitForTimeout(150);
-        const t0 = await page.evaluate(() => Music.state().index);
-        await page.click('#wdg-music .wdg-btn[data-b="next"]');
-        check(await page.evaluate((t) => Music.state().index === (t + 1) % 5, t0), 'the Music Player card\'s Next button changes the track');
-        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
-        await page.context().close();
-    }
+    await widgetTests(browser, base);
 
     console.log('43. Weather app: now, 24 hours, 7 days; shares its place, units and data with the widget; follows the theme; remote only');
     {
@@ -5074,6 +4946,163 @@ async function drivePhoneTests(browser, base) {
 
 // 44. Google Drive in the SDK (MyPC.drive, API 14): one sign-in per profile in My PC, every request sent by My PC.
 // MYPC_ONLY=drive node tests/run-tests.mjs runs just these.
+async function widgetTests(browser, base) {
+    console.log('42. desktop widgets: Weather, Playtime, System Monitor, Music Player; Control Panel > Widgets; paused while an app runs; app widgets');
+    {
+        const code = "export default async function (ctx) { const st = ctx.state || { n: 0 }; if (ctx.action === 'add') st.n++; " +
+            "return { view: { big: st.n + ' / ' + ctx.settings.goal, sub: 'stars', icon: '⭐', buttons: [{ id: 'add', label: '+1' }], link: 'level/2', html: '<b>no</b>' }, state: st }; }";
+        const sha = 'a'.repeat(64);
+        const app = (widgets) => ({ id: 'stars', name: 'Star Catcher', url: 'https://stars.example/', entry: 'https://stars.example/index.html', icon: '', type: 'game', version: '1.0.0', enabled: true, order: 0, widgets });
+        const w = { id: 'stars', title: 'Stars', file: 'https://stars.example/widgets/stars.js', size: 'medium', every: 15, background: false,
+            settings: [{ id: 'goal', label: 'Daily goal', type: 'select', default: '50', options: [{ value: '20', label: '20' }, { value: '50', label: '50' }] }] };
+        // a match card (Football Live, owner request 2026-11-13): competition logo + name, then home flag  0 - 0  away flag, then the start time
+        const koraCode = "export default async function () { return { view: { title: 'Africa Cup of Nations - Qualification', icon: 'https://flags.test/caf.svg', big: '0 - 0', " +
+            "versus: { left: 'https://flags.test/ma.svg', right: 'https://flags.test/ne.svg' }, sub: 'Starts at 20:00', accent: '#e50914' } }; }";
+        const kw = { id: 'scores', title: 'Football Live', file: 'https://kora.example/widgets/scores.js', size: 'medium', every: 15, background: false };
+        const db = { apps: { stars: app([Object.assign({ sha }, w)]), pending: Object.assign(app([w]), { id: 'pending', name: 'Pending' }),
+            kora: Object.assign(app([Object.assign({ sha }, kw)]), { id: 'kora', name: 'Football Live' }) },
+            widgets: { stars__stars: { app: 'stars', widget: 'stars', code, sha, at: 1 }, kora__scores: { app: 'kora', widget: 'scores', code: koraCode, sha, at: 1 } } };
+        const page = await newPage(browser, base, db);
+        await page.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'stars', at: 1 }, { id: 'pending', at: 1 }, { id: 'kora', at: 1 }])); });
+        const flag = (body) => ({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 20">' + body + '</svg>' });
+        await page.route('https://flags.test/**', (r) => r.fulfill(flag({
+            'ma.svg': '<rect width="30" height="20" fill="#c1272d"/><path d="M15 6l1.2 3.6h3.8l-3 2.2 1.1 3.6-3.1-2.2-3.1 2.2 1.1-3.6-3-2.2h3.8z" fill="none" stroke="#006233" stroke-width=".8"/>',
+            'ne.svg': '<rect width="30" height="20" fill="#fff"/><rect width="30" height="6.7" fill="#e05206"/><rect y="13.3" width="30" height="6.7" fill="#0db02b"/><circle cx="15" cy="10" r="2.4" fill="#e05206"/>',
+            'caf.svg': '<rect width="30" height="20" rx="3" fill="#1c6b3a"/><circle cx="15" cy="10" r="6" fill="#f4c300"/>' }[r.request().url().split('/').pop()])));
+        // the TV's player (plays by the clock) and a test source of 5 songs for the Music Player card
+        await page.addInitScript(() => {
+            const av = { state: 'NONE', cur: 0, t: 0, l: null };
+            window.webapis = window.webapis || {};
+            window.webapis.avplay = {
+                open: () => { av.state = 'IDLE'; av.cur = 0; }, setListener: (l) => { av.l = l; }, setDisplayRect() {},
+                prepareAsync: (ok) => setTimeout(() => { av.state = 'READY'; ok(); }, 10),
+                play: () => { av.state = 'PLAYING'; av.t = Date.now(); }, pause: () => { if (av.state === 'PLAYING') av.cur += Date.now() - av.t; av.state = 'PAUSED'; },
+                stop: () => { av.state = 'IDLE'; }, close: () => { av.state = 'NONE'; }, seekTo: (ms, ok) => { av.cur = ms; av.t = Date.now(); if (ok) setTimeout(ok, 1); },
+                getCurrentTime: () => av.state === 'PLAYING' ? av.cur + Date.now() - av.t : av.cur, getDuration: () => 200000, getState: () => av.state
+            };
+        });
+        await routeHosted(page, { offline: true });
+        await page.goto(base + 'index.html');
+        await page.waitForSelector('#desk-icons .dicon');
+        await page.evaluate(() => {
+            MusicSrc.add('t', { list: (d, cb) => cb({ code: 'unsupported' }), read: (e, a, l, cb) => cb({ code: 'unsupported' }), url: (e, cb) => cb(null, { url: 'https://music.test/' + e.n, path: '/t/' + e.n }) });
+            Music.playList(['Morning Pixels', 'Neon Avenue', 'Level Two', 'Night Drive', 'Last Boss'].map((t, i) => ({ s: 't', p: '/t/' + i + '.mp3', n: i + '.mp3', t, a: 'Lab' })), 0);
+            Music.pause();
+        });
+        // owner decision 2026-11-05: only Weather is on by default; the others (and app widgets) are turned on by the user
+        check(await page.evaluate(() => [...document.querySelectorAll('#desk-widgets .wdg')].map((c) => c.id).join() === 'wdg-weather' &&
+            ['playtime', 'sysmon', 'music', 'stars__stars'].every((id) => Widgets.conf(id).show === false) && Widgets._timers().join() === 'weather'),
+            'a new profile shows only the Weather widget; the others are off and run nothing');
+        await page.evaluate(() => ['playtime', 'sysmon', 'music', 'stars__stars', 'kora__scores'].forEach((id) => Widgets.set(id, 'show', true)));
+        await page.waitForFunction(() => /21/.test((document.getElementById('wdg-weather') || {}).textContent || ''), null, { timeout: 8000 }).catch(() => {});
+        await page.waitForFunction(() => /Morning Pixels/.test((document.getElementById('wdg-music') || {}).textContent || ''), null, { timeout: 5000 }).catch(() => {});
+        const cards = await page.evaluate(() => [...document.querySelectorAll('#desk-widgets .wdg')].map((c) => c.id + ':' + c.textContent));
+        check(['wdg-weather', 'wdg-playtime', 'wdg-sysmon', 'wdg-music'].every((id) => cards.some((c) => c.indexOf(id + ':') === 0)) && cards.some((c) => /wdg-weather:.*21°.*Casablanca.*Partly cloudy/.test(c)) &&
+            cards.some((c) => /wdg-sysmon:.*(Memory|My PC memory)/.test(c)) && cards.some((c) => /wdg-music:.*Morning Pixels/.test(c)) && cards.some((c) => /wdg-playtime:.*0 min/.test(c)),
+            'the desktop shows Weather (place from the internet address), Playtime, System Monitor and Music Player: ' + JSON.stringify(cards).slice(0, 400));
+        const layout = await page.evaluate(() => { const i = document.getElementById('desk-icons').getBoundingClientRect(), w = document.getElementById('desk-widgets').getBoundingClientRect(); return { iconsRight: i.right, wLeft: w.left, h: w.bottom, bar: document.getElementById('taskbar').getBoundingClientRect().top }; });
+        check(layout.iconsRight <= layout.wLeft + 1 && layout.h <= layout.bar, 'the widgets sit on the right, beside the icons and above the taskbar ' + JSON.stringify(layout));
+        // the approved app widget ran in its Worker; the one waiting for approval did not
+        await page.waitForFunction(() => /0 \/ 50/.test((document.getElementById('wdg-stars__stars') || {}).textContent || ''), null, { timeout: 8000 }).catch(() => {});
+        const st = await page.evaluate(() => ({ t: (document.getElementById('wdg-stars__stars') || {}).textContent || '', html: /&lt;b&gt;|<b>no<\/b>/.test(document.getElementById('wdg-stars__stars').innerHTML),
+            pending: !!document.getElementById('wdg-pending__stars'), code: !!(JSON.parse(localStorage.getItem('arc_dev_wcode') || '{}').stars__stars) }));
+        check(/Stars/.test(st.t) && /0 \/ 50/.test(st.t) && /stars/.test(st.t) && !st.html && !st.pending && st.code,
+            'an approved app widget runs its approved code (default settings, no HTML); one waiting for approval is not shown; the code is kept on the TV: ' + JSON.stringify(st));
+        await page.waitForFunction(() => document.querySelectorAll('#wdg-kora__scores .wdg-vs img').length === 2 && [...document.querySelectorAll('#wdg-kora__scores img')].every((i) => i.complete && i.naturalWidth), null, { timeout: 8000 }).catch(() => {});
+        const kora = await page.evaluate(() => {
+            const c = document.getElementById('wdg-kora__scores'), q = (s) => c && c.querySelector(s);
+            const vs = q('.wdg-vs'), imgs = vs ? [...vs.querySelectorAll('img')].map((i) => i.src.split('/').pop()) : [];
+            const head = q('.wdg-head img'), big = q('.wdg-vs .wdg-big'), sub = q('.wdg-sub');
+            const r = (e) => e && e.getBoundingClientRect();
+            return { head: head && head.src.split('/').pop(), title: (q('.wdg-title') || {}).textContent, imgs, big: big && big.textContent, sub: sub && sub.textContent,
+                oneLine: vs && Math.abs(r(vs.firstChild).top + r(vs.firstChild).height / 2 - (r(big).top + r(big).height / 2)) < 6 && r(vs.firstChild).right <= r(big).left && r(big).right <= r(vs.lastChild).left,
+                order: vs && r(q('.wdg-head')).bottom <= r(vs).top && r(vs).bottom <= r(sub).top, noSideImage: !q(':scope > .wdg-img') };
+        });
+        check(kora.head === 'caf.svg' && /Africa Cup/.test(kora.title) && kora.imgs.join() === 'ma.svg,ne.svg' && kora.big === '0 - 0' && kora.sub === 'Starts at 20:00' && kora.oneLine && kora.order && kora.noSideImage,
+            'a match card: competition logo + name, then home flag  0 - 0  away flag on one line, then the start time ' + JSON.stringify(kora));
+        if (process.env.MYPC_SHOTS) { await page.evaluate(() => Notify.clear()); await page.waitForTimeout(900); }
+        if (process.env.MYPC_SHOTS) await page.locator('#wdg-kora__scores').screenshot({ path: path.join(process.env.MYPC_SHOTS, 'widget-match.png') });
+        await page.click('#wdg-stars__stars .wdg-btn');
+        await page.waitForFunction(() => /1 \/ 50/.test(document.getElementById('wdg-stars__stars').textContent), null, { timeout: 5000 }).catch(() => {});
+        check(await page.evaluate(() => /1 \/ 50/.test(document.getElementById('wdg-stars__stars').textContent)), 'a card button runs the widget again with ctx.action and keeps its state');
+        const reads = db.log.filter((x) => /widgets\/stars__stars/.test(x)).length;
+        await page.evaluate(() => Widgets.refreshNow('stars__stars'));
+        await page.waitForTimeout(400);
+        check(db.log.filter((x) => /widgets\/stars__stars/.test(x)).length === reads && reads === 1, 'the approved code is read from Firestore once, then from the TV');
+
+        // refreshing: every shown widget has its timer on the desktop; an open app stops them all but the background ones
+        await page.evaluate(() => Music.play());
+        await page.waitForTimeout(100);
+        const onDesk = await page.evaluate(() => Widgets._timers());
+        await page.evaluate(() => Win.open('calculator'));
+        await page.waitForTimeout(200);
+        const inApp = await page.evaluate(() => Widgets._timers());
+        check(onDesk.indexOf('sysmon') >= 0 && onDesk.indexOf('weather') >= 0 && onDesk.indexOf('music') >= 0 && onDesk.indexOf('stars__stars') >= 0 && inApp.join() === 'music',
+            'refresh timers: all on the desktop ' + onDesk + '; only Music (background by default) while an app is open: ' + inApp);
+        const before = await page.evaluate(() => Music.state().pos);
+        await page.waitForTimeout(1200);
+        check(await page.evaluate((b) => Music.state().playing && Music.state().pos >= b + 1, before), 'the music keeps playing while the app is open');
+        await page.evaluate(() => Win.close());
+        await page.waitForTimeout(200);
+        check((await page.evaluate(() => Widgets._timers())).indexOf('sysmon') >= 0, 'back on the desktop the widgets refresh again');
+
+        // Control Panel > Widgets: the list, then a page per widget (show, refresh rate, background, own settings)
+        await page.evaluate(() => Win.open('settings', 'widgets'));
+        await page.waitForTimeout(200);
+        const cp = await page.textContent('.set-main');
+        check(/Show widgets on the desktop/.test(cp) && /Weather/.test(cp) && /Playtime/.test(cp) && /System Monitor/.test(cp) && /MyMusic|Music Player/.test(cp) && /Stars/.test(cp) && /every 30 min/.test(cp) && /every 5 s/.test(cp),
+            'Control Panel > Widgets lists every widget with its state and refresh rate');
+        await page.evaluate(() => { const b = [...document.querySelectorAll('.set-main .set-row')].find((x) => /System Monitor/.test(x.textContent)); b.click(); });
+        await page.waitForTimeout(200);
+        const sp = await page.textContent('.set-main');
+        check(/Show on the desktop/.test(sp) && /Refresh/.test(sp) && /Run in the background/.test(sp) && /Refresh now/.test(sp) && /Move up/.test(sp), 'a widget\'s page: show, refresh rate, background, refresh now, order');
+        // the refresh rate changes with the arrows
+        await page.evaluate(() => { const b = [...document.querySelectorAll('.set-main .set-row')].find((x) => /^Refresh/.test(x.textContent) && !/now/.test(x.textContent)); b.focus(); });
+        await page.keyboard.press('ArrowRight');
+        check(await page.evaluate(() => Widgets.conf('sysmon').every) === 10 && /every 10 s/.test(await page.textContent('.set-main')), 'Right picks the next refresh rate (5 s -> 10 s)');
+        await page.evaluate(() => Widgets.set('sysmon', 'bg', true));
+        await page.evaluate(() => Widgets.set('sysmon', 'show', false));
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(150);
+        check(await page.evaluate(() => !!document.querySelector('.set-main') && /Show widgets/.test(document.querySelector('.set-main').textContent)), 'Back returns to the list');
+        await page.evaluate(() => Win.close());
+        await page.waitForTimeout(200);
+        check(await page.evaluate(() => !document.getElementById('wdg-sysmon') && Widgets._timers().indexOf('sysmon') < 0), 'a hidden widget has no card and no timer');
+        await page.evaluate(() => { Widgets.set('sysmon', 'show', true); Win.open('calculator'); });
+        await page.waitForTimeout(200);
+        check((await page.evaluate(() => Widgets._timers())).indexOf('sysmon') >= 0, 'with "Run in the background" on, it keeps refreshing while an app is open');
+        await page.evaluate(() => Win.close());
+
+        // Weather: a typed place, units
+        await page.evaluate(() => { Widgets.setSetting('weather', 'units', 'c'); Widgets.setSetting('weather', 'place', 'Paris'); });
+        await page.waitForFunction(() => /12°.*Paris/.test(document.getElementById('wdg-weather').textContent), null, { timeout: 5000 }).catch(() => {});
+        check(await page.evaluate(() => /12°.*Paris/.test(document.getElementById('wdg-weather').textContent)) && db.weather.some((u) => /geocoding.*name=Paris/.test(u)), 'Weather: a typed city is looked up (Open-Meteo geocoding) and shown');
+        await page.evaluate(() => Widgets.setSetting('weather', 'units', 'f'));
+        await page.waitForTimeout(500);
+        check(db.weather.some((u) => /temperature_unit=fahrenheit/.test(u)), 'Weather: Fahrenheit asks the forecast in °F');
+
+        // per profile: another profile has its own widgets
+        const other = await page.evaluate(() => { const mine = Store.get('widgets'); const p2 = Profiles.create('Sara'); Store.setProfile(p2.id); const o = Store.get('widgets', null); const c = Widgets.conf('sysmon').every; Store.setProfile('p1'); return { mine: !!mine, other: o, every: c }; });
+        check(other.mine && other.other === null && other.every === 5, 'widget settings are per profile: a new profile starts from the defaults ' + JSON.stringify(other));
+        // master switch
+        await page.evaluate(() => Widgets.setOn(false));
+        check(await page.evaluate(() => document.getElementById('desk-widgets').hidden && Widgets._timers().length === 0 && !document.getElementById('desktop').classList.contains('has-wdg')), 'Show widgets off: no cards, no timers, the icons get the whole desktop');
+        await page.evaluate(() => Widgets.setOn(true));
+        // Music app and the card's buttons
+        await page.evaluate(() => Win.open('music'));
+        await page.waitForTimeout(150);
+        await page.waitForSelector('.mx-np:not([hidden])', { timeout: 3000 }).catch(() => {});
+        check(await page.evaluate(() => /Morning Pixels|Neon Avenue|Level Two|Night Drive|Last Boss/.test(document.querySelector('.mx-np').textContent)), 'the Music app opens on Now playing while a song plays');
+        await page.evaluate(() => Win.close());
+        await page.waitForTimeout(150);
+        const t0 = await page.evaluate(() => Music.state().index);
+        await page.click('#wdg-music .wdg-btn[data-b="next"]');
+        check(await page.evaluate((t) => Music.state().index === (t + 1) % 5, t0), 'the Music Player card\'s Next button changes the track');
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+}
+
 async function driveTests(browser, base) {
     console.log('44. Google Drive for apps (MyPC.drive): sign in once in My PC, permission per app, list / upload / read / rename / trash / delete, app folder, streaming; Control Panel > Google Drive');
     // the app: its own https origin, the SDK from My PC, a service worker that imports sdk/drive-sw.js
