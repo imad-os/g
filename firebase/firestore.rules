@@ -252,6 +252,37 @@ service cloud.firestore {
       }
     }
 
+    // Share to the TV over the internet (js/launcher/share-rx.js, the phone's Send to TV in js/launcher/apps/receiver.js).
+    // No sign-in: the TV's random 10 character code (about 50 bits, shown only on its screen) is the key. Anyone who knows it
+    // can send to that TV, so the TV deletes each item once it opened it and a TTL policy on `items.exp` (the same one as the
+    // push inbox, firebase/SETUP.md 4c) removes forgotten ones after a day. A photo is shrunk on the phone to fit one document.
+    //   share/{tv}             { name, at, open }   the TV listens (written at start, every 5 min, open: false at stop)
+    //   share/{tv}/items/{id}  { k, text?, n?, mime?, data?, u?, size?, from, at, exp }
+    function shareKey(k) { return k.matches('^[2-9A-HJ-NP-Z]{10}$'); }
+    function validShare(d) {
+      return d.keys().hasAll(['k', 'from', 'at', 'exp'])
+          && d.keys().hasOnly(['k', 'text', 'n', 'mime', 'data', 'u', 'size', 'from', 'at', 'exp'])
+          && d.k in ['text', 'photo', 'file']
+          && (!('text' in d) || shortText(d.text, 20000)) && (!('n' in d) || shortText(d.n, 120))
+          && (!('mime' in d) || shortText(d.mime, 100)) && (!('data' in d) || shortText(d.data, 750000))
+          && (!('u' in d) || (shortText(d.u, 300) && d.u.matches('^http://.*')))
+          && (!('size' in d) || d.size is int) && shortText(d.from, 60) && d.at is int
+          && d.exp is timestamp && d.exp < request.time + duration.value(2, 'd');
+    }
+    match /share/{tv} {
+      allow get, delete: if shareKey(tv);
+      allow create, update: if shareKey(tv)
+          && request.resource.data.keys().hasOnly(['name', 'at', 'open']) && request.resource.data.keys().hasAll(['name', 'at', 'open'])
+          && shortText(request.resource.data.name, 60) && request.resource.data.at is int && request.resource.data.open is bool;
+      match /items/{id} {
+        allow get, delete: if shareKey(tv) && id.matches('^[a-z0-9]{16,40}$');
+        allow list: if shareKey(tv) && request.query.limit <= 10;
+        allow create: if shareKey(tv) && id.matches('^[a-z0-9]{16,40}$') && validShare(request.resource.data);
+        // the TV could not open it: it marks it `no` (the phone reads that, tells the user and deletes it)
+        allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['no']) && request.resource.data.no == true;
+      }
+    }
+
     // Player accounts (js/core/accounts.js): a profile signed in with Firebase Authentication (username@players.mypc.app
     // + password). Only that account reads or writes its own copy: settings, saves and picture of the profile.
     // data.<game id>.<key> = a game's saves, settings.<key> = the rest. The old whole-profile blob string is refused

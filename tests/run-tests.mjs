@@ -187,7 +187,7 @@ async function fakeFirestore(ctx, db) {
             if (db.oldPlayerRules && method === 'PATCH' && pb && pb.fields && (pb.fields.data || pb.fields.settings || u.searchParams.getAll('updateMask.fieldPaths').length)) return json(403, { error: { code: 403, status: 'PERMISSION_DENIED' } });
         }
         const body = req.postData() ? JSON.parse(req.postData()) : null;
-        if (p === ':batchGet') return json(200, body.documents.map((n) => { const [col, id] = n.slice(FS_DB.length + 1).split('/'); return db[col] && db[col][id] ? { found: out(col, id) } : { missing: n }; }));
+        if (p === ':batchGet') return json(200, body.documents.map((n) => { const sg = n.slice(FS_DB.length + 1).split('/'), col = sg.slice(0, -1).join('/'), id = sg[sg.length - 1]; return db[col] && db[col][id] ? { found: out(col, id) } : { missing: n }; }));
         if (p === ':commit') {
             for (const w of body.writes) {
                 if (w.update) {                                             // a new document (error reports): currentDocument.exists false
@@ -205,7 +205,7 @@ async function fakeFirestore(ctx, db) {
         }
         // rooms: any depth (rooms/<id>/reqs/<id>), runQuery, updateMask, currentDocument.exists
         const segs = p.split('/').filter(Boolean);
-        if (segs[0] === 'rooms' || segs[0] === 'inbox' || segs[0] === 'subs' || segs[0] === 'gauth' || p === ':runQuery') {
+        if (segs[0] === 'rooms' || segs[0] === 'inbox' || segs[0] === 'subs' || segs[0] === 'gauth' || segs[0] === 'share' || p === ':runQuery') {
             if (segs[0] === 'inbox' || segs[0] === 'subs') { db.pushAuth = db.pushAuth || []; db.pushAuth.push(method + ' ' + p + ' ' + (req.headers()['authorization'] || '')); }
             const last = segs[segs.length - 1];
             if (last.endsWith(':runQuery')) {
@@ -8041,7 +8041,7 @@ async function shareTests(browser, base) {
     let phone;
     try { phone = await lanPhone({ host: '127.0.0.23', name: 'Pixel 8' }); } catch (e) { check(false, 'the fake phone could not listen on 127.0.0.23:47800 (' + e.message + ')'); return; }
     const page = await newPage(browser, base, {});
-    await page.addInitScript(() => { try { localStorage.setItem('arc_dev_lan_ip', '127.0.0.1'); } catch (e) {} });
+    await page.addInitScript(() => { try { localStorage.setItem('arc_dev_lan_ip', '127.0.0.1'); localStorage.setItem('arc_dev_rx_via', JSON.stringify('lan')); } catch (e) {} });
     await page.route(SITE + '**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Shared</title><body style="margin:0;background:#fff;font:40px sans-serif">The page the phone shared</body>' }));
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.goto(base + 'index.html');
@@ -8167,4 +8167,103 @@ async function shareTests(browser, base) {
     await ph2.context().close();
     await phone.close();
     fs.rmSync(tmp, { recursive: true, force: true });
+    await shareNetTests(browser, base);
+}
+
+// Share to the TV over the internet (owner request 2026-11-13 (2)): Listen on Automatic / This Wi-Fi / Internet, the TV's code,
+// a phone (browser or the My PC app) adds the TV by code and writes share/<code>/items, the TV opens and deletes them
+async function shareNetTests(browser, base) {
+    const shots = process.env.MYPC_SHOTS;
+    const db = {};
+    const tvp = await newPage(browser, base, db);
+    await tvp.addInitScript(() => { try { localStorage.setItem('arc_dev_netmode', JSON.stringify({ mode: 'online', why: '', at: Date.now() })); } catch (e) {} });
+    await tvp.setViewportSize({ width: 1920, height: 1080 });
+    await tvp.goto(base + 'index.html');
+    await tvp.waitForSelector('#desk-icons .dicon', { timeout: 15000 });
+    await tvp.evaluate(() => Win.open('receiver'));
+    await tvp.waitForTimeout(300);
+    check(await tvp.evaluate(() => ShareRx.state().via === 'auto' && ShareRx.state().mode === 'cloud' && !!document.querySelector('[data-k="via-auto"].on')), 'Listen on: Automatic picks the internet while NetMode says online');
+    const code = await tvp.evaluate(() => ShareRx.code());
+    check(/^[2-9A-HJ-NP-Z]{10}$/.test(code), 'the TV has a 10 character code ' + code);
+    const pres = await tvp.waitForFunction((c) => /listening over the internet/i.test(document.querySelector('.rx-status').textContent), code, { timeout: 8000 }).then(() => true, () => false);
+    check(pres && db.share && db.share[code] && db.share[code].open === true && /^My PC/.test(db.share[code].name), 'it tells phones it listens (share/<code> open) and says so');
+    check(await tvp.evaluate(() => !!document.querySelector('.rx-qr svg') && /sendto=/.test(ShareRx.link()) && document.querySelector('.rx-code-v').textContent.replace(' ', '') === ShareRx.code()), 'it shows the code and a QR code of the link');
+    if (shots) await tvp.screenshot({ path: shots + '/share-net-1-receiver.png' });
+    // Automatic falls back to this Wi-Fi when NetMode says the internet is limited; This Wi-Fi / Internet by hand
+    await tvp.evaluate(() => NetMode._set('local', 'blocked'));
+    await tvp.waitForTimeout(200);
+    check(await tvp.evaluate(() => ShareRx.state().mode === 'lan' && !document.querySelector('.rx-code')), 'Automatic moves to this Wi-Fi in "Home network only" mode (no code shown)');
+    check(db.share[code].open === false, 'leaving the internet tells phones the TV stopped listening there');
+    await tvp.evaluate(() => document.querySelector('[data-k="via-cloud"]').click());
+    await tvp.waitForTimeout(300);
+    check(await tvp.evaluate(() => ShareRx.via() === 'cloud' && ShareRx.state().mode === 'cloud' && !!document.querySelector('.rx-code')), 'Internet picked by hand listens over the internet whatever the network mode');
+
+    // a phone's browser (no My PC app) opens the QR code's link: Send to TV adds that TV
+    const ph = await newPage(browser, base, db, { phone: true });
+    await ph.goto(base + 'index.html?sendto=' + code);
+    const added = await ph.waitForFunction((c) => window.Win && Win.current() === 'sendtv' && JSON.parse(localStorage.getItem('arc_dev_st_net') || '[]').some((x) => x.code === c), code, { timeout: 15000 }).then(() => true, () => false);
+    check(added, 'the TV\'s link adds it on the phone (a browser, no My PC app)');
+    await ph.waitForFunction(() => /Receiver on/.test(document.querySelector('.st-tv') ? document.querySelector('.st-tv').textContent : ''), null, { timeout: 8000 }).catch(() => {});
+    check(await ph.evaluate(() => /Internet/.test(document.querySelector('.st-tv').textContent) && /Receiver on/.test(document.querySelector('.st-tv').textContent)), 'the phone shows the TV, over the internet, with its Receiver on');
+    if (shots) await ph.screenshot({ path: shots + '/share-net-2-phone.png' });
+    await ph.evaluate((c) => document.querySelector('[data-k="wt' + c + '"]').click(), code);
+    await ph.waitForTimeout(200);
+    await ph.evaluate(() => { Keyboard.setText('Dinner at 8\nbring the cake'); Keyboard.submit(); });
+    const txt = await tvp.waitForFunction(() => Win.current() === 'notes', null, { timeout: 10000 }).then(() => true, () => false);
+    check(txt && await tvp.evaluate(() => /bring the cake/.test(document.querySelector('.mn-text').textContent)), 'a text typed on the phone opens in MyNotes on the TV over the internet');
+    await tvp.waitForTimeout(300);
+    check(!Object.keys(db['share/' + code + '/items'] || {}).length, 'the TV deletes what it took (nothing stays in Firestore)');
+    // a photo picked in the browser: shrunk on the phone, one document, saved on the TV
+    const jpg = fs.readFileSync(path.join(ROOT, 'wallpapers', 'nightlake.jpg')).toString('base64');
+    const [chooser] = await Promise.all([ph.waitForEvent('filechooser'), ph.evaluate((c) => document.querySelector('[data-k="wp' + c + '"]').click(), code)]);
+    await chooser.setFiles({ name: 'lake.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(jpg, 'base64') });
+    const pic = await tvp.waitForFunction(() => Win.current() === 'photos' && document.querySelector('.ph-full') && document.querySelector('.ph-full').naturalWidth > 0, null, { timeout: 15000 }).then(() => true, () => false);
+    const sent = (db.rules || []).filter((r) => r.col === 'share/' + code + '/items' && r.data.k === 'photo');
+    check(pic && sent.length === 1 && sent[0].data.data.length <= 700000 && sent[0].data.mime === 'image/jpeg', 'a photo goes over the internet shrunk to one document (' + (sent[0] ? sent[0].data.data.length : 0) + ' chars) and opens in MyPhotos');
+    if (shots) await tvp.screenshot({ path: shots + '/share-net-3-photo.png' });
+    await ph.waitForFunction(() => /Opened on the TV/.test(document.querySelector('.rx-list').textContent), null, { timeout: 20000 }).catch(() => {});
+    check(await ph.evaluate(() => /Opened on the TV/.test(document.querySelector('.rx-list').textContent)), 'the phone sees the TV took it (its document is gone)');
+    if (shots) await ph.screenshot({ path: shots + '/share-net-4-phone-sent.png' });
+    // a typed code, wrong then right
+    await ph.evaluate(() => document.querySelector('[data-k="addcode"]').click());
+    await ph.waitForTimeout(150);
+    await ph.evaluate(() => { Keyboard.setText('ZZZZZ-ZZZZZ'); Keyboard.submit(); });
+    await ph.waitForTimeout(600);
+    check(await ph.evaluate(() => /No TV has this code/.test(document.getElementById('toast').textContent)), 'a code no TV has is refused');
+    check(!ph.errors.length, 'no page errors on the phone (internet) ' + ph.errors.join(' | '));
+    await ph.context().close();
+
+    // the My PC app on a phone: a video handed to the TV over the internet goes with the phone's address, and the TV says it
+    // needs the same Wi-Fi when it cannot reach it; a photo is read from the phone's own server (127.0.0.1) and shrunk
+    const ph2 = await newPage(browser, base, db, { phone: true });
+    await ph2.addInitScript((c) => {
+        localStorage.setItem('arc_dev_st_net', JSON.stringify([{ code: c, name: 'My PC (QE55Q80)' }]));
+        const s = { ip: '10.255.255.1', port: 47800, listening: true, name: 'Pixel 8', tv: '', tvs: [],
+            items: [{ id: 'b0000000000000000000000000000001', kind: 'file', mime: 'video/mp4', name: 'party.mp4', size: 90000000, text: '', state: 'wait', tv: '', at: 1 }] };
+        window.__marks = [];
+        window.MyPCNative = { version: () => 7, caps: () => '{}', motion() {}, settings() {}, active() {}, exit() {},
+            shareInfo: () => JSON.stringify(s), sharePending: () => false,
+            shareSend: (id, tv, rem) => { s.items.forEach((x) => { if (x.state === 'wait') { x.state = 'sent'; x.tv = tv; } }); if (rem) s.tv = tv; },
+            shareMark: (id, st) => { window.__marks.push([id, st]); s.items.forEach((x) => { if (x.id === id) x.state = st; }); },
+            shareRemove() {}, shareForget() {}, shareText() {} };
+    }, code);
+    await ph2.goto(base + 'index.html');
+    await ph2.waitForFunction(() => window.Win && Win.current() !== undefined && document.querySelector('#desk-icons .dicon'), null, { timeout: 15000 });
+    await ph2.evaluate(() => Win.open('sendtv'));
+    await ph2.waitForSelector('.st-tv .rx-main', { timeout: 5000 }).catch(() => {});
+    await ph2.evaluate(() => document.querySelector('.st-tv .rx-main').click());
+    const vd = await ph2.waitForFunction((c) => true, code).then(() => true);
+    await tvp.waitForTimeout(500);
+    const warned = await tvp.waitForFunction(() => /same Wi-Fi/.test(document.getElementById('toast').textContent), null, { timeout: 15000 }).then(() => true, () => false);
+    const vdoc = (db.rules || []).filter((r) => r.col === 'share/' + code + '/items' && r.data.k === 'file')[0];
+    check(vd && vdoc && /^http:\/\/10\.255\.255\.1:47800\/mypc\/file\/b0+1\?tv=net%3A/.test(vdoc.data.u), 'a video goes over the internet as the phone\'s address only (' + (vdoc && vdoc.data.u) + ')');
+    check(warned, 'the TV says a video needs the same Wi-Fi when it cannot reach the phone');
+    if (shots) await tvp.screenshot({ path: shots + '/share-net-5-needwifi.png' });
+    await ph2.waitForFunction(() => window.__marks.length, null, { timeout: 20000 }).catch(() => {});
+    check(await ph2.evaluate(() => window.__marks.some((m) => m[0] === 'b0000000000000000000000000000001' && m[1] === 'failed')) && !Object.keys(db['share/' + code + '/items'] || {}).length, 'the phone is told the TV could not open it (and removes it) ' + await ph2.evaluate(() => JSON.stringify(window.__marks)));
+    check(!ph2.errors.length, 'no page errors on the phone app ' + ph2.errors.join(' | '));
+    await ph2.context().close();
+    await tvp.evaluate(() => ShareRx.stop());
+    check(!tvp.errors.length, 'no page errors on the TV ' + tvp.errors.join(' | '));
+    await tvp.context().close();
 }

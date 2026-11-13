@@ -14,7 +14,7 @@ final class Bridge {
     /** 6: Share to the TV (shareInfo / shareSend / shareRemove / shareForget / shareText / sharePending, LanServer on port 47800);
      *  5: settings() takes "orient" (any / landscape / portrait: My PC can turn upright); 4: the page may use the microphone (getUserMedia, Microphone mode); 3: + settings(); 2: native motion samples,
      *  native QR scanner, link kept with the screen off, exit (1: no exit) */
-    @JavascriptInterface public int version() { return 6; }
+    @JavascriptInterface public int version() { return 7; }
 
     /** {"motion":true,"linear":true,"gyro":true}: which sensors this phone has */
     @JavascriptInterface public String caps() { return app.sensorCaps(); }
@@ -50,6 +50,9 @@ final class Bridge {
 
     /** a text or a link typed in My PC on the phone */
     @JavascriptInterface public void shareText(String text) { if (text != null && !text.trim().isEmpty()) app.lan().addText(text.length() > 20000 ? text.substring(0, 20000) : text, ""); }
+
+    /** 7: an item sent over the internet was taken by the TV / failed (the page checks Firestore) */
+    @JavascriptInterface public void shareMark(String id, String state) { if (id != null && state != null) app.lan().mark(id, state); }
 
     /** true once after Android's share menu sent something (the page opens Send to TV) */
     @JavascriptInterface public boolean sharePending() { return app.takePending(); }

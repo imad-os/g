@@ -40,7 +40,9 @@ import java.util.concurrent.ThreadFactory;
  *                                        phone that this TV's Receiver is open (the phone's Send to TV screen lists it).
  *                                        {"seq":n,"items":[{"id","seq","kind":"text"|"file","mime","name","size","text","subject"}]}
  *   GET  /mypc/file/<id>?tv=             the shared file, with Range (the TV's player streams a video / song straight from here).
- *                                        Only for the TV it was sent to, from that TV's address.
+ *                                        Only for the TV it was sent to, from that TV's address; tv=net:<code> = a TV it was sent
+ *                                        to over the internet (the id came through its Firestore inbox); and the phone's own page
+ *                                        (127.0.0.1, it shrinks a photo before sending it over the internet).
  *   POST /mypc/ack/<id>?tv=              the TV opened it
  *   POST /db                             the local rooms hub of the offline multiplayer (LanDb.handle, JSON in and out)
  *   OPTIONS *                            CORS / Private Network Access preflight
@@ -165,6 +167,13 @@ final class LanServer {
             if (remember) remembered = tv;
             items.notifyAll();
         }
+        changed();
+    }
+
+    /** the page's own news about an item sent over the internet: taken (the TV deleted it) or failed */
+    void mark(String id, String state) {
+        if (!"taken".equals(state) && !"failed".equals(state)) return;
+        synchronized (items) { for (Item it : items) if (it.id.equals(id)) it.state = state; }
         changed();
     }
 
@@ -381,7 +390,14 @@ final class LanServer {
         String tv = r.q("tv");
         synchronized (items) {
             for (Item x : items) if (x.id.equals(id)) it = x;
-            if (it != null) { Tv t = tvs.get(tv); if (!tv.equals(it.tv) || t == null || !r.ip.equals(t.ip) || it.uri == null) it = null; }
+            if (it != null) {
+                Tv t = tvs.get(tv);
+                // the phone's own page (it shrinks a photo before sending it over the internet), the TV it went to over the
+                // internet (any address: the 128-bit id came through that TV's Firestore inbox), or the TV on this Wi-Fi it was sent to
+                boolean self = r.ip.equals("127.0.0.1") || r.ip.equals("::1") || r.ip.endsWith(":127.0.0.1");
+                boolean net = tv.startsWith("net:") && tv.equals(it.tv);
+                if (it.uri == null || !(self || net || (tv.equals(it.tv) && t != null && r.ip.equals(t.ip)))) it = null;
+            }
         }
         if (it == null) { json(out, 404, "{\"error\":\"not-found\"}"); return; }
         InputStream in;

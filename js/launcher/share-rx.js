@@ -1,4 +1,18 @@
-/* ShareRx: the TV takes what phones share (owner request 2026-11-13), over the home network only (no Firebase, no internet).
+/* ShareRx: the TV takes what phones share (owner request 2026-11-13), over the home network or over the internet.
+ *
+ * Listen on (TV-wide arc_dev_rx_via, owner request 2026-11-13 (2)): 'auto' (default) = over the internet while NetMode says
+ * 'online' (internet + Firestore reached), on this Wi-Fi otherwise ('offline' / 'local'); 'lan' = this Wi-Fi only; 'cloud' =
+ * the internet only.
+ *
+ * Over the internet (Firestore, no sign-in): the TV has a random code (10 characters, arc_dev_rx_code, shown with a QR code on
+ * the Receiver; "New code" makes another). The phone adds the TV by that code once and writes share/<code>/items/<id>
+ * { k: 'text' | 'photo' | 'file', text, n, mime, data (a photo shrunk on the phone, base64 JPEG), u (a bigger file: the phone's
+ * own address, so only the same Wi-Fi can take it), size, from, at, exp (1 day, TTL) }. The TV lists them (limit 10), opens
+ * each and deletes it (= taken). share/<code> { name, at, open } tells phones the TV listens (written at start, every 5 min,
+ * open: false at stop). Asked every 3 s for a minute after the window opens or something arrives, every 8 s while the window
+ * is open, 30 s while closed (60 s after 10 quiet minutes), never while My PC is hidden (Firestore cost rule).
+ *
+ * On this Wi-Fi (no Firebase, no internet):
  *
  * A TV web app cannot listen on a port, so the phone (the My PC Android app, android-controller/.../LanServer.java, port 47800)
  * keeps the shares and the TV asks for them:
@@ -21,6 +35,8 @@ var ShareRx = (function () {
 
     var PORT = 47800, KNOWN = 'arc_dev_rx_phones', HIST = 'rx_hist', WAIT = 20, MAXH = 30;
     var on = false, watching = 0, ip = null, scanner = null, scanT = 0, progress = 0, phones = {}, listeners = [], noNet = false;
+    var VIA = 'arc_dev_rx_via', CODE = 'arc_dev_rx_code', ABC = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ', ITEM_ID = /^[a-z0-9]{16,40}$/;
+    var mode = null, net = { t: 0, busy: false, err: '', ok: false, fastTo: 0, quietAt: 0, seen: {}, presAt: 0 };
 
     function t(k) { return I18n.t(k); }
     function emit() { for (var i = 0; i < listeners.length; i++) { try { listeners[i](); } catch (e) {} } }
@@ -52,7 +68,7 @@ var ShareRx = (function () {
         }
         el.hidden = !on;
         el.title = t('rxTray');
-        el.classList.toggle('on', on && Object.keys(phones).length > 0);
+        el.classList.toggle('on', on && (mode === 'cloud' ? net.ok : Object.keys(phones).length > 0));
     }
 
     /* ---------------- finding phones ---------------- */
@@ -64,7 +80,7 @@ var ShareRx = (function () {
     }
     function scan() {
         clearTimeout(scanT);
-        if (!on || scanner) return;
+        if (!on || mode !== 'lan' || scanner) return;
         progress = 0;
         Lan.ip(function (v) {
             if (!on || scanner) return;
@@ -85,6 +101,8 @@ var ShareRx = (function () {
         var id = String(j.id).slice(0, 40), p = phones[id];
         if (p) { p.ip = host; p.name = String(j.name || p.name).slice(0, 60); return; }
         p = phones[id] = { id: id, ip: host, name: String(j.name || 'Android').slice(0, 60), since: 0, req: null, fails: 0, t: 0 };
+        p.url = function (it) { return base(p) + '/mypc/file/' + encodeURIComponent(it.id) + '?tv=' + encodeURIComponent(tvId()); };
+        p.ack = function (it, fail) { ack(p, it, fail); };
         remember(p);
         poll(p);
         tray(); emit();
@@ -95,6 +113,7 @@ var ShareRx = (function () {
         Lan.get('http://' + host + ':' + PORT + '/mypc/hello', 3000, function (e, j) {
             if (e || !j || j.app !== 'mypc' || !j.id) return cb(false);
             if (!on) start();
+            if (mode !== 'lan') { setVia('lan'); }
             found(host, j);
             cb(true);
         });
@@ -164,12 +183,12 @@ var ShareRx = (function () {
 
     function take(p, it) {
         var kind = it.kind === 'text' ? kindOf('text/plain', String(it.text || '')) : kindOf(it.mime);
-        var url = base(p) + '/mypc/file/' + encodeURIComponent(it.id) + '?tv=' + encodeURIComponent(tvId());
+        var url = it.data ? '' : p.url(it);
         var name = String(it.name || it.subject || '').slice(0, 120);
         var item = { k: kind, n: kind === 'link' ? linkIn(it.text) : kind === 'text' ? String(it.text).slice(0, 80) : name, from: p.name, at: Date.now(), u: url, mime: it.mime || '', size: +it.size || 0 };
         Notify.show({ id: 'rx', kind: 'info', title: t('rxGot').replace('%s', p.name), text: label(kind) + (item.n ? ': ' + item.n : '') });
         function done(ok, ref) {
-            ack(p, it, !ok);
+            p.ack(it, !ok);
             if (ref) item.ref = ref;
             if (ok) addHistory(item);
             emit();
@@ -187,6 +206,22 @@ var ShareRx = (function () {
             }).catch(function () { fail(item); done(false); });
             return;
         }
+        if (kind === 'photo' && it.data) {
+            var blob = null;
+            try { var bin = atob(String(it.data)), a = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); blob = new Blob([a], { type: it.mime || 'image/jpeg' }); } catch (e) { blob = null; }
+            if (!blob) { fail(item, 'phNoSave'); return done(false); }
+            return Photos.add(blob, { n: name, from: p.name }, function (e, pid) {
+                if (e) { fail(item, 'phNoSave'); return done(false); }
+                done(true, pid); open({ k: 'photo', ref: pid });
+            });
+        }
+        // a file that came over the internet with only the phone's address: it plays only when the TV reaches that phone
+        if (p.cloud && (kind === 'video' || kind === 'song' || kind === 'photo' || kind === 'textfile') && !p.checked) {
+            return reachable(url, function (ok) {
+                if (!ok) { Notify.show({ id: 'rx', kind: 'warn', title: t('rxGot').replace('%s', p.name), text: t('rxNeedWifi').replace('%s', name || label(kind)) }); return done(false); }
+                p.checked = true; take(p, it);
+            });
+        }
         if (kind === 'photo') {
             return Photos.addUrl(url, { n: name, from: p.name }, function (e, pid) {
                 if (e) { fail(item, 'phNoSave'); return done(false); }
@@ -197,6 +232,13 @@ var ShareRx = (function () {
         if (kind === 'song') { done(true); return open(item); }
         Notify.show({ id: 'rx', kind: 'warn', title: t('rxGot').replace('%s', p.name), text: t('rxCant').replace('%s', name || it.mime || '?') });
         done(false);
+    }
+    function reachable(u, cb) {
+        var end = false, ctl = typeof AbortController === 'function' ? new AbortController() : null;
+        var tm = setTimeout(function () { fin(false); }, 4000);
+        function fin(ok) { if (end) return; end = true; clearTimeout(tm); try { if (!ok && ctl) ctl.abort(); } catch (e) {} cb(ok); }
+        try { fetch(u, { headers: { Range: 'bytes=0-0' }, cache: 'no-store', signal: ctl ? ctl.signal : undefined }).then(function (r) { fin(r.ok); try { ctl && ctl.abort(); } catch (e) {} }, function () { fin(false); }); }
+        catch (e) { fin(false); }
     }
     function fail(item, k) { Notify.show({ id: 'rx', kind: 'err', title: item.from, text: t(k || 'rxFail') }); }
 
@@ -217,20 +259,109 @@ var ShareRx = (function () {
     }
 
     /* ---------------- on / off ---------------- */
+    /* ---------------- over the internet (Firestore) ---------------- */
+    function newCode() { var s = '', b = new Uint8Array(10); try { crypto.getRandomValues(b); } catch (e) { for (var j = 0; j < 10; j++) b[j] = Math.floor(Math.random() * 256); } for (var i = 0; i < 10; i++) s += ABC[b[i] % 32]; return s; }
+    function code() {
+        var c = Store.rawGet(CODE);
+        if (typeof c !== 'string' || !/^[2-9A-HJ-NP-Z]{10}$/.test(c)) { c = newCode(); Store.rawSet(CODE, c); }
+        return c;
+    }
+    function renewCode() {
+        var old = code();
+        Store.rawSet(CODE, newCode());
+        if (on && mode === 'cloud') { Cloud.remove('share/' + old, 5000, function () {}); net.presAt = 0; net.seen = {}; netFast(); }
+        emit();
+    }
+    function presence(open) {
+        net.presAt = Date.now();
+        Cloud.patch('share/' + code(), { name: tvName().slice(0, 60), at: Cloud.now(), open: !!open }, null, 6000, function () {});
+    }
+    function netDelay() {
+        var now = Date.now();
+        if (now < net.fastTo) return 3000;
+        if (watching) return 8000;
+        return now - net.quietAt > 600000 ? 60000 : 30000;
+    }
+    function netNext(ms) { clearTimeout(net.t); if (on && mode === 'cloud') net.t = setTimeout(netPoll, ms === undefined ? netDelay() : ms); }
+    function netFast() { net.fastTo = Date.now() + 60000; net.quietAt = Date.now(); netNext(0); }
+    function netPoll() {
+        if (!on || mode !== 'cloud' || net.busy) return;
+        if (typeof document !== 'undefined' && document.hidden) return netNext(30000);       // nothing asked while My PC is hidden
+        if (!net.presAt || Date.now() - net.presAt > 300000) presence(true);
+        net.busy = true;
+        var c = code();
+        Cloud.query('share/' + c, { from: [{ collectionId: 'items' }], limit: 10 }, 8000, function (e, docs) {
+            net.busy = false;
+            if (!on || mode !== 'cloud' || c !== code()) return netNext();
+            var was = net.ok;
+            net.ok = !e; net.err = e ? String(e) : '';
+            if (was !== net.ok) { tray(); emit(); }
+            // Automatic: Firestore stopped answering, maybe the internet is gone: NetMode looks again (at most every 2 min)
+            if (e && viaPref() === 'auto' && typeof NetMode !== 'undefined' && Date.now() - (net.chkAt || 0) > 120000) { net.chkAt = Date.now(); NetMode.check(true); }
+            var got = false;
+            for (var i = 0; !e && docs && i < docs.length; i++) {
+                var d = docs[i], id = d.id;
+                if (!ITEM_ID.test(id) || net.seen[id]) continue;
+                net.seen[id] = 1; got = true;
+                takeNet(c, id, d.data || {});
+            }
+            if (got) { net.fastTo = Date.now() + 60000; net.quietAt = Date.now(); }
+            netNext();
+        });
+    }
+    function takeNet(c, id, d) {
+        var from = String(d.from || 'Android').slice(0, 60), path = 'share/' + c + '/items/' + id;
+        var src = { name: from, cloud: true, url: function () { return String(d.u || ''); }, ack: function (x, fail) {
+            // taken = deleted; could not open = marked `no` (the phone reads it, says so and deletes it)
+            if (fail) Cloud.patchMask(path, { no: true }, ['no'], { exists: true }, 6000, function (e) { if (e) Cloud.remove(path, 6000, function () {}); });
+            else Cloud.remove(path, 6000, function () {});
+        } };
+        var k = d.k === 'text' ? 'text' : 'file';
+        var it = { id: id, kind: k, text: k === 'text' ? String(d.text || '') : '', mime: String(d.mime || (k === 'text' ? 'text/plain' : '')), name: String(d.n || ''), size: +d.size || 0, subject: k === 'text' ? String(d.n || '') : '', data: d.data || '' };
+        if (k === 'file' && !it.data && !/^http:\/\//.test(src.url())) { src.ack(); return; }
+        take(src, it);
+    }
+    function netStart() { net.ok = false; net.err = ''; net.seen = {}; net.presAt = 0; net.quietAt = Date.now(); net.fastTo = watching ? Date.now() + 60000 : 0; netNext(0); }
+    function netStop() { clearTimeout(net.t); if (net.presAt) presence(false); net.presAt = 0; net.ok = false; }
+    function lanStop() {
+        clearTimeout(scanT);
+        if (scanner) { scanner.stop(); scanner = null; }
+        for (var id in phones) { var p = phones[id]; if (p.req) { try { p.req.abort(); } catch (e2) {} } clearTimeout(p.t); }
+        phones = {};
+    }
+
+    /* ---------------- which way ---------------- */
+    function viaPref() { var v = Store.rawGet(VIA); return v === 'lan' || v === 'cloud' ? v : 'auto'; }
+    function viaNow() {
+        var p = viaPref();
+        if (p !== 'auto') return p;
+        return typeof NetMode !== 'undefined' && NetMode.mode() === 'online' ? 'cloud' : 'lan';
+    }
+    function apply() {
+        var m = on ? viaNow() : null;
+        if (m === mode) return;
+        if (mode === 'cloud') netStop();
+        if (mode === 'lan') lanStop();
+        mode = m;
+        if (mode === 'cloud') netStart();
+        if (mode === 'lan') scan();
+        tray(); emit();
+    }
+    function setVia(v) { Store.rawSet(VIA, v === 'lan' || v === 'cloud' ? v : 'auto'); apply(); emit(); }
+    if (typeof NetMode !== 'undefined') NetMode.onChange(function () { if (on && viaPref() === 'auto') apply(); else emit(); });
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', function () { if (!document.hidden && on && mode === 'cloud') netNext(500); });
+
     function start() {
         if (on) return;
         on = true;
         try { sessionStorage.setItem('rx_on', '1'); } catch (e) {}
         tray(); emit();
-        scan();
+        apply();
     }
     function stop() {
         on = false;
         try { sessionStorage.removeItem('rx_on'); } catch (e) {}
-        clearTimeout(scanT);
-        if (scanner) { scanner.stop(); scanner = null; }
-        for (var id in phones) { var p = phones[id]; if (p.req) { try { p.req.abort(); } catch (e2) {} } clearTimeout(p.t); }
-        phones = {};
+        apply();
         tray(); emit();
     }
     // the desktop page of the same session: it was on before a game / app opened
@@ -239,7 +370,7 @@ var ShareRx = (function () {
     function state() {
         var l = [];
         for (var id in phones) l.push({ id: id, name: phones[id].name, ip: phones[id].ip });
-        return { on: on, ip: ip, noNet: noNet, scanning: !!scanner, progress: progress, phones: l };
+        return { on: on, ip: ip, noNet: noNet, scanning: !!scanner, progress: progress, phones: l, via: viaPref(), mode: mode || viaNow(), code: code(), netOk: net.ok, netErr: net.err, online: typeof NetMode === 'undefined' || NetMode.mode() === 'online' };
     }
 
     // a song sent from a phone: MyMusic plays it straight from the phone (Range), its tags read in pieces the same way
@@ -257,8 +388,13 @@ var ShareRx = (function () {
     });
 
     return {
-        start: start, stop: stop, resume: resume, on: function () { return on; }, state: state, scan: function () { if (on) scan(); },
-        watch: function (v) { watching = Math.max(0, watching + (v ? 1 : -1)); if (v && on && !scanner && !Object.keys(phones).length) scan(); },
+        start: start, stop: stop, resume: resume, on: function () { return on; }, state: state, scan: function () { if (on && mode === 'cloud') netFast(); else if (on) scan(); },
+        watch: function (v) {
+            watching = Math.max(0, watching + (v ? 1 : -1));
+            if (v && on && mode === 'lan' && !scanner && !Object.keys(phones).length) scan();
+            if (v && on && mode === 'cloud') netFast();
+        },
+        setVia: setVia, via: viaPref, code: code, renewCode: renewCode, link: function () { return 'https://pc.geekspro.us/?sendto=' + code(); },
         onChange: function (fn) { listeners.push(fn); }, offChange: function (fn) { var i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); },
         addPhone: addPhone, history: history, open: open, kindOf: kindOf, label: label, linkIn: linkIn, tvId: tvId, tvName: tvName
     };

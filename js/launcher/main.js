@@ -437,7 +437,12 @@ var App = (function () {
             }
             ShareRx.resume();                                    // Receiver was on before a game / app page in this session
             // a share from Android's share menu (the My PC app): its Send to TV screen
-            if (window.ShareOut && (param('share') === '1' || ShareOut.pending())) {
+            // a TV's Receiver QR code (or link) opened on a phone: Send to TV adds that TV for sending over the internet
+            var sendto = param('sendto');
+            if (sendto && /^[2-9A-HJ-NP-Z]{10}$/i.test(sendto)) {
+                try { history.replaceState(null, '', page('')); } catch (e3) {}
+                setTimeout(function () { Win.open('sendtv', { add: sendto }); }, 300);
+            } else if (window.ShareOut && (param('share') === '1' || ShareOut.pending())) {
                 try { history.replaceState(null, '', page('')); } catch (e2) {}
                 setTimeout(function () { Win.open('sendtv'); }, 300);
             }

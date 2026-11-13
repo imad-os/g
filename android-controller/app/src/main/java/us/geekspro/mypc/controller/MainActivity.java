@@ -296,7 +296,9 @@ public final class MainActivity extends Activity {
 
     /** a scanned code or a pairing link: the page connects with it (GamepadApp.scanCode answers '' when it is not one) */
     private void pair(String text) {
-        web.evaluateJavascript("window.GamepadApp?GamepadApp.scanCode(" + JSONObject.quote(text) + "):null", v -> {
+        String q = JSONObject.quote(text);
+        // a TV's Receiver QR code (Send to TV over the internet) first, else a phone controller pairing code
+        web.evaluateJavascript("(window.ShareOut&&ShareOut.scanCode&&ShareOut.scanCode(" + q + "))||(window.GamepadApp?GamepadApp.scanCode(" + q + "):null)", v -> {
             if ("null".equals(v)) web.loadUrl(pairUrl(text));    // the controller is not open (page still loading): open it with the code
             else if ("\"\"".equals(v)) Toast.makeText(this, R.string.scan_bad, Toast.LENGTH_SHORT).show();
         });

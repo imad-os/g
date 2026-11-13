@@ -241,3 +241,18 @@ copy once per approved version (then keep it on the device) and run it in a sand
    `widgets` in the `apps` documents. Until then, adding an app with widgets is refused ("Firebase refused it").
 2. No index, no TTL. Cost: one read per TV per approved widget version; the built-in Weather widget uses Open-Meteo and
    GeoJS (free, no key), never Firestore.
+
+## 4e. Share to the TV over the internet (`share`): rules and TTL (once)
+The TV's Receiver can listen over the internet (Listen on: Automatic / This Wi-Fi / Internet). A phone writes
+`share/<TV code>/items/<id>` (a text, a link, or a photo shrunk on the phone to fit one document); the TV reads and deletes it.
+`share/<TV code>` (`name, at, open`) tells phones the TV listens. No sign-in: the TV's 10 character code is the key.
+
+1. Publish `firebase/firestore.rules` again (step 1): it adds `share` and `share/{tv}/items`.
+2. TTL: nothing new if the push notification policy of 4c exists (collection group `items`, field `exp`): it also removes
+   shares a TV never took (after a day). Otherwise create it as in 4c.
+3. Recommended: Firestore → Indexes → **Single field** → exemption for collection group `items`, fields `data` and `text`,
+   indexing off (a photo is a long text; nobody searches it). Not needed for it to work.
+
+Cost: a listening TV lists its items every 3 s for the minute after its Receiver opens or something arrives, every 8 s while
+the Receiver window stays open, every 30 s (60 s after 10 quiet minutes) when closed, never while My PC is hidden; it writes
+`share/<code>` every 5 minutes. A phone's Send to TV screen reads its TVs once every 15 s while shown.

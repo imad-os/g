@@ -418,6 +418,14 @@
   AVPlay through `AppVideo.attach` straight from the phone's URL; `<video>` without AVPlay; profile key `videos`), song -> **MyMusic** (MusicSrc
   source `lan`). History per profile `rx_hist`. Strings `js/core/i18n-share.js` (keep `rxPrivacy` true). Tests: `MYPC_ONLY=share` (fake phone
   `tests/lan-phone-mock.mjs` on 127.0.0.23, same protocol as LanServer).
+  **Over the internet too (owner request 2026-11-13 (2), build 179, APK MyPCNative 7)**: Receiver's "Listen on" Automatic (default: internet
+  while `NetMode` says online, this Wi-Fi in offline / home-network-only) / This Wi-Fi / Internet (`arc_dev_rx_via`). The TV has a random
+  10 character code (`arc_dev_rx_code`, QR of `https://pc.geekspro.us/?sendto=<code>`, New code); a phone adds it (typed, the app's QR scanner ->
+  `ShareOut.scanCode`, or the link -> `?sendto=`, kept in `arc_dev_st_net`) and writes Firestore `share/<code>/items/<id>` (rules `validShare`,
+  TTL = the `items` policy of SETUP 4c): text / link, a photo shrunk on the phone (base64 JPEG <= 700 000 chars; the app reads it from its own
+  server at 127.0.0.1), a bigger file = only the phone's address `u` (the TV says "needs the same Wi-Fi" when it can not reach it; Firebase has
+  no free file storage). The TV lists (limit 10; 3 s for a minute after activity, 8 s window open, 30 / 60 s closed, never hidden), opens and
+  deletes (taken) or marks `no` (failed); `share/<code>` { name, at, open } every 5 min. A phone browser without the app sends texts, links, photos.
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /
   start failures and timeouts from `game-host.js` (with why: no SDK answer, no `ready()`, given up), uncaught errors of built-in games, the
   SDK's reports (uncaught, rejections, failed files, handler throws, `MyPC.fail`, `MyPC.report`; sent even before `MyPC.init`), and My PC's
