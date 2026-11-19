@@ -1341,7 +1341,10 @@ importScripts('https://imad-os.github.io/g/sdk/drive-sw.js');
 `url` is an address of your own site that the worker answers piece by piece (2 MB Range pieces read through My PC), so
 playback starts at once and seeking works. Pass the file object (not only its id) so its size and type are known. Without
 the worker (or where service workers are not available) `mode` is `'blob'`: the whole file is downloaded first
-(`onProgress`), then played from a `blob:` address. Images: `download()` then `URL.createObjectURL(new Blob([buf]))`.
+(`onProgress`), then played from a `blob:` address. **The TV's own player (`MyPC.video`, section 21) cannot play a Drive file**: it cannot
+send Google's sign-in. Play Drive videos in your own `<video>` with `stream()` (the TV's browser decodes MP4 / WebM well; for
+formats it cannot play, offer a copy to a USB drive with `MyPC.copy`, section 20, which the TV's player then reads). Example:
+Speedy IPTV (imad-os/g_iptv, `js/drive.js`). Images: `download()` then `URL.createObjectURL(new Blob([buf]))`.
 
 **Errors** (`err.code`): `noconfig` (no Google client set up for My PC: tell the user an App Store manager must add it),
 `signed-out` / `reauth` (call `signIn()`), `denied` (the user said no: stop asking during this run), `not-found`,
@@ -1353,7 +1356,7 @@ argument), `network`, `timeout`, `cancelled` (aborted, or the user closed the si
 uses the Google client of every My PC (or `app_config.google.tvClientId` / `tvClientSecret` if your test config has them),
 shows a plain sign-in box, and keeps the account in this browser's `localStorage` (`mypc_drive`); use a test account.
 
-**Controls in your Drive screens**: A B X Y and **+** as everywhere (B = OK / open, A = back, X / Y = your own actions such as
+**Controls in your Drive screens**: A B X Y and **+** as everywhere (A = OK / open, B = back, X / Y = your own actions such as
 Rename or Delete, + = your menu); everything also reachable with the remote's arrows + OK.
 
 Protocol (for reference): app -> My PC `drive { rid, op, args }` (`op`: status signIn addFiles list get mkdir rename move
