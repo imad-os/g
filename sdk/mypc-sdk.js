@@ -30,6 +30,8 @@
  * The TV's own video player (MyPC.video), the remote's Back for the app's own screens (MyPC.back), CH + / CH - and the
  *   media keys (MyPC.init({ keys: ['channel', 'media'] })), My PC's on-screen keyboard (MyPC.text.keyboard) (API 17).
  * Which controller each pad is (brand, model, layout) and the name printed on each of its buttons: MyPC.gamepad.label(i, dev) (API 20).
+ * The copy My PC saved on a USB drive for when the internet fails (MyPC.offline true): fetch() of the app's own files is served
+ *   from the drive and localStorage is kept in memory (API 23). Use fetch (not XMLHttpRequest) for your files.
  *   'menu' = gamepad Start or Select pressed alone; only sent to apps that init with { ownMenu: true }.
  *   Only the TV remote's Back, or holding Start + Select together 1 s, opens My PC's menu; Esc / Backspace are 'cancel'.
  * Written in ES5 so it loads anywhere; My PC itself supports Samsung TVs from 2024 (Tizen 8+).
@@ -37,12 +39,66 @@
 var MyPC = (function () {
     'use strict';
 
-    var VERSION = 1, API = 22, HELLO_WAIT = 1200;
+    var VERSION = 1, API = 23, HELLO_WAIT = 1200;
     var handlers = {}, info = null, data = {}, started = false, destroyed = false, isReady = false;
     var hosted = false, hostWin = null, hostOrigin = '*', helloTimer = 0;
     var down = {};                       // action -> number of keys / buttons holding it
     var menuItems = [];
     var standalonePaused = false, uiBlock = false, ownBack = false;
+
+    /* ---------------- the copy saved on a USB drive (API 23) ----------------
+     * My PC saves installed apps on a plugged USB drive and opens that copy ONLY when the internet does not work, as
+     * file://<drive>/MyPC/apps/<id>/<version>/<entry>?mypc_usb=<levels of the entry + 1>, in a frame with no origin of its own
+     * (on the TV every file:// page could otherwise share My PC's storage). Here, as soon as this file runs (include it first):
+     *  - fetch() of the app's own files: read from the drive (the page itself if the TV allows it, else through My PC);
+     *  - localStorage / sessionStorage refused to a page with no origin: a memory copy (keep saves in MyPC.save). */
+    var usbCopy = typeof location !== 'undefined' && /[?&]mypc_usb=\d/.test(location.search), usbReqs = {}, usbRid = 0;
+    var MIME = { js: 'text/javascript', mjs: 'text/javascript', json: 'application/json', css: 'text/css', html: 'text/html', htm: 'text/html', txt: 'text/plain', svg: 'image/svg+xml',
+                 png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', m4a: 'audio/mp4',
+                 mp4: 'video/mp4', webm: 'video/webm', wasm: 'application/wasm', glb: 'model/gltf-binary', gltf: 'model/gltf+json', woff2: 'font/woff2', woff: 'font/woff', ttf: 'font/ttf' };
+    function memStorage() {
+        var d = {};
+        return { getItem: function (k) { k = String(k); return Object.prototype.hasOwnProperty.call(d, k) ? d[k] : null; }, setItem: function (k, v) { d[String(k)] = String(v); },
+                 removeItem: function (k) { delete d[String(k)]; }, clear: function () { d = {}; }, key: function (i) { return Object.keys(d)[i] || null; },
+                 get length() { return Object.keys(d).length; } };
+    }
+    function usbShims() {
+        ['localStorage', 'sessionStorage'].forEach(function (n) {
+            try { window[n].getItem('mypc'); } catch (e) { try { Object.defineProperty(window, n, { value: memStorage(), configurable: true }); } catch (x) {} }
+        });
+        var nativeFetch = window.fetch, depth = +(/[?&]mypc_usb=(\d+)/.exec(location.search) || [0, 1])[1];
+        var root = location.href.replace(/[?#].*$/, '').replace(/[^\/]*$/, '');
+        for (var i = 1; i < depth; i++) root = root.replace(/[^\/]*\/$/, '');
+        if (typeof nativeFetch !== 'function' || typeof Promise === 'undefined') return;
+        function viaPage(url) {
+            return new Promise(function (ok, no) {
+                var x = new XMLHttpRequest();
+                try { x.open('GET', url, true); x.responseType = 'arraybuffer'; } catch (e) { return no(e); }
+                x.onload = function () { if ((x.status === 0 || x.status === 200) && x.response && x.response.byteLength) ok({ b: x.response, s: 200 }); else no(new Error('no file')); };
+                x.onerror = function () { no(new Error('no file')); };
+                try { x.send(); } catch (e2) { no(e2); }
+            });
+        }
+        function viaHost(rel) {
+            return new Promise(function (ok, no) {
+                var rid = ++usbRid, t = setTimeout(function () { delete usbReqs[rid]; no(new TypeError('Failed to fetch')); }, 30000);
+                usbReqs[rid] = function (d) { clearTimeout(t); if (d.b) ok({ b: d.b, s: 200 }); else if (d.error === 'missing') ok({ b: null, s: 404 }); else no(new TypeError('Failed to fetch')); };
+                try { (hostWin || window.parent).postMessage({ mypc: VERSION, type: 'usbfile', data: { rid: rid, p: rel } }, '*'); } catch (e) { no(e); }
+            });
+        }
+        window.fetch = function (input, init) {
+            var url = typeof input === 'string' ? input : input && input.url, abs = '', args = arguments;
+            try { abs = new URL(String(url), location.href).href; } catch (e) {}
+            if (!abs || abs.indexOf(root) !== 0 || (init && init.method && !/^(GET|HEAD)$/i.test(init.method))) return nativeFetch.apply(window, args);
+            var rel = abs.slice(root.length).replace(/[?#].*$/, '');
+            try { rel = decodeURIComponent(rel); } catch (e2) {}
+            var ext = (/\.([a-z0-9]+)$/i.exec(rel) || [0, ''])[1].toLowerCase();
+            return viaPage(abs).then(null, function () { return viaHost(rel); }).then(function (r) {
+                return new Response(r.b, { status: r.s, statusText: r.s === 200 ? 'OK' : 'Not Found', headers: { 'Content-Type': MIME[ext] || 'application/octet-stream' } });
+            });
+        };
+    }
+    if (usbCopy) { try { usbShims(); } catch (e) {} }
 
     function call(name) {
         var f = handlers[name];
@@ -238,6 +294,7 @@ var MyPC = (function () {
         var m = e.data;
         if (!m || m.mypc !== VERSION || typeof m.type !== 'string') return;
         if (hosted && e.source !== hostWin) return;
+        if (!hosted && usbCopy && e.source !== window.parent) return;
         var d = m.data || {};
         switch (m.type) {
             case 'init':
@@ -285,6 +342,7 @@ var MyPC = (function () {
             case 'video': video._message(d); break;
             case 'kb': kb._message(d); break;
             case 'bug': bug._message(d); break;
+            case 'usbfile': if (d && usbReqs[d.rid]) { var f = usbReqs[d.rid]; delete usbReqs[d.rid]; f(d); } break;
         }
     }
 
@@ -2302,7 +2360,7 @@ var MyPC = (function () {
 
     var pub = {
         version: VERSION,
-        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy, 17 MyPC.video + MyPC.back + init keys + MyPC.text.keyboard, 18 every button to the app: onInput returning false for 'cancel' = nothing to close (My PC's menu), 19 MyPC.buttons (init keys 'buttons': the remote's buttons by name), 22 MyPC.bug (a bug report with a log and a screenshot) (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy, 17 MyPC.video + MyPC.back + init keys + MyPC.text.keyboard, 18 every button to the app: onInput returning false for 'cancel' = nothing to close (My PC's menu), 19 MyPC.buttons (init keys 'buttons': the remote's buttons by name), 22 MyPC.bug (a bug report with a log and a screenshot), 23 the USB copy for when the internet fails (MyPC.offline, fetch() from the drive) (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,
@@ -2318,6 +2376,8 @@ var MyPC = (function () {
         usb: usb,
         copy: copy,
         video: video,
+        // true in the copy My PC saved on a USB drive, opened because the internet does not work (API 23): hide what needs it
+        offline: usbCopy,
         // MyPC.back(true): the app has a screen of its own to close, the remote's Back comes to it as 'cancel' (API 17).
         // MyPC.back(false) on the app's first screen: Back opens My PC's menu again (Quit). Standalone: Esc is 'cancel' meanwhile.
         back: function (on) { on = !!on; if (on === ownBack) return; ownBack = on; if (hosted) post('back', { on: on }); },

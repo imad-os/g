@@ -293,6 +293,7 @@ var App = (function () {
             Push.start();                              // notifications also arrive during a game (small cards, no focus taken)
             CalRemind.start();                         // the profile's calendar reminders, also over a game
             CopyJobs.init();                           // copies Google Drive <-> USB go on here too (js/core/copy-jobs.js)
+            AppUsb.init({ game: true });               // apps saved on a USB drive for when the internet fails (js/core/app-usb.js), slower here
             Music.init({ resume: true, lite: true });  // the music goes on under the game (the game menu can pause it)
         };
         if (id.indexOf('app-') === 0) {
@@ -307,8 +308,14 @@ var App = (function () {
             g.remote.prepare = function (done) {
                 Cloud.fetchApp(a.id, function (err, fresh) {
                     if (err === 'notfound') return done(false);
-                    if (!err && fresh) { g.remote.entry = fresh.entry; g.remote.config = fresh.config; g.remote.version = fresh.version || ''; g.remote.touch = fresh.touch; }
-                    done(true);
+                    if (!err && fresh) {
+                        g.remote.entry = fresh.entry; g.remote.config = fresh.config; g.remote.version = fresh.version || ''; g.remote.touch = fresh.touch;
+                        // online: the online version opens, and a plugged USB drive gets (or updates) its copy (js/core/app-usb.js)
+                        AppUsb.want({ id: a.id, name: fresh.name || a.name, url: fresh.url || a.url, entry: fresh.entry, version: fresh.version || '' });
+                        return done(true);
+                    }
+                    // the store did not answer: the copy saved on a USB drive, ONLY if the app's own site does not answer now either
+                    AppUsb.pick({ id: a.id, entry: g.remote.entry }, function (copy) { g.remote.usb = copy; done(true); });
                 });
             };
             return go(g);
@@ -410,6 +417,7 @@ var App = (function () {
             Desktop.show();
             // apps installed from the computer: shown from the cache now, updated when Firebase answers
             if (syncDue('apps')) Cloud.refresh(function (err, list, changed) {
+                if (!err) AppUsb.refresh(list);
                 if (err || !changed) return;
                 var keep = Focus.current();
                 Desktop.setInstalled(list);
@@ -452,6 +460,8 @@ var App = (function () {
             Push.start();                                        // push notifications of a signed-in player account (js/launcher/push.js)
             CalRemind.start();                                   // the profile's calendar reminders (js/launcher/cal-remind.js)
             CopyJobs.init();                                     // copies Google Drive <-> USB started earlier go on (js/core/copy-jobs.js)
+            AppUsb.init();                                       // installed apps saved on a USB drive: newer versions saved (js/core/app-usb.js)
+            AppUsb.refresh(Cloud.apps());
             World.flush();
             if (syncDue('ai')) Bridges.syncAi();                 // the AI services set in the App Store Manager
             GDrive.syncSoon();                                   // the Google client of every My PC (settings/google), twice a day at most

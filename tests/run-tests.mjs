@@ -398,6 +398,7 @@ async function main() {
     if (process.env.MYPC_ONLY === 'wall') { await wallTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'speedy') { await speedyTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'video') { await videoTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'appusb') { await appUsbTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'copy') { await copyTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'drive') { await driveTests(browser, base); await drivePhoneTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'calendar') { await calendarTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
@@ -4312,6 +4313,7 @@ async function main() {
     await musicTests(browser, base);
     await driveTests(browser, base);
     await copyTests(browser, base);
+    await appUsbTests(browser, base);
     await drivePhoneTests(browser, base);
     await calendarTests(browser, base);
     await clockTests(browser, base);
@@ -7143,6 +7145,183 @@ async function padTests(browser, base) {
     await pc.context().close();
 }
 
+// 54. Installed apps saved on a USB drive for when the internet fails (js/core/app-usb.js, owner request 2026-11-19): the app's folder
+// MyPC/apps/<id> is made first, the copy goes in a folder of its version and is used only once complete; ONLINE ALWAYS WINS (also when
+// only the store is down); no internet = the USB copy, its fetch() served from the drive (SDK API 23); a new version replaces the old
+// copy (unchanged files copied on the drive, not downloaded again). MYPC_ONLY=appusb runs only these; MYPC_SHOTS=<folder> saves screenshots.
+async function appUsbTests(browser, base) {
+    console.log('54. Apps saved on a USB drive: folder first, versioned copy, online always wins, the USB copy only without internet, updates');
+    const D = '/opt/media/USBDriveA1', APP = 'https://tester.github.io/quest/', USBW = 'https://usb-files.test';
+    const big = Buffer.alloc(5 * 1024 * 1024 + 3); for (let i = 0; i < big.length; i++) big[i] = (i * 13 + 5) & 255;
+    const sha = (b) => crypto.createHash('sha1').update(b).digest('hex');
+    const gameJs = (v) => `window.__ver = '${v}';
+MyPC.init({ onInit() {
+    Promise.all([fetch('data/level.json?v=1').then((r) => r.json()), fetch('data/big.bin').then((r) => r.arrayBuffer()), fetch('data/none.json').then((r) => r.status)]).then(([l, b, s404]) => {
+        localStorage.setItem('k', 'v');
+        document.getElementById('d').textContent = 'Level ' + l.name + ' · ' + b.byteLength + ' bytes · ' + (MyPC.offline ? 'USB copy' : 'online') + ' · v' + window.__ver + ' · ' + s404 + ' · ' + localStorage.getItem('k');
+        window.__ok = 1; MyPC.ready();
+    }).catch((e) => { document.getElementById('d').textContent = 'ERR ' + e; MyPC.ready(); });
+} });`;
+    const files = {
+        'index.html': `<!doctype html><meta charset=utf-8><title>Quest</title><body style="margin:0;background:#174;color:#fff;font:44px sans-serif;padding:60px">
+<script src="https://imad-os.github.io/g/sdk/mypc-sdk.js"></script><p>Quest (test app)</p><p id=d>...</p><script src="game.js?v=1"></script>`,
+        'game.js': gameJs('1.0.0'),
+        'data/level.json': JSON.stringify({ name: 'Forest' }),
+        'data/big.bin': big,
+        'icon.svg': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#2a6"/></svg>',
+        'mypc-app.json': JSON.stringify({ mypc: 1, id: 'quest', name: 'Quest', type: 'game', entry: 'index.html', icon: 'icon.svg', version: '1.0.0' }),
+        'tests/run.mjs': 'never saved', 'README.md': '# never saved', '.nojekyll': ''
+    };
+    let treeSha = 'aaaaaaa1111', siteDown = false;
+    const siteGets = [];
+    const db = { apps: { quest: { id: 'quest', name: 'Quest', url: APP, entry: APP + 'index.html', icon: APP + 'icon.svg', type: 'game', version: '1.0.0', enabled: true, order: 1, config: {} } } };
+    const page = await newPage(browser, base, db);
+    const ctx = page.context();
+    let usbSeed = {};
+    await ctx.route('https://usb-seed.test/seed', (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(usbSeed) }));
+    const snapshot = async () => { const d = await page.evaluate(() => window.__usb ? window.__usb.dump() : null); if (d) usbSeed = d; };
+    await ctx.addInitScript(USB_MOCK, D);
+    // file:// on the TV; here the drive's files are served by the test at https://usb-files.test<path> (no CORS headers, like file://
+    // for a page with no origin: the app's fetch() must come through My PC)
+    await ctx.addInitScript((W) => {
+        if (window.top !== window || !window.tizen || !window.tizen.filesystem) return;
+        const fsys = window.tizen.filesystem, mk = fsys.createDirectory;
+        fsys.toURI = (p) => W + encodeURI(p);
+        fsys.createDirectory = (p, ...a) => { (window.__mk = window.__mk || []).push(p); return mk(p, ...a); };
+    }, USBW);
+    const usbGets = [];
+    await ctx.route(USBW + '/**', async (r) => {
+        const p = decodeURI(new URL(r.request().url()).pathname);
+        usbGets.push(p);
+        const b64 = await page.evaluate((p) => { const v = window.__usb.tree[p]; if (!v || v === true) return null; let s = ''; for (let i = 0; i < v.length; i += 32768) s += String.fromCharCode.apply(null, v.subarray(i, i + 32768)); return btoa(s); }, p).catch(() => null);
+        if (b64 === null) return r.fulfill({ status: 404, body: '' });
+        r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || 'application/octet-stream', body: Buffer.from(b64, 'base64') });
+    });
+    await page.addInitScript((a) => { if (!localStorage.getItem('arc_dev_installed')) { localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'quest', at: 1 }])); localStorage.setItem('arc_dev_catalog', JSON.stringify([a])); } }, db.apps.quest);
+    await routeHosted(page, { offline: true });
+    await page.route(OLD_HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(ROOT, 'sdk', 'mypc-sdk.js')) }));
+    // the app's site on GitHub Pages (Range answered with 206) and its repository's file list on api.github.com
+    await ctx.route(APP + '**', (r) => {
+        const u = new URL(r.request().url()), rel = decodeURIComponent(u.pathname.slice('/quest/'.length)) || 'index.html', range = r.request().headers().range || '';
+        siteGets.push(rel + (range ? ' ' + range : '') + (u.searchParams.has('mypc_probe') ? ' probe' : ''));
+        if (siteDown) return r.abort('internetdisconnected');
+        const f = files[rel];
+        if (f === undefined) return r.fulfill({ status: 404, headers: { 'Access-Control-Allow-Origin': '*' }, body: '' });
+        const buf = Buffer.isBuffer(f) ? f : Buffer.from(f);
+        const h = { 'Access-Control-Allow-Origin': '*', 'Content-Type': TYPES[path.extname(rel)] || 'application/octet-stream' };
+        const m = /bytes=(\d+)-(\d+)/.exec(range);
+        if (m) { const a = +m[1], b = Math.min(+m[2], buf.length - 1); return r.fulfill({ status: 206, headers: Object.assign(h, { 'Content-Range': `bytes ${a}-${b}/${buf.length}` }), body: buf.subarray(a, b + 1) }); }
+        r.fulfill({ status: 200, headers: h, body: buf });
+    });
+    const treeAsks = [];
+    await ctx.route('https://api.github.com/repos/**', (r) => {
+        treeAsks.push(r.request().url());
+        if (siteDown) return r.abort('internetdisconnected');
+        const tree = Object.keys(files).map((p) => ({ path: p, type: 'blob', size: (Buffer.isBuffer(files[p]) ? files[p] : Buffer.from(files[p])).length, sha: sha(files[p]) }));
+        r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ sha: treeSha, tree, truncated: false }) });
+    });
+    const shot = async (name) => { if (process.env.MYPC_SHOTS) { await page.waitForTimeout(250); await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'appusb-' + name + '.png') }); } };
+    const appFrame = () => page.frames().find((f) => /tester\.github\.io|usb-files\.test/.test(f.url()));
+    const open = async () => {
+        await snapshot();
+        await page.goto(base + 'index.html?play=app-quest');
+        await page.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 30000 }).catch(() => {});
+        const f = appFrame();
+        const txt = f ? await f.evaluate(() => document.getElementById('d').textContent).catch(() => '') : '';
+        return { url: f ? f.url() : '', txt, state: await page.evaluate(() => GameHost.state()), toast: await page.evaluate(() => document.getElementById('toast').textContent) };
+    };
+    const waitSaved = (v) => page.waitForFunction((v) => { const a = AppUsb._state().st.apps.quest; return a && a.state === 'saved' && a.sv === v; }, v, { timeout: 90000 }).catch(() => {});
+
+    // --- online, a USB drive plugged in: the online version opens, the app is remembered, then saved (folder made first)
+    let o = await open();
+    check(o.state === 'running' && o.url.indexOf(APP + 'index.html?mypc_v=1.0.0') === 0 && /online · v1\.0\.0/.test(o.txt), 'online: the app opens from its site ' + JSON.stringify([o.url, o.txt]));
+    const q = await page.evaluate(() => AppUsb._state().st.apps.quest);
+    check(q && q.q === 1 && q.v === '1.0.0' && q.url === 'https://tester.github.io/quest/', 'the opened app is remembered to be saved on the USB drive ' + JSON.stringify(q));
+    await page.evaluate(() => AppUsb.now());
+    await waitSaved('1.0.0');
+    const u1 = await page.evaluate((D) => {
+        const t = window.__usb.tree, A = D + '/MyPC/apps/quest', saved = JSON.parse(window.__usb.text(A + '/saved.json') || '{}'), dir = A + '/' + saved.key;
+        return { mk0: (window.__mk || [])[0], saved, dirs: Object.keys(t).filter((k) => k.indexOf(A + '/') === 0 && t[k] === true && k.split('/').length === 8),
+                 files: Object.keys(t).filter((k) => k.indexOf(dir + '/') === 0 && t[k] !== true).map((k) => k.slice(dir.length + 1)).sort(),
+                 html: window.__usb.text(dir + '/index.html'), big: window.__usb.sum(dir + '/data/big.bin'), sdk: (window.__usb.text(dir + '/__mypc/mypc-sdk.js') || '').length };
+    }, D);
+    const bigGets = siteGets.filter((g) => /^data\/big\.bin bytes=/.test(g));
+    check(u1.mk0 === D + '/MyPC/apps/quest', 'the app\'s folder MyPC/apps/quest is made first ' + u1.mk0);
+    check(u1.saved.v === '1.0.0' && /^v1\.0\.0-aaaaaaa$/.test(u1.saved.key) && u1.saved.entry === 'index.html' && u1.dirs.length === 1,
+        'saved.json points at the copy in its own version folder ' + JSON.stringify([u1.saved.key, u1.saved.v, u1.dirs]));
+    check(JSON.stringify(u1.files) === JSON.stringify(['__mypc/mypc-sdk.js', 'data/big.bin', 'data/level.json', 'game.js', 'icon.svg', 'index.html', 'mypc-app.json']),
+        'every file of the app is on the drive; tests/, README.md and dot files are not ' + JSON.stringify(u1.files));
+    check(u1.big === (() => { let h = 0; for (let i = 0; i < big.length; i++) h = (h * 31 + big[i]) >>> 0; return big.length + ':' + h; })() && bigGets.length === 6 && bigGets[0] === 'data/big.bin bytes=0-1048575',
+        'the 5 MB file is byte for byte, downloaded in 1 MB Range pieces on the game page ' + JSON.stringify(bigGets.slice(0, 2)));
+    check(/src="__mypc\/mypc-sdk\.js"/.test(u1.html) && !/imad-os\.github\.io/.test(u1.html) && u1.sdk > 50000, 'the saved page loads the SDK saved next to it (no internet needed) ' + (u1.html || '').slice(0, 200));
+    await shot('1-online-saved');
+
+    // --- online again: the ONLINE version opens, never the saved copy
+    usbGets.length = 0;
+    o = await open();
+    check(o.url.indexOf(APP) === 0 && /online/.test(o.txt) && !usbGets.length && !/No internet/.test(o.toast), 'online with a saved copy: the online version opens, the USB copy is not touched ' + JSON.stringify([o.url, usbGets.length]));
+    // --- the store (Firestore) does not answer but the app's site does: still online (a live check of the site decides)
+    db.down = true;
+    o = await open();
+    check(o.url.indexOf(APP) === 0 && /online/.test(o.txt) && !usbGets.length && siteGets.some((g) => / probe$/.test(g)), 'the store does not answer but the app\'s site does: the online version opens ' + JSON.stringify([o.url, o.txt]));
+
+    // --- no internet at all: the copy saved on the USB drive opens, its fetch() served from the drive
+    siteDown = true;
+    const t0 = Date.now();
+    o = await open();
+    const frameInfo = await page.evaluate(() => { const f = document.querySelector('#game-frame-box iframe'); return f ? f.getAttribute('sandbox') : ''; });
+    check(o.state === 'running' && o.url.indexOf(USBW + D + '/MyPC/apps/quest/v1.0.0-aaaaaaa/index.html?mypc_usb=1') === 0, 'no internet: the copy saved on the USB drive opens ' + o.url);
+    check(/^Level Forest · 5242883 bytes · USB copy · v1\.0\.0 · 404 · v$/.test(o.txt), 'the USB copy runs: its fetch() reads the drive (5 MB file, a missing file = 404), MyPC.offline, a memory localStorage: ' + o.txt);
+    check(/No internet: Quest opened from the copy saved on USB A1 \(version 1\.0\.0\)/.test(o.toast) && frameInfo === 'allow-scripts allow-pointer-lock', 'a card says so; the copy has no origin of its own (no allow-same-origin) ' + JSON.stringify([o.toast, frameInfo]));
+    console.log('    (opened from the USB drive ' + (Date.now() - t0) + ' ms after the page change)');
+    await shot('2-offline-usb-copy');
+
+    // --- the store answers but the app's site does not: the USB copy after 6 s (not 20)
+    db.down = false;
+    const t1 = Date.now();
+    o = await open();
+    check(o.url.indexOf(USBW) === 0 && /USB copy/.test(o.txt) && Date.now() - t1 < 16000, 'the store answers, the app\'s site does not: the USB copy opens after the 6 s check ' + (Date.now() - t1) + ' ms');
+
+    // --- a new version: saved in a new folder, the unchanged 5 MB file copied on the drive, the old copy removed only after
+    siteDown = false;
+    files['game.js'] = gameJs('1.1.0'); treeSha = 'bbbbbbb2222';
+    files['mypc-app.json'] = files['mypc-app.json'].replace('1.0.0', '1.1.0');
+    db.apps.quest.version = '1.1.0';
+    siteGets.length = 0;
+    o = await open();
+    check(/online · v1\.1\.0/.test(o.txt), 'online: the new version 1.1.0 opens ' + o.txt);
+    await page.evaluate(() => AppUsb.now());
+    await waitSaved('1.1.0');
+    const u2 = await page.evaluate((D) => {
+        const t = window.__usb.tree, A = D + '/MyPC/apps/quest', saved = JSON.parse(window.__usb.text(A + '/saved.json') || '{}');
+        return { saved, dirs: Object.keys(t).filter((k) => k.indexOf(A + '/') === 0 && t[k] === true && k.split('/').length === 8), js: window.__usb.text(A + '/' + saved.key + '/game.js'), copies: window.__usb.copies || 0 };
+    }, D);
+    check(u2.saved.v === '1.1.0' && u2.saved.key === 'v1.1.0-bbbbbbb' && JSON.stringify(u2.dirs) === JSON.stringify([D + '/MyPC/apps/quest/v1.1.0-bbbbbbb']) && /1\.1\.0/.test(u2.js),
+        'the new version is saved in its own folder, saved.json switched to it, the old folder removed ' + JSON.stringify([u2.saved.key, u2.dirs]));
+    check(!siteGets.some((g) => /^data\/big\.bin bytes/.test(g)) && u2.copies >= 1, 'the unchanged 5 MB file is copied on the drive, not downloaded again ' + JSON.stringify([siteGets.filter((g) => /big/.test(g)), u2.copies]));
+    siteDown = true; db.down = true;
+    o = await open();
+    check(/USB copy · v1\.1\.0/.test(o.txt), 'no internet after the update: the USB copy is version 1.1.0 ' + o.txt);
+
+    // --- Control Panel > System: the switch and what is saved
+    siteDown = false; db.down = false;
+    await snapshot();
+    await page.goto(base + 'index.html');
+    await page.waitForSelector('#desk-icons .dicon');
+    await page.evaluate(() => Win.open('settings', 'system'));
+    await page.waitForTimeout(400);
+    const cp = await page.evaluate(() => document.querySelector('.window').textContent);
+    check(/Save apps on a USB drive/.test(cp) && /Version 1\.1\.0 saved on USB A1/.test(cp), 'Control Panel > System: "Save apps on a USB drive" and "Quest: Version 1.1.0 saved on USB A1" ' + cp.slice(cp.indexOf('Save apps'), cp.indexOf('Save apps') + 160));
+    await page.evaluate(() => { const r = [...document.querySelectorAll('.window [data-focus]')].find((e) => /Save apps on a USB/.test(e.textContent)); if (r) { r.scrollIntoView(); Focus.focus(r); } });
+    await shot('3-control-panel');
+    // --- switched off: nothing is remembered or used
+    await page.evaluate(() => AppUsb.setOn(false));
+    siteDown = true; db.down = true;
+    o = await open();
+    check(o.url.indexOf(USBW) !== 0 && o.state !== 'running', 'switched off: the USB copy is never used ' + JSON.stringify([o.url, o.state]));
+    await page.context().close();
+}
+
 // 48. Copies between Google Drive and the USB drives of the TV (js/core/copy-jobs.js, js/core/usb-fs.js, MyPC.usb / MyPC.copy, API 16):
 // both ways, whole folders, 4 MB pieces, Google Docs exported, same files skipped, keep both / replace, going on after a page
 // change (USB file and Google upload), USB removed, not enough space, the app bridge with its permission. MYPC_ONLY=copy runs only these.
@@ -7177,6 +7356,8 @@ const USB_MOCK = (D) => {
         toURI: (p) => 'file://' + encodeURI(p),
         createDirectory: (p, parents, ok, err) => setTimeout(() => { if (!live(p)) return err(fsErr('NotFoundError')); if (p in tree) return err(fsErr('IOError', 'exists')); U.put(p + '/x', 0); delete tree[p + '/x']; ok(p); }, 2),
         deleteFile: (p, ok, err) => setTimeout(() => { if (tree[p] && tree[p] !== true) { delete tree[p]; ok(); } else err(fsErr('NotFoundError')); }, 2),
+        deleteDirectory: (p, rec, ok, err) => setTimeout(() => { if (tree[p] !== true || !live(p)) return err(fsErr('NotFoundError')); Object.keys(tree).forEach((k) => { if (k === p || k.indexOf(p + '/') === 0) delete tree[k]; }); ok(); }, 2),
+        copyFile: (a, b, over, ok, err) => setTimeout(() => { if (!tree[a] || tree[a] === true || !live(a)) return err(fsErr('NotFoundError')); U.put(b, tree[a].slice()); U.copies = (U.copies || 0) + 1; ok(); }, 2),
         openFile: (p, mode) => {
             wait();
             if (!live(p)) throw fsErr('NotFoundError');

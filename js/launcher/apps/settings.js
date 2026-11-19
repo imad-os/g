@@ -75,6 +75,7 @@
                            adjust: function (d) { var l = ['auto', 'lan', 'cloud'], i2 = (l.indexOf(NetMode.pref()) + d + l.length) % l.length; NetMode.setPref(l[i2]); } });
             } else out.push({ kind: 'info', label: t('network'), value: t(navigator.onLine === false ? 'netOffShort' : 'netOnShort') });
             out.push({ kind: 'info', label: t('storage'), value: storageText() });
+            if (window.AppUsb && AppUsb.supported()) appUsbRows(out);
         } else if (id === 'display') {
             displayRows(out);
         } else if (id === 'personal') {
@@ -560,6 +561,30 @@
         AI.start({ prompt: 'Reply with the single word OK.', maxTokens: 20, timeout: 30000 }, p, null, { lan: true }).promise.then(function (r) {
             App.toast(t('aiTestOk').replace('%s', (r.text || '').trim().slice(0, 60) || r.model));
         }, function (e) { App.toast(t('aiTestFail').replace('%s', String(e && e.message || e).slice(0, 140))); });
+    }
+
+    /* ---------- apps saved on a USB drive for when the internet fails (js/core/app-usb.js), TV-wide ---------- */
+    function appUsbText(r) {
+        var st = r.state;
+        if (st === 'saving') return r.total ? t('auSaving').replace('%p', Math.min(99, Math.floor(r.done * 100 / r.total))) : t('auChecking');
+        var saved = r.v ? t('auSaved').replace('%v', r.v).replace('%d', r.drive) : '';
+        if (st === 'saved') return saved;
+        var why = st === 'wait' ? t('auWait_' + r.err) : r.err === 'full' ? t('auErr_full') : r.err === 'off' ? t('auErr_off') : r.err === 'too-big' ? t('auErr_too') : t('auErr');
+        if (/^auWait_/.test(why)) why = t('auErr');
+        return saved ? saved + ' · ' + why : why;
+    }
+    function appUsbRows(out) {
+        admin(out, { kind: 'toggle', label: t('auOn'), desc: t('auOnDesc'), get: function () { return AppUsb.on(); }, set: function (v) { AppUsb.setOn(v); } });
+        if (!AppUsb.on()) return;
+        var l = AppUsb.list();
+        if (!l.length) out.push({ kind: 'text', value: t('auNone') });
+        l.forEach(function (r) {
+            var row = { kind: 'action', label: r.name, desc: appUsbText(r), run: function () {
+                if (!Profiles.isAdmin()) return;
+                App.confirm(t('auRemove'), r.name, function () { AppUsb.remove(r.id, function () { if (Win.current() === 'settings') { var f = renderMain(1); if (f) Focus.focus(f); } }); }, { yes: t('auRemove'), no: t('cancel') });
+            } };
+            out.push(row);
+        });
     }
 
     /* ---------- roles: what only an administrator changes, Other users (js/core/storage.js) ---------- */

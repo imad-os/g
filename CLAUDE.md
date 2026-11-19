@@ -428,6 +428,22 @@
   deletes (taken) or marks `no` (failed); `share/<code>` { name, at, open } every 5 min. A phone browser without the app sends texts, links, photos. Receiver and Send to TV are on every My PC (owner 2026-11-13: "I can send from the PC to the TV too"). **Same player account = no code**
   (owner request 2026-11-13): a signed-in TV's Receiver writes `players/<uid>/tvs/<tv>` { code, name, at } with the account's token; Send to TV
   signed in with the same account lists them by itself ("Your TV", no Remove); the code is only for other users.
+- **Apps saved on a USB drive for when the internet fails (owner request 2026-11-19, build 183, SDK API 23)**: `js/core/app-usb.js` (`AppUsb`) +
+  strings `js/core/i18n-appusb.js`. An installed (store) app opened ONLINE is remembered (`AppUsb.want` in main.js `prepare`, TV-wide `arc_dev_appusb`);
+  with a USB drive plugged in My PC FIRST makes `<drive>/MyPC/apps/<id>/` (owner: "create the app folder first"), downloads the app into
+  `<id>/v<version>-<git tree sha 7>/` and only when every file is there writes `<id>/saved.json` (the switch) and removes the older copy (a
+  half-saved copy is never used). Files = the GitHub tree (api.github.com `git/trees/HEAD?recursive=1`, one call per version / 24 h) minus
+  tests / tools / docs / dot files / .md / .mjs..., or exactly `"offline": [...]` of mypc-app.json (`false` = never; Tangier TAXI lists its folders);
+  4 MB Range pieces (1 MB + 150 ms gaps on the game page), unchanged files (same sha) copied on the drive (`tizen.filesystem.copyFile`);
+  pages get the SDK `<script>` pointed at `__mypc/mypc-sdk.js` (saved from My PC's own base) and CDN scripts / styles saved to `__mypc/ext*`.
+  Desktop start (`AppUsb.refresh(Cloud.apps())`) updates saved apps with a newer store version. **ONLINE ALWAYS WINS (owner rule)**: the copy
+  opens only when `Cloud.fetchApp` failed AND a live no-cors request to the app's own entry failed just now (`AppUsb.pick`), or the online page
+  gave no SDK hello in 6 s / timed out and the same check fails (`game-host.js`); never from NetMode's cached mode alone. It opens as
+  `file://.../<key>/<entry>?mypc_usb=<depth+1>` in a frame WITHOUT allow-same-origin (on the TV every file:// page could share My PC's
+  storage); postMessage '*' / origin 'null'; the SDK (API 23, `MyPC.offline`) serves the app's own `fetch()` (page XHR first, else the shell's
+  `usbfile` message -> `AppUsb.readFile`) and a memory localStorage. Notify card `appusb`. Control Panel > System: switch (admin,
+  `arc_dev_appusb_on`, on by default) + one row per app (OK = remove). Tests: `MYPC_ONLY=appusb` (section 54; the fake drive is served at
+  https://usb-files.test). Not proven on a real TV yet: file:// frames, `deleteDirectory` / `copyFile` on Tizen 9. GUIDE.md section 22.
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /
   start failures and timeouts from `game-host.js` (with why: no SDK answer, no `ready()`, given up), uncaught errors of built-in games, the
   SDK's reports (uncaught, rejections, failed files, handler throws, `MyPC.fail`, `MyPC.report`; sent even before `MyPC.init`), and My PC's

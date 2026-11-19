@@ -96,6 +96,7 @@ The site **MUST** be served over **https** and must allow other sites to read `m
 | `config` | optional default settings, a JSON object (see "App config" below); 8000 characters at most |
 | `services` | optional push notification services, up to 3: `[{ "id": "goals", "file": "services/notify.js", "every": 5, "title": "Goal alerts" }]` (section 16) |
 | `widgets` | optional desktop widgets, up to 3: `[{ "id": "stars", "title": "Star Catcher", "file": "widgets/stars.js", "size": "medium", "every": 15 }]` (section 18) |
+| `offline` | optional: the paths saved on a USB drive for when the internet fails (`"dist/"` = a folder), or `false` = never saved (section 22) |
 
 ## 4. The SDK API
 
@@ -613,6 +614,7 @@ the World records.
 
 - [ ] `mypc-app.json` valid: `mypc: 1`, `id`, `name`, `type`, `entry`, `icon`
 - [ ] `MyPC.init()` called once; `MyPC.ready()` called once after loading
+- [ ] Own files loaded with `fetch()` and relative paths, classic scripts (no `type="module"`), saves in `MyPC.save`: the USB copy works without internet (section 22)
 - [ ] `onPause` stops the loop and sound; `onResume` restarts them; `onDestroy` stops everything
       and closes the `AudioContext`
 - [ ] **game controller first**: every button, trigger and both sticks used through `MyPC.gamepad`, controls shown on screen, up to 4 pads by `dev`
@@ -1528,3 +1530,28 @@ Your app waits under it (no input). A phone in Text mode types into it too (sect
 Protocol (for reference): app -> My PC `video { rid, op, args }` (`op`: open play pause stop seek rect fit tracks track
 subs speed state), `kb { rid, value, kind, label, placeholder, ok, max }`, `back { on }`, `hello { keys }`; My PC -> app
 `{ rid, result | error }` and `video { rid: 0, ev, ... }`. My PC side: `js/launcher/app-video.js`, `js/launcher/game-host.js`.
+
+## 22. Works without internet: the copy on a USB drive (API level 23, TV only)
+
+When a USB drive is plugged into the TV, My PC saves every App Store app or game the player opens on it
+(`<drive>/MyPC/apps/<id>/`) and saves it again when you publish a new version. **The saved copy opens only when the
+internet does not work** (the store and your own site do not answer right then); online, your site always opens, as before.
+Nothing to do for most apps; follow these rules so the copy works:
+
+- **Which files are saved.** For a site on GitHub Pages, My PC reads the file list of your repository (GitHub's API) and
+  saves everything except `tests/`, `tools/`, `docs/`, `scripts/`, `raw/`, `node_modules/`, dot files, `.md`, `.mjs`,
+  `.sh` / `.ps1` and `package.json`. To choose exactly, list paths in `mypc-app.json` (a path ending with `/` = the whole folder):
+  `"offline": ["index.html", "mypc-app.json", "icon.svg", "dist/", "assets/", "css/"]`. `"offline": false` = never saved.
+  Not on GitHub Pages: only the entry page and the files it links directly. 1 GB and 4000 files at most.
+- **The SDK `<script>` stays as it is** (`https://imad-os.github.io/g/sdk/mypc-sdk.js`): the saved page gets a saved SDK.
+  Scripts and styles from other sites (CDNs) linked by your pages are saved too; anything your code loads from the
+  internet at run time is not.
+- **Load your own files with `fetch()` and relative paths** (`fetch('assets/level1.json')`). The copy is a `file://` page
+  with no origin of its own: the SDK serves `fetch()` of your files from the drive (a missing file answers 404). `XMLHttpRequest`
+  of your own files, ES modules (`<script type="module">`) and service workers may not work there: bundle your code
+  into classic scripts (esbuild `--format=iife`).
+- **`localStorage` is kept in memory only** in the copy: keep saves in `MyPC.save` (they are the same online and offline).
+- **`MyPC.offline`** is `true` in the copy: hide what needs the internet (online leaderboards, multiplayer rooms, AI) or say
+  it needs the internet. `MyPC.net`, `MyPC.ai` and the others still answer with their usual "network" errors.
+
+The player turns it off in Control Panel > System > Save apps on a USB drive (it also lists what is saved).

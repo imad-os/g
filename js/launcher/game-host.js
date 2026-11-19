@@ -19,7 +19,7 @@ var GameHost = (function () {
 
     var state = 'idle';         // idle | loading | running | paused | error
     function setState(s) { state = s; if (typeof TouchPad !== 'undefined') TouchPad.state(s); }
-    var game = null, base = '', triedBundled = false;
+    var game = null, base = '', triedBundled = false, triedUsb = false;
     var iframe = null, api = null, gameWin = null, loadTimer = 0, onExitCb = null;
     var pauseItems = [], loadSeq = 0;
     var said = { hello: 0, progress: 0, at: 0, sdk: 0 };      // how far the app got (error reports when it does not open)
@@ -168,12 +168,15 @@ var GameHost = (function () {
 
     // GameAPI-shaped proxy that talks to the app's My PC SDK with postMessage
     function remoteApi() {
-        var id = game.id, origin = originOf(game.remote.entry), items = [], win = null, mp = null;
+        // the copy saved on a USB drive (js/core/app-usb.js) is a file:// page with no origin of its own: '*' and 'null' / 'file://'
+        var usb = game.remote.usb || null, origin = originOf(usb ? usb.uri : game.remote.entry), to = usb ? '*' : origin;
+        var id = game.id, items = [], win = null, mp = null;
         function send(type, d, transfer) {
             if (!win) return;
-            try { win.postMessage({ mypc: 1, type: type, data: d === undefined ? null : d }, origin, transfer && transfer.length ? transfer : undefined); }
-            catch (e) { if (transfer && transfer.length) { try { win.postMessage({ mypc: 1, type: type, data: d === undefined ? null : d }, origin); } catch (e2) {} } }
+            try { win.postMessage({ mypc: 1, type: type, data: d === undefined ? null : d }, to, transfer && transfer.length ? transfer : undefined); }
+            catch (e) { if (transfer && transfer.length) { try { win.postMessage({ mypc: 1, type: type, data: d === undefined ? null : d }, to); } catch (e2) {} } }
         }
+        function mine(e) { return e.origin === origin || (!!usb && (e.origin === 'null' || e.origin === 'file://')); }
         // MyPC.net / MyPC.ai / MyPC.mic (js/launcher/bridges.js): web requests, AI services and the microphone, done by My PC
         var storeId = id.replace(/^app-/, '');
         var pushCtx = { appId: storeId, title: title(), hold: hold, release: release };
@@ -223,9 +226,19 @@ var GameHost = (function () {
             var m = e.data, d;
             if (!m || m.mypc !== 1 || typeof m.type !== 'string') return;
             d = m.data || {};
-            if (e.origin === origin && br.handle(m.type, d)) return;
-            if (m.type === 'video') { if (e.origin === origin && typeof d.rid === 'number') vid.handle(d); return; }
-            if (m.type === 'kb') { if (e.origin === origin && typeof d.rid === 'number') keyboard(d); return; }
+            // the USB copy's own files for its fetch() (the SDK asks, API 23); the answer goes straight back to that frame
+            if (m.type === 'usbfile') {
+                if (usb && typeof d.rid === 'number' && typeof AppUsb !== 'undefined') {
+                    var src = e.source, rid = d.rid;
+                    AppUsb.readFile(usb, String(d.p || ''), function (er, buf) {
+                        try { if (er) src.postMessage({ mypc: 1, type: 'usbfile', data: { rid: rid, error: er.code } }, '*'); else src.postMessage({ mypc: 1, type: 'usbfile', data: { rid: rid, b: buf } }, '*', [buf]); } catch (x) {}
+                    });
+                }
+                return;
+            }
+            if (mine(e) && br.handle(m.type, d)) return;
+            if (m.type === 'video') { if (mine(e) && typeof d.rid === 'number') vid.handle(d); return; }
+            if (m.type === 'kb') { if (mine(e) && typeof d.rid === 'number') keyboard(d); return; }
             if (m.type === 'back') { remote.ownBack = !!d.on; remote.backSaid = true; return; }
             if (m.type === 'unhandled') { if (d.action === 'cancel') backUnhandled(); return; }
             switch (m.type) {
@@ -246,7 +259,8 @@ var GameHost = (function () {
                         config: game.remote.config || {},
                         mp: typeof Multiplayer !== 'undefined' && typeof Rooms !== 'undefined' && NetLink.supported() ? 1 : 0,   // MyPC.multiplayer is supported
                         bridges: { net: 1, ai: 1, mic: Mic.supported() || Mic.phone() ? 1 : 0, drive: 1, usb: UsbFs.supported() ? 1 : 0, copy: UsbFs.supported() ? 1 : 0, video: AppVideo.supported() ? 1 : 0, keyboard: 1, back: 1 },     // MyPC.net / ai / mic (API 10), MyPC.drive (API 14), MyPC.usb / copy (API 16, TV only) go through My PC
-                        notify: 1, launch: Push.takeLaunch(id)        // MyPC.notify, MyPC.launch: push notifications (API 12, js/launcher/push.js)
+                        notify: 1, launch: Push.takeLaunch(id),       // MyPC.notify, MyPC.launch: push notifications (API 12, js/launcher/push.js)
+                        usb: usb ? { v: usb.v, at: usb.at } : null    // MyPC.offline (API 23): this is the copy saved on a USB drive
                     });
                     padsSent = ''; sendPrefs(); padsChanged();
                     Input.onPadRaw(rawPad); Input.offDevices(padsChanged); Input.onDevices(padsChanged);
@@ -254,7 +268,7 @@ var GameHost = (function () {
                 case 'ble':
                     // MyPC.bluetooth: the HR Monitor app, or an app the App Store Manager allowed ("heartRate": true in its config)
                     if (typeof d.requestId !== 'number') break;
-                    if (e.origin !== origin || !bleAllowed()) { ble.reject(d.requestId, 'Bluetooth is not allowed for this app.'); break; }
+                    if (!mine(e) || !bleAllowed()) { ble.reject(d.requestId, 'Bluetooth is not allowed for this app.'); break; }
                     if (state !== 'running' && /^(scan|connect|reconnect-last|start-test)$/.test(d.action)) { ble.reject(d.requestId, 'The app is not running. Resume it first.'); break; }
                     ble.handle(String(d.action), d.requestId, { deviceId: d.deviceId, seconds: d.seconds });
                     break;
@@ -286,22 +300,22 @@ var GameHost = (function () {
                     break;
                 case 'notify':
                     // MyPC.notify.request() / status(): { rid, op } -> { rid, result: 'granted' | 'denied' | 'default' | 'no-account' }
-                    if (e.origin !== origin || typeof d.rid !== 'number') break;
+                    if (!mine(e) || typeof d.rid !== 'number') break;
                     if (d.op === 'request') Push.ask(pushCtx, function (s) { send('notify', { rid: d.rid, result: s }); });
                     else send('notify', { rid: d.rid, result: Push.state(storeId) });
                     break;
                 case 'field':                                                  // { on, id, kind, label, v, max } (API 13)
-                    if (e.origin !== origin || typeof TextIn === 'undefined') break;
+                    if (!mine(e) || typeof TextIn === 'undefined') break;
                     TextIn.app(d.on ? d : null, textSend);
                     break;
                 case 'failed': fail('app: ' + d.reason); break;
                 case 'err':                                                    // MyPC.report and the app's uncaught errors (sent by the SDK, even before MyPC.init)
-                    if (e.origin !== origin) break;
+                    if (!mine(e)) break;
                     if (!said.sdk && +d.sdk) said.sdk = +d.sdk;
                     report({ kind: String(d.kind || 'error'), msg: String(d.msg || ''), stack: String(d.stack || ''), src: String(d.src || ''), n: +d.n || 1 });
                     break;
                 case 'bug':                                                    // MyPC.bug(note, data, image): what the player saw, for the app's developer (js/core/bugs.js)
-                    if (e.origin !== origin || typeof d.rid !== 'number' || typeof Bugs === 'undefined') break;
+                    if (!mine(e) || typeof d.rid !== 'number' || typeof Bugs === 'undefined') break;
                     Bugs.send(game.id, { note: d.note, data: d.data, img: d.img, appv: appVersion() }, function (err, bid) { send('bug', { rid: d.rid, error: err || undefined, result: bid || null }); });
                     break;
                 case 'menu':
@@ -353,7 +367,7 @@ var GameHost = (function () {
 
     function loadRemote(token) {
         // optional: the launcher refreshes the app's document first (its config) behind the loading screen
-        if (game.remote.prepare) {
+        if (game.remote.prepare && !game.remote.usb) {
             return game.remote.prepare(function (ok) {
                 if (state !== 'loading' || token !== loadSeq) return;       // cancelled or superseded
                 if (ok === false) return exit();                            // uninstalled meanwhile
@@ -370,16 +384,38 @@ var GameHost = (function () {
         iframe.setAttribute('title', title());
         iframe.setAttribute('aria-hidden', 'true');
         iframe.setAttribute('scrolling', 'no');
-        // its own origin: it cannot touch My PC's page, storage or navigation
-        iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-pointer-lock');
+        // its own origin: it cannot touch My PC's page, storage or navigation. The USB copy is a file:// page: on the TV every file://
+        // page could share My PC's own storage, so it gets no origin at all (the SDK serves its fetch() and a memory localStorage)
+        var usb = game.remote.usb;
+        iframe.setAttribute('sandbox', usb ? 'allow-scripts allow-pointer-lock' : 'allow-scripts allow-same-origin allow-pointer-lock');
         iframe.setAttribute('allow', directOk(game.id) ? 'autoplay; gamepad; fullscreen' : 'autoplay; fullscreen');     // App settings > Read the controllers directly: no = the browser hides them too
         iframe.setAttribute('referrerpolicy', 'no-referrer');
         api = remoteApi();
         // the version in the address: a new version published in the App Store never opens from the TV's cache
         var v = game.remote.version, e = String(game.remote.entry).split('#');
-        iframe.src = v ? e[0] + (e[0].indexOf('?') < 0 ? '?' : '&') + 'mypc_v=' + encodeURIComponent(v) + (e[1] !== undefined ? '#' + e[1] : '') : e.join('#');
+        if (usb) {
+            iframe.src = usb.uri + '?mypc_usb=' + (usb.depth + 1);
+            if (typeof Notify !== 'undefined') Notify.show({ id: 'appusb', kind: 'warn', text: I18n.t('auOpened').replace('%s', title()).replace('%d', usb.drive).replace('%v', usb.v) });
+        } else iframe.src = v ? e[0] + (e[0].indexOf('?') < 0 ? '?' : '&') + 'mypc_v=' + encodeURIComponent(v) + (e[1] !== undefined ? '#' + e[1] : '') : e.join('#');
         $('game-frame-box').appendChild(iframe);
         $('game-layer').focus();
+        // the online page says nothing after 6 s: when the app's own site does not answer either and a copy is saved on a USB
+        // drive, that copy opens now instead of after the 20 s timeout
+        if (!usb && typeof AppUsb !== 'undefined') {
+            var tk = loadSeq, g0 = game;
+            setTimeout(function () {
+                if (tk !== loadSeq || game !== g0 || state !== 'loading' || said.hello || triedUsb) return;
+                AppUsb.pick({ id: game.id.replace(/^app-/, ''), entry: game.remote.entry }, function (copy) {
+                    if (!copy || tk !== loadSeq || game !== g0 || state !== 'loading' || said.hello || triedUsb) return;
+                    triedUsb = true;
+                    report({ kind: 'load', msg: 'no answer from the app\'s site in ' + Math.round((Date.now() - said.at) / 1000) + ' s: opening the copy saved on USB ' + copy.v, stage: 'loading' });
+                    clearTimeout(loadTimer);
+                    teardown();
+                    game.remote.usb = copy;
+                    load();
+                });
+            }, 6000);
+        }
     }
 
     function load() {
@@ -442,9 +478,20 @@ var GameHost = (function () {
         }
         try { console.warn('[GameHost] ' + game.id + ' failed: ' + reason); } catch (e) {}
         var fallback = !triedBundled && game.bundledBase && game.bundledBase !== base;
-        if (!/^start: /.test(reason)) report({ kind: /^app: /.test(reason) ? 'failed' : 'load', msg: loadReason(reason) + (fallback ? ' [hosted copy; trying the built-in one]' : ''), stage: 'loading' });
+        // an installed app whose page never answered: its copy saved on a USB drive, only if its own site does not answer now either
+        var tryUsb = game.remote && !game.remote.usb && !triedUsb && !said.hello && typeof AppUsb !== 'undefined' && /^timeout/.test(reason);
+        if (!/^start: /.test(reason)) report({ kind: /^app: /.test(reason) ? 'failed' : 'load', msg: loadReason(reason) + (fallback ? ' [hosted copy; trying the built-in one]' : '') + (game.remote && game.remote.usb ? ' [copy saved on USB ' + game.remote.usb.v + ']' : ''), stage: 'loading' });
         clearTimeout(loadTimer);
         teardown();
+        if (tryUsb) {
+            triedUsb = true;
+            var token = loadSeq, g0 = game;
+            return AppUsb.pick({ id: game.id.replace(/^app-/, ''), entry: game.remote.entry }, function (copy) {
+                if (game !== g0 || token !== loadSeq || state !== 'loading') return;
+                if (copy) { game.remote.usb = copy; return load(); }
+                showError();
+            });
+        }
         // A hosted game that fails falls back to the bundled copy of the same game, if any.
         if (fallback) {
             triedBundled = true;
@@ -452,6 +499,9 @@ var GameHost = (function () {
             game.manifest = game.bundledManifest || game.manifest;
             return load();
         }
+        showError();
+    }
+    function showError() {
         setState('error');
         hideLoading();
         $('game-error').hidden = false;
@@ -730,6 +780,7 @@ var GameHost = (function () {
         base = g.base;
         if (typeof TouchPad !== 'undefined') TouchPad.begin(g.id, g.remote ? g.remote.touch : g.manifest && g.manifest.touch);
         triedBundled = base === g.bundledBase;
+        triedUsb = false;
         onExitCb = onExit;
         $('game-layer').hidden = false;
         load();
@@ -739,6 +790,7 @@ var GameHost = (function () {
         if (state !== 'error') return;
         $('game-error').hidden = true;
         Focus.pop();
+        if (game.remote) { game.remote.usb = null; triedUsb = false; }     // online first again
         load();
     }
 
