@@ -370,6 +370,9 @@
   profile + Google account; a lease `arc_dev_copy_lease` keeps one tab running it; progress card `Notify` id `copy-<job>` (option `quiet`:
   no sound / Voice Guide per update), none while the job's app listens (`CopyJobs.watch`). Strings `js/core/i18n-copy.js`. Docs: GUIDE.md
   section 20. Tests: `MYPC_ONLY=copy node tests/run-tests.mjs` (fake USB drive with writes `USB_MOCK`, fake Google with export + upload status).
+  **Writes (imad 2026-11-20: "a 4 MB file takes minutes and the UI hangs")**: Tizen's `writeData` turns each byte into a string on the page's
+  thread; `UsbFs.writer` now writes `writeStringNonBlocking(latin1, 'iso-8859-1')` 1 MB at a time with 15 ms gaps, after a one-time check on
+  the drive (256 bytes written + read back; `arc_dev_usbw` = 'str' / 'data' = fall back to writeData). Not proven on a real TV yet.
 - **Video apps (API 17, owner request 2026-11-10, for the Speedy IPTV app, repo `imad-os/g_iptv` (moved from `imad-os/speedy` `mypc/` 2026-11-11))**: `MyPC.video` = the TV's
   AVPlay played by My PC for an installed app (`js/launcher/app-video.js`, `AppVideo.attach` in `game-host.js`): the picture is on the
   video plane BEHIND the page, `html.av-video` makes My PC's layers transparent, the app keeps its page transparent where it shows

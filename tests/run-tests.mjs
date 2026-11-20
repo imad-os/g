@@ -7389,6 +7389,13 @@ const USB_MOCK = (D) => {
                     if (!U.mounted) return e(fsErr('IOError', 'Input/output error'));
                     const old = tree[p], b = new Uint8Array(old.length + data.length); b.set(old); b.set(data, old.length); tree[p] = b; pos = b.length; U.writes++; ok();
                 }, U.slow || 2),
+                // Tizen's string writes: 'iso-8859-1' = one char per byte (what My PC uses for copies, much cheaper than writeData)
+                writeString: (str, enc) => { const b = Uint8Array.from(str, (c) => c.charCodeAt(0) & 255); const old = tree[p], n = new Uint8Array(old.length + b.length); n.set(old); n.set(b, old.length); tree[p] = n; pos = n.length; U.strWrites = (U.strWrites || 0) + 1; U.enc = enc; return b.length; },
+                writeStringNonBlocking: (str, ok, e, enc) => setTimeout(() => {
+                    if (!U.mounted) return e(fsErr('IOError', 'Input/output error'));
+                    const b = Uint8Array.from(str, (c) => c.charCodeAt(0) & 255), old = tree[p], n = new Uint8Array(old.length + b.length); n.set(old); n.set(b, old.length); tree[p] = n; pos = n.length; U.writes++; U.strWrites = (U.strWrites || 0) + 1; U.enc = enc; ok(b.length);
+                }, U.slow || 2),
+                readData: (n) => { const r = tree[p].slice(pos, pos + n); pos += r.length; return r; },
                 close() {}, closeNonBlocking(ok) { setTimeout(() => ok && ok(), 1); }
             };
         },
@@ -7611,6 +7618,9 @@ async function copyTests(browser, base) {
     await page.waitForFunction((id) => { const x = CopyJobs.list().find((y) => y.id === id); return x && x.state === 'done'; }, j3, { timeout: 30000 }).catch(() => {});
     check(/Copying to USB A1\/From Drive/.test(deskCard) && (await job(j3)).state === 'done' && await page.evaluate((D) => window.__usb.sum(D + '/From Drive/long.mkv'), D) === sum(film2),
         'quitting the app does not stop its copy: the desktop page goes on with it, with My PC\'s card ' + deskCard);
+    // imad 2026-11-20 ("4 MB takes minutes and the screen hangs"): pieces go to the drive as latin-1 strings (checked once on the drive), 1 MB at a time
+    const wr = await page.evaluate(() => ({ str: window.__usb.strWrites || 0, enc: window.__usb.enc, mode: localStorage.getItem('arc_dev_usbw'), left: Object.keys(window.__usb.tree).filter((k) => /\.mypc-w/.test(k)) }));
+    check(wr.str > 0 && wr.enc === 'iso-8859-1' && wr.mode === 'str' && !wr.left.length, 'copies write to the USB drive as one-byte-per-char strings after a one-time check on the drive (no test file left) ' + JSON.stringify(wr));
     check(!page.errors.length, 'no page errors ' + page.errors.join(' | '));
     await page.context().close();
 }

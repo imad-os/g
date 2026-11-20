@@ -178,6 +178,41 @@ var UsbFs = (function () {
         for (var i = 0; i < u8.length; i += 32768) s += String.fromCharCode.apply(null, u8.subarray(i, i + 32768));
         return btoa(s);
     }
+    // Tizen's writeData turns every byte into a string one by one on the page's own thread before it reaches the drive: a 4 MB
+    // piece froze My PC for seconds and a 4 MB file took minutes (imad 2026-11-20). writeString with 'iso-8859-1' takes the same bytes
+    // as one string built 32 KB at a time (one char = one byte). Checked once on the drive (256 bytes, every value written and read
+    // back): a TV where it does not give the same bytes keeps writeData (arc_dev_usbw = 'data'). Pieces go 1 MB at a time with a
+    // pause between them, so the remote keeps answering during a copy.
+    var SLICE = 1024 * 1024, GAP = 15, W_KEY = 'arc_dev_usbw';
+    function latin1(u8) {
+        var s = '';
+        for (var i = 0; i < u8.length; i += 32768) s += String.fromCharCode.apply(null, u8.subarray(i, i + 32768));
+        return s;
+    }
+    function strOk(fs, dir) {
+        var v = null;
+        try { v = localStorage.getItem(W_KEY); } catch (e) {}
+        if (v === 'str') return true;
+        if (v === 'data') return false;
+        var t = join(dir, '.mypc-w' + Date.now().toString(36)), ok = false, h = null;
+        try {
+            var ref = new Uint8Array(256);
+            for (var i = 0; i < 256; i++) ref[i] = i;
+            h = fs.openFile(t, 'w');
+            if (!h.writeString) throw new Error('no writeString');
+            h.writeString(latin1(ref), 'iso-8859-1');
+            h.close(); h = null;
+            h = fs.openFile(t, 'r');
+            var back = h.readData(256);
+            h.close(); h = null;
+            ok = !!back && back.length === 256;
+            for (var j = 0; ok && j < 256; j++) if (back[j] !== j) ok = false;
+        } catch (e2) { ok = false; }
+        try { if (h) h.close(); } catch (e3) {}
+        try { if (fs.deleteFile) fs.deleteFile(t, function () {}, function () {}); } catch (e4) {}
+        try { localStorage.setItem(W_KEY, ok ? 'str' : 'data'); } catch (e5) {}
+        return ok;
+    }
     function writer(path, append, cb) {
         var fs = tz(), p = clean(path);
         if (!fs) return later(function () { cb(err('unsupported', 'No USB drives here.')); });
@@ -189,6 +224,7 @@ var UsbFs = (function () {
             var fh = null;
             try { fh = fs.openFile(p, append ? 'a' : 'w'); } catch (x) { if (!fs.resolve) return later(function () { cb(tzErr(x)); }); fh = null; }
             if (fh) {
+                var useStr = !!(fh.writeStringNonBlocking || fh.writeString) && strOk(fs, parent(p));
                 // a write still running when the copy is paused / stopped lands anyway: close() waits for it, so the next run
                 // (which goes on from the file's real size) never sees a size that grows behind its back
                 var busy = 0, onIdle = null;
@@ -202,11 +238,21 @@ var UsbFs = (function () {
                 };
                 return later(function () {
                     cb(null, {
-                        write: function (u8, done) {
-                            try {
-                                if (fh.writeDataNonBlocking) { busy++; fh.writeDataNonBlocking(u8, function () { written += u8.length; settled(); done(null); }, function (x) { settled(); done(wErr(x, u8.length)); }); }
-                                else { fh.writeData(u8); written += u8.length; later(function () { done(null); }); }
-                            } catch (x) { if (busy) settled(); var e = wErr(x, u8.length); later(function () { done(e); }); }
+                        write: function (all, done) {
+                            var off = 0;
+                            (function slice() {
+                                if (off >= all.length) return done(null);
+                                var u8 = all.subarray(off, Math.min(all.length, off + SLICE));
+                                function ok() { written += u8.length; off += u8.length; settled(); if (off >= all.length) done(null); else setTimeout(slice, GAP); }
+                                function bad(x) { settled(); done(wErr(x, u8.length)); }
+                                try {
+                                    busy++;
+                                    if (useStr && fh.writeStringNonBlocking) fh.writeStringNonBlocking(latin1(u8), ok, bad, 'iso-8859-1');
+                                    else if (useStr) { fh.writeString(latin1(u8), 'iso-8859-1'); later(ok); }
+                                    else if (fh.writeDataNonBlocking) fh.writeDataNonBlocking(u8, ok, bad);
+                                    else { fh.writeData(u8); later(ok); }
+                                } catch (x) { if (busy) settled(); var e = wErr(x, u8.length); later(function () { done(e); }); }
+                            })();
                         },
                         close: function (done) {
                             if (!busy) return closeNow(done);
