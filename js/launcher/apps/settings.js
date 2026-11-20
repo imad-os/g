@@ -530,7 +530,7 @@
             });
         } });
         var lines = t('gdPrivacy');
-        if (GDrive.fullAccess() || (act && act.full)) lines = [lines[0], t('gdPrivacyFull'), lines[2]];
+        if (GDrive.fullAccess() || (act && act.full)) lines = [lines[0], t('gdPrivacyFull')];
         for (i = 0; i < lines.length; i++) out.push({ kind: 'text', value: lines[i] });
     }
 

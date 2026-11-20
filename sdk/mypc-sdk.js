@@ -39,7 +39,7 @@
 var MyPC = (function () {
     'use strict';
 
-    var VERSION = 1, API = 24, HELLO_WAIT = 1200;
+    var VERSION = 1, API = 23, HELLO_WAIT = 1200;
     var handlers = {}, info = null, data = {}, started = false, destroyed = false, isReady = false;
     var hosted = false, hostWin = null, hostOrigin = '*', helloTimer = 0;
     var down = {};                       // action -> number of keys / buttons holding it
@@ -2261,7 +2261,6 @@ var MyPC = (function () {
      * drawn BEHIND the web page: keep your page transparent where it must show (the whole screen, or a box for a preview).
      * http streams play too (no mixed-content block), and USB paths once MyPC.usb is allowed. One video at a time.
      *   video.supported()                          true on a TV (else use your own <video>)
-     *   video.drive()                              true when open('drive:<file id>', { name }) plays Google Drive files (API 24)
      *   video.open(url, { start, live, rect, fit, ua }) -> { duration, live, tracks }     start in seconds; rect: an element or { x, y, w, h }
      *   video.play() pause() stop() seek(seconds) rect(elementOr{x,y,w,h} | null = whole screen) fit('fit' | 'fill' | 'auto')
      *   video.tracks() -> { audio: [{ index, lang, codec, channels }], text: [{ index, lang }], video: { w, h }, cur: { audio, text } }
@@ -2287,10 +2286,9 @@ var MyPC = (function () {
         }
         return {
             supported: function () { return !!(viaShell() && info.bridges && info.bridges.video); },
-            drive: function () { return !!(viaShell() && info.bridges && info.bridges.video >= 2); },
             open: function (url, o) {
                 o = o || {};
-                return call('open', { url: String(url || ''), start: +o.start || 0, live: !!o.live, rect: o.rect ? rectOf(o.rect) : null, fit: o.fit || 'fit', ua: o.ua || '', name: o.name ? String(o.name).slice(0, 200) : '' });
+                return call('open', { url: String(url || ''), start: +o.start || 0, live: !!o.live, rect: o.rect ? rectOf(o.rect) : null, fit: o.fit || 'fit', ua: o.ua || '' });
             },
             play: function () { return call('play'); },
             pause: function () { return call('pause'); },
@@ -2362,7 +2360,7 @@ var MyPC = (function () {
 
     var pub = {
         version: VERSION,
-        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy, 17 MyPC.video + MyPC.back + init keys + MyPC.text.keyboard, 18 every button to the app: onInput returning false for 'cancel' = nothing to close (My PC's menu), 19 MyPC.buttons (init keys 'buttons': the remote's buttons by name), 22 MyPC.bug (a bug report with a log and a screenshot), 23 the USB copy for when the internet fails (MyPC.offline, fetch() from the drive), 24 MyPC.video.open('drive:<file id>') (a Google Drive film on the TV's player; info().bridges.video >= 2) (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy, 17 MyPC.video + MyPC.back + init keys + MyPC.text.keyboard, 18 every button to the app: onInput returning false for 'cancel' = nothing to close (My PC's menu), 19 MyPC.buttons (init keys 'buttons': the remote's buttons by name), 22 MyPC.bug (a bug report with a log and a screenshot), 23 the USB copy for when the internet fails (MyPC.offline, fetch() from the drive) (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,

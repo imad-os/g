@@ -29,7 +29,6 @@
  *   GDrive.star(id, on, cb)  trash(id, cb)  untrash(id, cb)  remove(id, cb)  read(id, start, end, cb)  download(id, opts, cb)
  *   GDrive.upload(opts, onProgress, cb)  exportFile(id, mime, cb)  thumb(link, size, cb)  about(cb)  appFolder(appId, title, cb)
  *   GDrive.request(req, cb)  an authorized Drive request (My PC only)        GDrive.token(cb)  (My PC only: Music's service worker)
- *   GDrive.mediaUrl(id, name, cb)  a link for the TV's player (My PC only, through the relay; never given to apps)
  * Every call returns { abort() }. Errors: { code, message, status }, code one of noconfig signed-out reauth denied expired
  * not-found permission quota full (Drive full) range too-big bad-request network timeout cancelled http.
  * Standalone (the SDK in a plain browser) loads this file too: GDrive.setStorage({ load, save }) and setConfig(cfg). */
@@ -226,24 +225,6 @@ var GDrive = (function () {
             var l = waiting[k]; delete waiting[k];
             for (var i = 0; i < l.length; i++) { try { l[i](x, x ? null : tokens[k].tok); } catch (y) {} }
         });
-    }
-
-    // a link the TV's own player (AVPlay) can open for a Drive file (owner report 2026-11-20: Drive videos did not play on the TV:
-    // the TV's player and its <video> make their own requests, so neither a header nor a service worker can add the sign-in, and
-    // Google refuses a token in the address). The relay (route /gdrive of the owner's Cloudflare worker, code in imad-os/fb
-    // cloudflare/src/gdrive.js) adds the header and passes Range; it keeps nothing. The token is a short one (about an hour),
-    // taken fresh when it has less than 40 minutes left; My PC reopens at the same place when it runs out (js/launcher/app-video.js).
-    // Never given to apps: only the TV's player gets the address.
-    var RELAY = 'https://iptv-lists.mypc-app.workers.dev/gdrive/';
-    function mediaUrl(id, name, cb) {
-        id = String(id || '');
-        if (!/^[A-Za-z0-9_-]{10,200}$/.test(id)) return later(function () { cb(err('bad-request', 'Not a Drive file id.')); });
-        var a = activeAcc(), t = a && tokens[tkey(a)];
-        token(function (e, tok) {
-            if (e) return cb(e);
-            var n = String(name || 'video').replace(/[\/\\?#%]/g, ' ').slice(0, 120) || 'video';
-            cb(null, RELAY + id + '/' + encodeURIComponent(n) + '?t=' + encodeURIComponent(tok));
-        }, !!(t && t.exp - Date.now() < 40 * 60000));
     }
 
     function apiError(r) {
@@ -679,8 +660,7 @@ var GDrive = (function () {
         status: status, statusNow: statusNow, accounts: accounts, active: active, use: use, signIn: signIn, signOut: signOut, onChange: onChange,
         list: list, get: get, mkdir: function (n, p, cb) { return mkdir(n, p, cb); }, rename: rename, move: move, copy: copy, star: star, trash: trash, untrash: untrash,
         remove: remove, setInfo: setInfo, read: read, download: download, upload: upload, exportFile: exportFile, thumb: thumb, about: about, appFolder: appFolder,
-        request: request, token: token, mediaUrl: mediaUrl, setStorage: setStorage, setConfig: setConfig,
-        _expire: function () { for (var k in tokens) tokens[k].exp = Date.now() + 60000; },        // tests: tokens about to run out
+        request: request, token: token, setStorage: setStorage, setConfig: setConfig,
         _reset: function () { tokens = {}; waiting = {}; folders = {}; cfgMem = null; appCfg = null; }
     };
 })();
