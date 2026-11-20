@@ -470,7 +470,9 @@
 - **Stream lists** (owner request 2026-11-11): the Manager's nav ends with an external link to the IPTV Xtream admin
   `https://imad-os.github.io/fb/` (the Cloudflare version: Worker https://iptv-lists.mypc-app.workers.dev + D1, code in `cloudflare/` of repo
   imad-os/fb, imad's folder `D:\frb\fb`; owner request 2026-11-11, was the Firebase admin https://iptv-8b60c.web.app/admin.html).
-- `installer/`: the App Store Manager, a desktop-browser page (Firebase JS SDK from gstatic is OK
+- `installer/`: the App Store Manager. **Add apps** (owner request 2026-11-20) checks, each time the Manager opens / Refresh, the owner's `g_`
+  repositories AND every store app added by address (`InstallerLib.storeSources`: its own `url` + mypc-app.json, no typing again); it lists only
+  new apps and apps with an update (in store + up to date = hidden, counted; menu badge `#nav-add`). It is a desktop-browser page (Firebase JS SDK from gstatic is OK
   there, never in the TV app). Also shows TV statistics and world records.
 - `firebase/`: rules and owner setup steps (`SETUP.md`). After a rules change the owner must publish
   them again in the Firebase console. Tests use an in-memory Firestore (`fakeFirestore` in

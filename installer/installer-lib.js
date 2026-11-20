@@ -122,6 +122,22 @@
         return out;
     }
 
+    // apps in the store that the catalog does not cover (added by address, other owners): their own address is
+    // checked for updates with the catalog, so the owner never types it again -> [{ repo, base, manifest, manual: true }]
+    function storeSources(installed, cat) {
+        var have = {}, out = [];
+        (cat || []).forEach(function (c) { have[c.base.toLowerCase()] = 1; });
+        (installed || []).forEach(function (a) {
+            if (!a || !a.url) return;
+            var w;
+            try { w = locate(a.url); } catch (e) { return; }
+            if (have[w.base.toLowerCase()]) return;
+            have[w.base.toLowerCase()] = 1;
+            out.push({ repo: 'Added by address', base: w.base, manifest: w.manifest, manual: true, id: a.id });
+        });
+        return out;
+    }
+
     // a widget as mypc-app.json describes it (without the approval the Manager adds)
     function plainWidget(w) { var o = {}, k; for (k in w) if (k !== 'sha' && k !== 'approvedAt') o[k] = w[k]; return o; }
 
@@ -152,7 +168,7 @@
         return !a ? 'new' : diff(a, app).length ? 'update' : 'installed';
     }
 
-    var api = { MANIFEST: MANIFEST, MAX_CONFIG: MAX_CONFIG, locate: locate, toApp: toApp, parseConfig: parseConfig, catalog: catalog, status: status, diff: diff, find: find, canon: canon };
+    var api = { MANIFEST: MANIFEST, MAX_CONFIG: MAX_CONFIG, locate: locate, toApp: toApp, parseConfig: parseConfig, catalog: catalog, storeSources: storeSources, status: status, diff: diff, find: find, canon: canon };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.InstallerLib = api;
 })(this);
