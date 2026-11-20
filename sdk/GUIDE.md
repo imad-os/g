@@ -1341,9 +1341,12 @@ importScripts('https://imad-os.github.io/g/sdk/drive-sw.js');
 `url` is an address of your own site that the worker answers piece by piece (2 MB Range pieces read through My PC), so
 playback starts at once and seeking works. Pass the file object (not only its id) so its size and type are known. Without
 the worker (or where service workers are not available) `mode` is `'blob'`: the whole file is downloaded first
-(`onProgress`), then played from a `blob:` address. **The TV's own player (`MyPC.video`, section 21) cannot play a Drive file**: it cannot
-send Google's sign-in. Play Drive videos in your own `<video>` with `stream()` (the TV's browser decodes MP4 / WebM well; for
-formats it cannot play, offer a copy to a USB drive with `MyPC.copy`, section 20, which the TV's player then reads). Example:
+(`onProgress`), then played from a `blob:` address. **On a Samsung TV play Drive videos with the TV's own player**
+(API 24): `if (MyPC.video.drive()) MyPC.video.open('drive:' + file.id, { name: file.name, start })` (section 21). The TV's
+`<video>` is played by the TV's media engine, which does NOT go through your service worker, so `stream()` with a worker
+fails there (owner report 2026-11-20: "This screen cannot play ... (video/mp4)"); `drive:` plays every format the TV
+plays (MKV, AVI, MP4, HEVC...), streams at once and seeks. Keep `stream()` for computers and phones
+(`MyPC.video.supported()` false). Example:
 Speedy IPTV (imad-os/g_iptv, `js/drive.js`). Images: `download()` then `URL.createObjectURL(new Blob([buf]))`.
 
 **Errors** (`err.code`): `noconfig` (no Google client set up for My PC: tell the user an App Store manager must add it),
@@ -1468,7 +1471,8 @@ if (MyPC.video.supported()) {                                  // a TV (else: yo
 
 | Call | Result |
 |---|---|
-| `open(url, { start, live, rect, fit, ua })` | `{ duration, live, tracks }`. `start` in seconds; `live` for a channel (no seek); `ua` a User-Agent some IPTV servers want. Opening another video closes the first (one player on the TV; My PC's music stops). |
+| `open(url, { start, live, rect, fit, ua, name })` | `{ duration, live, tracks }`. `url` http(s) / rtsp / rtmp / udp, a USB path, or `drive:<file id>` (API 24). `start` in seconds; `live` for a channel (no seek); `ua` a User-Agent some IPTV servers want. Opening another video closes the first (one player on the TV; My PC's music stops). |
+| `drive()` | true when `open('drive:<id>')` works (My PC on a TV, API 24) |
 | `play()` `pause()` `stop()` | |
 | `seek(seconds)` | refused for a live stream (`live`) |
 | `rect(el \| {x,y,w,h} \| null)` | where the picture is (null = whole screen) |
@@ -1478,6 +1482,11 @@ if (MyPC.video.supported()) {                                  // a TV (else: yo
 | `state()` | `{ state, t, d }` |
 | `on(name, fn)` | `state`, `time`, `buffer` (`{ p }` 0..100), `sub` (`{ text, dur }`), `error` (`{ code }`), `info` (`{ w, h }`); returns `off()` |
 
+- **Google Drive files** (API 24, `MyPC.video.drive()` true): `open('drive:<file id>', { name, start })` once the user
+  allowed your app to use Google Drive (`MyPC.drive`, section 19). My PC makes a link for the TV's player (through My PC's
+  relay, which adds the sign-in and passes Range; your app never sees it) and, when that sign-in runs out (about an hour)
+  or the line drops, opens it again at the same place by itself (3 times in 10 minutes, then `error`). Errors also
+  `denied` (Drive not allowed: call `MyPC.drive.signIn()`), `signed-out` / `reauth`, `noconfig`. Tracks work as for a stream.
 - **USB files**: a path from `MyPC.usb` (`/opt/media/USBDriveA1/Films/a.mkv`) plays once the app may use the USB drives
   (section 20); subtitle files next to it are read with `MyPC.usb.read` and drawn by the app.
   **The tracks of a USB file are never read** (build 154): the TV's player hangs on some MKV files when asked and the TV

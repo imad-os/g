@@ -258,7 +258,7 @@ var GameHost = (function () {
                         data: Store.get('game_' + id + '_data', {}), app: { id: id },
                         config: game.remote.config || {},
                         mp: typeof Multiplayer !== 'undefined' && typeof Rooms !== 'undefined' && NetLink.supported() ? 1 : 0,   // MyPC.multiplayer is supported
-                        bridges: { net: 1, ai: 1, mic: Mic.supported() || Mic.phone() ? 1 : 0, drive: 1, usb: UsbFs.supported() ? 1 : 0, copy: UsbFs.supported() ? 1 : 0, video: AppVideo.supported() ? 1 : 0, keyboard: 1, back: 1 },     // MyPC.net / ai / mic (API 10), MyPC.drive (API 14), MyPC.usb / copy (API 16, TV only) go through My PC
+                        bridges: { net: 1, ai: 1, mic: Mic.supported() || Mic.phone() ? 1 : 0, drive: 1, usb: UsbFs.supported() ? 1 : 0, copy: UsbFs.supported() ? 1 : 0, video: AppVideo.supported() ? (typeof GDrive !== 'undefined' ? 2 : 1) : 0, keyboard: 1, back: 1 },     // MyPC.net / ai / mic (API 10), MyPC.drive (API 14), MyPC.usb / copy (API 16, TV only) go through My PC
                         notify: 1, launch: Push.takeLaunch(id),       // MyPC.notify, MyPC.launch: push notifications (API 12, js/launcher/push.js)
                         usb: usb ? { v: usb.v, at: usb.at } : null    // MyPC.offline (API 23): this is the copy saved on a USB drive
                     });

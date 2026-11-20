@@ -358,6 +358,13 @@
   Drive" once per app per profile, key `drive_apps`; `signIn()` from the app counts as yes). SDK `MyPC.drive` (+ `sdk/drive-sw.js`: the
   app's own `sw.js` imports it so `<audio>/<video>` stream by Range; else a blob download); standalone the SDK runs `gdrive.js` in the
   page. Strings `js/core/i18n-drive.js`. Docs: GUIDE.md section 19. Tests: `MYPC_ONLY=drive node tests/run-tests.mjs` (fake Google `fakeGoogle`).
+  **Drive films on the TV (owner report 2026-11-20, build 184, API 24)**: the TV's `<video>` is played by the TV's media engine, which never
+  goes through an app's service worker, so `MyPC.drive.stream()` with a worker fails there ("This screen cannot play ... (video/mp4)"). On a TV
+  apps call `MyPC.video.open('drive:<id>', { name })` (`MyPC.video.drive()`, `bridges.video` = 2): `GDrive.mediaUrl` makes
+  `https://iptv-lists.mypc-app.workers.dev/gdrive/<id>/<name>?t=<token>` (the relay route of imad's Cloudflare worker, repo imad-os/fb
+  `cloudflare/src/gdrive.js`: adds the header, passes Range, keeps nothing; imad deploys it with wrangler), token taken fresh under 40 min left;
+  `app-video.js` reopens at the same place when the player fails (token ran out, 3 times / 10 min); the black box hides `?t=`. Privacy line 3 of
+  `gdPrivacy`. Speedy 1.1.1 and MyDrive 1.2.1 use it. Tests: `MYPC_ONLY=speedytv` (50c Speedy, 50d MyDrive with the g_drive checkout's docs/).
 - **Copies Google Drive <-> USB (API 16, owner request 2026-11-10)**: My PC copies, both ways, files and whole folders; apps (MyDrive)
   only ask through `MyPC.copy` (`toUsb` / `toDrive` / `jobs` / `pause` / `resume` / `cancel` / `clear` / `onChange`) and browse the drives
   with `MyPC.usb` (`drives` / `list` / `stat` / `createFolder` / `read`; permission "<app> wants to use your USB drives" once per app, `arc_dev_perm`

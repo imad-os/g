@@ -15,7 +15,9 @@
  * events (rid 0): { ev: 'state', state: 'buffering' | 'playing' | 'paused' | 'ended' | 'idle' }  { ev: 'buffer', p }
  *      { ev: 'time', t, d }  (twice a second)  { ev: 'sub', text, dur }  { ev: 'error', code }  { ev: 'info', w, h }
  * Only one video at a time (the TV has one player: My PC's music stops). A USB path (/opt/media/USBDriveA1/...) plays
- * once the app is allowed to use the USB drives (MyPC.usb). Everything is closed when the app closes. */
+ * once the app is allowed to use the USB drives (MyPC.usb). 'drive:<file id>' plays a file of the profile's Google Drive once the
+ * app may use it (MyPC.drive, API 24): My PC makes the link (GDrive.mediaUrl) and opens it again at the same place when its
+ * sign-in runs out. Everything is closed when the app closes. */
 var AppVideo = (function () {
     'use strict';
 
@@ -33,7 +35,7 @@ var AppVideo = (function () {
     }
     function tWrite() { if (!trace) return; trace.at = Date.now(); try { trace.st = String(webapis.avplay.getState()); } catch (e0) {} trace.mem = mem(); if (trace.low === undefined || (trace.mem.free >= 0 && trace.mem.free < trace.low)) trace.low = trace.mem.free; try { localStorage.setItem(TRACE, JSON.stringify(trace)); } catch (e) {} }
     function tStart(appId, url) {
-        trace = { app: appId, url: String(url).replace(/\/\/[^\/@]*@/, '//').replace(/(\/(live|movie|series)\/)[^\/]+\/[^\/]+\//, '$1*/*/').slice(-120), from: Date.now(), ev: {}, log: [], st: '', t: 0 };
+        trace = { app: appId, url: String(url).replace(/\/\/[^\/@]*@/, '//').replace(/(\/(live|movie|series)\/)[^\/]+\/[^\/]+\//, '$1*/*/').replace(/\?t=[^&]*/, '?t=*').slice(-120), from: Date.now(), ev: {}, log: [], st: '', t: 0 };
         clearInterval(traceT); traceT = setInterval(tWrite, 1000); tWrite();
     }
     // each note is written at once: when the page freezes, the last note names the step it froze in
@@ -83,7 +85,7 @@ var AppVideo = (function () {
 
     function attach(ctx) {
         var a = api(), open = false, playing = false, wasPlaying = false, suspended = false, live = false, isFile = false;
-        var subsOn = false, dur = 0, lastTimeAt = 0, lastBuf = -1, seq = 0, rect = null, fit = 'fit', prepTimer = 0, buffering = false, bufMs = -1;
+        var reopens = [], subsOn = false, dur = 0, lastTimeAt = 0, lastBuf = -1, seq = 0, rect = null, fit = 'fit', prepTimer = 0, buffering = false, bufMs = -1;
 
         function ev(d) { d.rid = 0; ctx.send('video', d); }
         function alive() { return ctx.state() === 'running' || ctx.state() === 'paused'; }
@@ -149,14 +151,29 @@ var AppVideo = (function () {
         }
         document.addEventListener('visibilitychange', onVis);
 
-        function doOpen(o, reply) {
+        function doOpen(o, reply, driveId) {
             if (!a) return reply(err('unsupported', 'This device has no TV player (only a TV has one): use a <video> element.'));
             var url = String(o.url || '');
+            // 'drive:<file id>' = a file of the profile's Google Drive (API 24, owner report 2026-11-20): My PC makes the link
+            // (GDrive.mediaUrl, through the relay that adds the sign-in); the app never sees it
+            var dm = /^drive:([A-Za-z0-9_-]{10,200})$/.exec(url);
+            if (dm) {
+                if (typeof GDrive === 'undefined') return reply(err('unsupported', 'No Google Drive in this My PC.'));
+                if (!Bridges.allowed(ctx.appId, 'drive')) return reply(err('denied', 'Ask for Google Drive first (MyPC.drive.signIn()).'));
+                var want = ++seq;
+                return GDrive.mediaUrl(dm[1], o.name, function (e, u) {
+                    if (want !== seq) return reply(err('cancelled', 'Another video was opened.'));
+                    if (e) return reply(err(e.code || 'network', e.message || String(e)));
+                    var o2 = {}; for (var k in o) if (o.hasOwnProperty(k)) o2[k] = o[k];
+                    o2.url = u; o2.live = false;
+                    doOpen(o2, reply, dm[1]);
+                });
+            }
             if (/^\/opt\/media\//.test(url)) {
                 if (typeof UsbFs === 'undefined' || !UsbFs.inside(url)) return reply(err('bad-request', 'Not a path inside a plugged USB drive.'));
                 if (!Bridges.allowed(ctx.appId, 'usb')) return reply(err('denied', 'Ask for the USB drives first (MyPC.usb).'));
                 try { var fsys = tizen.filesystem; url = fsys && fsys.toURI ? fsys.toURI(url) : 'file://' + encodeURI(url); } catch (x) { url = 'file://' + encodeURI(url); }
-            } else if (!/^https?:\/\/[^\s]+$/i.test(url) && !/^(rtsp|rtmp|udp|rtp):\/\/[^\s]+$/i.test(url)) return reply(err('bad-request', 'The address must start with http(s)://, rtsp://, rtmp://, udp:// or be a USB path.'));
+            } else if (!/^https?:\/\/[^\s]+$/i.test(url) && !/^(rtsp|rtmp|udp|rtp):\/\/[^\s]+$/i.test(url)) return reply(err('bad-request', 'The address must start with http(s)://, rtsp://, rtmp://, udp:// be a USB path or drive:<file id>.'));
             close();
             // the TV has one player: My PC's own music gives way
             try { if (typeof Music !== 'undefined' && Music.state && Music.state().playing) Music.stop(); } catch (x2) {}
@@ -197,7 +214,29 @@ var AppVideo = (function () {
                         ev({ ev: 'time', t: (+ms || 0) / 1000, d: dur });
                     },
                     onstreamcompleted: function () { tNote('ended'); if (my !== seq) return; playing = false; ev({ ev: 'state', state: 'ended' }); },
-                    onerror: function (e) { tNote('error ' + String(e && (e.name || e) || '').slice(0, 60)); if (!done) return fail(e); if (my === seq) { playing = false; ev({ ev: 'error', code: avCode(e), message: String(e) }); } },
+                    onerror: function (e) {
+                        tNote('error ' + String(e && (e.name || e) || '').slice(0, 60));
+                        if (!done) return fail(e);
+                        if (my !== seq) return;
+                        // a Drive file: the sign-in in its link lasts about an hour (or the line dropped): a new link, same place (3 times / 10 min)
+                        if (driveId && !live) {
+                            var tnow = Date.now();
+                            reopens = reopens.filter(function (x) { return tnow - x < 600000; });
+                            if (reopens.length < 3) {
+                                reopens.push(tnow);
+                                var at = now(), was = playing;
+                                return setTimeout(function () {
+                                    if (my !== seq) return;
+                                    tNote('drive reopen ' + Math.round(at));
+                                    doOpen({ url: 'drive:' + driveId, name: o.name, start: at, rect: rect, fit: fit }, function (e2) {
+                                        if (e2) { playing = false; return ev({ ev: 'error', code: e2.code, message: e2.message }); }
+                                        if (!was) { try { a.pause(); playing = false; ev({ ev: 'state', state: 'paused' }); } catch (x5) {} }
+                                    });
+                                }, 0);
+                            }
+                        }
+                        playing = false; ev({ ev: 'error', code: avCode(e), message: String(e) });
+                    },
                     onevent: function (type, data) {
                         tEv('event'); tNote('event ' + String(type).replace(/^PLAYER_MSG_/, '').slice(0, 40));
                         if (my !== seq) return;
@@ -251,6 +290,7 @@ var AppVideo = (function () {
             function reply(e, r) { ctx.send('video', e ? { rid: d.rid, error: e } : { rid: d.rid, result: r === undefined ? null : r }); }
             if (d.op === 'open') {
                 if (!alive()) return reply(err('not-running', 'The app is not running.'));
+                reopens = [];
                 return doOpen(o, reply);
             }
             if (!a) return reply(err('unsupported', 'This device has no TV player.'));

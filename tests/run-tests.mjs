@@ -396,7 +396,8 @@ async function main() {
     if (process.env.MYPC_ONLY === 'manager') { await managerTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'widgets') { await widgetTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'wall') { await wallTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
-    if (process.env.MYPC_ONLY === 'speedy') { await speedyTests(browser, base); await speedyDriveTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'speedy') { await speedyTests(browser, base); await speedyDriveTests(browser, base); await speedyDriveTvTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'speedytv') { await speedyDriveTvTests(browser, base); await mydriveTvTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'video') { await videoTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'appusb') { await appUsbTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'copy') { await copyTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
@@ -4455,6 +4456,8 @@ async function main() {
     await videoTests(browser, base);
     await speedyTests(browser, base);
     await speedyDriveTests(browser, base);
+    await speedyDriveTvTests(browser, base);
+    await mydriveTvTests(browser, base);
     await shareTests(browser, base);
 
     await browser.close();
@@ -7655,7 +7658,7 @@ MyPC.init({ keys: ['channel', 'media'], onInit() { MyPC.ready(); window.__ok = 1
     const app = page.frames().find((x) => x.url().indexOf(APP) === 0);
     await app.waitForFunction(() => window.__ok === 1 && MyPC.info() && MyPC.info().bridges);
     const b0 = await app.evaluate(() => ({ api: MyPC.apiLevel, video: MyPC.info().bridges.video, kb: MyPC.info().bridges.keyboard, sup: MyPC.video.supported() }));
-    check(b0.api >= 18 && b0.video === 1 && b0.kb === 1 && b0.sup === true, 'API 18+ on a TV: MyPC.video and the keyboard are offered ' + JSON.stringify(b0));
+    check(b0.api >= 18 && b0.video >= 1 && b0.kb === 1 && b0.sup === true, 'API 18+ on a TV: MyPC.video and the keyboard are offered ' + JSON.stringify(b0));
 
     // open a live stream in a small box (a preview): the TV's player gets the address and the box scaled to its 1920x1080 plane
     const r1 = await app.evaluate(() => MyPC.video.open('http://iptv.example:8080/live/u/p/1.ts', { live: true, rect: { x: 640, y: 180, w: 640, h: 360 }, ua: 'SpeedyTest' }).then((r) => r, (e) => 'err ' + e.code));
@@ -8530,6 +8533,152 @@ async function speedyDriveTests(browser0, base) {
     const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--autoplay-policy=no-user-gesture-required', '--ignore-certificate-errors', '--no-proxy-server',
         '--host-resolver-rules=MAP speedy.example.test 127.0.0.1:' + port + ', MAP pc.geekspro.us 127.0.0.1:' + port] });
     try { await speedyDrivePart(browser, base, DIR); } finally { await browser.close(); appSrv.close(); fs.rmSync(tmp, { recursive: true, force: true }); }
+}
+
+// 50d. MyDrive (github.com/imad-os/g_drive, its built site docs/) on a TV: its player uses the TV's player for Drive films
+// (drive:<id>), the page goes see-through, its own subtitle file is drawn over the picture. Skipped without the checkout.
+async function mydriveTvTests(browser, base) {
+    const DIR = path.resolve(process.env.MYDRIVE_DIR || path.join(ROOT, '..', 'g_drive'), 'docs');
+    if (!fs.existsSync(path.join(DIR, 'index.html'))) { console.log('50d. MyDrive on a TV: skipped (no built checkout at ' + DIR + ')'); return; }
+    console.log('50d. MyDrive on a TV: Drive films on the TV\'s player (drive:<id>), see-through page, subtitles, pause / seek');
+    const APP = 'https://mydrive.example.test/';
+    const db = { apps: {}, settings: { google: { tvClientId: 'cid.apps.googleusercontent.com', tvClientSecret: 'sec', pickerClientId: 'web.apps.googleusercontent.com', pickerApiKey: 'PKEY', projectNumber: '123' } } };
+    db.apps.mydrive = { id: 'mydrive', name: 'MyDrive', url: APP, entry: APP + 'index.html', icon: '', type: 'app', version: '1.2.1', enabled: true, order: 1, config: {} };
+    const page = await newPage(browser, base, db);
+    const ctx = page.context();
+    await ctx.addInitScript(FAKE_AVPLAY);
+    const SRT = '1\n00:00:01,000 --> 00:00:09,000\nHello from MyDrive\'s subtitle file\n';
+    const g = { files: { fo: { id: 'fo', name: 'Films', mimeType: 'application/vnd.google-apps.folder', parents: ['root'] },
+        fm1234567890: { id: 'fm1234567890', name: 'Holiday 2024.mkv', mimeType: 'video/x-matroska', parents: ['fo'], data: Buffer.from('x'.repeat(100)) },
+        fs1234567890: { id: 'fs1234567890', name: 'Holiday 2024.srt', mimeType: 'application/x-subrip', parents: ['fo'], data: Buffer.from(SRT) } } };
+    await fakeGoogle(ctx, g);
+    const relay = [];
+    await ctx.route(/^https:\/\/iptv-lists\.mypc-app\.workers\.dev\//, (r) => { relay.push(r.request().url()); r.fulfill({ status: 404, body: '' }); });
+    await ctx.route(APP + '**', (r) => {
+        const rel = decodeURIComponent(new URL(r.request().url()).pathname).replace(/^\/+/, '') || 'index.html', p = path.join(DIR, rel);
+        if (!p.startsWith(DIR) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) return r.fulfill({ status: 404, body: '' });
+        r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || 'application/octet-stream', body: fs.readFileSync(p) });
+    });
+    await page.addInitScript((a) => { if (!localStorage.getItem('arc_dev_installed')) { localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'mydrive', at: 1 }])); localStorage.setItem('arc_dev_catalog', JSON.stringify([a])); } }, db.apps.mydrive);
+    await routeHosted(page, { offline: true });
+    const sdk = (r) => r.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(ROOT, 'sdk', 'mypc-sdk.js')) });
+    await ctx.route(OLD_HOSTED + 'sdk/mypc-sdk.js', sdk);
+    await page.route(OLD_HOSTED + 'sdk/mypc-sdk.js', sdk);
+    const shot = async (name) => { if (process.env.MYPC_SHOTS) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'mydrive-' + name + '.png') }); } };
+    await page.goto(base + 'index.html');
+    await page.waitForSelector('#desk-icons .dicon');
+    await page.evaluate(() => { Store.set('gdrive', { accounts: [{ id: 'g7', email: 'sara@example.com', name: 'Sara', refreshToken: 'RT-secret', scope: 'https://www.googleapis.com/auth/drive', cid: 'cid.apps.googleusercontent.com', addedAt: 1 }], active: 'g7' }); Store.set('drive_apps', { mydrive: 1 }); });
+    await page.waitForFunction(() => Desktop.games().some((x) => x.id === 'app-mydrive'), null, { timeout: 10000 });
+    await Promise.all([page.waitForURL(/play=app-mydrive/), page.evaluate(() => Desktop.play(Desktop.games().find((x) => x.id === 'app-mydrive')))]);
+    await page.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 15000 });
+    const app = page.frames().find((x) => x.url().indexOf(APP) === 0);
+    await app.waitForFunction(() => window.MyDriveApp && window.MyDriveApp.stack, null, { timeout: 15000 });
+    await page.waitForTimeout(1500);
+    await shot('tv-0-explorer');
+    const files = [{ id: 'fm1234567890', name: 'Holiday 2024.mkv', mimeType: 'video/x-matroska', size: '100' }];
+    const sibs = files.concat([{ id: 'fs1234567890', name: 'Holiday 2024.srt', mimeType: 'application/x-subrip', size: String(SRT.length) }]);
+    await app.evaluate(([f, s]) => MyDriveApp.openPlayer(f, 0, s), [files, sibs]);
+    await page.waitForFunction(() => window.__av.state === 'PLAYING', null, { timeout: 15000 }).catch(() => {});
+    const p1 = await page.evaluate(() => ({ url: window.__av.url, cls: document.documentElement.classList.contains('av-video') }));
+    const a1 = await app.evaluate(() => ({ tv: MyDriveApp.player.tv, video: document.querySelector('.player-video').getAttribute('src'), html: getComputedStyle(document.documentElement).backgroundColor,
+        pl: getComputedStyle(document.querySelector('.player')).backgroundColor, under: [...document.querySelectorAll('.app > *')].filter((x) => !x.classList.contains('player') && getComputedStyle(x).visibility !== 'hidden').map((x) => x.className) }));
+    check(/workers\.dev\/gdrive\/fm1234567890\/Holiday%202024\.mkv\?t=AT-secret$/.test(p1.url) && a1.tv && !a1.video, 'MyDrive on a TV: the film goes to the TV\'s player as drive:<id> (My PC\'s relay link), not to a <video> ' + p1.url + ' ' + JSON.stringify(a1));
+    check(p1.cls && /rgba\(0, 0, 0, 0\)/.test(a1.html) && /rgba\(0, 0, 0, 0\)/.test(a1.pl) && a1.under.length === 0, 'its page is see-through and the screens under the player are hidden, so the picture shows ' + JSON.stringify(a1));
+    // the subtitle file beside it: drawn by MyDrive from the TV player's time
+    await page.evaluate(() => { const av = window.__av; av.cur = 3000; av.t = Date.now(); av.l.oncurrentplaytime(3000); });
+    await app.waitForFunction(() => /Hello from MyDrive/.test(document.querySelector('.player-sub').textContent), null, { timeout: 5000 }).catch(() => {});
+    const sub = await app.evaluate(() => document.querySelector('.player-sub').textContent);
+    check(/Hello from MyDrive's subtitle file/.test(sub), 'the .srt next to it shows over the picture in time ' + sub);
+    await shot('tv-1-playing');
+    // pause / skip with the remote: the TV's player does it
+    await page.evaluate(() => { window.__av.log = []; });
+    await app.evaluate(() => { MyDriveApp.player.togglePlay(); MyDriveApp.player.skip(30); });
+    await page.waitForTimeout(300);
+    const log = await page.evaluate(() => window.__av.log.join(' | '));
+    check(/pause/.test(log) && /seek 3\d\d\d\d/.test(log), 'pause and +30 s go to the TV\'s player ' + log);
+    // close: the TV's player stops, the page is drawn again
+    await app.evaluate(() => MyDriveApp.player.close());
+    await page.waitForTimeout(300);
+    const after = { av: await page.evaluate(() => [window.__av.state, document.documentElement.classList.contains('av-video')]), html: await app.evaluate(() => document.documentElement.classList.contains('tv-video')) };
+    check(after.av[0] === 'NONE' && !after.av[1] && !after.html, 'closing the player stops the TV\'s player and draws MyDrive again ' + JSON.stringify(after));
+    check(relay.length === 0, 'the test never reached the real relay');
+    check(page.errors.filter((e) => !/ResizeObserver/.test(e)).length === 0, 'no page errors ' + page.errors.slice(0, 3).join(' | '));
+    await page.close();
+}
+
+// 50c. Speedy + Google Drive on a TV (owner report 2026-11-20: "Google Drive videos don't play" on the TV: its <video> is played by
+// the TV's media engine, which never goes through the app's service worker). On a TV the film goes to the TV's player as
+// 'drive:<id>' (API 24): My PC makes the relay link with the profile's token (the app never sees it); when the token runs out
+// the TV's player fails and My PC opens a new link at the same place by itself.
+async function speedyDriveTvTests(browser, base) {
+    const DIR = path.resolve(process.env.SPEEDY_DIR || path.join(ROOT, '..', 'g_iptv'));
+    if (!fs.existsSync(path.join(DIR, 'js', 'drive.js'))) { console.log('50c. Speedy + Google Drive on a TV: skipped (no checkout at ' + DIR + ')'); return; }
+    console.log('50c. Speedy + Google Drive on a TV: the TV\'s player plays drive:<id> through My PC\'s relay, a new link when the sign-in runs out');
+    const fx = await import(new URL('file://' + path.join(DIR, 'tests', 'fixtures.mjs')).href);
+    const APP = 'https://speedy.example.test/';
+    const db = { apps: {}, settings: { google: { tvClientId: 'cid.apps.googleusercontent.com', tvClientSecret: 'sec', pickerClientId: 'web.apps.googleusercontent.com', pickerApiKey: 'PKEY', projectNumber: '123' } } };
+    db.apps.speedy = { id: 'speedy', name: 'Speedy IPTV', url: APP, entry: APP + 'index.html', icon: '', type: 'app', version: '1.1.1', enabled: true, order: 1, config: { orientation: 'landscape' } };
+    const page = await newPage(browser, base, db);
+    const ctx = page.context();
+    await ctx.addInitScript(FAKE_AVPLAY);
+    const FOLDER = 'application/vnd.google-apps.folder';
+    const g = { files: {
+        fo: { id: 'fo', name: 'Films', mimeType: FOLDER, parents: ['root'] },
+        v1: { id: 'v1AbCdEfGhIj', name: 'The.Big.Test.2019.1080p.mkv', mimeType: 'video/x-matroska', parents: ['fo'], data: Buffer.from('x'.repeat(2000)), videoMediaMetadata: { durationMillis: '5400000' } } } };
+    g.files = { fo: g.files.fo, v1AbCdEfGhIj: g.files.v1 };
+    await fakeGoogle(ctx, g);
+    const relay = [];
+    await ctx.route(/^https:\/\/iptv-lists\.mypc-app\.workers\.dev\//, (r) => { relay.push(r.request().url()); r.fulfill({ status: 404, body: '' }); });
+    await page.addInitScript((a) => { if (!localStorage.getItem('arc_dev_installed')) { localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'speedy', at: 1 }])); localStorage.setItem('arc_dev_catalog', JSON.stringify([a])); } }, db.apps.speedy);
+    await routeHosted(page, { offline: true });
+    await fx.routeAll(ctx, { appBase: APP, sdk: path.join(ROOT, 'sdk', 'mypc-sdk.js') });
+    await page.route(OLD_HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(ROOT, 'sdk', 'mypc-sdk.js')) }));
+    const shot = async (name) => { if (process.env.MYPC_SHOTS) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'speedy-' + name + '.png') }); } };
+    await page.goto(base + 'index.html');
+    await page.waitForSelector('#desk-icons .dicon');
+    // signed in to Google Drive in My PC, Speedy allowed
+    await page.evaluate(() => { Store.set('gdrive', { accounts: [{ id: 'g7', email: 'sara@example.com', name: 'Sara', refreshToken: 'RT-secret', scope: 'https://www.googleapis.com/auth/drive', cid: 'cid.apps.googleusercontent.com', addedAt: 1 }], active: 'g7' }); Store.set('drive_apps', { speedy: 1 }); });
+    await page.waitForFunction(() => Desktop.games().some((x) => x.id === 'app-speedy'), null, { timeout: 10000 });
+    await Promise.all([page.waitForURL(/play=app-speedy/), page.evaluate(() => Desktop.play(Desktop.games().find((x) => x.id === 'app-speedy')))]);
+    await page.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 15000 });
+    const app = page.frames().find((x) => x.url().indexOf(APP) === 0);
+    await app.waitForFunction(() => typeof UI !== 'undefined' && UI.top() && UI.top().constructor.name === 'HomeScreen', null, { timeout: 15000 });
+    const tvOk = await app.evaluate(() => ({ api: MyPC.apiLevel, v: MyPC.info().bridges.video, drive: MyPC.video.drive(), gd: Gd.tv() }));
+    check(tvOk.api >= 24 && tvOk.v === 2 && tvOk.drive && tvOk.gd, 'on a TV My PC says its player plays Google Drive files (API 24, bridges.video 2) ' + JSON.stringify(tvOk));
+    await app.evaluate(async () => { UI.push(new DriveScreen()); });
+    await app.waitForFunction(() => UI.top().constructor.name === 'DriveScreen' && UI.top().lib && UI.top().items.length, null, { timeout: 20000 });
+    await shot('drive-tv-1-movies');
+    // OK on the film: the TV's player
+    await app.evaluate(() => UI.top().gv && UI.top().gv.index !== undefined);
+    await app.evaluate(async () => { const f = UI.top().items[0]; playDrive(f, [], 754); });
+    await page.waitForFunction(() => window.__av.state === 'PLAYING', null, { timeout: 15000 }).catch(() => {});
+    const p1 = await page.evaluate(() => ({ url: window.__av.url, log: window.__av.log.join(' | '), cls: document.documentElement.classList.contains('av-video') }));
+    const a1 = await app.evaluate(() => ({ eng: Player.state().engine, url: Player.current().url, video: !!document.querySelector('video') && document.querySelector('video').getAttribute('src') }));
+    check(/^https:\/\/iptv-lists\.mypc-app\.workers\.dev\/gdrive\/v1AbCdEfGhIj\/The\.Big\.Test\.2019\.1080p\.mkv\?t=AT-secret$/.test(p1.url) && /seek 754000/.test(p1.log) && p1.cls,
+        'OK on a Drive film on the TV: the TV\'s player opens My PC\'s relay link (file id, name, the profile\'s token) at the resume point ' + p1.url + ' ' + p1.log);
+    check(a1.eng === 'tv' && a1.url === 'drive:v1AbCdEfGhIj' && !a1.video, 'Speedy uses the TV\'s player for it and only knows drive:<id> (no token, no <video>) ' + JSON.stringify(a1));
+    await page.waitForFunction(() => localStorage.getItem('arc_dev_av_trace'), null, { timeout: 3000 }).catch(() => {});
+    const tr = await page.evaluate(() => JSON.parse(localStorage.getItem('arc_dev_av_trace') || 'null'));
+    check(tr && /\?t=\*$/.test(tr.url) && !/AT-secret/.test(JSON.stringify(tr)), 'the black box keeps no token ' + (tr && tr.url));
+    await shot('drive-tv-2-playing');
+    // the sign-in in the link runs out (an hour): the TV's player fails; My PC asks Google for a new token and opens again where it was
+    const tokN = () => g.calls.filter((c) => /^POST \/token/.test(c)).length, tokBefore = tokN();
+    await page.evaluate(() => { const av = window.__av; av.cur = 1800000; av.t = Date.now(); window.__avOldL = av.l; });
+    await page.evaluate(() => GDrive._expire && GDrive._expire());
+    await page.evaluate(() => window.__av.l.onerror('PLAYER_ERROR_CONNECTION_FAILED'));
+    await page.waitForFunction(() => window.__av.l !== window.__avOldL && window.__av.state === 'PLAYING', null, { timeout: 10000 }).catch(() => {});
+    const p2 = await page.evaluate(() => ({ url: window.__av.url, log: window.__av.log.slice(-6).join(' | ') }));
+    const a2 = await app.evaluate(() => ({ mode: Player.mode(), msg: (document.querySelector('.dialog') || {}).textContent || '' }));
+    check(/workers\.dev\/gdrive\/v1AbCdEfGhIj\//.test(p2.url) && /seek 18000\d\d/.test(p2.log) && a2.mode === 'full' && !a2.msg && tokN() > tokBefore,
+        'the link\'s sign-in ran out: My PC opens a new link at the same place (30:00) by itself, no error in Speedy ' + JSON.stringify([p2, a2]));
+    // a Drive film needs the app's permission: without it, open('drive:...') is refused
+    const denied = await page.evaluate(() => { Store.set('drive_apps', {}); return true; }) && await app.evaluate(() => MyPC.video.open('drive:v1AbCdEfGhIj').then(() => 'ok', (e) => e.code));
+    check(denied === 'denied', 'an app not allowed to use Google Drive cannot open drive:<id> ' + denied);
+    check(relay.length === 0, 'the test never reached the real relay ' + relay.length);
+    const leak = await app.evaluate(() => JSON.stringify(localStorage) + document.documentElement.outerHTML.slice(0, 200000));
+    check(!/AT-secret|RT-secret/.test(leak), 'Speedy never holds a Google token on the TV either');
+    check(page.errors.filter((e) => !/ResizeObserver/.test(e)).length === 0, 'no page errors ' + page.errors.slice(0, 3).join(' | '));
+    await page.close();
 }
 async function speedyDrivePart(browser, base, DIR) {
     console.log('50b. Speedy IPTV + Google Drive through My PC: sign-in, films, shows, folders, shared, playlists, streaming with seeking, subtitles');
