@@ -1,5 +1,5 @@
 {
-  "build": 186,
+  "build": 187,
   "version": "3.0.0",
   "shell": 1,
   "css": [
@@ -34,6 +34,7 @@
     "js/core/web-proxy.js",
     "js/core/ai.js",
     "js/core/mic.js",
+    "js/core/stt.js",
     "js/core/gdrive.js",
     "js/core/qr.js",
     "js/core/memo-store.js",
@@ -69,6 +70,7 @@
     "js/core/i18n-net.js",
     "js/core/i18n-appusb.js",
     "js/core/i18n-share.js",
+    "js/core/i18n-stt.js",
     "js/core/a11y.js",
     "js/core/scores.js",
     "js/core/audio.js",

@@ -19,6 +19,7 @@
         { id: 'drive', icon: 'drive', label: 'sysDrive' },
         { id: 'sound', icon: 'sound', label: 'sysSound' },
         { id: 'devices', icon: 'gamepad', label: 'sysDevices' },
+        { id: 'speech', icon: 'memo', label: 'sysStt' },               // speech to text for apps and games (js/core/stt.js)
         { id: 'shortcuts', icon: 'remote', label: 'sysShortcuts' },
         { id: 'time', icon: 'clock', label: 'sysTime' },
         { id: 'gaming', icon: 'controller', label: 'sysGaming' },
@@ -47,6 +48,7 @@
         if (sub === 'phonectrl' && id === 'devices') { phoneRows(out); return out; }
         if (sub === 'motionmoves' && id === 'devices') { movesRows(out); return out; }
         if (id === 'ai') { aiRows(out); return out; }
+        if (id === 'speech') { sttRows(out); return out; }
         if (id === 'widgets') { if (sub === 'widget') widgetRows(out); else widgetsRows(out); return out; }
         if (id === 'notifications') { notifRows(out); return out; }
         if (id === 'drive') { driveRows(out); return out; }
@@ -200,6 +202,28 @@
             out.push({ kind: 'info', label: t('device'), value: Perf.describe() });
         }
         return out;
+    }
+
+    /* ---------- Speech to text (owner request 2026-11-20, js/core/stt.js): per profile, used by apps through MyPC.stt ---------- */
+    function sttText() {
+        var st = Stt.status();
+        if (!st.on) return t('sttWhy_off');
+        if (!st.ready) return t('sttWhy_' + String(st.why).replace(/-/g, ''));
+        return t('sttReady_' + st.source + (st.engine === 'ai' ? 'ai' : '')).replace('%p', st.phone || t('sttPhone')).replace('%s', st.service);
+    }
+    function sttRedraw() { if (!main || page !== 'speech') return; var c = Focus.current(), idx = c && inMain(c) ? c.getAttribute('data-row') : null, f = renderMain(idx === null ? -1 : +idx); if (idx !== null && f) Focus.focus(f); }
+    function sttRows(out) {
+        if (typeof Stt === 'undefined') { out.push({ kind: 'text', value: t('sttErr_failed') }); return; }
+        out.push({ kind: 'toggle', label: t('sttOn'), desc: t('sttOnDesc'), get: function () { return Stt.prefs().on; }, set: function (v) { Stt.setPref('on', !!v); sttRedraw(); } });
+        out.push({ kind: 'info', label: t('sttNow'), value: sttText() });
+        if (!Stt.prefs().on) return;
+        out.push({ kind: 'select', label: t('sttLang'), value: function () { var l = Stt.prefs().lang; return l === 'auto' ? t('sttLangAuto').replace('%s', I18n.NAMES[I18n.lang()]) : I18n.NAMES[l]; },
+                   adjust: function (d) { var l = Stt.LANGS, i2 = (l.indexOf(Stt.prefs().lang) + d + l.length) % l.length; Stt.setPref('lang', l[i2]); } });
+        out.push({ kind: 'select', label: t('sttEngine'), desc: t('sttEngineDesc'), value: function () { return t('sttEngine_' + Stt.prefs().engine); },
+                   adjust: function (d) { var l = Stt.ENGINES, i2 = (l.indexOf(Stt.prefs().engine) + d + l.length) % l.length; Stt.setPref('engine', l[i2]); sttRedraw(); } });
+        out.push({ kind: 'action', label: t('sttTry'), desc: t('sttTryDesc'), primary: true, run: function () { if (Stt.active()) Stt.stop(); else Stt.listen({}, function () {}); } });
+        out.push({ kind: 'text', value: t('sttHow') });
+        out.push({ kind: 'text', value: t('sttPrivacy') });
     }
 
     // approximate localStorage use of the whole app (UTF-16: 2 bytes per character)
@@ -826,6 +850,7 @@
     }
     // the phone controller opens its room in the background: show what happens (status, players) as it changes
     function onCtrl() {
+        if (page === 'speech') return sttRedraw();          // a phone came or went: what listens now
         if (!main || page !== 'devices' || (sub && sub !== 'phonectrl')) return;
         var c = Focus.current(), idx = c && inMain(c) ? c.getAttribute('data-row') : null, f = renderMain(idx === null ? -1 : +idx);
         if (idx !== null && f) Focus.focus(f);

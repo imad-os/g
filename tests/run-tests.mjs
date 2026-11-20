@@ -398,6 +398,7 @@ async function main() {
     if (process.env.MYPC_ONLY === 'wall') { await wallTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'speedy') { await speedyTests(browser, base); await speedyDriveTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'video') { await videoTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'stt') { await sttTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'appusb') { await appUsbTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'copy') { await copyTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'drive') { await driveTests(browser, base); await drivePhoneTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
@@ -1215,8 +1216,8 @@ async function main() {
         check(await page.evaluate(() => Win.current() === null && !Mic.active()), 'Memo closes with the microphone off');
         // the Control Panel (was Settings) opens on a grid of categories
         await page.evaluate(() => Win.open('settings'));
-        check(await page.evaluate(() => document.querySelectorAll('.cp-tile').length === 16 && document.getElementById('win-title').textContent === 'Control Panel' &&
-            document.activeElement.getAttribute('data-page') === 'system' && document.querySelector('.set-nav').hidden), 'the Control Panel opens on a grid of 16 categories, focus on the first');
+        check(await page.evaluate(() => document.querySelectorAll('.cp-tile').length === 17 && document.getElementById('win-title').textContent === 'Control Panel' &&
+            document.activeElement.getAttribute('data-page') === 'system' && document.querySelector('.set-nav').hidden), 'the Control Panel opens on a grid of 17 categories, focus on the first');
         await key('ArrowRight', 'Enter');
         check(await page.evaluate(() => !document.querySelector('.cp-home') .offsetParent && document.querySelector('.set-title').textContent === 'Personalization' &&
             document.activeElement.getAttribute('data-theme') === 'win11'), 'OK on a card opens its page, focus on its first row (the theme)');
@@ -3914,7 +3915,7 @@ async function main() {
         const loop = by('error', /loop error/);
         check(loop && loop.n === 5 && reps.filter((r) => /loop error/.test(r.msg)).length === 1, 'the same error 5 times is one report with n = 5 (' + (loop && loop.n) + ')');
         const one = by('error', /boom/) || {};
-        check(one.appv === '2.0.1' && one.sdk === 22 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
+        check(one.appv === '2.0.1' && one.sdk >= 22 && /^tv-/.test(one.tv) && one.ver && one.build > 0 && one.model && one.lang === 'en' && one.where === 'tv' && one.url.indexOf(APP) === 0 && /^\d{4}-/.test(one.at) && Date.parse(one.exp) - Date.parse(one.at) === 30 * 86400000,
             'each report has the app version, SDK level, TV id and model, My PC version and build, language, place, address, time and a 30-day expiry (' + JSON.stringify(one) + ')');
         const keys = new Set(reps.flatMap((r) => Object.keys(r)));
         const allowed = ['app', 'kind', 'msg', 'stack', 'src', 'stage', 'appv', 'sdk', 'n', 'at', 'exp', 'tv', 'model', 'ver', 'build', 'lang', 'user', 'where', 'ua', 'url'];
@@ -4314,6 +4315,7 @@ async function main() {
     await driveTests(browser, base);
     await copyTests(browser, base);
     await appUsbTests(browser, base);
+    await sttTests(browser, base);
     await drivePhoneTests(browser, base);
     await calendarTests(browser, base);
     await clockTests(browser, base);
@@ -8712,4 +8714,190 @@ async function speedyDrivePart(browser, base, DIR) {
     check(appReq.length === 0 && !/AT-secret|RT-secret/.test(leak), 'Speedy never talks to Google itself and never holds a Google token (My PC sends every Drive request) ' + appReq.slice(0, 2).join(' '));
     check(page.errors.filter((e) => !/ResizeObserver/.test(e)).length === 0, 'no page errors ' + page.errors.slice(0, 3).join(' | '));
     await page.close();
+}
+
+// 55. Speech to text (js/core/stt.js, MyPC.stt API 24; owner request 2026-11-20). A TV and a phone in Buttons mode: Control Panel >
+// Speech to text, an app that listens when A is pressed (keyboard when it is off), the phone's mic button, the phone's own recognizer.
+// MYPC_ONLY=stt runs only these; MYPC_SHOTS=<folder> saves screenshots.
+async function sttTests(browser, base) {
+    console.log('55. Speech to text: Control Panel, MyPC.stt.listen on A, the phone\'s mic button, the phone\'s own recognizer, off = keyboard');
+    const shots = process.env.MYPC_SHOTS;
+    const okKey = (pg) => pg.evaluate(() => { const k = (d) => Input.onKey({ keyCode: 13, repeat: false, preventDefault() {} }, d); k(true); k(false); });
+    const shot = async (pg, name) => { if (shots) await pg.screenshot({ path: path.join(shots, name) }); };
+    const APP = 'https://apps.example.test/talk/';
+    const appHtml = `<!doctype html><meta charset=utf-8><title>Talk</title>
+<body style="margin:0;background:#1d2b44;color:#fff;font:40px sans-serif;padding:60px">
+<script src="https://imad-os.github.io/g/sdk/mypc-sdk.js"></script>
+<h2 style="margin:0 0 20px">Talk (test app)</h2><p id=hint>...</p><p id=said style="color:#7fe08a"></p><p id=log style="font-size:26px;opacity:.8"></p>
+<script>
+window.__said = []; window.__ev = []; window.__kb = 0;
+function hint() { document.getElementById('hint').textContent = MyPC.stt.enabled() ? 'Press A to talk (speech to text is on)' : 'Press A to type (speech to text is off)'; }
+function said(t, how) { __said.push(how + ':' + t); document.getElementById('said').textContent = 'You said: ' + t; }
+MyPC.init({
+    onInit() {
+        hint();
+        MyPC.stt.on('text', (e) => said(e.text, 'event'));
+        ['start', 'partial', 'working', 'error', 'end', 'status'].forEach((n) => MyPC.stt.on(n, (e) => { __ev.push(n + (e && e.code ? ':' + e.code : '')); if (n === 'status') hint(); }));
+        MyPC.ready();
+    },
+    onInput(a, down) {
+        if (a !== 'confirm' || !down) return;
+        if (MyPC.stt.enabled()) MyPC.stt.listen({ maxSeconds: 3 }).then((r) => { __ev.push('listen:' + r.text + ':' + r.engine); }, (e) => { __ev.push('listen-err:' + e.code); });
+        else { __kb++; MyPC.text.keyboard({ label: 'Say something' }).then((v) => { if (v) said(v, 'keyboard'); }); }
+    }
+});
+</script>`;
+    const files = { 'index.html': appHtml, 'icon.svg': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#36c"/></svg>' };
+    const db = { apps: { talk: { id: 'talk', name: 'Talk', url: APP, entry: APP + 'index.html', icon: APP + 'icon.svg', type: 'app', version: '1.0.0', enabled: true, order: 1, config: {} } },
+                 settings: { ai: { list: [{ id: 'gem', preset: 'gemini', type: 'gemini', name: 'Google Gemini', url: 'https://generativelanguage.googleapis.com/v1beta', key: 'k-test', model: 'gemini-2.5-flash' }], def: 'gem' } } };
+    const tv = await newPage(browser, base, db);
+    const ctx = tv.context();
+    await routeHosted(tv, { offline: true });
+    await tv.route(OLD_HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(ROOT, 'sdk', 'mypc-sdk.js')) }));
+    await ctx.route(APP + '**', (r) => { const rel = new URL(r.request().url()).pathname.slice('/talk/'.length) || 'index.html'; const f = files[rel]; r.fulfill(f === undefined ? { status: 404, body: '' } : { status: 200, contentType: TYPES[path.extname(rel)] || 'image/svg+xml', headers: { 'Access-Control-Allow-Origin': '*' }, body: f }); });
+    await tv.addInitScript((a) => { if (!localStorage.getItem('arc_dev_installed')) { localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'talk', at: 1 }])); localStorage.setItem('arc_dev_catalog', JSON.stringify([a])); } }, db.apps.talk);
+    // Gemini writes down the recording: the test answers with the words, and keeps what was asked
+    const asked = [];
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': '*' };
+    await ctx.route('https://generativelanguage.googleapis.com/**', (r) => {
+        const q = r.request();
+        if (q.method() === 'OPTIONS') return r.fulfill({ status: 204, headers: cors });
+        const b = JSON.parse(q.postData() || '{}'), parts = (b.contents || []).flatMap((c) => c.parts || []), au0 = parts.find((p) => (p.inlineData || p.inline_data) && /^audio\//.test((p.inlineData || p.inline_data).mimeType || (p.inlineData || p.inline_data).mime_type)), au = au0 && (au0.inlineData || au0.inline_data);
+        asked.push({ url: q.url(), key: q.headers()['x-goog-api-key'], audio: au ? (au.mimeType || au.mime_type) + ':' + au.data.length : '', sys: JSON.stringify(b.systemInstruction || '') });
+        r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Come to the well with me.\n' }] }, finishReason: 'STOP' }] }) });
+    });
+    await tv.goto(base + 'index.html');
+    await tv.waitForFunction(() => window.Controllers && window.Stt && document.querySelector('[data-game]'), null, { timeout: 20000 });
+    // Control Panel > Speech to text: off at first
+    await tv.evaluate(() => Win.open('settings', 'speech'));
+    await tv.waitForSelector('.set-row', { timeout: 5000 });
+    const off = await tv.evaluate(() => ({ on: Stt.enabled(), text: document.querySelector('.set-main, #win-body').textContent }));
+    check(!off.on && /Turned off/.test(off.text) && /Speech to text/.test(off.text), 'Control Panel > Speech to text: a page of its own, off by default');
+    await tv.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /^Speech to text/.test(r.textContent)).click());
+    await tv.waitForFunction(() => Stt.enabled() && /Write it down with/.test(document.body.textContent), null, { timeout: 3000 });
+    const noPhone = await tv.evaluate(() => Stt.status());
+    check(noPhone.on && noPhone.ready && noPhone.engine === 'ai' && noPhone.source === 'device', 'on a TV with no phone it would use a plugged microphone, written down by the AI service ' + JSON.stringify(noPhone));
+    // a phone in Buttons mode, whose browser has no speech recognition of its own (like the Android app): its microphone + Gemini
+    await tv.evaluate(() => Controllers.setOn(true));
+    const code = await tv.evaluate(() => Controllers.code());
+    await tv.waitForFunction(() => Controllers.status().s === 'ready', null, { timeout: 10000 });
+    const ph = await newPage(browser, base, db, { phone: true, viewport: { width: 844, height: 390 } });
+    await ph.addInitScript(() => { window.SpeechRecognition = undefined; window.webkitSpeechRecognition = undefined; });
+    await ph.goto(base + 'index.html');
+    await ph.waitForFunction(() => window.Win && document.querySelector('[data-game]'), null, { timeout: 20000 });
+    await ph.evaluate(() => Win.open('gamepad'));
+    await ph.fill('.gc-code', code);
+    await ph.evaluate(() => [...document.querySelectorAll('.gc-modes .btn')][0].click());
+    await ph.click('.gc-go');
+    await tv.waitForFunction(() => Controllers.modes()[1] === 'pad', null, { timeout: 40000 });
+    await tv.waitForFunction(() => /records, Google Gemini writes it down/.test(document.body.textContent), null, { timeout: 5000 }).catch(() => {});
+    const ready = await tv.evaluate(() => ({ st: Stt.status(), text: [...document.querySelectorAll('.set-row')].map((r) => r.textContent).join(' | ') }));
+    check(ready.st.ready && ready.st.engine === 'ai' && ready.st.source === 'phone' && /records, Google Gemini writes it down/.test(ready.text), 'with the phone connected: "Ready: <phone> records, Google Gemini writes it down" (' + ready.st.phone + ')');
+    await tv.evaluate(() => Notify.clear());
+    await tv.waitForTimeout(400);
+    await shot(tv, 'stt-1-control-panel.png');
+    // Try it: the phone records, Gemini writes it down, the card shows the words
+    await tv.evaluate(() => [...document.querySelectorAll('.set-row')].find((r) => /^Try it/.test(r.textContent)).click());
+    await ph.waitForFunction(() => Mic.active(), null, { timeout: 8000 });
+    await tv.waitForFunction(() => /Listening/.test(document.getElementById('toast').textContent), null, { timeout: 4000 });
+    await shot(tv, 'stt-2-listening.png');
+    await tv.waitForFunction(() => /You said/.test(document.getElementById('toast').textContent), null, { timeout: 15000 }).catch(() => {});
+    const tried = await tv.evaluate(() => document.getElementById('toast').textContent);
+    check(/You said\s*Come to the well with me\./.test(tried) && asked.length === 1 && /^audio\/wav:\d{5,}/.test(asked[0].audio) && asked[0].key === 'k-test', 'Try it: the phone\'s microphone is recorded, Gemini gets a WAV and the card says what was heard (' + tried.slice(0, 80) + ', ' + (asked[0] && asked[0].audio) + ')');
+    check(await ph.evaluate(() => !Mic.active()), 'the phone closes its microphone once it stopped listening');
+    await shot(tv, 'stt-3-heard.png');
+    await tv.evaluate(() => Win.close());
+    // the app: A = listen (MyPC.stt.listen), the words come back to it
+    await tv.evaluate(() => Notify.clear());
+    await tv.waitForSelector('#desk-icons [data-game="app-talk"]', { timeout: 8000 });
+    await tv.focus('#desk-icons [data-game="app-talk"]'); await tv.keyboard.press('Enter');
+    await tv.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 15000 });
+    let frame = tv.frames().find((x) => x.url().indexOf(APP) === 0);
+    await frame.waitForFunction(() => window.MyPC && MyPC.info() && MyPC.info().bridges, null, { timeout: 8000 });
+    await tv.waitForFunction(() => Controllers.modes()[1] === 'pad', null, { timeout: 40000 });     // the phone came back after the page change
+    await frame.waitForFunction(() => MyPC.stt.enabled(), null, { timeout: 8000 }).catch(() => {});
+    const st1 = await frame.evaluate(() => ({ api: MyPC.apiLevel, en: MyPC.stt.enabled(), st: MyPC.stt.status(), hint: document.getElementById('hint').textContent }));
+    check(st1.api >= 24 && st1.en && st1.st.source === 'phone' && /Press A to talk/.test(st1.hint), 'the app learns that speech to text is on and ready (MyPC.stt.enabled(), API 24) ' + JSON.stringify(st1.st));
+    await okKey(tv);                                                            // A / OK in the app
+    await tv.waitForSelector('#dialog-backdrop:not([hidden])', { timeout: 4000 });
+    check(/wants to use the microphone/.test(await tv.textContent('#dialog-title')), 'the first time, the app asks for the microphone');
+    await tv.click('#dialog-yes');
+    await ph.waitForFunction(() => Mic.active(), null, { timeout: 8000 });
+    await ph.waitForFunction(() => /229, 57, 53/.test(document.getElementById('vp-mic').style.background), null, { timeout: 5000 }).catch(() => {});
+    const red = await ph.evaluate(() => /229, 57, 53/.test(document.getElementById('vp-mic').style.background));
+    await tv.waitForTimeout(500);
+    await shot(tv, 'stt-4-app-listening.png');
+    if (shots) await ph.screenshot({ path: path.join(shots, 'stt-5-phone-mic-red.png') });
+    await frame.waitForFunction(() => __ev.some((e) => /^listen:/.test(e)), null, { timeout: 15000 }).catch(() => {});
+    const got = await frame.evaluate(() => ({ ev: __ev.slice(), said: __said.slice(), text: document.getElementById('said').textContent }));
+    check(red && got.ev.indexOf('listen:Come to the well with me.:ai') >= 0 && got.said[0] === 'event:Come to the well with me.' && got.ev.indexOf('start') >= 0 && got.ev.indexOf('working') >= 0 && got.ev.indexOf('end') >= 0,
+        'A in the app: the phone\'s mic button turns red, listen() gives the words, and on(\'text\') / start / working / end come too ' + JSON.stringify(got.ev));
+    await shot(tv, 'stt-6-app-heard.png');
+    // the phone's mic button over an app that listens for speech: starts listening for it (no key reaches the app)
+    const tap = async () => { const r = await ph.evaluate(() => { const b = document.getElementById('vp-mic').getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; }); await ph.mouse.move(r[0], r[1]); await ph.mouse.down(); await ph.mouse.up(); };
+    await frame.evaluate(() => { __said = []; });
+    await tap();
+    await ph.waitForFunction(() => Mic.active(), null, { timeout: 8000 });
+    await frame.waitForFunction(() => __said.length > 0, null, { timeout: 15000 }).catch(() => {});
+    check(await frame.evaluate(() => __said[0] === 'event:Come to the well with me.') && asked.length === 3, 'the phone\'s mic button starts listening for the app; the words arrive as on(\'text\') (' + JSON.stringify(await frame.evaluate(() => __said)) + ')');
+    // My PC's menu stops listening at once
+    const cancelled = frame.evaluate(() => MyPC.stt.listen({ maxSeconds: 6 }).then(() => 'text', (e) => e.code));
+    await ph.waitForFunction(() => Mic.active(), null, { timeout: 8000 });
+    await tvMenu(tv);
+    check(await cancelled === 'cancelled' && await ph.waitForFunction(() => !Mic.active(), null, { timeout: 5000 }).then(() => true, () => false), 'My PC\'s menu stops listening: listen() rejects with "cancelled" and the phone closes its microphone');
+    await tv.evaluate(() => { const b = document.querySelectorAll('#pause-items button'); b[b.length - 1].click(); });      // Quit
+    await tv.waitForFunction(() => window.GameHost && GameHost.state() === 'idle' && !!document.querySelector('#desk-icons .dicon'), null, { timeout: 10000 });
+    // the phone's own speech recognition (Chrome on a phone): the words come from the phone, partial words on the card
+    await ph.evaluate(() => document.querySelector('[data-act="leave"]').click());
+    await tv.waitForFunction(() => !Controllers.modes()[1], null, { timeout: 10000 });
+    await ph.context().close();
+    const ph2 = await newPage(browser, base, db, { phone: true, viewport: { width: 844, height: 390 } });
+    await ph2.addInitScript(() => {
+        window.__recs = [];
+        window.webkitSpeechRecognition = window.SpeechRecognition = function () {
+            const r = this; window.__recs.push(r);
+            r.start = () => {
+                setTimeout(() => r.onaudiostart && r.onaudiostart(), 50);
+                setTimeout(() => r.onresult && r.onresult({ results: [Object.assign([{ transcript: 'salam' }], { isFinal: false })] }), 300);
+                setTimeout(() => r.onresult && r.onresult({ results: [Object.assign([{ transcript: 'salam alikoum' }], { isFinal: true })] }), 1400);
+                setTimeout(() => r.onend && r.onend(), 1500);
+            };
+            r.stop = () => {}; r.abort = () => { r.onerror && r.onerror({ error: 'aborted' }); r.onend && r.onend(); };
+        };
+    });
+    await tv.evaluate(() => Controllers.pair());                                 // a new phone: pairing open again
+    await ph2.goto(base + 'index.html');
+    await ph2.waitForFunction(() => window.Win && document.querySelector('[data-game]'), null, { timeout: 20000 });
+    await ph2.evaluate(() => Win.open('gamepad'));
+    await ph2.fill('.gc-code', code);
+    await ph2.evaluate(() => [...document.querySelectorAll('.gc-modes .btn')][0].click());
+    await ph2.click('.gc-go');
+    await tv.waitForFunction(() => Controllers.modes()[1] === 'pad', null, { timeout: 40000 });
+    const st2 = await tv.evaluate(() => Stt.status());
+    check(st2.engine === 'phone' && st2.source === 'phone', 'a phone with its own speech recognition writes the words down itself ' + JSON.stringify(st2));
+    await tv.evaluate(() => { window.__p = []; Stt.listen({ lang: 'fr' }, (t, d) => __p.push(t + (d && d.text ? ':' + d.text : ''))); });
+    await tv.waitForFunction(() => __p.some((x) => x === 'partial:salam'), null, { timeout: 8000 }).catch(() => {});
+    const card1 = await tv.evaluate(() => document.getElementById('toast').textContent);
+    await tv.waitForFunction(() => __p.indexOf('end') >= 0, null, { timeout: 8000 }).catch(() => {});
+    const p2 = await tv.evaluate(() => __p.slice());
+    const recLang = await ph2.evaluate(() => window.__recs[0] && window.__recs[0].lang);
+    check(p2.indexOf('partial:salam') >= 0 && p2.indexOf('text:salam alikoum') >= 0 && /salam/.test(card1) && recLang === 'fr-FR' && asked.length === 3,
+        'the phone\'s recognizer: partial words on the card, then the words; the language asked (fr-FR); no AI request ' + JSON.stringify(p2));
+    await shot(tv, 'stt-7-phone-recognizer.png');
+    // off: the app shows the keyboard on A, and listen() says "off"
+    await tv.evaluate(() => { Stt.setPref('on', false); Notify.clear(); });
+    await tv.focus('#desk-icons [data-game="app-talk"]'); await tv.keyboard.press('Enter');
+    await tv.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 15000 });
+    frame = tv.frames().find((x) => x.url().indexOf(APP) === 0);
+    await frame.waitForFunction(() => window.MyPC && MyPC.info() && MyPC.info().bridges, null, { timeout: 8000 });
+    const offSt = await frame.evaluate(() => ({ en: MyPC.stt.enabled(), why: MyPC.stt.status().why, hint: document.getElementById('hint').textContent }));
+    const offErr = await frame.evaluate(() => MyPC.stt.listen().then(() => 'text', (e) => e.code));
+    await okKey(tv);
+    await tv.waitForFunction(() => Keyboard.isOpen(), null, { timeout: 5000 }).catch(() => {});
+    check(!offSt.en && offSt.why === 'off' && /Press A to type/.test(offSt.hint) && offErr === 'off' && await tv.evaluate(() => Keyboard.isOpen()) && await frame.evaluate(() => __kb === 1),
+        'turned off: enabled() is false, listen() says "off", and the app shows My PC\'s keyboard on A instead');
+    await shot(tv, 'stt-8-off-keyboard.png');
+    await tv.evaluate(() => Keyboard.close());
+    check(tv.errors.length === 0 && ph2.errors.length === 0, 'no page errors ' + tv.errors.concat(ph2.errors).join('; '));
+    for (const pg of [tv, ph2]) await pg.context().close();
 }

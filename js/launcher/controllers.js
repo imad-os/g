@@ -78,7 +78,7 @@ var Controllers = (function () {
         slots[p] = null;
         Input.releaseRemote(p); Input.virtualPad(p, null);
         if (slot.mode === 'pointer') Pointer.hide();
-        micGone(slot);
+        micGone(slot); srGone(slot);
         say(I18n.t('ctrlGone').replace('%s', slot.name).replace('%n', p), { id: 'ctrl' + p, kind: 'err' });
         report();
     }
@@ -100,9 +100,9 @@ var Controllers = (function () {
                     save(c);
                 }
                 if (slots[p] && slots[p].cid !== cid) { conn.send({ t: 'no', why: 'busy' }); return setTimeout(function () { conn.close(); }, 300); }
-                if (slots[p]) { var old = slots[p]; slots[p] = null; Input.releaseRemote(p); Input.virtualPad(p, null); micGone(old); old.conn.close(); }
+                if (slots[p]) { var old = slots[p]; slots[p] = null; Input.releaseRemote(p); Input.virtualPad(p, null); micGone(old); srGone(old); old.conn.close(); }
                 var h = SensorProto.hello(m);
-                slot = { conn: conn, cid: cid, p: p, name: name || 'Phone', mode: h.mode, proto: h.proto, session: h.session || SensorProto.session(),
+                slot = { conn: conn, cid: cid, p: p, name: name || 'Phone', mode: h.mode, sr: !!(m.caps && m.caps.sr === true), proto: h.proto, session: h.session || SensorProto.session(),
                          offset: h.now ? Date.now() - h.now : null, seen: SensorProto.tracker(), stats: { actions: 0, duplicate: 0, stale: 0, invalid: 0, metrics: 0, raw: 0 } };
                 slots[p] = slot;
                 conn.send({ t: 'ok', p: p, proto: SensorProto.VERSION, session: slot.session });
@@ -119,6 +119,7 @@ var Controllers = (function () {
                 return;
             }
             if (m.t === 'ms' || m.t === 'au' || m.t === 'me') return micMessage(slot, m);
+            if (m.t === 'sr') return srMessage(slot, m);
             if (m.t === 'tx') {                                                // Text mode: the whole text of the field (go: then Enter / OK)
                 if (slot.mode !== 'text' || typeof m.v !== 'string') return;
                 if (!TextIn.put(m.v, m.go === 1)) sendField(slot, null);      // no field (any more): the phone shows it
@@ -191,6 +192,50 @@ var Controllers = (function () {
         if (r.started) r.onEnd('closed'); else r.cb('no-mic');
     }
     if (typeof Mic !== 'undefined' && Mic.source) Mic.source({ available: function () { return !!micSlot(); }, open: micOpen });
+
+    /* ---------- speech to text (js/core/stt.js): the phone's own speech recognition, when it has one (caps.sr) ---------- */
+    var srReq = null, srSeq = 0;
+    function srEnd(r, drop) {
+        clearTimeout(r.timer);
+        if (srReq === r) srReq = null;
+        r.slot.conn.send({ t: 'stt', on: 0, id: r.id, x: drop ? 1 : 0 });
+    }
+    function srOpen(lang, max, ev) {
+        var slot = micSlot();
+        if (srReq) { var old = srReq; srEnd(old, true); old.ev('end', { reason: 'cancel' }); }
+        var r = srReq = { id: ++srSeq, slot: slot, ev: ev, text: '' };
+        slot.conn.send({ t: 'stt', on: 1, id: r.id, lang: lang, max: max });
+        r.timer = setTimeout(function () { if (srReq === r) { srEnd(r, true); ev('error', { code: 'no-mic', message: 'The phone did not answer.' }); ev('end', { reason: 'error' }); } }, max * 1000 + 8000);
+        return {
+            stop: function () { if (srReq === r) r.slot.conn.send({ t: 'stt', on: 0, id: r.id, x: 0 }); },      // the phone sends what it heard, then end
+            cancel: function () { if (srReq === r) { srEnd(r, true); ev('end', { reason: 'cancel' }); } }
+        };
+    }
+    function srMessage(slot, m) {
+        var r = srReq;
+        if (!r || r.slot !== slot || m.id !== r.id) return;
+        if (typeof m.v === 'string') {
+            var v = m.v.replace(/\s+/g, ' ').trim().slice(0, 500);
+            if (m.fin === 1) { r.text = v; if (v) r.ev('text', { text: v }); }
+            else if (v) r.ev('partial', { text: v });
+        } else if (m.err) {
+            var c = String(m.err);
+            r.err = /^(denied|no-mic|nothing|network)$/.test(c) ? c : 'failed';
+        }
+        if (m.end === 1) {
+            srReq = null; clearTimeout(r.timer);
+            if (!r.text) r.ev('error', { code: r.err || 'nothing', message: '' });
+            r.ev('end', { reason: r.text ? 'done' : 'error' });
+        }
+    }
+    function srGone(slot) {
+        var r = srReq;
+        if (!r || r.slot !== slot) return;
+        srReq = null; clearTimeout(r.timer);
+        r.ev('error', { code: 'no-mic', message: 'The phone went away.' }); r.ev('end', { reason: 'error' });
+    }
+    if (typeof Stt !== 'undefined') Stt.phone({ available: function () { return !!micSlot(); }, recognizes: function () { var s = micSlot(); return !!(s && s.sr); },
+                                                 label: function () { var s = micSlot(); return s ? s.name + ' (P' + s.p + ')' : ''; }, recognize: srOpen });
 
     /* ---------- sensor modes ---------- */
     function currentCfg() { return appCfg || SensorProto.config({ moves: SensorProto.DEFAULT_MOVES, metrics: { enabled: false } }); }

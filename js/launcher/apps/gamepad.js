@@ -221,14 +221,15 @@
             }
             else if (m.type === 'ack') onAck(SensorProto.ack(m));
             else if (m.t === 'mic') micCmd(m);
+            else if (m.t === 'stt') sttCmd(m);
             else if (m.t === 'tf') onField(m);
         });
         c.onClose(function () {
             if (conn !== c) return;
-            conn = null; linked = false; busy = false; release(); micStop(false); field = null; paintTx();
+            conn = null; linked = false; busy = false; release(); micStop(false); sttStop(); field = null; paintTx();
             if (run) { state(t('gcConnecting'), false); clearTimeout(retry); retry = setTimeout(attempt, 1200); }
         });
-        c.send({ t: 'hi', p: player, cid: cid, name: name(), proto: SensorProto.VERSION, mode: mode, session: session || SensorProto.session(), caps: { motion: caps.motion, orientation: 'DeviceOrientationEvent' in window }, now: Date.now() });
+        c.send({ t: 'hi', p: player, cid: cid, name: name(), proto: SensorProto.VERSION, mode: mode, session: session || SensorProto.session(), caps: { motion: caps.motion, orientation: 'DeviceOrientationEvent' in window, sr: sttCan() }, now: Date.now() });
     }
     function start() {
         var v = ui.code.value.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -243,7 +244,7 @@
         attempt();
     }
     function stop() {
-        run = false; clearTimeout(retry); clearTimeout(wait); release(); micStop(false); native('active', false); unwake();
+        run = false; clearTimeout(retry); clearTimeout(wait); release(); micStop(false); sttStop(); native('active', false); unwake();
         sensorsOff();
         if (conn) { var c = conn; conn = null; c.close(); }
         if (offerObj) { offerObj.cancel(); offerObj = null; }
@@ -276,7 +277,7 @@
         send({ t: 'gp', b: gpBits, x: x, y: y });
     }
     function release() { gpBits = 0; gpHeld = {}; if (mode === 'keyboard') kbRelease(); else sync(); for (var a in want) if (want[a]) padAction(a, false); }
-    function onVis() { if (document.hidden) { release(); micStop(true); } else if (run) wake(); }
+    function onVis() { if (document.hidden) { release(); micStop(true); sttStop(); } else if (run) wake(); }
     function onBlur() { if (mode === 'keyboard') kbRelease(); }        // a key let go elsewhere never comes back as keyup
 
     /* ---------- Buttons mode's microphone: this phone's microphone for the TV, only while the TV records ---------- */
@@ -305,6 +306,27 @@
             Haptics.buzz();
         });
     }
+    /* ---------- speech to text: this phone's own speech recognition, when it has one (js/core/stt.js on the TV asks) ---------- */
+    var sttId = 0, sttH = null;
+    // Chrome on a phone has one; the Android app's WebView does not (its microphone then goes to the TV as sound: Mic above)
+    function sttCan() { return mode === 'pad' && !window.MyPCNative && typeof Stt !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
+    function sttCmd(m) {
+        if (typeof m.id !== 'number') return;
+        if (!m.on) { if (m.id === sttId && sttH) { if (m.x) { var h = sttH; sttH = null; sttId = 0; h.cancel(); VirtualPad.micLive(false); } else sttH.stop(); } return; }
+        if (sttH) { sttH.cancel(); sttH = null; }
+        var id = sttId = m.id;
+        if (!sttCan()) { send({ t: 'sr', id: id, err: 'no-mic' }); send({ t: 'sr', id: id, end: 1 }); sttId = 0; return; }
+        VirtualPad.micLive(true, 0.4); Haptics.buzz();
+        sttH = Stt.webRec(String(m.lang || 'en-US'), Math.max(1, Math.min(30, +m.max || 10)), function (type, d) {
+            if (sttId !== id) return;
+            if (type === 'partial') send({ t: 'sr', id: id, v: d.text, fin: 0 });
+            else if (type === 'text') send({ t: 'sr', id: id, v: d.text, fin: 1 });
+            else if (type === 'error') send({ t: 'sr', id: id, err: d.code });
+            else if (type === 'end') { sttId = 0; sttH = null; VirtualPad.micLive(false); send({ t: 'sr', id: id, end: 1 }); }
+        });
+    }
+    function sttStop() { if (sttH) { var h = sttH, id = sttId; sttH = null; sttId = 0; h.cancel(); VirtualPad.micLive(false); send({ t: 'sr', id: id, end: 1 }); } }
+
     function micSend(id, buf) {
         for (var o = 0; o < buf.byteLength; o += MIC_CHUNK) {
             var b = new Uint8Array(buf, o, Math.min(MIC_CHUNK, buf.byteLength - o)), str = '';

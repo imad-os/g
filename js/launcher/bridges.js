@@ -2,6 +2,7 @@
  *   'net'  MyPC.net    web requests without CORS limits (js/core/web-proxy.js)
  *   'ai'   MyPC.ai     AI services set up in the App Store Manager (copied at start, Bridges.syncAi), keys never sent to apps (js/core/ai.js)
  *   'mic'  MyPC.mic    the microphone (js/core/mic.js)
+ *   'stt'  MyPC.stt    speech to text (js/core/stt.js, API 24): listens when the app asks or the phone's mic button is pressed
  *   'drive' MyPC.drive Google Drive of the profile (js/core/gdrive.js): one sign-in in Control Panel > Google Drive,
  *                      apps never see a token. Allowed once per app and per profile (profile key drive_apps).
  *   'usb'  MyPC.usb    the USB drives of the TV (js/core/usb-fs.js): drives, list, new folder, read. Allowed once per app (arc_dev_perm).
@@ -329,15 +330,66 @@ var Bridges = (function () {
             });
         }
 
+        /* MyPC.stt (API 24): speech to text (js/core/stt.js), turned on by the user in Control Panel > Speech to text.
+         * app -> { rid, op: 'listen', opts } | { rid, op: 'stop' | 'cancel' | 'status' } | { rid, op: 'want', on } (the app listens for
+         * speech: the phone's microphone button then starts listening for it).  shell -> { rid, result | error }, and every event
+         * { ev: 'start' | 'level' | 'partial' | 'working' | 'text' | 'error' | 'end', of: rid (0 = the microphone button), ... },
+         * { ev: 'status', status } when it changes. Uses the microphone permission (once per app). */
+        var stt = null, sttWant = false, sttLast = '';
+        function sttStatus() { var st = Stt.status(); return { on: st.on, ready: st.on && st.ready, why: st.why, lang: st.lang, engine: st.engine, source: st.source }; }
+        function sttPush() { var st = sttStatus(), j = JSON.stringify(st); if (j !== sttLast) { sttLast = j; send('stt', { rid: 0, ev: 'status', status: st }); } }
+        var sttOff = typeof Stt !== 'undefined' ? Stt.onChange(sttPush) : null;
+        var ctrlOff = null;
+        if (typeof Controllers !== 'undefined' && Controllers.onChange) { Controllers.onChange(sttPush); ctrlOff = function () { Controllers.offChange(sttPush); }; }
+        function sttListen(rid, opts) {
+            function no(code, msg) { if (rid) send('stt', { rid: rid, error: { code: code, message: msg } }); else App.toast(msg, { id: 'stt', kind: 'warn' }); }
+            if (o.state() !== 'running') return no('not-running', 'The app is not running. Resume it first.');
+            if (stt) return no('busy', 'My PC is already listening.');
+            if (!Stt.enabled()) return no('off', I18n.t('sttErr_off'));
+            stt = { rid: rid, h: null };
+            var mine = stt;
+            ask(ctx, 'mic', I18n.t('permMicText'), function (ok) {
+                if (stt !== mine) return;
+                if (!ok || ctx.dead || o.state() !== 'running') { stt = null; return no(ok ? 'not-running' : 'denied', ok ? 'The app is not running.' : 'The user did not allow this app to use the microphone.'); }
+                var answered = false;
+                mine.h = Stt.listen(opts && typeof opts === 'object' ? opts : {}, function (ev, data) {
+                    if (ev === 'end' && stt === mine) stt = null;
+                    var m = { ev: ev, of: rid };
+                    for (var k in data) if (data.hasOwnProperty(k)) m[k] = data[k];
+                    send('stt', m);
+                    if (!rid || answered) return;
+                    if (ev === 'text') { answered = true; send('stt', { rid: rid, result: { text: data.text, lang: data.lang, engine: data.engine } }); }
+                    else if (ev === 'error') { answered = true; send('stt', { rid: rid, error: { code: data.code, message: data.message || '' } }); }
+                    else if (ev === 'end') { answered = true; send('stt', { rid: rid, error: { code: 'cancelled', message: 'Stopped.' } }); }
+                });
+            });
+        }
+        function sttRun(d) {
+            if (typeof Stt === 'undefined') return send('stt', { rid: d.rid, error: { code: 'unsupported', message: 'This My PC has no speech to text. Update My PC.' } });
+            if (d.op === 'status') return send('stt', { rid: d.rid, result: sttStatus() });
+            if (d.op === 'want') { sttWant = d.on !== false; return send('stt', { rid: d.rid, result: true }); }
+            if (d.op === 'stop') { if (stt && stt.h) stt.h.stop(); return send('stt', { rid: d.rid, result: true }); }
+            if (d.op === 'cancel') { if (stt) { if (stt.h) stt.h.cancel(); else { var r0 = stt.rid; stt = null; if (r0) send('stt', { rid: r0, error: { code: 'cancelled', message: 'Stopped.' } }); } } return send('stt', { rid: d.rid, result: true }); }
+            if (d.op === 'listen') return sttListen(d.rid, d.opts);
+            send('stt', { rid: d.rid, error: { code: 'bad-request', message: 'Unknown operation ' + d.op + '.' } });
+        }
+
         return {
             handle: function (type, d) {
-                if (type !== 'net' && type !== 'ai' && type !== 'mic' && type !== 'drive' && type !== 'usb' && type !== 'copy') return false;
+                if (type !== 'net' && type !== 'ai' && type !== 'mic' && type !== 'drive' && type !== 'usb' && type !== 'copy' && type !== 'stt') return false;
                 if (!d || typeof d !== 'object' || typeof d.rid !== 'number') return true;
-                if (type === 'net') net(d); else if (type === 'ai') aiRun(d); else if (type === 'drive') driveRun(d); else if (type === 'usb') usbRun(d); else if (type === 'copy') copyRun(d); else micRun(d);
+                if (type === 'net') net(d); else if (type === 'ai') aiRun(d); else if (type === 'drive') driveRun(d); else if (type === 'usb') usbRun(d); else if (type === 'copy') copyRun(d); else if (type === 'stt') sttRun(d); else micRun(d);
+                return true;
+            },
+            sttStatus: function () { return typeof Stt !== 'undefined' ? sttStatus() : null; },
+            // the phone's microphone button (the Record key) over an app that listens for speech: starts listening, a second press stops
+            sttButton: function () {
+                if (!sttWant || typeof Stt === 'undefined' || !Stt.enabled()) return false;
+                if (stt) { if (stt.h) stt.h.stop(); } else sttListen(0, {});
                 return true;
             },
             // My PC's menu or another screen covers the app: it stops listening (the app gets 'end' with reason 'paused')
-            pause: function () { if (mic && !mic.starting) { Mic.end('paused'); micEnd(); } },
+            pause: function () { if (mic && !mic.starting) { Mic.end('paused'); micEnd(); } if (stt && stt.h) stt.h.cancel(); },
             destroy: function () {
                 ctx.dead = true;
                 Object.keys(nets).forEach(function (k) { try { nets[k].abort(); } catch (e) {} });
@@ -347,6 +399,8 @@ var Bridges = (function () {
                 if (unwatch) { unwatch(); unwatch = null; CopyJobs.watch(sid(ctx.appId), false); }
                 if (DriveUI.screenOpen()) DriveUI.close();
                 if (mic) { Mic.cancel(); micEnd(); }
+                if (stt && stt.h) stt.h.cancel(); stt = null;
+                if (sttOff) sttOff(); if (ctrlOff) ctrlOff();
                 queue = queue.filter(function (q) { return q.ctx !== ctx; });
             }
         };

@@ -152,6 +152,13 @@ when the two clocks differ. Older phones without `proto` / `mode` are treated as
 { "t": "ms", "id": 7, "ok": 1, "rate": 16000 }         // phone -> TV: started (or "err": "denied" | "no-mic" | "off")
 { "t": "au", "id": 7, "d": "<base64>" }                // phone -> TV: 16-bit PCM, little endian, mono, 2400 bytes at most (about 14 a second)
 { "t": "me", "id": 7 }                                 // phone -> TV: the phone stopped by itself (page hidden): the TV keeps what it got
+// Speech to text (js/core/stt.js, MyPC.stt API 24): only to a phone whose hello said caps.sr = true (its browser has its own speech
+// recognition: Chrome on a phone; the Android app's WebView has none, its microphone then goes to the TV as "au" sound above)
+{ "t": "stt", "on": 1, "id": 3, "lang": "fr-FR", "max": 10 } // TV -> phone: listen once (stops after a silence or max seconds)
+{ "t": "stt", "on": 0, "id": 3, "x": 0 }               // TV -> phone: stop now and send what was heard (x: 1 = drop it)
+{ "t": "sr", "id": 3, "v": "salam", "fin": 0 }         // phone -> TV: words so far (fin: 1 = the final words)
+{ "t": "sr", "id": 3, "err": "nothing" }               // phone -> TV: "denied" | "no-mic" | "nothing" | "network" | "failed"
+{ "t": "sr", "id": 3, "end": 1 }                       // phone -> TV: finished (always last)
 ```
 
 Rules:

@@ -162,7 +162,7 @@ still slow down a hidden page by itself. Standalone, outside My PC, the SDK does
 itself. Your app only sees `info.profile` and keeps progress with `MyPC.save` / `MyPC.load`, which are already per
 profile and backed up. **Never** build your own login, accounts, cloud saves, name entry for scores, Firebase or backend.
 
-Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text, 14 drive, 15 no input while paused, 16 usb / copy, 17 video / back / keys / keyboard, 18 every button to the app: Back as `cancel`, `onInput` returns `false` = nothing to close, 19 `MyPC.buttons`) and hide the feature
+Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text, 14 drive, 15 no input while paused, 16 usb / copy, 17 video / back / keys / keyboard, 18 every button to the app: Back as `cancel`, `onInput` returns `false` = nothing to close, 19 `MyPC.buttons`, 22 `MyPC.bug`, 23 the USB copy (`MyPC.offline`), 24 `MyPC.stt` speech to text) and hide the feature
 when it is missing.
 
 ### App config: `MyPC.app_config`
@@ -1558,3 +1558,69 @@ Nothing to do for most apps; follow these rules so the copy works:
   it needs the internet. `MyPC.net`, `MyPC.ai` and the others still answer with their usual "network" errors.
 
 The player turns it off in Control Panel > System > Save apps on a USB drive (it also lists what is saved).
+
+## 23. Speech to text: `MyPC.stt` (API level 24)
+
+The player can **talk to your app** instead of typing. My PC listens and gives your app the words; you never touch the
+microphone, a speech service or a key. The player turns it on in **Control Panel > Speech to text** (per profile, off by
+default; also the language they speak). Samsung keeps the remote's microphone for Bixby, so the microphone is **a phone
+in the Game controller's Buttons mode** (on a computer, its own microphone). My PC writes the speech down with the phone's
+own speech recognition when it has one (Chrome on a phone), else with the AI service of My PC that can (App Store Manager >
+AI services: Gemini, OpenAI or Groq). While it listens My PC shows a "Listening…" card, the phone's microphone button turns
+red, and the words show on the card at the end.
+
+**The rule: check `MyPC.stt.enabled()` every time the player wants to type.** On = listen; off (or an older My PC, or no
+phone / no service) = show the keyboard (`MyPC.text.keyboard`, section 21) as before. Never ask the player to turn it on from
+your app, never record the microphone yourself for this (no `MyPC.mic` + your own AI call), never show your own microphone
+permission screen: the first `listen()` asks the player once ("<app> wants to use the microphone").
+
+```js
+// a chat: the player presses A to talk
+function talk() {
+  if (MyPC.apiLevel >= 24 && MyPC.stt.enabled()) {
+    showListening(true);                               // optional: your own "listening" look; My PC already shows a card
+    MyPC.stt.listen({ maxSeconds: 10 })                // stops by itself after a short silence
+      .then((r) => send(r.text))                       // { text, lang, engine }
+      .catch((e) => { if (e.code === 'nothing' || e.code === 'cancelled') return; keyboardThenSend(); })
+      .finally(() => showListening(false));
+  } else keyboardThenSend();
+}
+function keyboardThenSend() { MyPC.text.keyboard({ label: 'Say something' }).then((v) => { if (v) send(v); }); }
+```
+
+**The phone's microphone button.** While your app has a `MyPC.stt.on('text', fn)` listener, the microphone button on the
+phone's pad (and the remote's Record key) starts listening for your app; a second press stops early. The words come only
+to the listeners (no `listen()` promise then), so a chat that wants push-to-talk from the phone adds:
+
+```js
+MyPC.stt.on('text', (e) => send(e.text));             // every result: from listen() and from the phone's mic button
+```
+
+Reference (all after `onInit`):
+
+| Call | What it does |
+|---|---|
+| `MyPC.stt.enabled()` | `true` when the player turned it on **and** something can listen now (a phone or microphone, a service) |
+| `MyPC.stt.status()` | `{ on, ready, why, lang, engine, source }`: `why` = `'off'` / `'no-mic'` / `'no-service'` / `'old'` (My PC too old) when not ready; `lang` = `'en'` / `'fr'` / `'es'` / `'ar'`; `engine` = `'phone'` / `'device'` / `'ai'`; `source` = `'phone'` / `'device'` |
+| `MyPC.stt.check()` | Promise: the status asked again from My PC |
+| `MyPC.stt.listen({ lang, maxSeconds, silenceMs, hint })` | listens once. Promise `{ text, lang, engine }`. `lang` = the player's setting when missing; `maxSeconds` 1-30 (10); `silenceMs` 500-4000 (1200, the pause that ends it); `hint` = words that may be said (names in your game) |
+| `MyPC.stt.stop()` | stop listening now and write down what was heard |
+| `MyPC.stt.cancel()` | stop and drop it (the promise rejects with `cancelled`) |
+| `MyPC.stt.listening()` | `true` while My PC listens for your app |
+| `MyPC.stt.on(name, fn)` | events, returns `off()`: `'start'` `{ engine, source, lang }`, `'level'` `{ v: 0..1 }`, `'partial'` `{ text }` (words so far, phone recognizer only), `'working'` (writing it down), `'text'` `{ text, lang, engine }`, `'error'` `{ code, message }`, `'end'` `{ reason }` (always last), `'status'` (the status changed: a phone came or went) |
+
+Errors (`e.code`): `off` (turned off: show the keyboard), `busy` (already listening), `no-mic`, `no-service`, `denied` (the
+player did not allow the microphone), `nothing` (no words heard), `network`, `not-running` (your app is paused),
+`cancelled` (My PC's menu opened, the player pressed the mic button again with nothing heard, or `cancel()`), `unsupported`
+(My PC too old), `failed`. My PC's menu over your app stops listening at once.
+
+Standalone (your page opened in a browser): `enabled()` is `true` when the browser has its own speech recognition (Chrome),
+and `listen()` uses it, so you can test without a TV.
+
+### Protocol (for reference)
+
+app -> My PC `stt` `{ rid, op: 'listen', opts }` | `{ rid, op: 'stop' | 'cancel' | 'status' }` | `{ rid, op: 'want', on }`;
+My PC -> app `stt` `{ rid, result | error }` and events `{ ev, of: rid (0 = the phone's mic button), ... }`, `{ ev: 'status', status }`.
+`init` carries `stt` (the status) and `bridges.stt: 1`. Phone controller (Buttons mode): TV -> phone `{ t: 'stt', on: 1, id, lang, max }` /
+`{ t: 'stt', on: 0, id, x }`, phone -> TV `{ t: 'sr', id, v, fin }` | `{ t: 'sr', id, err }` | `{ t: 'sr', id, end: 1 }`; a phone without a
+recognizer sends its microphone as sound (`mic` / `au`, section 14) and My PC's AI service writes it down.

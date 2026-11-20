@@ -24,6 +24,6 @@ performance on low-resource TVs**: when in doubt, choose the lighter option.
 - **Game controllers come first**: design for a controller and map every button, trigger and stick through
   `MyPC.gamepad` (guide section 5), then check it still plays with the TV remote's arrows + OK.
 - Use only what My PC gives you for input, saves, scores, profiles, multiplayer, sensors, heart rate, web requests,
-  AI and the microphone (guide section 14). Never build your own key handling, login, lobby, backend, Firebase, CORS
+  AI and the microphone (guide section 14), speech to text (guide section 23). Never build your own key handling, login, lobby, backend, Firebase, CORS
   proxy, AI SDK or microphone code.
 - Finish with the guide's checklist (section 11), each item ticked, then the publish steps from section 10.

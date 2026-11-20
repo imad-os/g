@@ -447,6 +447,14 @@
   `usbfile` message -> `AppUsb.readFile`) and a memory localStorage. Notify card `appusb`. Control Panel > System: switch (admin,
   `arc_dev_appusb_on`, on by default) + one row per app (OK = remove). Tests: `MYPC_ONLY=appusb` (section 54; the fake drive is served at
   https://usb-files.test). Not proven on a real TV yet: file:// frames, `deleteDirectory` / `copyFile` on Tizen 9. GUIDE.md section 22.
+- **Speech to text (API 24, owner request 2026-11-20)**: `js/core/stt.js` (`Stt`) + strings `js/core/i18n-stt.js` (keep `sttPrivacy` true),
+  Control Panel > **Speech to text** (page `speech`, per profile key `stt` { on (off by default), lang auto / en / fr / es / ar, engine auto / ai }, Try it).
+  Engines: the phone's own recognizer (Buttons mode phone whose hello has `caps.sr`: Chrome on a phone; protocol `stt` / `sr` in controllers.js +
+  gamepad.js), this computer's own (never on the TV / in the APK WebView), else the phone's (or device's) mic via `Mic` (16 kHz WAV, stops on silence)
+  written down by a managed AI service with `transcribe` (Gemini, OpenAI, Groq whisper-large-v3-turbo). Card `Notify` id `stt` (shown even over a
+  quiet app). Apps: `MyPC.stt` (enabled / status / check / listen / stop / cancel / on), bridge `stt` in bridges.js (microphone permission once per app);
+  while an app has `on('text')` the phone's mic button / Record key (`record` action) listens for it (`GameHost` -> `api.sttButton`). My PC's menu
+  cancels. No APK change needed. GUIDE.md section 23. Tests: `MYPC_ONLY=stt` (section 55: TV + phone, fake Gemini, fake phone recognizer).
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /
   start failures and timeouts from `game-host.js` (with why: no SDK answer, no `ready()`, given up), uncaught errors of built-in games, the
   SDK's reports (uncaught, rejections, failed files, handler throws, `MyPC.fail`, `MyPC.report`; sent even before `MyPC.init`), and My PC's

@@ -22,6 +22,7 @@
  * Input actions: left right up down jump run confirm cancel pause menu
  *   Every controller button, trigger and stick: MyPC.gamepad (API 9). Game controllers come first: use all of them.
  * Web requests without CORS limits, AI services and the microphone: MyPC.net, MyPC.ai, MyPC.mic (API 10).
+ * Speech to text (the player speaks, the app gets the words): MyPC.stt (API 24).
  * Errors (uncaught, failed files, MyPC.fail, MyPC.report(error, data)) are saved by My PC for the App Store Manager (API 11).
  * Push notifications: MyPC.notify.request() / status(), MyPC.launch (the notification that opened the app) (API 12).
  * Google Drive of the profile (one sign-in in My PC, no token in the app): MyPC.drive (API 14).
@@ -39,7 +40,7 @@
 var MyPC = (function () {
     'use strict';
 
-    var VERSION = 1, API = 23, HELLO_WAIT = 1200;
+    var VERSION = 1, API = 24, HELLO_WAIT = 1200;
     var handlers = {}, info = null, data = {}, started = false, destroyed = false, isReady = false;
     var hosted = false, hostWin = null, hostOrigin = '*', helloTimer = 0;
     var down = {};                       // action -> number of keys / buttons holding it
@@ -306,6 +307,7 @@ var MyPC = (function () {
                 pub.launch = plainObject(d.launch) ? d.launch : null;
                 info = { standalone: false, lang: d.lang || 'en', rtl: !!d.rtl, volume: d.volume || { music: 0.7, sfx: 0.8 },
                          profile: d.profile || { id: 'p1', name: '' }, quality: d.quality || { tier: 'mid' }, app: d.app || {}, bridges: d.bridges || null, notify: d.notify || 0 };
+                stt._init(d.stt);
                 if (info.rtl) document.documentElement.setAttribute('dir', 'rtl');
                 document.documentElement.setAttribute('lang', info.lang);
                 multiplayer._enable(d.mp === 1 ? 'shell' : 'none');       // false on an older My PC: apps hide the multiplayer feature
@@ -318,7 +320,7 @@ var MyPC = (function () {
             case 'resume': thaw(function () { call('onResume'); }); break;
             case 'destroy':
                 if (destroyed) return;
-                destroyed = true; frozen = false; heldRaf = []; frozenMedia = []; frozenCtx = []; releaseAll(); gamepad._stop(); mic._stop();
+                destroyed = true; frozen = false; heldRaf = []; frozenMedia = []; frozenCtx = []; releaseAll(); gamepad._stop(); mic._stop(); stt._stop();
                 call('onDestroy');
                 break;
             case 'input': setInput(d.action, !!d.pressed, d.repeat, d.dev); break;
@@ -333,6 +335,7 @@ var MyPC = (function () {
             case 'net': net._message(d); break;
             case 'ai': ai._message(d); break;
             case 'mic': mic._message(d); break;
+            case 'stt': stt._message(d); break;
             case 'notify': notify._message(d); break;
             case 'launch': if (plainObject(d)) { pub.launch = d; call('onLaunch', d); } break;
             case 'text': text._message(d); break;
@@ -1862,6 +1865,79 @@ var MyPC = (function () {
         };
     })();
 
+    /* ---------------- speech to text: MyPC.stt (API 24) ----------------
+     * The user turns it on in Control Panel > Speech to text; My PC listens (a phone in the Game controller's Buttons mode is
+     * the microphone: Samsung keeps the remote's for Bixby) and gives the app the words. Check enabled() first: off = show
+     * the keyboard (MyPC.text.keyboard) instead.
+     *   MyPC.stt.enabled() -> true when it is on and something can listen now        MyPC.stt.status() -> { on, ready, why, lang, engine, source }
+     *   MyPC.stt.check() -> Promise status (asked again)   MyPC.stt.listen({ lang, maxSeconds, silenceMs, hint }) -> Promise { text, lang, engine }
+     *   MyPC.stt.stop() (stop now and write down what was heard)   cancel()   listening()
+     *   MyPC.stt.on('text' | 'partial' | 'start' | 'level' | 'working' | 'error' | 'end' | 'status', fn) -> off()
+     *     while the app has an on('text') listener, the phone's microphone button (or the remote's Record key) starts listening too.
+     * Standalone (a browser): the browser's own speech recognition when it has one (Chrome). Full reference: sdk/GUIDE.md "Speech to text". */
+    var stt = (function () {
+        var ch = channel('stt'), names = { text: 1, partial: 1, start: 1, level: 1, working: 1, error: 1, end: 1, status: 1 }, ls = {}, st = null, on = false, local = null, wantSent = false;
+        for (var n in names) ls[n] = [];
+        function emit(name, d) { var l = ls[name].slice(); for (var i = 0; i < l.length; i++) { try { l[i](d); } catch (e) { try { console.error('[MyPC stt] ' + e); } catch (x) {} } } }
+        function webRec() { return typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition) ? 1 : 0; }
+        function cur() {
+            if (viaShell()) return st || { on: false, ready: false, why: info.bridges && info.bridges.stt ? 'off' : 'old', lang: info.lang, engine: '', source: '' };
+            return { on: true, ready: !!webRec(), why: webRec() ? '' : 'no-mic', lang: (info && info.lang) || 'en', engine: webRec() ? 'device' : '', source: webRec() ? 'device' : '' };
+        }
+        function event(d) {
+            var name = d.ev, x = {};
+            for (var k in d) if (d.hasOwnProperty(k) && k !== 'ev' && k !== 'of' && k !== 'rid') x[k] = d[k];
+            if (name === 'status') { st = d.status || st; emit('status', cur()); return; }
+            if (name === 'start') on = true;
+            if (name === 'end') on = false;
+            if (names[name]) emit(name, x);
+        }
+        function want() { if (viaShell() && ls.text.length && !wantSent) { wantSent = true; ch.call('want', { on: true }); } }
+        function listen(opts) {
+            var wire = {};
+            opts = opts && typeof opts === 'object' ? opts : {};
+            for (var k in opts) if (opts.hasOwnProperty(k) && typeof opts[k] !== 'function') wire[k] = opts[k];
+            return bridgeReady().then(function () {
+                if (viaShell()) {
+                    if (!(info.bridges && info.bridges.stt)) throw bridgeError({ code: 'unsupported', message: 'This My PC has no speech to text yet. Update My PC (Settings > Update).' });
+                    return ch.call('listen', { opts: wire });
+                }
+                if (on) throw bridgeError({ code: 'busy', message: 'Already listening.' });
+                return need(['js/core/stt.js']).then(function () {
+                    return new Promise(function (resolve, reject) {
+                        var got = null, er = null;
+                        on = true; emit('start', { engine: 'device', source: 'device', lang: Stt.langOf(wire.lang || (info && info.lang)) });
+                        local = Stt.webRec(wire.lang || (info && info.lang), Math.max(1, Math.min(30, +wire.maxSeconds || 10)), function (type, d) {
+                            if (type === 'text') { got = { text: d.text, lang: Stt.langOf(wire.lang || (info && info.lang)), engine: 'device' }; d = got; }
+                            if (type === 'error') er = d;
+                            if (type === 'end') { on = false; local = null; }
+                            if (names[type]) emit(type, d);
+                            if (type === 'end') { if (got) resolve(got); else reject(bridgeError(er || { code: 'cancelled', message: 'Stopped.' })); }
+                        });
+                    });
+                });
+            });
+        }
+        return {
+            enabled: function () { var s = info ? cur() : null; return !!(s && s.on && s.ready); },
+            status: function () { return info ? cur() : null; },
+            check: function () { return bridgeReady().then(function () { return viaShell() && info.bridges && info.bridges.stt ? ch.call('status', {}).then(function (s) { st = s || st; return cur(); }) : cur(); }); },
+            listen: listen,
+            stop: function () { if (local) local.stop(); else if (viaShell()) ch.call('stop', {}); },
+            cancel: function () { if (local) local.cancel(); else if (viaShell()) ch.call('cancel', {}); },
+            listening: function () { return on; },
+            on: function (name, fn) {
+                if (typeof fn !== 'function' || !names[name]) return function () {};
+                ls[name].push(fn);
+                if (name === 'text') want();
+                return function () { var l = ls[name], i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); };
+            },
+            _init: function (s) { st = s && typeof s === 'object' ? s : null; wantSent = false; want(); },
+            _message: function (d) { if (d.ev) { event(d); return; } ch._message(d); },
+            _stop: function () { if (local) local.cancel(); on = false; }
+        };
+    })();
+
     /* ---------------- push notifications: MyPC.notify (API 12) ----------------
      * The notifications themselves come from the app's service (a .js file listed in mypc-app.json, run by the App Store
      * Manager: sdk/GUIDE.md "Push notifications"). In the app: ask the player once, at a good moment.
@@ -2360,7 +2436,7 @@ var MyPC = (function () {
 
     var pub = {
         version: VERSION,
-        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy, 17 MyPC.video + MyPC.back + init keys + MyPC.text.keyboard, 18 every button to the app: onInput returning false for 'cancel' = nothing to close (My PC's menu), 19 MyPC.buttons (init keys 'buttons': the remote's buttons by name), 22 MyPC.bug (a bug report with a log and a screenshot), 23 the USB copy for when the internet fails (MyPC.offline, fetch() from the drive) (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy, 17 MyPC.video + MyPC.back + init keys + MyPC.text.keyboard, 18 every button to the app: onInput returning false for 'cancel' = nothing to close (My PC's menu), 19 MyPC.buttons (init keys 'buttons': the remote's buttons by name), 22 MyPC.bug (a bug report with a log and a screenshot), 23 the USB copy for when the internet fails (MyPC.offline, fetch() from the drive), 24 MyPC.stt (speech to text) (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,
@@ -2370,6 +2446,7 @@ var MyPC = (function () {
         net: net,
         ai: ai,
         mic: mic,
+        stt: stt,
         notify: notify,
         text: text,
         drive: drive,

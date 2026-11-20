@@ -258,9 +258,10 @@ var GameHost = (function () {
                         data: Store.get('game_' + id + '_data', {}), app: { id: id },
                         config: game.remote.config || {},
                         mp: typeof Multiplayer !== 'undefined' && typeof Rooms !== 'undefined' && NetLink.supported() ? 1 : 0,   // MyPC.multiplayer is supported
-                        bridges: { net: 1, ai: 1, mic: Mic.supported() || Mic.phone() ? 1 : 0, drive: 1, usb: UsbFs.supported() ? 1 : 0, copy: UsbFs.supported() ? 1 : 0, video: AppVideo.supported() ? 1 : 0, keyboard: 1, back: 1 },     // MyPC.net / ai / mic (API 10), MyPC.drive (API 14), MyPC.usb / copy (API 16, TV only) go through My PC
+                        bridges: { net: 1, ai: 1, mic: Mic.supported() || Mic.phone() ? 1 : 0, drive: 1, usb: UsbFs.supported() ? 1 : 0, copy: UsbFs.supported() ? 1 : 0, video: AppVideo.supported() ? 1 : 0, keyboard: 1, back: 1, stt: typeof Stt !== 'undefined' ? 1 : 0 },     // MyPC.net / ai / mic (API 10), MyPC.drive (API 14), MyPC.usb / copy (API 16, TV only) go through My PC
                         notify: 1, launch: Push.takeLaunch(id),       // MyPC.notify, MyPC.launch: push notifications (API 12, js/launcher/push.js)
-                        usb: usb ? { v: usb.v, at: usb.at } : null    // MyPC.offline (API 23): this is the copy saved on a USB drive
+                        usb: usb ? { v: usb.v, at: usb.at } : null,   // MyPC.offline (API 23): this is the copy saved on a USB drive
+                        stt: br.sttStatus()                           // MyPC.stt (API 24): speech to text on / ready
                     });
                     padsSent = ''; sendPrefs(); padsChanged();
                     Input.onPadRaw(rawPad); Input.offDevices(padsChanged); Input.onDevices(padsChanged);
@@ -359,6 +360,7 @@ var GameHost = (function () {
             menuItems: function () { return items; },
             onMenu: function (mid) { send('menu', { id: String(mid).slice(4) }); },
             onAction: function (a, pressed, repeat, dev) { send('input', { action: a, pressed: pressed, repeat: repeat, dev: dev }); },
+            sttButton: function () { return br.sttButton(); },          // MyPC.stt (API 24): the phone's microphone button
             prefs: function () { sendPrefs(); },
             button: function (n, down, repeat) { send('btn', { n: n, d: down ? 1 : 0, r: repeat ? 1 : 0, l: Input.buttonLabel(n) }); }
         };
@@ -821,6 +823,8 @@ var GameHost = (function () {
             if ((action === 'pageUp' || action === 'pageDown') && k && k.channel) { if (api.onAction) { try { api.onAction(action, pressed, repeat, dev); } catch (e0) {} } return; }
             if (/^media/.test(action) && k && k.media) { if (api.onAction) { try { api.onAction(action, pressed, repeat, dev); } catch (e1) {} } return; }
             if (action === 'pause' && k && k.media && String(dev).slice(0, 3) !== 'pad') { if (api.onAction) { try { api.onAction('playPause', pressed, repeat, dev); } catch (e2) {} } return; }
+            // the phone's microphone button (the Record key): speech to text for an app that listens for it (MyPC.stt, API 24)
+            if (action === 'record') { if (pressed && !repeat && api && api.sttButton) api.sttButton(); return; }
             if (action === 'pageUp' || action === 'pageDown' || action === 'tab' || action === 'tabBack' || action === 'record' || /^media/.test(action)) return;
             var own = ownsKeys();
             if (action === 'pause' && !own) { if (pressed && !repeat) openPause(); return; }

@@ -125,10 +125,12 @@ var AI = (function () {
         else if (p.type === 'openai') {
             t.embed = !!EMBED[p.preset];
             if (isNvidia(p)) { t.speech = !!p.speechUrl; t.transcribe = !!p.transcribeUrl; }
+            if (isGroq(p)) t.transcribe = true;                            // Whisper on Groq (free tier): speech to text
         }
         return t;
     }
     function isOllama(p) { return p.preset === 'ollama'; }
+    function isGroq(p) { return p.preset === 'groq' || /\/\/api\.groq\.com/.test(p.url || ''); }
     // Ollama's own API is at the server's root: an address saved with /v1 (its OpenAI-compatible part) or /api still works
     function ollamaBase(p) { return String(p.url || '').replace(/\/+$/, '').replace(/\/(v1|api)$/, ''); }
     function isNvidia(p) { return p.preset === 'nvidia' || /\/\/integrate\.api\.nvidia\.com/.test(p.url || ''); }
@@ -742,7 +744,7 @@ var AI = (function () {
             var nv = isNvidia(p) && (n.task === 'speech' || n.task === 'transcribe');
             if (nv) fn = n.task === 'speech' ? nvSpeech : nvTranscribe;
             if (!fn) throw err('unsupported', (p.name || p.type) + ' cannot do "' + n.task + '". ' + (n.task === 'chat' ? '' : 'Gemini and OpenAI can.'));
-            var model = req.model || (nv ? (n.task === 'speech' ? 'magpie-multilingual' : 'parakeet') : '') ||
+            var model = req.model || (nv ? (n.task === 'speech' ? 'magpie-multilingual' : 'parakeet') : '') || (n.task === 'transcribe' && isGroq(p) ? (p.models && p.models.transcribe) || 'whisper-large-v3-turbo' : '') ||
                 (n.task === 'chat' || n.task === 'transcribe' && p.type === 'gemini' ? '' : (p.models && p.models[n.task]) || MODELS[isOllama(p) ? 'ollama' : p.type][n.task]) || p.model;
             if (!model) throw err('bad-request', 'Name a model (the request\'s "model", or the service\'s model in the App Store Manager).');
             var r = await fn(ctl, p, model, n, req, onEvent);
