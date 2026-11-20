@@ -282,7 +282,7 @@
     <nav class="nav" aria-label="Pages">
       <a href="#overview" data-page="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Overview</a>
       <a href="#apps" data-page="apps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8V7a6 6 0 0 1 12 0v1"/><path d="M3.5 8h17l-1.4 12a2 2 0 0 1-2 1.8H6.9a2 2 0 0 1-2-1.8z"/></svg>Apps<span class="count" id="nav-apps"></span></a>
-      <a href="#add" data-page="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Add apps</a>
+      <a href="#add" data-page="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Add apps<span class="count" id="nav-add" title="New apps and updates"></span></a>
       <a href="#ai" data-page="ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>AI services</a>
       <a href="#gdrive" data-page="gdrive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8.5 3h7l6 10.5-3.5 6h-12L2.5 13.5z"/><path d="M8.5 3 15 14.5M15.5 3 9 14.5M2.5 13.5h19"/></svg>Google Drive</a>
       <a href="#services" data-page="services"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>Services</a>
@@ -341,7 +341,7 @@
       <div class="head"><div class="grow"><h1>Add apps</h1><p>Publish apps and games built with the My PC SDK.</p></div></div>
       <div class="card flush cat" style="overflow:visible">
         <div class="card-head"><div class="grow"><h2>Apps from <span id="owner"></span></h2>
-          <span class="muted small">GitHub repositories of <b id="owner2"></b> named <code id="prefix"></code> with GitHub Pages. Apps already in the store are marked; new versions can be updated.</span></div>
+          <span class="muted small">GitHub repositories of <b id="owner2"></b> named <code id="prefix"></code> with GitHub Pages. Apps added by address below are checked here too. Only new apps and apps with an update are listed.</span></div>
           <button id="btn-scan">Refresh</button></div>
         <p id="scan-msg" class="small" style="padding:0 18px"></p>
         <div id="catalog-actions" class="row cat-actions" hidden>
@@ -355,6 +355,7 @@
       </div>
       <div class="card">
         <h2>Add from another address</h2>
+        <p class="muted small">Type it once: after that the app is checked for updates with the apps above, each time the App Store Manager opens or you press Refresh.</p>
         <label for="url">App address (the folder that contains <code>mypc-app.json</code>)</label>
         <div class="row">
           <input id="url" class="grow" placeholder="https://someone.github.io/my-game/">
@@ -853,9 +854,11 @@
     $('catalog').innerHTML = '';
     $('catalog-actions').hidden = true;
     say('scan-msg', 'Looking for ' + PREFIX + '… repositories of ' + OWNER + ' …', 'muted');
-    let list;
-    try { list = InstallerLib.catalog(await githubRepos(), OWNER, PREFIX); } catch (e) { return say('scan-msg', e.message, 'err'); }
-    if (!list.length) return say('scan-msg', 'No repository named ' + PREFIX + '… with GitHub Pages yet.', 'muted');
+    let list, ghErr = '';
+    try { list = InstallerLib.catalog(await githubRepos(), OWNER, PREFIX); } catch (e) { list = []; ghErr = e.message; }
+    // apps added by address (any site): their own address is checked for a new version too
+    list = list.concat(InstallerLib.storeSources(apps, list));
+    if (!list.length) return say('scan-msg', ghErr || 'No repository named ' + PREFIX + '… with GitHub Pages yet.', ghErr ? 'err' : 'muted');
     const results = await Promise.all(list.map(async (c) => {
       try {
         const r = await fetch(c.manifest, { cache: 'no-store' });
@@ -865,7 +868,7 @@
     }));
     found = results;
     const ok = results.filter((x) => x.app).length;
-    say('scan-msg', ok + ' app' + (ok === 1 ? '' : 's') + ' found in ' + list.length + ' repositor' + (list.length === 1 ? 'y' : 'ies') + '.', 'ok');
+    say('scan-msg', (ghErr ? ghErr + ' Checked the apps added by address only: ' : '') + ok + ' app' + (ok === 1 ? '' : 's') + ' checked.', ghErr ? 'err' : 'ok');
     renderCatalog();
   }
 
@@ -873,17 +876,19 @@
     const box = $('catalog');
     if (!found.length) return;
     box.innerHTML = '';
-    let selectable = 0;
+    let selectable = 0, upToDate = 0;
     found.forEach((f) => {
       const row = document.createElement('div');
       row.className = 'app';
       if (!f.app) {
         row.innerHTML = '<div class="grow"><span class="name"></span> <span class="muted small err"></span></div>';
-        row.querySelector('.name').textContent = f.c.repo;
-        row.querySelector('.err').textContent = '– not a My PC app: ' + f.error;
+        const inStore = f.c.manual && apps.find((a) => a.id === f.c.id);
+        row.querySelector('.name').textContent = inStore ? inStore.name : f.c.repo;
+        row.querySelector('.err').textContent = inStore ? '– could not check for an update (' + f.c.base + '): ' + f.error : '– not a My PC app: ' + f.error;
         return box.appendChild(row);
       }
       const st = InstallerLib.status(apps, f.app);
+      if (st === 'installed') { upToDate++; return; }     // in the store and up to date: nothing to do here
       row.innerHTML = '<input type="checkbox"><img alt=""><div class="grow"><div><span class="name"></span><span class="tag type"></span><span class="tag st"></span>' +
         ' <span class="muted small ver"></span></div><div class="muted desc"></div><div class="small why" hidden></div><div class="muted small url"></div></div><button class="act"></button>';
       const cb = row.querySelector('input');
@@ -905,7 +910,7 @@
         why.textContent = 'Changed: ' + d.map((x) => x.field === 'version' ? 'version ' + x.from + ' → ' + x.to : x.field === 'widgets' ? 'widgets (approve them again in Widgets if their code changed)' : x.field).join(', ');
       }
       row.querySelector('.desc').textContent = f.app.description;
-      row.querySelector('.url').textContent = f.c.repo + ' · ' + f.app.url;
+      row.querySelector('.url').textContent = (f.c.manual ? 'Added by address' : f.c.repo) + ' · ' + f.app.url;
       const act = row.querySelector('.act');
       act.textContent = st === 'new' ? 'Add to store' : st === 'update' ? 'Update' : 'In store';
       act.disabled = st === 'installed';
@@ -919,6 +924,14 @@
     $('btn-update-all').hidden = !ups;
     $('btn-update-all').textContent = 'Update all (' + ups + ')';
     $('cat-sum').textContent = [news ? news + ' not in store' : '', ups ? ups + ' with an update' : ''].filter(Boolean).join(' · ');
+    $('nav-add').textContent = news + ups || '';
+    if (upToDate) {
+      const p = document.createElement('p');
+      p.className = 'muted small uptodate';
+      p.style.padding = '12px 18px';
+      p.textContent = (news + ups ? '' : 'Nothing new: ') + upToDate + ' app' + (upToDate === 1 ? ' is' : 's are') + ' in the store and up to date (not listed).';
+      box.appendChild(p);
+    }
     updateSel();
   }
 

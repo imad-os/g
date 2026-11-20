@@ -4726,7 +4726,8 @@ async function managerTests(browser, base) {
                     e3: { app: 'jumper', kind: 'error', msg: 'TypeError: x is undefined', src: 'games/jumper/js/game.js:10:5', stack: 'TypeError: x is undefined\n    at step (game.js:10:5)', n: 5, at: now - 60000, tv: 'tv-aaaabbbbccccddddeeeeffff0000', model: 'QE55Q80D', ver: '2.19.0', where: 'tv' },
                     e4: { app: 'jumper', kind: 'error', msg: 'old one', n: 1, at: now - 20 * 86400000, tv: 'tv-a', where: 'tv' } },
                 apps: {
-                'old-game': { id: 'old-game', name: 'Old Game', url: 'https://imad-os.github.io/g_oldgame/', entry: 'https://imad-os.github.io/g_oldgame/index.html', icon: '', type: 'game', version: '1.0.0', enabled: true, order: 0 } } };
+                'old-game': { id: 'old-game', name: 'Old Game', url: 'https://imad-os.github.io/g_oldgame/', entry: 'https://imad-os.github.io/g_oldgame/index.html', icon: '', type: 'game', version: '1.0.0', enabled: true, order: 0 },
+                'far-app': { id: 'far-app', name: 'Far App', url: 'https://friend.example/far/', entry: 'https://friend.example/far/index.html', icon: '', type: 'app', version: '2.0.0', enabled: true, order: 1 } } };
         });
         await page.route(GS + '**', (r) => { const f = r.request().url().slice(GS.length); r.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: FAKE[f] || '' }); });
         await page.route('https://api.github.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify([
@@ -4741,26 +4742,31 @@ async function managerTests(browser, base) {
             if (u.indexOf('/g_oldgame/mypc-app.json') > 0) return send({ mypc: 1, id: 'old-game', name: 'Old Game', type: 'game', version: '1.0.0' });
             r.fulfill({ status: 404, body: '' });
         });
+        // an app added by address (not an imad-os g_ repository): checked for updates at its own address
+        let farVersion = '2.0.0';
+        await page.route('https://friend.example/**', (r) => r.request().url().indexOf('/far/mypc-app.json') > 0
+            ? r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ mypc: 1, id: 'far-app', name: 'Far App', type: 'app', version: farVersion }) })
+            : r.fulfill({ status: 404, body: '' }));
         await page.goto(base + 'installer/index.html#add');
         await page.waitForSelector('#catalog .app', { timeout: 8000 });
         const go = async (h) => { await page.evaluate((x) => { location.hash = x; }, h); await page.waitForTimeout(80); };
         const rows = await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].map((r) => r.textContent));
-        check(rows.length === 3 && !rows.some((t) => /speedy|nopages|archived/.test(t)), 'only g_ repositories with GitHub Pages are listed (' + rows.length + ')');
-        check(rows.some((t) => /Star Catcher.*Not in store/.test(t)) && rows.some((t) => /Old Game.*In store/.test(t)) && rows.some((t) => /g_broken.*not a My PC app/.test(t)),
-            'each app shows its status: not in the store, in the store, or not a My PC app');
+        check(rows.length === 2 && !rows.some((t) => /speedy|nopages|archived/.test(t)), 'only g_ repositories with GitHub Pages are listed (' + rows.length + ')');
+        check(rows.some((t) => /Star Catcher.*Not in store/.test(t)) && !rows.some((t) => /Old Game|Far App/.test(t)) && rows.some((t) => /g_broken.*not a My PC app/.test(t)) &&
+            /2 apps are in the store and up to date \(not listed\)/.test(await page.textContent('#catalog')) && await page.textContent('#nav-add') === '1',
+            'Add apps lists only new apps (and broken repositories); the 2 apps in the store with no new version are hidden; the menu counts 1');
         check(/App Store Manager/.test(await page.title()) && /App Store Manager/.test(await page.textContent('.brand')), 'the installer is now the App Store Manager');
         check(await page.evaluate(() => [...document.querySelectorAll('.nav a')].map((a) => a.textContent.replace(/\d+/g, '').trim()).join() === 'Overview,Apps,Add apps,AI services,Google Drive,Services,Widgets,Settings,Devices,World records,Errors,Stream lists'
             && document.querySelector('.nav a.on').dataset.page === 'add' && !document.querySelector('[data-view="add"]').hidden && document.querySelector('[data-view="overview"]').hidden),
             'a menu with one page each: Overview, Apps, Add apps, AI services, Google Drive, Services, Widgets, Settings, Devices, World records, Errors (+ the Stream lists link)');
-        check(await page.evaluate(() => [...document.querySelectorAll('#catalog .app')].find((r) => /Old Game/.test(r.textContent)).querySelector('input').disabled), 'installed apps cannot be selected again');
         await page.check('#sel-all');
         await page.click('#btn-install-sel');
         await page.waitForFunction(() => window.__db.apps['star-catcher'], null, { timeout: 5000 }).catch(() => {});
         const db = await page.evaluate(() => window.__db.apps);
-        check(db['star-catcher'] && db['star-catcher'].order === 1 && db['star-catcher'].url === 'https://imad-os.github.io/g_star/' && db['star-catcher'].installedBy === 'U1' && Object.keys(db).length === 2,
+        check(db['star-catcher'] && db['star-catcher'].order === 2 && db['star-catcher'].url === 'https://imad-os.github.io/g_star/' && db['star-catcher'].installedBy === 'U1' && Object.keys(db).length === 3,
             '"Add selected to the store" publishes the new app only, after the ones already there');
-        await page.waitForFunction(() => /Star Catcher.*In store/.test(document.getElementById('catalog').textContent) && !/Not in store/.test(document.getElementById('catalog').textContent));
-        check(true, 'after adding, the catalog marks it in the store');
+        await page.waitForFunction(() => !/Star Catcher/.test(document.getElementById('catalog').textContent) && /3 apps are in the store and up to date/.test(document.getElementById('catalog').textContent));
+        check(await page.textContent('#nav-add') === '', 'after adding, the app leaves the list (in the store, up to date) and the menu count goes away');
         // Overview: totals, most installed apps, recent TVs
         await go('#overview');
         const sum = await page.textContent('#tv-summary');
@@ -4830,7 +4836,7 @@ async function managerTests(browser, base) {
         await page.click(row('Star Catcher') + ' button.cfg');
         await page.fill('#cfg-text', '{ "speed": 9 }'); await page.click('#cfg-save');
         await page.waitForFunction(() => window.__db.apps['star-catcher'].config.speed === 9);
-        starVersion = '1.0.1';
+        starVersion = '1.0.1'; farVersion = '2.1.0';
         await page.evaluate(() => { window.__db['subs/star-catcher/users'] = { sara: { at: 1, app: 'star-catcher' } }; });
         await go('#add');
         await page.click('#btn-scan');
@@ -4840,13 +4846,21 @@ async function managerTests(browser, base) {
             const why = [...cat.querySelectorAll('.app')].find((r) => /Star Catcher/.test(r.textContent)).querySelector('.why');
             return { above: bar.getBoundingClientRect().bottom <= cat.getBoundingClientRect().top + 1, sticky: getComputedStyle(bar).position, up: !up.hidden && up.textContent, why: why && !why.hidden && why.textContent };
         });
-        check(top.above && top.sticky === 'sticky' && top.up === 'Update all (1)' && /version 1\.0\.0 → 1\.0\.1/.test(top.why),
+        const far = await page.evaluate(() => { const r = [...document.querySelectorAll('#catalog .app')].find((x) => /Far App/.test(x.textContent)); return r && r.textContent; });
+        check(/Update available/.test(far || '') && /Added by address · https:\/\/friend\.example\/far\//.test(far) && /2\.0\.0 → 2\.1\.0/.test(far) && await page.textContent('#nav-add') === '2',
+            'an app added by address is checked at its own address: its new version shows, nobody types the address again (' + far + ')');
+        check(top.above && top.sticky === 'sticky' && top.up === 'Update all (2)' && /version 1\.0\.0 → 1\.0\.1/.test(top.why),
             'Add apps: the actions (Select all, Update all, Add selected) stay on top; an update says what changed ' + JSON.stringify(top));
         if (process.env.MYPC_SHOTS) await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'manager-add-update.png') });
         await page.click('#catalog .app:has-text("Star Catcher") button.act');
         await page.waitForFunction(() => window.__db.apps['star-catcher'].version === '1.0.1');
         const upd = await page.evaluate(() => window.__db.apps['star-catcher']);
-        check(upd.config.speed === 9 && upd.order === 1, 'updating an app keeps its config and its position');
+        check(upd.config.speed === 9 && upd.order === 2, 'updating an app keeps its config and its position');
+        await page.click('#catalog .app:has-text("Far App") button.act');
+        await page.waitForFunction(() => window.__db.apps['far-app'].version === '2.1.0' && !/Far App/.test(document.getElementById('catalog').textContent), null, { timeout: 4000 }).catch(() => {});
+        check(await page.evaluate(() => window.__db.apps['far-app'].version === '2.1.0' && window.__db.apps['far-app'].url === 'https://friend.example/far/' && !document.querySelector('#catalog .app button.act') && /3 apps are in the store and up to date/.test(document.getElementById('catalog').textContent)),
+            'Update writes the new version of the app added by address; then nothing is left to list');
+        if (process.env.MYPC_SHOTS) await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'manager-add-uptodate.png') });
         await page.waitForFunction(() => Object.keys(window.__db['inbox/sara/items'] || {}).length === 1, null, { timeout: 4000 }).catch(() => {});
         const upn = await page.evaluate(() => Object.values(window.__db['inbox/sara/items'] || {}));
         check(upn.length === 1 && upn[0].title === 'Star Catcher was updated' && /1\.0\.1/.test(upn[0].text) && upn[0].app === 'star-catcher' && upn[0].link === 'app',
