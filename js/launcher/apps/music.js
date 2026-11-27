@@ -94,7 +94,7 @@
         if (c === 'network' || c === 'timeout') return t('muErrNet');
         if (c === 'unsupported') return t('muErrUnsupported');
         if (c === 'badname') return t('muBadName');
-        if (c === 'noconfig' || c === 'nouser' || c === 'reauth') return t('muGd_' + c);
+        if (c === 'noconfig' || c === 'nouser' || c === 'reauth') return Music._reason ? Music._reason(e, { s: 'gd' }) : t('muGd_' + c);
         return t('muErrRead') + (e && e.message ? ' (' + e.message + ')' : '');
     }
 
