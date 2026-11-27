@@ -11,6 +11,7 @@
  *   UsbFs.read(path, at, len, cb)  cb(err, Uint8Array)
  *   UsbFs.writer(path, append, cb) cb(err, { write(u8, cb), close(cb) })     append false: a new (or emptied) file
  *   UsbFs.remove(path, cb)         a file
+ *   UsbFs.removeAny(path, cb)      a file, or a folder with everything in it (MyPC.usb.remove); never a whole drive
  *   UsbFs.safeName(name)           a name FAT32 / exFAT / NTFS accept
  *   UsbFs.inside(path)             true when the path is inside a drive of the last drives() answer (no "..")
  * Errors { code, message }: perm (no privilege: older package), gone (not there / drive removed), full, too-big (FAT32: 4 GB
@@ -295,7 +296,24 @@ var UsbFs = (function () {
         } catch (x) { later(function () { cb(tzErr(x)); }); }
     }
 
-    return { supported: supported, drives: drives, list: list, stat: stat, mkdir: mkdir, read: read, writer: writer, remove: remove,
+    // MyPC.usb.remove (API 25): a file, or a folder with everything in it. Never a drive itself (its top folder).
+    function removeAny(path, cb) {
+        var fs = tz(), p = clean(path);
+        cb = cb || function () {};
+        if (!fs || !p) return later(function () { cb(err('bad-request', 'Not a path of a USB drive.')); });
+        for (var i = 0; i < known.length; i++) if (p === known[i]) return later(function () { cb(err('bad-request', 'A whole USB drive cannot be deleted.')); });
+        stat(p, function (e, st) {
+            if (e) return cb(e);
+            if (!st.exists) return cb(err('not-found', 'Not found: ' + base(p)));
+            if (!st.dir) return remove(p, cb);
+            try {
+                if (fs.deleteDirectory) return fs.deleteDirectory(p, true, function () { cb(null); }, function (x) { cb(tzErr(x)); });
+                fs.resolve(parent(p), function (d) { d.deleteDirectory(p, true, function () { cb(null); }, function (x) { cb(tzErr(x)); }); }, function (x) { cb(tzErr(x)); }, 'rw');
+            } catch (x) { later(function () { cb(tzErr(x)); }); }
+        });
+    }
+
+    return { supported: supported, drives: drives, list: list, stat: stat, mkdir: mkdir, read: read, writer: writer, remove: remove, removeAny: removeAny,
              safeName: safeName, inside: inside, join: join, base: base, parent: parent, FAT_MAX: FAT_MAX };
 })();
 if (typeof module !== 'undefined') module.exports = UsbFs;

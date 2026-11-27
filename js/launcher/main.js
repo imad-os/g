@@ -454,7 +454,7 @@ var App = (function () {
                 try { history.replaceState(null, '', page('')); } catch (e2) {}
                 setTimeout(function () { Win.open('sendtv'); }, 300);
             }
-            if (!ProfilesUI.screenOpen()) Shortcuts.resume();         // a shortcut pressed in a game that asked to open something here
+            if (!ProfilesUI.screenOpen() && !AppOpen.resume()) Shortcuts.resume();   // MyPC.open (a file of an app in MyPhotos / MyVideos / MyMusic), or a shortcut pressed in a game
             Backup.start();
             Accounts.start();
             Push.start();                                        // push notifications of a signed-in player account (js/launcher/push.js)
