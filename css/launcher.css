@@ -641,6 +641,10 @@ html.win-covers-app .game-frame-box { visibility: hidden; }
 .gl-info:empty { visibility: hidden; }
 .gl-chip { display: block; padding: 7px 18px; border-radius: 20px; font-size: 20px; line-height: 24px; letter-spacing: 0.02em; color: #a8a8a8;
            background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.09); white-space: nowrap; }
+.gl-ok { color: #8ee6a8; }
+.gl-ok .gl-ring { position: relative; border-color: #6ccb5f; background: #6ccb5f; -webkit-animation: none; animation: none; }
+.gl-ok .gl-ring:after { content: ""; position: absolute; left: 6px; top: 2px; width: 5px; height: 10px; border: solid #0f2a14; border-width: 0 3px 3px 0; -webkit-transform: rotate(45deg); transform: rotate(45deg); }
+.gl-chip-run { color: #e6e6e6; background: rgba(255, 255, 255, 0.09); border-color: rgba(255, 255, 255, 0.18); }
 .gl-chip-new { color: #8fd8ff; background: rgba(76, 194, 255, 0.12); border-color: rgba(76, 194, 255, 0.35); }
 .gl-chip-warn { color: #ffd479; background: rgba(255, 196, 61, 0.10); border-color: rgba(255, 196, 61, 0.32); }
 .gl-brand { position: absolute; left: 0; bottom: 56px; width: var(--sw); display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center;

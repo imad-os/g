@@ -50,7 +50,7 @@ var AppLive = (function () {
             var m = null;
             if (!err) { try { m = JSON.parse(text); } catch (e) { m = null; } }
             var v = m && okVersion(m.version) ? m.version : '';
-            if (v) { load()[app.id] = { v: v, at: Date.now() }; save(); }
+            if (v) { load()[app.id] = { v: v, at: Date.now(), run: m.run === 'online' ? 'online' : '' }; save(); }
             cb(v);
         });
     }
@@ -109,5 +109,14 @@ var AppLive = (function () {
         return prev;
     }
 
-    return { seen: seen, check: check, version: version, newer: newer, withLive: withLive, refresh: refresh };
+    // App updates (owner 2026-11-28, Control Panel > System, admins): 'ask' (default) = "Update available: Update / Later" when an app
+    // opens; 'auto' = installed at once with the progress screen. TV-wide `arc_dev_appupd`.
+    function updMode() { var v = null; try { v = localStorage.getItem('arc_dev_appupd'); } catch (e) {} return v === 'auto' ? 'auto' : 'ask'; }
+    function setUpdMode(v) { try { localStorage.setItem('arc_dev_appupd', v === 'auto' ? 'auto' : 'ask'); } catch (e) {} }
+
+    // where the app opens from unless the person chose (My PC's menu > App settings): its mypc-app.json "run": "online" = online,
+    // else the copy installed on the USB drive
+    function runDefault(id) { var r = load()[id]; return r && r.run === 'online' ? 'online' : 'usb'; }
+
+    return { runDefault: runDefault, updMode: updMode, setUpdMode: setUpdMode, seen: seen, check: check, version: version, newer: newer, withLive: withLive, refresh: refresh };
 })();

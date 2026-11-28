@@ -663,7 +663,7 @@ async function main() {
         siteVersion = '1.3.0';
         u = await openUrl();
         check(/[?&]mypc_v=1\.3\.0(&|$)/.test(u), 'the next version on the site opens the next time, still no Manager (' + u + ')');
-        check(chips[0] === 'Version 1.2.0 | Online' && chips[1] === 'Version 1.3.0 | Updated from 1.2.0 | Online', 'the start screen shows the version, "Updated from", where it opens from ' + JSON.stringify(chips));
+        check(chips[0] === 'Version 1.2.0 | Opens online · no USB drive' && chips[1] === 'Version 1.3.0 | Updated from 1.2.0 | Opens online · no USB drive', 'the start screen shows the version, "Updated from", where it opens from ' + JSON.stringify(chips));
         await page.context().close();
     }
 
@@ -7349,7 +7349,8 @@ MyPC.init({ onInit() {
         'data/level.json': JSON.stringify({ name: 'Forest' }),
         'data/big.bin': big,
         'icon.svg': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#2a6"/></svg>',
-        'mypc-app.json': JSON.stringify({ mypc: 1, id: 'quest', name: 'Quest', type: 'game', entry: 'index.html', icon: 'icon.svg', version: '1.0.0' }),
+        // "run": "online": this part tests the online mode (the copy only without internet); the installed mode is tested after
+        'mypc-app.json': JSON.stringify({ mypc: 1, id: 'quest', name: 'Quest', type: 'game', entry: 'index.html', icon: 'icon.svg', version: '1.0.0', run: 'online' }),
         'tests/run.mjs': 'never saved', 'README.md': '# never saved', '.nojekyll': ''
     };
     let treeSha = 'aaaaaaa1111', siteDown = false;
@@ -7462,26 +7463,71 @@ MyPC.init({ onInit() {
     o = await open();
     check(o.url.indexOf(USBW) === 0 && /USB copy/.test(o.txt) && Date.now() - t1 < 16000, 'the store answers, the app\'s site does not: the USB copy opens after the 6 s check ' + (Date.now() - t1) + ' ms');
 
-    // --- a new version: saved in a new folder, the unchanged 5 MB file copied on the drive, the old copy removed only after
+    // --- a new version, like a PC (owner 2026-11-28): "Update available"; Later = the installed version from the drive; Update =
+    //     progress bar, "Installed", then the new version; saved in a new folder, the unchanged 5 MB file copied, the old one kept
     siteDown = false;
     files['game.js'] = gameJs('1.1.0'); treeSha = 'bbbbbbb2222';
     files['mypc-app.json'] = files['mypc-app.json'].replace('1.0.0', '1.1.0');
     db.apps.quest.version = '1.1.0';
     siteGets.length = 0;
-    o = await open();
-    check(/online · v1\.1\.0/.test(o.txt), 'online: the new version 1.1.0 opens ' + o.txt);
-    await page.evaluate(() => AppUsb.now());
-    await waitSaved('1.1.0');
+    const ask = async () => {
+        await snapshot();
+        await page.goto(base + 'index.html?play=app-quest');
+        await page.waitForFunction(() => { const b = document.getElementById('dialog-backdrop'); return b && !b.hidden && window.GameHost && GameHost.state() === 'loading'; }, null, { timeout: 60000 }).catch(() => {});
+        return page.evaluate(() => ({ shown: !document.getElementById('dialog-backdrop').hidden, text: document.getElementById('dialog').textContent, focus: document.activeElement && document.activeElement.id }));
+    };
+    let d = await ask();
+    await shot('4-update-available');
+    check(d.shown && /Update available[\s\S]*Version 1\.1\.0 of Quest is ready\. This TV has version 1\.0\.0 installed\.[\s\S]*Update[\s\S]*Later/.test(d.text) && d.focus === 'dialog-yes',
+        'a new version on the site: "Update available" with both versions, Update focused ' + JSON.stringify(d));
+    check(await page.evaluate(() => AppUsb._state().st.apps.quest.sv === '1.0.0'), 'nothing is installed before the person answers');
+    await page.keyboard.press('Escape');                                         // Back = Later
+    await page.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 30000 }).catch(() => {});
+    let f = appFrame(), txt = f ? await f.evaluate(() => document.getElementById('d').textContent).catch(() => '') : '';
+    check(/USB copy · v1\.0\.0/.test(txt) && !/No internet/.test(await page.textContent('#toast')), 'Later: the installed version 1.0.0 opens from the USB drive (no "no internet" card) ' + txt);
+    d = await ask();
+    await page.evaluate(() => document.getElementById('dialog-yes').click());
+    await page.waitForFunction(() => /Installing version 1\.1\.0/.test(document.querySelector('#game-loading .gl-status').textContent), null, { timeout: 10000 }).catch(() => {});
+    const installing = await page.evaluate(() => document.querySelector('#game-loading .gl-status').textContent);
+    await shot('5-installing');
+    await page.waitForFunction(() => /Installed · version 1\.1\.0/.test(document.querySelector('#game-loading .gl-status').textContent), null, { timeout: 90000 }).catch(() => {});
+    const installed = await page.evaluate(() => ({ s: document.querySelector('#game-loading .gl-status').textContent, w: document.getElementById('game-loading-fill').style.width, ok: document.querySelector('#game-loading .gl-status').className }));
+    await shot('6-installed');
+    check(/Installing version 1\.1\.0/.test(installing) && installed.w === '100%' && /gl-ok/.test(installed.ok), 'Update: "Installing version 1.1.0" with the bar, then "Installed · version 1.1.0" ' + JSON.stringify([installing, installed]));
+    await page.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 30000 }).catch(() => {});
+    f = appFrame(); txt = f ? await f.evaluate(() => document.getElementById('d').textContent).catch(() => '') : '';
+    check(/online · v1\.1\.0/.test(txt), 'then the new version 1.1.0 opens ' + txt);
     const u2 = await page.evaluate((D) => {
         const t = window.__usb.tree, A = D + '/MyPC/apps/quest', saved = JSON.parse(window.__usb.text(A + '/saved.json') || '{}');
-        return { saved, dirs: Object.keys(t).filter((k) => k.indexOf(A + '/') === 0 && t[k] === true && k.split('/').length === 8), js: window.__usb.text(A + '/' + saved.key + '/game.js'), copies: window.__usb.copies || 0 };
+        return { saved, dirs: Object.keys(t).filter((k) => k.indexOf(A + '/') === 0 && t[k] === true && k.split('/').length === 8).sort(), js: window.__usb.text(A + '/' + saved.key + '/game.js'), copies: window.__usb.copies || 0 };
     }, D);
-    check(u2.saved.v === '1.1.0' && u2.saved.key === 'v1.1.0-bbbbbbb' && JSON.stringify(u2.dirs) === JSON.stringify([D + '/MyPC/apps/quest/v1.1.0-bbbbbbb']) && /1\.1\.0/.test(u2.js),
-        'the new version is saved in its own folder, saved.json switched to it, the old folder removed ' + JSON.stringify([u2.saved.key, u2.dirs]));
+    check(u2.saved.v === '1.1.0' && u2.saved.key === 'v1.1.0-bbbbbbb' && u2.saved.prev === 'v1.0.0-aaaaaaa' && JSON.stringify(u2.dirs) === JSON.stringify([D + '/MyPC/apps/quest/v1.0.0-aaaaaaa', D + '/MyPC/apps/quest/v1.1.0-bbbbbbb']) && /1\.1\.0/.test(u2.js),
+        'the new version is installed in its own folder, saved.json switched to it, the version before kept for a rollback ' + JSON.stringify([u2.saved.key, u2.saved.prev, u2.dirs]));
     check(!siteGets.some((g) => /^data\/big\.bin bytes/.test(g)) && u2.copies >= 1, 'the unchanged 5 MB file is copied on the drive, not downloaded again ' + JSON.stringify([siteGets.filter((g) => /big/.test(g)), u2.copies]));
+
+    // --- "Opens from: Installed copy" (the default without "run": "online"; here the person's choice in My PC's menu > App settings)
+    await page.evaluate(() => GameHost.setAppPref('app-quest', 'run', 'usb'));
+    siteGets.length = 0;
+    o = await open();
+    let chipsNow = await page.evaluate(() => [...document.querySelectorAll('#game-loading-info .gl-chip')].map((c) => c.textContent).join(' | '));
+    check(o.url.indexOf(USBW) === 0 && /USB copy · v1\.1\.0/.test(o.txt) && !/No internet/.test(o.toast) && /Opens from USB A1 \(installed\)/.test(chipsNow),
+        'installed mode, online: the installed copy opens from the drive, the start screen says so ' + JSON.stringify([o.url.slice(0, 40), o.txt, chipsNow]));
+    check(!siteGets.some((g) => /^(index\.html|game\.js)/.test(g)), 'nothing of the app is downloaded (only its small mypc-app.json is read) ' + JSON.stringify(siteGets));
+    // a new version in installed mode: Update installs it, then the NEW installed copy opens from the drive
+    files['game.js'] = gameJs('1.2.0'); treeSha = 'ccccccc3333';
+    files['mypc-app.json'] = files['mypc-app.json'].replace('1.1.0', '1.2.0');
+    db.apps.quest.version = '1.2.0';
+    d = await ask();
+    await page.evaluate(() => document.getElementById('dialog-yes').click());
+    await page.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 90000 }).catch(() => {});
+    f = appFrame(); txt = f ? await f.evaluate(() => document.getElementById('d').textContent).catch(() => '') : '';
+    const u3 = await page.evaluate((D) => { const A = D + '/MyPC/apps/quest', s = JSON.parse(window.__usb.text(A + '/saved.json') || '{}'); return { v: s.v, prev: s.prev, dirs: Object.keys(window.__usb.tree).filter((k) => k.indexOf(A + '/') === 0 && window.__usb.tree[k] === true && k.split('/').length === 8).sort() }; }, D);
+    check(/USB copy · v1\.2\.0/.test(txt) && u3.v === '1.2.0' && u3.prev === 'v1.1.0-bbbbbbb' && u3.dirs.length === 2,
+        'installed mode: Update installs 1.2.0 and it opens from the drive; 1.1.0 kept, 1.0.0 removed ' + JSON.stringify([txt, u3]));
+    await page.evaluate(() => GameHost.setAppPref('app-quest', 'run', null));
     siteDown = true; db.down = true;
     o = await open();
-    check(/USB copy · v1\.1\.0/.test(o.txt), 'no internet after the update: the USB copy is version 1.1.0 ' + o.txt);
+    check(/USB copy · v1\.2\.0/.test(o.txt), 'no internet after the update: the USB copy is version 1.2.0 ' + o.txt);
 
     // --- Control Panel > System: the switch and what is saved
     siteDown = false; db.down = false;
@@ -7491,7 +7537,7 @@ MyPC.init({ onInit() {
     await page.evaluate(() => Win.open('settings', 'system'));
     await page.waitForTimeout(400);
     const cp = await page.evaluate(() => document.querySelector('.window').textContent);
-    check(/Save apps on a USB drive/.test(cp) && /Version 1\.1\.0 saved on USB A1/.test(cp), 'Control Panel > System: "Save apps on a USB drive" and "Quest: Version 1.1.0 saved on USB A1" ' + cp.slice(cp.indexOf('Save apps'), cp.indexOf('Save apps') + 160));
+    check(/Save apps on a USB drive/.test(cp) && /Version 1\.2\.0 saved on USB A1/.test(cp), 'Control Panel > System: "Save apps on a USB drive" and "Quest: Version 1.2.0 saved on USB A1" ' + cp.slice(cp.indexOf('Save apps'), cp.indexOf('Save apps') + 160));
     await page.evaluate(() => { const r = [...document.querySelectorAll('.window [data-focus]')].find((e) => /Save apps on a USB/.test(e.textContent)); if (r) { r.scrollIntoView(); Focus.focus(r); } });
     await shot('3-control-panel');
     // --- switched off: nothing is remembered or used
