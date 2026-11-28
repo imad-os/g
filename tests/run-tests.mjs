@@ -7203,6 +7203,10 @@ async function padTests(browser, base) {
     check(/Nintendo Switch Pro Controller/.test(txt) && /Nintendo · Switch Pro Controller/.test(txt) && /B bottom, A right/.test(txt) && /057e:2009/.test(txt) && /Swap A ↔ B and X ↔ Y/.test(txt) && /Automatic \(Off\)/.test(txt) && /A is OK \/ jump and B is Back/.test(txt),
         'Control Panel > Gaming shows the controller: Nintendo Switch Pro Controller, its button names, USB id 057e:2009, nothing swapped on a TV (it sends A first)');
     if (shots) await page.screenshot({ path: path.join(shots, 'pads-1-gaming-switch-pro.png') });
+    // the TV's Game Mode row (js/core/game-mode.js, package 3.2.0): an info row, its value from GameMode.status()
+    const gm = await page.evaluate(() => GameMode.status());
+    check(gm === 'on' && /Game Mode\s*On\s*Game Mode is the TV's own low latency picture/.test(txt),
+        'Control Panel > Gaming shows Game Mode: On on the (fake) TV with this package, and what it does (' + gm + ')');
     // on a TV the Switch Pro sends its buttons by LETTER (A = 0, B = 1, X = 2, Y = 3): A = OK, B = Back (owner decision 2026-11-11)
     const held = () => page.evaluate(() => ['jump', 'confirm', 'run', 'cancel'].filter((a) => Input.isDownDev('pad0', a)).sort().join());
     const acts = {};

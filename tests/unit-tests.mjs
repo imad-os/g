@@ -11,6 +11,7 @@
 //      Music (placeholder player) and Playtime
 //   9. Calendar (js/core/events.js): Google's holiday calendar (.ics, the site copy), the Moroccan Hijri date, built-in dates;
 //      the App Store Manager's event lines (GlobalSettings)
+//  11. GameMode (js/core/game-mode.js): the TV's Game Mode status from the package version and the TV's Tizen version; config.xml key
 //  10. PadInfo (js/core/pad-info.js): brand / model / button names from a gamepad id (Switch Pro A = button 1); the SDK's copy is identical
 import fs from 'node:fs';
 import path from 'node:path';
@@ -654,6 +655,20 @@ console.log('10. PadInfo (which controller, the names printed on its buttons)');
     const strip = (t) => t.slice(t.indexOf('/* PADINFO-BEGIN'), t.indexOf('/* PADINFO-END */')).split('\n').map((l) => l.trim()).join('\n');
     const a = strip(fs.readFileSync(path.join(ROOT, 'js/core/pad-info.js'), 'utf8')), b = strip(fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js'), 'utf8'));
     check(a.length > 500 && a === b, 'sdk/mypc-sdk.js has the same PadInfo code as js/core/pad-info.js');
+}
+console.log('\n11. GameMode: the TV Game Mode key in config.xml, status per TV / package');
+{
+    const xml = fs.readFileSync(path.join(ROOT, 'config.xml'), 'utf8');
+    check(/<tizen:metadata key="http:\/\/samsung\.com\/tv\/metadata\/use\.game\.mode" value="true"\/>/.test(xml), 'config.xml has the use.game.mode metadata key');
+    const pv = (xml.match(/version="(\d+\.\d+\.\d+)" viewmodes/) || [])[1];
+    const mk = (win) => { const c = vm.createContext(Object.assign({ parseFloat, parseInt, String }, { window: win })); c.tizen = win.tizen; return load('js/core/game-mode.js', c).GameMode; };
+    const tv = (plat, ver) => ({ tizen: { systeminfo: { getCapability: () => plat }, application: { getAppInfo: () => ({ version: ver }) } } });
+    check(mk({}).status() === 'none', 'a browser: none');
+    check(mk(tv('8.0', pv)).status() === 'on', 'a 2024 TV with this package (' + pv + '): on');
+    check(mk(tv('8.0', '3.1.0')).status() === 'package', 'package 3.1.0: needs the new package');
+    check(mk(tv('6.0', pv)).status() === 'tv', 'a 2021 TV (Tizen 6.0): not on this TV');
+    const G = mk({});
+    check(G._newer('3.2.0', [3, 2, 0]) && G._newer('3.10.1', [3, 2, 0]) && !G._newer('3.1.9', [3, 2, 0]) && G._newer('4.0.0', [3, 2, 0]), 'version compare');
 }
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall unit checks passed');
 process.exit(failures ? 1 : 0);
