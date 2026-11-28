@@ -483,9 +483,12 @@
   (`{ open }` album mode: one picture at a time, `GDrive.download` / `UsbFs.read`, shrunk to 1920x1080, next one read ahead, nothing saved, no
   Delete, the picture focused), MyVideos (`{ open }`; USB = AVPlay with `own: true`; Drive = `MusicSrc.url` through sw.js where there is one,
   else the file read whole, 150 MB max `AppOpen.VIDEO_MAX`, bigger = `too-big` and the app plays it) or MyMusic (`Music.playList` +
-  `{ np: 1, back }`: ONE Back on Now playing closes it, the music goes on). Zoom from the tile (`from` rect in the app's px -> transform,
-  Web Animations, 240 ms, none on Perf tier low / reduced motion); once covered `html.win-covers-app` hides `#game-frame-box`. Close: a clone
-  of the window (`.win-ghost`, no video / ids) shrinks back while `GameHost.release` resumes the app at once; `AppOpen.justClosed()` keeps the
+  `{ np: 1, back }`: ONE Back on Now playing closes it, the music goes on). Zoom from the tile (`from` rect in the app's px -> transform;
+  **build 192, owner report 2026-11-28 "the zoom is not smooth"**: only `.win-zoom` moves, a plain card in the window's colour on its own GPU
+  layer, keyframes transform + opacity only (never the window with its content, never border-radius / shadow / size), started 2 frames after
+  the screen is built, 260 ms ease-out then the window fades in under it (140 ms); close = the same card shrinking back while the app runs;
+  none on Perf tier low / reduced motion; measured at CPU x6: ~60 fps, worst gap 21-32 ms); once covered `html.win-covers-app` hides
+  `#game-frame-box`. `GameHost.release` resumes the app at once on close; `AppOpen.justClosed()` keeps the
   closing key's release from the app; `teardown` calls `AppOpen.appGone()`. main.js routes keys to `Win` while `AppOpen.isOpen()`.
   `MyPC.init({ uses: ['photos' | 'videos' | 'music' | 'all'] })` (hello `uses`): only those open (`unsupported`), and `AppOpen.warm` gets them
   ready in idle time (window layer, `Music.init({ lite })`); none declared = all three. `MyPC.usb.remove(path)` = `UsbFs.removeAny` (file, or
