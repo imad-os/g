@@ -76,7 +76,15 @@
   then "check your connection"; build 195)**: no message at all from its page in 10 s (`USB_SILENT_MS`) or a load failure = `GameHost.usbToOnline`:
   report (Manager > Errors, with the file:// address and whether the SDK ran), card `auUsbFailed`, the online version opens; that version is noted
   in `arc_dev_appusb_fail` (`AppUsb.failed / setFailed / clearFailed`) so it opens online at once next time; two apps "silent" = this TV opens no
-  USB page, all online. "Opens from: USB" in App settings clears it. Why file:// frames fail on the TV is not known yet (read the error reports).
+  USB page, all online. "Opens from: USB" in App settings clears it. **Build 196 (imad's error report: "the SDK never answered in 20 s
+  [copy saved on USB 0.7.0]")**: the TV runs no file:// page in a frame, so USB copies open as **srcdoc** built by `js/core/usb-page.js`
+  (`UsbPage.build`: files read with `AppUsb.readFile`, scripts / stylesheets inline, `url()` + `<img>` as data:, My PC's current SDK,
+  `<base href="https://mypc-usb.invalid/...">` + `PRELUDE` serving fetch / src setters / Audio / addModule through `usbfile` messages,
+  `window.MYPC_USB`; the SDK then skips its own shims). Real Tangier TAXI reaches ready this way in a browser. Notes in
+  `arc_dev_appusb_fail` from before build 196 are forgotten. **Start limits (owner 2026-11-28: "progressing, then timeout")**: the start screen
+  fails only after `LOAD_TIMEOUT_MS` (20 s) with NO progress (`kickLoad`: app progress, hello, `loadingStatus`), `LOAD_MAX_MS` 15 min in all,
+  none while "Update available" waits (`GameHost.loadingWait`); `AppUsb` downloads: 20 s with no byte (`STALL_MS`), 10 min per request,
+  a piece retried 3 times, bytes on the way move the bar (`onBytes`).
   Tests: `MYPC_ONLY=appusb` (section 54).
 - `js/launcher/`: desktop shell (`desktop.js`), full-screen app window (`window.js`), apps
   (`apps/*.js`: settings, explorer, browser, calculator, calendar, scores), on-screen keyboard,

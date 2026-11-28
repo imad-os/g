@@ -30,7 +30,7 @@ var AppUsb = (function () {
     var KEY = 'arc_dev_appusb', ON = 'arc_dev_appusb_on', LEASE = 'arc_dev_appusb_lease';
     var ROOT = 'MyPC/apps', SAVED = 'saved.json', SDK_DIR = '__mypc';
     var PIECE = 4 * 1024 * 1024, PIECE_GAME = 1024 * 1024, MAX_BYTES = 1024 * 1024 * 1024, MAX_FILES = 4000;
-    var RECHECK = 24 * 3600000, PROBE_MS = 4000, GET_MS = 30000, RETRY = 10 * 60000;
+    var RECHECK = 24 * 3600000, PROBE_MS = 4000, GET_MS = 10 * 60000, STALL_MS = 20000, RETRY = 10 * 60000;
     // never saved unless "offline" lists them: tools, tests, docs, sources of data, dot files, notes
     var SKIP = /^(node_modules|tests?|tools|docs|scripts|raw|bot_log|android[^/]*|\.github)\/|(^|\/)\.[^/]*$|(^|\/)\.[^/]*\/|\.(md|ps1|sh|bat|mjs)$|^(package(-lock)?\.json|LICENSE[^/]*|Makefile)$/i;
     var SDK_RE = /(<script[^>]+src=["'])(?:https?:)?\/\/(?:imad-os\.github\.io\/g|pc\.geekspro\.us)\/sdk\/mypc-sdk\.js[^"']*(["'])/gi;
@@ -61,13 +61,19 @@ var AppUsb = (function () {
 
     /* ---------------- web requests (no CORS on the TV; GitHub Pages and api.github.com allow it in a browser) ---------------- */
     // cb(err, data, status): type 'text' | 'json' | 'arraybuffer'; range [from, to] or null
+    // two limits (owner 2026-11-28: "it was progressing, then it said timeout"): STALL_MS with no byte arriving, GET_MS in all.
+    // While bytes arrive, `onBytes(loaded)` (the piece being downloaded) moves the progress bar.
+    var onBytes = null;
     function get(url, type, range, cb) {
-        var x = new XMLHttpRequest(), done = false;
-        function end(e, d, s) { if (done) return; done = true; cb(e, d, s); }
+        var x = new XMLHttpRequest(), done = false, stall = 0, tick = onBytes;
+        function end(e, d, s) { if (done) return; done = true; clearTimeout(stall); cb(e, d, s); }
+        function alive() { clearTimeout(stall); stall = setTimeout(function () { try { x.abort(); } catch (e) {} end(err('network', 'Stalled ' + Math.round(STALL_MS / 1000) + ' s: ' + url)); }, STALL_MS); }
         try {
             x.open('GET', url, true);
             x.responseType = type === 'arraybuffer' ? 'arraybuffer' : 'text';
             x.timeout = GET_MS;
+            x.onprogress = function (ev) { alive(); if (tick) { try { tick(ev.loaded || 0); } catch (e) {} } };
+            alive();
             if (range) x.setRequestHeader('Range', 'bytes=' + range[0] + '-' + range[1]);
             x.onload = function () {
                 var s = x.status;
@@ -356,6 +362,10 @@ var AppUsb = (function () {
     function saveCopy(job, id, drive, appDir, fl, old, cb) {
         var dir = appDir + '/' + fl.key, files = fl.files, html = [], i = 0, done = 0;
         function progress(n) { done += n; set(id, { done: done, total: fl.bytes }); }
+        // bytes of the piece on its way: the bar moves (and the start screen's no-progress limit starts again) while they come
+        var lastTick = 0, cb0 = cb;
+        cb = function (e) { onBytes = null; cb0(e); };
+        onBytes = function (loaded) { var now = Date.now(); if (now - lastTick < 500) return; lastTick = now; set(id, { done: Math.min(fl.bytes, done + loaded), total: fl.bytes }); };
         mkdirs(dir + '/' + SDK_DIR, function (e0) {
             if (e0) return cb(e0);
             (function nextFile() {
@@ -452,7 +462,9 @@ var AppUsb = (function () {
                     if (job.stop) return close(err('stopped'));
                     if (at >= f.size) return close(null);
                     var to = Math.min(f.size, at + piece()) - 1;
-                    get(url, 'arraybuffer', [at, to], function (e3, buf, status) {
+                    var tries = 0;
+                    (function piece1() { get(url, 'arraybuffer', [at, to], function (e3, buf, status) {
+                        if (e3 && e3.code === 'network' && ++tries < 4 && !job.stop) return setTimeout(piece1, 1500 * tries);   // a weak line: the same piece again
                         if (e3) return close(e3);
                         if (status !== 206 && at > 0) return close(err('network', 'No Range answer: ' + f.p));
                         var u8 = new Uint8Array(buf);
@@ -463,7 +475,7 @@ var AppUsb = (function () {
                             at += u8.length; progress(u8.length);
                             gap(nextPiece);
                         });
-                    });
+                    }); })();
                 })();
             });
         }
@@ -522,12 +534,15 @@ var AppUsb = (function () {
     // installed or the person picks "Opens from: USB" again. TV-wide arc_dev_appusb_fail { <id>: { v, why, at } }
     var FAIL = 'arc_dev_appusb_fail';
     function failed(id, v) {
-        var all = lsGet(FAIL) || {}, f = all[id];
+        var all = lsGet(FAIL) || {}, f, k;
+        // noted before build 196 (file:// pages, which the TV never ran): forgotten, the new way is tried
+        for (k in all) if (!all[k] || !(all[k].b >= 196)) delete all[k];
+        f = all[id];
         if (f && (!v || f.v === v)) return true;
         // two apps whose page never ran from the drive: this TV does not open USB pages at all, every app opens online
         return Object.keys(all).filter(function (k) { return all[k] && all[k].why === 'silent'; }).length >= 2;
     }
-    function setFailed(id, v, why) { var f = lsGet(FAIL) || {}; f[id] = { v: String(v || ''), why: String(why || ''), at: Date.now() }; lsSet(FAIL, f); }
+    function setFailed(id, v, why) { var f = lsGet(FAIL) || {}; f[id] = { v: String(v || ''), why: String(why || ''), at: Date.now(), b: typeof AppBoot !== 'undefined' && AppBoot.build ? +AppBoot.build() || 196 : 196 }; lsSet(FAIL, f); }
     function clearFailed(id) { if (!id) { try { localStorage.removeItem(FAIL); } catch (e) {} return; } var f = lsGet(FAIL) || {}; if (f[id]) { delete f[id]; lsSet(FAIL, f); } }
 
     return { failed: failed, setFailed: setFailed, clearFailed: clearFailed, supported: supported, on: on, setOn: setOn, init: init, want: want, refresh: refresh, has: has, size: size, installed: installed, install: install, pick: pick, find: find, readFile: readFile,

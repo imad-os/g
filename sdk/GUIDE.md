@@ -1559,10 +1559,14 @@ Nothing to do for most apps; follow these rules so the copy works:
 - **The SDK `<script>` stays as it is** (`https://imad-os.github.io/g/sdk/mypc-sdk.js`): the saved page gets a saved SDK.
   Scripts and styles from other sites (CDNs) linked by your pages are saved too; anything your code loads from the
   internet at run time is not.
-- **Load your own files with `fetch()` and relative paths** (`fetch('assets/level1.json')`). The copy is a `file://` page
-  with no origin of its own: the SDK serves `fetch()` of your files from the drive (a missing file answers 404). `XMLHttpRequest`
-  of your own files, ES modules (`<script type="module">`) and service workers may not work there: bundle your code
-  into classic scripts (esbuild `--format=iife`).
+- **Load your own files with `fetch()` and relative paths** (`fetch('assets/level1.json')`). A TV runs no `file://` page from
+  the drive in a frame, so My PC (build 196) reads the copy's files itself and builds the page: your entry page, its own
+  `<script src>` files and stylesheets are put inline (stylesheet `url()` and `<img src>` in the page become `data:` addresses),
+  the page gets a `<base>` on a made-up address, and a first script serves your files while it runs: `fetch()`, the `src` of
+  `<img>` / `<audio>` / `<video>` / `<source>` / `<script>` set from code, `new Audio(url)` and `audioWorklet.addModule(url)`
+  (a missing file answers 404). `XMLHttpRequest` of your own files, `new Worker(url)`, ES modules (`<script type="module">`
+  with imports) and service workers do not work there: bundle your code into classic scripts (esbuild `--format=iife`).
+  The page has no origin of its own. Tangier TAXI works this way as it is.
 - **`localStorage` is kept in memory only** in the copy: keep saves in `MyPC.save` (they are the same online and offline).
 - **`MyPC.offline`** is `true` in the copy: hide what needs the internet (online leaderboards, multiplayer rooms, AI) or say
   it needs the internet. `MyPC.net`, `MyPC.ai` and the others still answer with their usual "network" errors.
