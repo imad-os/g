@@ -13,16 +13,18 @@
 var Win = (function () {
     'use strict';
 
-    var apps = {}, cur = null, curId = null;
+    var apps = {}, cur = null, curId = null, after = null;
 
     function $(id) { return document.getElementById(id); }
 
     function register(id, def) { apps[id] = def; }
 
-    function open(id, arg) {
+    // opts.onClose: runs in place of showing the desktop when this app is closed (MyPC.open: back to the app that asked)
+    function open(id, arg, opts) {
         var def = apps[id];
         if (!def) return;
         if (cur) close(true);
+        after = opts && typeof opts.onClose === 'function' ? opts.onClose : null;
         Desktop.hide();
         Desktop.releaseImages();
         cur = def; curId = id;
@@ -52,12 +54,15 @@ var Win = (function () {
     // quiet = something else takes the screen next (a game, another app)
     function close(quiet) {
         if (!cur) return;
-        var id = curId;
+        var id = curId, then = after;
+        after = null;
         try { if (cur.close) cur.close(); } catch (e) {}
         cur = null; curId = null;
         $('win-body').innerHTML = '';
         $('window').hidden = true;
-        if (!quiet) Desktop.show(Desktop.iconForApp(id));
+        if (quiet) return;
+        if (then) { try { then(); return; } catch (e2) {} }
+        Desktop.show(Desktop.iconForApp(id));
     }
 
     // settings that change other parts (profile, language) ask the open app to redraw
