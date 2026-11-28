@@ -152,7 +152,7 @@ var AppUsb = (function () {
                     var dir = appDir + '/' + s.key, entry = safePath(s.entry);
                     UsbFs.stat(dir + '/' + entry, function (e2, x) {
                         if (e2 || !x.exists) return next();
-                        var copy = { id: id, dir: dir, entry: entry, depth: entry.split('/').length - 1, uri: uri(dir + '/' + entry), v: s.v || '', name: s.name || '', drive: d.name, drivePath: d.path, at: s.at || 0 };
+                        var copy = { id: id, dir: dir, entry: entry, depth: entry.split('/').length - 1, uri: uri(dir + '/' + entry), v: s.v || '', name: s.name || '', drive: d.name, drivePath: d.path, at: s.at || 0, bytes: +s.bytes || 0 };
                         found[id] = { at: Date.now(), copy: copy };
                         cb(copy);
                     });
@@ -237,6 +237,8 @@ var AppUsb = (function () {
 
     /* ---------------- saving (one app at a time, one file at a time) ---------------- */
     function rec(id) { return load().apps[id]; }
+    function has(id) { return !!load().apps[id]; }
+    function size(id) { var r = load().apps[id]; return r && r.state === 'saved' ? +r.total || 0 : 0; }
     function set(id, o) { var r = load().apps[id] = load().apps[id] || {}; for (var k in o) r[k] = o[k]; save(); return r; }
     function list() {
         var a = load().apps, out = [];
@@ -475,7 +477,7 @@ var AppUsb = (function () {
         });
     }
 
-    return { supported: supported, on: on, setOn: setOn, init: init, want: want, refresh: refresh, pick: pick, find: find, readFile: readFile,
+    return { supported: supported, on: on, setOn: setOn, init: init, want: want, refresh: refresh, has: has, size: size, pick: pick, find: find, readFile: readFile,
              list: list, remove: remove, onChange: function (fn) { fns.push(fn); }, offChange: function (fn) { fns = fns.filter(function (f) { return f !== fn; }); },
              probe: probe, now: function () { kick(0); }, _state: function () { return { run: run && run.id, st: load() }; } };
 })();

@@ -602,7 +602,10 @@ Voice Guide announcements.
    `<link rel="stylesheet" href="style.css?v=1.3.0">`, and images or sounds loaded from code
    (`'sprites.png?v=' + VERSION`). Keep the SDK `<script>` as it is.
 2. Push, and wait until GitHub Pages has published it (repository → Actions: green tick).
-3. In the App Store Manager press **Update** next to the app (or paste the address, **Check**, **Update**).
+3. That's it for a new version: right before an app opens, My PC also reads your site's own `mypc-app.json`
+   (a few hundred bytes, no Firebase) and opens the higher of its `version` and the store's (since 2026-11-28).
+   Press **Update** in the App Store Manager only when the name, icon, entry, `services` or `widgets` changed
+   (those wait for the admin), or to show the new version number in the App Store app.
 
 Right before an app opens, My PC reads its document in the store again and loads
 `index.html?mypc_v=<version>`. A new version number therefore always skips the TV's cache (and

@@ -151,7 +151,29 @@ var GameHost = (function () {
         $('game-loading-icon').innerHTML = '';
     }
 
+    // the start screen's info row: version, "Updated" (from which), size when known, where it opens from. Only what is known.
+    function showInfo() {
+        var box = $('game-loading-info');
+        if (!box || !game) return;
+        var t = I18n.t, chips = [], r = game.remote, v = '';
+        if (r) v = String(r.usb ? r.usb.v || r.version || '' : r.version || '');
+        else if (game.manifest) v = String(game.manifest.version || '');
+        if (v) chips.push({ text: t('glVersion').replace('%v', v) });
+        if (r && r.prev && v && r.prev !== v) chips.push({ text: t('glUpdated').replace('%v', r.prev), cls: 'gl-chip-new' });
+        var bytes = r ? (r.usb && r.usb.bytes) || r.bytes || 0 : 0;
+        if (bytes > 0) chips.push({ text: bytes >= 1048576 ? (Math.round(bytes / 104857.6) / 10) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB' });
+        chips.push(r ? (r.usb ? { text: t('glUsb').replace('%d', r.usb.drive || 'USB'), cls: 'gl-chip-warn' } : { text: t('glOnline') }) : { text: t('glBuiltIn') });
+        box.innerHTML = '';
+        for (var i = 0; i < chips.length; i++) {
+            var c = document.createElement('span');
+            c.className = 'gl-chip' + (chips[i].cls ? ' ' + chips[i].cls : '');
+            c.textContent = chips[i].text;
+            box.appendChild(c);
+        }
+    }
+
     function showLoading() {
+        showInfo();
         $('game-loading-title').textContent = title();
         setProgress(0);
         showIcon();
@@ -375,6 +397,7 @@ var GameHost = (function () {
             return game.remote.prepare(function (ok) {
                 if (state !== 'loading' || token !== loadSeq) return;       // cancelled or superseded
                 if (ok === false) return exit();                            // uninstalled meanwhile
+                showInfo();                                                 // the version read just now (store / the app's site)
                 openRemote();
             });
         }

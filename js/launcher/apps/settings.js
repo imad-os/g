@@ -276,10 +276,21 @@
 
         out.push({ kind: 'info', label: t('version'), value: inf.version });
         out.push({ kind: 'info', label: t('build'), value: String(inf.build) });
-        out.push({ kind: 'info', label: t('updRunning'), value: t(inf.source === 'remote' ? 'updRunOnline' : 'updRunBuiltIn') });
+        var cachedNow = AppBoot.cached ? AppBoot.cached() : '';
+        out.push({ kind: 'info', label: t('updRunning'), value: t(cachedNow ? 'updRunSaved' : inf.source === 'remote' ? 'updRunOnline' : 'updRunBuiltIn') });
+        // the saved copy for weak-network starts (js/core/boot-cache.js; packages 3.1.0+)
+        if (typeof BootCache !== 'undefined' && BootCache.supported()) {
+            var c = BootCache.last(), v = '…';
+            if (c) {
+                v = c.build ? t('updSavedTv').replace('%b', c.build) : t('updSavedNone');
+                if (c.usb && c.usb.b) v += ' · ' + t('updSavedUsb').replace('%b', c.usb.b);
+            }
+            out.push({ kind: 'info', label: t('updSaved'), value: v });
+            if (!c) BootCache.info(function () { if (Win.current() === 'settings' && page === 'update' && main) rerender(); });
+        }
         var last = Updater.lastChecked();
         out.push({ kind: 'info', label: t('updLast'), value: last ? Desktop.dateText(new Date(last), { day: 'numeric', month: 'short' }) + ' ' + Desktop.timeText(new Date(last)) : t('updNever') });
-        var why = { stale: 'updWhyStale', unreachable: 'updWhyUnreachable', bad: 'updWhyBad', forced: 'updWhyForced' }[inf.reason];
+        var why = { stale: 'updWhyStale', unreachable: 'updWhyUnreachable', bad: 'updWhyBad', forced: 'updWhyForced', cached: 'updWhyCached', saved: 'updWhySaved' }[inf.reason];
         if (why) out.push({ kind: 'info', label: t('updWhy'), value: t(why) });
         // what made the last online build give up on this TV (package 1.6.1+)
         var lf = (inf.reason === 'bad' || inf.reason === 'forced') && AppBoot.lastFail ? AppBoot.lastFail() : null;
