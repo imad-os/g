@@ -63,7 +63,7 @@
   **Installed apps follow their own site** (`js/core/app-live.js`, `AppLive`): before an app opens the TV reads its `mypc-app.json`
   (2.5 s, in parallel with `Cloud.fetchApp`) and opens the higher version (`AppLive.newer`); USB copies follow (every 6 h, `arc_dev_applive`).
   Manager Update is only needed for name / icon / entry / services / widgets. Tests: `MYPC_ONLY=boot` (4b-4d).
-  **Installed apps update like a PC (owner 2026-11-28, build 192)**: an app with a copy in `MyPC/apps` whose site has a newer version asks
+  **Installed apps update like a PC (owner 2026-11-28, build 193)**: an app with a copy in `MyPC/apps` whose site has a newer version asks
   "Update available" (`App.confirm`, Update focused); Update = `AppUsb.install` (full speed, `run.fast`) with the start screen's bar
   (`GameHost.loadingStatus`), "Installed · version X", then it opens; Later / Back = the installed version from the drive (`copy.chosen`, no
   "no internet" card). `want()` never replaces an installed version in 'ask' mode (only notes `nv`). The version before stays as `prev` (rollback).
