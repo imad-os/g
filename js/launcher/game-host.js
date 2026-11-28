@@ -272,6 +272,8 @@ var GameHost = (function () {
                     remote.keys = { channel: !!(d.keys && d.keys.indexOf && d.keys.indexOf('channel') >= 0), media: !!(d.keys && d.keys.indexOf && d.keys.indexOf('media') >= 0), buttons: !!(d.keys && d.keys.indexOf && d.keys.indexOf('buttons') >= 0) };
                     // MyPC.init({ keys: ['buttons'] }) (API 19): every remote button by name, the app maps them itself
                     if (remote.keys.buttons) Input.registerExtraKeys();
+                    // MyPC.init({ uses: ['photos', 'videos', 'music'] }) (API 26): the built-in apps it opens files in, got ready now (js/launcher/app-open.js)
+                    if (typeof AppOpen !== 'undefined') AppOpen.hello(id, d.uses);
                     if (typeof TouchPad !== 'undefined') { TouchPad.app(d.pad); TouchPad.relay(function (m) { send('pad', m); }); }      // MyPC.init({ pad }); presses of the app's own pad go back to it
                     send('init', {
                         lang: I18n.lang(), rtl: I18n.rtl(), quality: { tier: Perf.profile().tier },
@@ -280,7 +282,7 @@ var GameHost = (function () {
                         data: Store.get('game_' + id + '_data', {}), app: { id: id },
                         config: game.remote.config || {},
                         mp: typeof Multiplayer !== 'undefined' && typeof Rooms !== 'undefined' && NetLink.supported() ? 1 : 0,   // MyPC.multiplayer is supported
-                        bridges: { net: 1, ai: 1, mic: Mic.supported() || Mic.phone() ? 1 : 0, drive: 1, usb: UsbFs.supported() ? 1 : 0, copy: UsbFs.supported() ? 1 : 0, video: AppVideo.supported() ? 1 : 0, keyboard: 1, back: 1, stt: typeof Stt !== 'undefined' ? 1 : 0 },     // MyPC.net / ai / mic (API 10), MyPC.drive (API 14), MyPC.usb / copy (API 16, TV only) go through My PC
+                        bridges: { net: 1, ai: 1, mic: Mic.supported() || Mic.phone() ? 1 : 0, drive: 1, usb: UsbFs.supported() ? 1 : 0, copy: UsbFs.supported() ? 1 : 0, video: AppVideo.supported() ? 1 : 0, keyboard: 1, back: 1, stt: typeof Stt !== 'undefined' ? 1 : 0, open: typeof AppOpen !== 'undefined' ? 1 : 0 },     // MyPC.net / ai / mic (API 10), MyPC.drive (API 14), MyPC.usb / copy (API 16, TV only) go through My PC
                         notify: 1, launch: Push.takeLaunch(id),       // MyPC.notify, MyPC.launch: push notifications (API 12, js/launcher/push.js)
                         usb: usb ? { v: usb.v, at: usb.at } : null,   // MyPC.offline (API 23): this is the copy saved on a USB drive
                         stt: br.sttStatus()                           // MyPC.stt (API 24): speech to text on / ready
@@ -770,6 +772,7 @@ var GameHost = (function () {
     }
 
     function teardown() {
+        if (typeof AppOpen !== 'undefined') AppOpen.appGone();      // a MyPhotos / MyVideos / MyMusic window over the app goes with it
         if (typeof TouchPad !== 'undefined') TouchPad.end();
         sensorsOff();
         if (api) { try { api.destroy(); } catch (e) {} }

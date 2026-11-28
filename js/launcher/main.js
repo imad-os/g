@@ -161,6 +161,14 @@ var App = (function () {
 
         // My PC's on-screen keyboard opened for the app (MyPC.text.keyboard, API 17) sits over it
         if (GameHost.active() && Keyboard.isOpen()) { if (pressed) Keyboard.action(action, repeat); return; }
+        // MyPC.open: MyPhotos / MyVideos / MyMusic over the paused app (js/launcher/app-open.js) get the keys; Back closes it, the app goes on
+        if (GameHost.active() && AppOpen.isOpen() && Win.isOpen()) {
+            if (!pressed) { Win.release(action); return; }
+            if (mediaKey(action, repeat)) return;
+            return Win.action(action, repeat, dev);
+        }
+        // the key that closed it is let go over the app: not a press the app never saw
+        if (GameHost.active() && !pressed && AppOpen.justClosed()) return;
         if (GameHost.active()) return GameHost.onAction(action, pressed, repeat, dev);
 
         if (action === 'padLost') { toast(I18n.t('padOff').split('.')[0], { id: 'pad', kind: 'err' }); return; }
@@ -471,7 +479,7 @@ var App = (function () {
                 try { history.replaceState(null, '', page('')); } catch (e2) {}
                 setTimeout(function () { Win.open('sendtv'); }, 300);
             }
-            if (!ProfilesUI.screenOpen()) Shortcuts.resume();         // a shortcut pressed in a game that asked to open something here
+            if (!ProfilesUI.screenOpen()) Shortcuts.resume();   // a shortcut pressed in a game
             Backup.start();
             Accounts.start();
             Push.start();                                        // push notifications of a signed-in player account (js/launcher/push.js)

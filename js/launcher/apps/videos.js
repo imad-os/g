@@ -6,12 +6,16 @@
  * Per profile, key "videos": [{ id, n, u, from, mime, at }] (30 at most). A video plays only while the phone still shares it
  * (My PC open there). Player: OK = play / pause, Left / Right = 10 s, Up / Down = the buttons, Back = the list.
  *
- *   Videos.add({ n, u, from, mime }) -> id      Win.open('videos', id) plays that video */
+ *   Videos.add({ n, u, from, mime }) -> id      Win.open('videos', id) plays that video
+ *   Win.open('videos', { open: { s, p, n, mime, size }, title })   MyPC.open (API 25, js/launcher/app-open.js): a video of an app's
+ *       Google Drive or USB drive. USB = the TV's player; Drive = My PC's service worker (web / phone app), else the file read whole
+ *       first (AppOpen.VIDEO_MAX) into a <video>. Not added to the list; it opens over the paused app, Back closes MyVideos and the app goes on. */
 var Videos = (function () {
     'use strict';
 
     var KEY = 'videos', MAX = 30;
     var body = null, view = '', cur = null, av = null, vid = null, ui = {}, st = { state: 'idle', t: 0, d: 0 }, hideT = 0, rid = 0, waits = {};
+    var ext = null, dl = null, blobUrl = '';            // MyPC.open: the app's video; its download; the blob: address made of it
 
     function t(k) { return I18n.t(k); }
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
@@ -56,6 +60,11 @@ var Videos = (function () {
         closePlayer();
         if (!body) return;
         var gone = code === 'not-found' || code === 'network' || code === 'net' || code === 'timeout';
+        if (ext) {
+            Notify.show({ id: 'vd', kind: 'err', title: t('videos'), text: t('opVidFail').replace('%s', code || '?') });
+            setTimeout(function () { if (ext && Win.current() === 'videos') Win.close(); }, 0);       // back to the app that asked
+            return;
+        }
         Notify.show({ id: 'vd', kind: 'err', title: t('videos'), text: gone ? t('vdGone') : t('vdError').replace('%s', code || '?') });
         showList(cur && cur.id);
     }
@@ -87,7 +96,7 @@ var Videos = (function () {
         if (!playing()) { clearTimeout(hideT); ui.bar.classList.remove('vd-hide'); }
     }
 
-    function play(v) {
+    function play(v, html) {
         closePlayer();
         cur = v; view = 'play';
         st = { state: 'opening', t: 0, d: 0 };
@@ -113,8 +122,8 @@ var Videos = (function () {
         box.appendChild(bar);
         body.appendChild(box);
         document.documentElement.classList.add('vd-playing');
-        if (useAv()) {
-            av = AppVideo.attach({ appId: 'videos', title: v.n, send: onAv, frame: function () { return null; }, state: function () { return 'running'; } });
+        if (useAv() && !html) {
+            av = AppVideo.attach({ appId: 'videos', title: v.n, own: true, send: onAv, frame: function () { return null; }, state: function () { return 'running'; } });
             op('open', { url: v.u, fit: 'fit' }, function (e, r) {
                 if (e) return failed(e.code);
                 if (r && r.duration) st.d = r.duration;
@@ -167,16 +176,66 @@ var Videos = (function () {
         return first;
     }
 
+    /* ---------------- MyPC.open: a video of an app (Drive or USB) ---------------- */
+    function freeExt() {
+        if (dl) { dl.off = true; if (dl.h) { try { dl.h.abort(); } catch (e) {} } dl = null; }
+        if (blobUrl) { try { URL.revokeObjectURL(blobUrl); } catch (e2) {} blobUrl = ''; }
+    }
+    function waiting(text) {
+        body.innerHTML = '';
+        var box = el('div', 'vd'), msg = el('div', 'ph-empty', text);
+        box.appendChild(msg); body.appendChild(box);
+        return msg;
+    }
+    function openExt(e) {
+        view = 'play';
+        Win.setTitle(e.n || t('videos'));
+        var v = { id: '', n: e.n || '', u: '', from: '', mime: e.mime || '' };
+        if (e.s === 'usb') {
+            waiting(t('vdLoading'));
+            // this page has not asked for the drives yet: UsbFs.inside() knows them after drives()
+            return UsbFs.drives(function () { if (body && ext === e) { v.u = e.p; play(v); } });
+        }
+        if (typeof GDrive === 'undefined') return failed('unsupported');
+        if (AppOpen.canStream() && typeof MusicSrc !== 'undefined') {
+            waiting(t('vdLoading'));
+            return MusicSrc.url({ s: 'gd', p: e.p, n: e.n, mime: e.mime, size: e.size }, function (x, r) {
+                if (!body || ext !== e) return;
+                if (x || !r || !r.url) return failed((x && x.code) || 'stream');
+                v.u = r.url; play(v, true);
+            });
+        }
+        // the TV: its player cannot send Google's sign-in, and this page has no service worker: the file is read first
+        var msg = waiting(t('opLoad')), parts = [], at = 0, CH = 4 * 1048576, me = dl = { off: false, h: null }, errs = 0;
+        (function next() {
+            me.h = GDrive.read(e.p, at, at + CH - 1, function (x, r) {
+                if (me.off) return;
+                if (x) { if (++errs <= 3 && x.code !== 'not-found' && x.code !== 'permission') return setTimeout(next, 1000 * errs); dl = null; return failed(x.code || 'network'); }
+                errs = 0;
+                var n = r && r.buf ? r.buf.byteLength : 0, total = (r && r.total) || e.size || 0;
+                if (n) { parts.push(r.buf); at += n; }
+                if (total > AppOpen.VIDEO_MAX) { dl = null; return failed('too-big'); }
+                if (total) msg.textContent = t('opLoadPc').replace('%n', Math.floor(Math.min(1, at / total) * 100));
+                if (n && (!total || at < total)) return next();
+                dl = null;
+                blobUrl = URL.createObjectURL(new Blob(parts, { type: (r && r.type) || e.mime || 'video/mp4' }));
+                parts = [];
+                v.u = blobUrl; play(v, true);
+            });
+        })();
+    }
+
     Win.register('videos', {
         icon: 'videos',
         title: function () { return t('videos'); },
         open: function (b, arg) {
-            body = b; cur = null;
+            body = b; cur = null; ext = null;
+            if (arg && typeof arg === 'object' && arg.open && arg.open.p) { ext = arg.open; openExt(ext); return ui.play || null; }
             var v = typeof arg === 'string' ? find(arg) : null;
             if (v) { play(v); return ui.play; }
             return showList();
         },
-        close: function () { closePlayer(); body = null; ui = {}; cur = null; view = ''; },
+        close: function () { closePlayer(); freeExt(); body = null; ui = {}; cur = null; view = ''; ext = null; },
         action: function (a, repeat) {
             if (view !== 'play') return false;
             peek();
@@ -187,7 +246,7 @@ var Videos = (function () {
             if (a === 'mediaRew') { seekBy(-30); return true; }
             return false;
         },
-        back: function () { if (view === 'play') { showList(cur && cur.id); return true; } return false; }
+        back: function () { if (ext) return false; if (view === 'play') { showList(cur && cur.id); return true; } return false; }
     });
 
     return { add: add, list: list, find: find, remove: removeVid };

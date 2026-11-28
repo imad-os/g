@@ -576,12 +576,30 @@ var Music = (function () {
             tryNext(null);
         });
     }
+    /* why a song did not play, in words the listener can act on (owner report 2026-11-27: every Drive failure said only
+     * "This song cannot be played", which hid the real cause: a sign-in that ran out, a file My PC may not open...) */
+    function reason(e, cur) {
+        var code = e && e.code, gd = !!(cur && cur.s === 'gd'), msg = e && typeof e.message === 'string' ? e.message.replace(/^Google Drive: /, '') : '';
+        function who() {
+            var a = gd && typeof GDrive !== 'undefined' && GDrive.active ? GDrive.active() || {} : {};
+            var n = typeof Profiles !== 'undefined' && Profiles.name ? Profiles.name(null, t('player')) : '';
+            return code === 'reauth' ? a.email || n : n;
+        }
+        if (typeof code === 'number') code = code === 2 ? 'network' : code === 3 || code === 4 ? 'format' : 'play';     // MediaError / DOMException
+        if (code === 'gone') return gd ? t('muErrGdGone') : t('muErrGone');
+        if (code === 'perm') return t('muErrPerm');
+        if (code === 'reauth' || code === 'nouser' || code === 'noconfig') return t('muGd_' + code).replace('%s', who());
+        if (code === 'network' || code === 'timeout') return t('muErrNet');
+        if (gd && code === 'permission') return t('muErrGdPerm');
+        if (gd && code === 'quota') return t('muErrGdQuota');
+        if (code === 'toobig' || code === 'too-big') return t('muErrTooBig');
+        if (!code || code === 'format' || /NotSupported|MEDIA_ERR|DECODE|SRC_NOT/i.test(msg + ' ' + ((e && e.name) || ''))) return t('muErrFormat');
+        return t('muErrPlay') + (msg ? ' (' + msg.slice(0, 160) + ')' : '');
+    }
     function failed(e, my) {
         if (my !== gen) return;
         loading = false; playing = false;
-        var code = e && e.code;
-        error = code === 'gone' ? t('muErrGone') : code === 'perm' ? t('muErrPerm') : code === 'reauth' || code === 'nouser' || code === 'noconfig' ? t('muGd_' + code) :
-                code === 'network' ? t('muErrNet') : t('muErrPlay');
+        error = reason(e, current());
         emit('error');
         if (typeof App !== 'undefined' && App.toast) App.toast(error + (current() ? ' ' + current().n : ''), { id: 'music', kind: 'err', timeout: 4000 });
         var cur0 = current();
@@ -767,7 +785,7 @@ var Music = (function () {
         time: position,                                   // where the song is now (cheap: no state object), for the screensaver
         onChange: function (fn) { if (listeners.indexOf(fn) < 0) listeners.push(fn); },
         offChange: function (fn) { var i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); },
-        _msType: msType, _streaming: function () { return !!stream; }, _grow: function () { return grow ? (grow.done ? 'whole' : grow.waiting ? 'waiting' : grow.started ? 'piece' : 'loading') : ''; },
+        _msType: msType, _reason: reason, _streaming: function () { return !!stream; }, _grow: function () { return grow ? (grow.done ? 'whole' : grow.waiting ? 'waiting' : grow.started ? 'piece' : 'loading') : ''; },
         _engines: { AV: AV, HTML: HTML }
     };
 })();

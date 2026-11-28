@@ -48,6 +48,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { startHub } from '../tools/lan-hub.mjs';
 import { execFileSync } from 'node:child_process';
+import zlibSync from 'node:zlib';
 import { lanPhone } from './lan-phone-mock.mjs';
 
 const require = createRequire(import.meta.url);
@@ -400,6 +401,7 @@ async function main() {
     if (process.env.MYPC_ONLY === 'video') { await videoTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'stt') { await sttTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'appusb') { await appUsbTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
+    if (process.env.MYPC_ONLY === 'open') { await openTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'copy') { await copyTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'drive') { await driveTests(browser, base); await drivePhoneTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
     if (process.env.MYPC_ONLY === 'calendar') { await calendarTests(browser, base); await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }
@@ -4461,6 +4463,7 @@ async function main() {
     await musicTests(browser, base);
     await driveTests(browser, base);
     await copyTests(browser, base);
+    await openTests(browser, base);
     await appUsbTests(browser, base);
     await sttTests(browser, base);
     await drivePhoneTests(browser, base);
@@ -6047,6 +6050,17 @@ async function musicTests(browser, base) {
     const media = gcalls.filter((c) => /alt=media/.test(c));
     check(gp.playing && gp.engine === 'html' && gp.stream && /^blob:/.test(gp.ms) && !gcalls.some((c) => /access_token=/.test(c)) && media.length && media.every((c) => /Bearer AT1/.test(c)),
         'a Drive song plays at once: read in pieces with the token as a header (Google refuses it in the address) ' + JSON.stringify(gp) + ' ' + media.length + ' piece(s)');
+    // owner report 2026-11-27: a Drive song that failed always said "This song cannot be played"; the real reason is shown now
+    const why = await page.evaluate(() => {
+        const gd = { s: 'gd', n: 'x.mp3' }, usb = { s: 'usb', n: 'x.mp3' }, r = Music._reason;
+        return { gone: r({ code: 'gone' }, gd), usbGone: r({ code: 'gone' }, usb), reauth: r({ code: 'reauth' }, gd), perm: r({ code: 'permission', message: 'Google Drive: Not allowed' }, gd),
+                 quota: r({ code: 'quota' }, gd), big: r({ code: 'toobig' }, gd), media: r({ code: 4, message: 'MEDIA_ERR_SRC_NOT_SUPPORTED' }, gd), net: r({ code: 2 }, gd),
+                 other: r({ code: 'http', message: 'Google Drive: Internal error' }, gd), none: r(null, gd) };
+    });
+    check(/no longer exists, or My PC is not allowed/.test(why.gone) && /drive may have been removed/.test(why.usbGone) && /sign in to imad@example\.com again/.test(why.reauth) && !/%s/.test(why.reauth) &&
+        /does not let this account download/.test(why.perm) && /busy/.test(why.quota) && /too big/.test(why.big) && /cannot play this kind of file/.test(why.media) && /No connection/.test(why.net) &&
+        why.other === 'This song cannot be played. (Internal error)' && /cannot play this kind/.test(why.none),
+        'a song that fails says why (Drive file not allowed / gone, sign-in ran out with the address, download refused, busy, too big, format, network, Google\'s own words) ' + JSON.stringify(why));
     await page.waitForTimeout(600);
     const ld = await page.evaluate(() => ({ loaded: Music.state().loaded, mini: (document.querySelector('.mx-mini-bar .mx-load') || {}).style ? document.querySelector('.mx-mini-bar .mx-load').style.transform : '' }));
     check(ld.loaded === 1 && /scaleX\(1\)/.test(ld.mini), 'the light grey bar under the progress shows how much of the song has arrived (all of this short one) ' + JSON.stringify(ld));
@@ -7770,6 +7784,181 @@ async function copyTests(browser, base) {
     // imad 2026-11-20 ("4 MB takes minutes and the screen hangs"): pieces go to the drive as latin-1 strings (checked once on the drive), 1 MB at a time
     const wr = await page.evaluate(() => ({ str: window.__usb.strWrites || 0, enc: window.__usb.enc, mode: localStorage.getItem('arc_dev_usbw'), left: Object.keys(window.__usb.tree).filter((k) => /\.mypc-w/.test(k)) }));
     check(wr.str > 0 && wr.enc === 'iso-8859-1' && wr.mode === 'str' && !wr.left.length, 'copies write to the USB drive as one-byte-per-char strings after a one-time check on the drive (no test file left) ' + JSON.stringify(wr));
+    check(!page.errors.length, 'no page errors ' + page.errors.join(' | '));
+    await page.context().close();
+}
+
+// 56. MyPC.open (API 25, owner request 2026-11-27: "in MyDrive a photo opens in MyPhotos, a video in MyVideos, music in MyMusic")
+// and MyPC.usb.remove (delete USB files and folders). An installed app hands My PC a Drive file / USB entry: My PC closes the app,
+// opens it in its own app on the desktop page, Back there opens the app again with MyPC.launch.from = 'open'.
+// MYPC_ONLY=open runs only these; MYPC_SHOTS=<folder> saves screenshots.
+function testPng(w, h, rgb) {
+    const crc = (b) => { let c, x = -1; for (let n = 0; n < b.length; n++) { c = (x ^ b[n]) & 255; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; x = (x >>> 8) ^ c; } return (x ^ -1) >>> 0; };
+    const chunk = (t, d) => { const l = Buffer.alloc(4); l.writeUInt32BE(d.length); const td = Buffer.concat([Buffer.from(t), d]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([l, td, c]); };
+    const ih = Buffer.alloc(13); ih.writeUInt32BE(w, 0); ih.writeUInt32BE(h, 4); ih[8] = 8; ih[9] = 2;
+    const raw = Buffer.alloc((w * 3 + 1) * h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const o = y * (w * 3 + 1) + 1 + x * 3; raw[o] = rgb[0]; raw[o + 1] = rgb[1]; raw[o + 2] = rgb[2]; }
+    return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ih), chunk('IDAT', zlibSync.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+async function openTests(browser, base) {
+    console.log('56. MyPC.open: a Drive / USB picture in MyPhotos, a song in MyMusic, a video in MyVideos OVER the paused app (no reload), Back = the app at once; init uses; MyPC.usb.remove');
+    const D = '/opt/media/USBDriveA1';
+    const APP = 'https://mydrive.example.test/';
+    const APP_HTML = `<!doctype html><meta charset=utf-8><title>MyDrive</title><body style="background:#123;color:#fff;font:40px sans-serif"><p id=t>MyDrive (test)</p>
+<script src="${OLD_HOSTED}sdk/mypc-sdk.js"></script><script>window.__life = []; window.__in = []; window.__loads = (window.__loads || 0) + 1;
+MyPC.init({ uses: ['photos', 'videos', 'music'], onInit() { window.__launch = MyPC.launch; MyPC.ready(); window.__ok = 1; }, onPause() { __life.push('pause'); }, onResume() { __life.push('resume'); },
+  onInput(a, p) { __in.push(a + (p ? '+' : '-')); } });</script>`;
+    const db = { apps: {}, settings: { google: { tvClientId: 'cid.apps.googleusercontent.com', tvClientSecret: 'sec', pickerClientId: 'web.apps.googleusercontent.com', pickerApiKey: 'PKEY', projectNumber: '123' } } };
+    db.apps.mydrive = { id: 'mydrive', name: 'MyDrive', url: APP, entry: APP + 'index.html', icon: '', type: 'app', version: '1.3.0', enabled: true, order: 1, config: {} };
+    const page = await newPage(browser, base, db);
+    const ctx = page.context();
+    const red = testPng(64, 48, [220, 30, 30]), blue = testPng(48, 64, [20, 40, 220]), clip = Buffer.alloc(300000, 7);
+    const g = { files: {
+        root: { id: 'root', name: 'My Drive', mimeType: 'application/vnd.google-apps.folder', parents: ['none'] },
+        p1: { id: 'p1', name: 'red.png', mimeType: 'image/png', parents: ['root'], data: red },
+        p2: { id: 'p2', name: 'blue.png', mimeType: 'image/png', parents: ['root'], data: blue },
+        s1: { id: 's1', name: 'one.mp3', mimeType: 'audio/mpeg', parents: ['root'], data: Buffer.alloc(4000, 1) },
+        s2: { id: 's2', name: 'two.mp3', mimeType: 'audio/mpeg', parents: ['root'], data: Buffer.alloc(4000, 2) },
+        v1: { id: 'v1', name: 'clip.mp4', mimeType: 'video/mp4', parents: ['root'], data: clip },
+        t1: { id: 't1', name: 'notes.pdf', mimeType: 'application/pdf', parents: ['root'], data: Buffer.alloc(10, 3) } }, quota: { limit: '16000000000', usage: '1000' } };
+    await fakeGoogle(ctx, g);
+    let usbSeed = {};
+    await ctx.route('https://usb-seed.test/seed', (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(usbSeed) }));
+    const snapshot = async () => { usbSeed = await page.evaluate(() => window.__usb.dump()); };
+    await ctx.addInitScript(USB_MOCK, D);
+    await page.addInitScript((a) => { if (!localStorage.getItem('arc_dev_installed')) { localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'mydrive', at: 1 }])); localStorage.setItem('arc_dev_catalog', JSON.stringify([a])); } }, db.apps.mydrive);
+    await routeHosted(page, { offline: true });
+    await page.route(OLD_HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(path.join(ROOT, 'sdk', 'mypc-sdk.js')) }));
+    await ctx.route(APP + '**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: APP_HTML }));
+    const shot = async (name) => { if (process.env.MYPC_SHOTS) { await page.waitForTimeout(200); await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'open-' + name + '.png') }); } };
+    await page.goto(base + 'index.html');
+    await page.waitForSelector('#desk-icons .dicon');
+    await page.evaluate(() => {
+        Store.set('gdrive', { accounts: [{ id: 'g7', email: 'sara@example.com', name: 'Sara', refreshToken: 'RT-secret', scope: 'https://www.googleapis.com/auth/drive', cid: 'cid.apps.googleusercontent.com', addedAt: 1 }], active: 'g7' });
+        Store.set('drive_apps', { mydrive: 1 });
+        const p = JSON.parse(localStorage.getItem('arc_dev_perm') || '{}'); p['app-mydrive'] = { usb: 1 }; localStorage.setItem('arc_dev_perm', JSON.stringify(p));
+    });
+    await page.evaluate((D) => { window.__usb.put(D + '/Pics/green.png', new Uint8Array([1])); window.__usb.put(D + '/Old/a.txt', new TextEncoder().encode('a')); window.__usb.put(D + '/Old/sub/b.txt', new TextEncoder().encode('b')); window.__usb.put(D + '/x.txt', new TextEncoder().encode('x')); }, D);
+    const green = testPng(30, 30, [20, 200, 40]);
+    await page.evaluate(([D, b64]) => window.__usb.put(D + '/Pics/green.png', Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))), [D, green.toString('base64')]);
+    await page.waitForFunction(() => Desktop.games().some((x) => x.id === 'app-mydrive'), null, { timeout: 10000 });
+    const openApp = async () => {
+        await snapshot();
+        if (!/play=app-mydrive/.test(page.url())) await Promise.all([page.waitForURL(/play=app-mydrive/), page.evaluate(() => Desktop.play(Desktop.games().find((x) => x.id === 'app-mydrive')))]);
+        await page.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 15000 });
+        const app = page.frames().find((x) => x.url().indexOf(APP) === 0);
+        await app.waitForFunction(() => window.__ok === 1 && MyPC.info() && MyPC.info().bridges);
+        return app;
+    };
+    const files = (ids) => ids.map((id) => { const f = g.files[id]; return { id: f.id, name: f.name, mimeType: f.mimeType, size: String(f.data.length) }; });
+
+    // --- the app side: API 25, MyPC.open refuses what My PC has no app for, and a Drive video too big to read whole on this device
+    let app = await openApp();
+    const r0 = await app.evaluate(async () => ({
+        api: MyPC.apiLevel, open: MyPC.info().bridges.open,
+        pdf: await MyPC.open({ id: 't1', name: 'notes.pdf', mimeType: 'application/pdf', size: '10' }).then(() => 'ok', (e) => e.code),
+        big: await MyPC.open({ id: 'v1', name: 'huge.mp4', mimeType: 'video/mp4', size: String(400 * 1048576) }).then(() => 'ok', (e) => e.code),
+        bad: await MyPC.open({ name: 'x' }).then(() => 'ok', (e) => e.code)
+    }));
+    check(r0.api >= 26 && r0.open === 1 && r0.pdf === 'unsupported' && r0.big === 'too-big' && r0.bad === 'bad-request' && await page.evaluate(() => GameHost.state()) === 'running',
+        'MyPC.open (API 25): a PDF is "unsupported", a 400 MB Drive video "too-big" here (no service worker), a bad file "bad-request"; the app stays open ' + JSON.stringify(r0));
+
+    // the app is the same page all along (never reloaded): a mark set now must still be there after each Back
+    await app.evaluate(() => { window.__mark = 'kept'; });
+    const url0 = page.url();
+    const over = (id) => page.waitForFunction((id) => Win.current() === id && AppOpen.isOpen(), id, { timeout: 15000 }).catch(() => {});
+    // Back (or Win.close) over the app: the window goes, the app runs again at once, on the same page
+    const backToApp = async (how) => {
+        if (how === 'close') await page.evaluate(() => Win.close()); else await tvBack(page);
+        const st = await page.evaluate(() => ({ win: Win.isOpen(), open: AppOpen.isOpen(), state: GameHost.state(), url: location.href, focus: document.activeElement && document.activeElement.id }));
+        await page.waitForTimeout(450);
+        const after = await page.evaluate(() => ({ ghost: !!document.querySelector('.win-ghost'), cls: document.documentElement.className, vis: getComputedStyle(document.getElementById('game-frame-box')).visibility }));
+        const ap = await app.evaluate(() => ({ mark: window.__mark, loads: window.__loads, life: window.__life.slice(), cancel: window.__in.filter((x) => /cancel|back/.test(x)) }));
+        await app.evaluate(() => { window.__life.length = 0; window.__in.length = 0; });
+        return { st, after, ap };
+    };
+    const okBack = (r) => !r.st.win && !r.st.open && r.st.state === 'running' && r.st.url === url0 && !r.after.ghost && !/win-over-app|win-covers-app/.test(r.after.cls) && r.after.vis === 'visible'
+        && r.ap.mark === 'kept' && r.ap.loads === 1 && r.ap.life.join() === 'pause,resume' && !r.ap.cancel.length;
+
+    // --- a Drive picture: MyPhotos opens over the app with a zoom from the tile, the folder's other picture with Right; Back = the app
+    const list = files(['p1', 's1', 'p2', 'v1']);
+    await app.evaluate((l) => MyPC.open(l[2], { list: l, folder: 'My Drive', from: { x: 100, y: 120, w: 240, h: 180 } }), list);
+    const z = await page.evaluate(() => ({ anim: document.getElementById('window').getAnimations().length, cls: document.documentElement.className, state: GameHost.state(), url: location.href }));
+    await page.waitForFunction(() => Win.current() === 'photos' && document.querySelector('.ph-full') && document.querySelector('.ph-full').naturalWidth > 0, null, { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(350);
+    const ph1 = await page.evaluate(() => ({ app: Win.current(), title: document.getElementById('win-title').textContent, w: (document.querySelector('.ph-full') || {}).naturalWidth, hint: (document.querySelector('.ph-hint') || {}).textContent, del: !!document.querySelector('.ph-del'),
+        covers: document.documentElement.classList.contains('win-covers-app'), vis: getComputedStyle(document.getElementById('game-frame-box')).visibility, zw: +getComputedStyle(document.getElementById('window')).zIndex, zg: +getComputedStyle(document.getElementById('game-layer')).zIndex }));
+    await shot('1-photo');
+    check(z.url === url0 && z.state === 'paused' && /win-over-app/.test(z.cls) && z.anim >= 1, 'MyPC.open shows MyPhotos over the app at once: same page, the app paused, the window zooms in ' + JSON.stringify(z));
+    check(ph1.app === 'photos' && /2 \/ 2/.test(ph1.title) && ph1.w === 48 && /return to MyDrive/.test(ph1.hint) && !ph1.del && ph1.covers && ph1.vis === 'hidden' && ph1.zw > ph1.zg,
+        'the Drive picture in MyPhotos: 2 / 2 (only the folder\'s pictures), "Back: return to MyDrive", no Delete; above the app, whose frame is not drawn under it ' + JSON.stringify(ph1));
+    await page.keyboard.press('ArrowRight');        // the picture has the focus from the start
+    await page.waitForFunction(() => /1 \/ 2/.test(document.getElementById('win-title').textContent) && document.querySelector('.ph-full') && document.querySelector('.ph-full').naturalWidth === 64, null, { timeout: 10000 }).catch(() => {});
+    const ph2 = await page.evaluate(() => [document.getElementById('win-title').textContent, (document.querySelector('.ph-full') || {}).naturalWidth]);
+    const in1 = await app.evaluate(() => window.__in.slice());
+    check(/1 \/ 2/.test(ph2[0]) && ph2[1] === 64 && !in1.length, 'Right shows the other picture of the folder; the app under it gets no key ' + JSON.stringify([ph2, in1]));
+    const saved = await page.evaluate(() => new Promise((ok) => Photos.all((l) => ok(l.length))));
+    check(saved === 0, 'nothing is saved into MyPhotos\' own pictures ' + saved);
+    // a second open while one is shown is refused
+    const busy = await app.evaluate((l) => MyPC.open(l[0]).then(() => 'ok', (e) => e.code), list);
+    check(busy === 'busy', 'a second MyPC.open while one is shown is "busy" ' + busy);
+    const b1 = await backToApp('key');
+    check(okBack(b1), 'Back in MyPhotos: the window zooms away and the app goes on at once (onPause, onResume), same page, not reloaded, the Back key never reaches it ' + JSON.stringify(b1));
+    const after1 = await page.evaluate(() => GameHost.state());
+    await tvBack(page);
+    const in2 = await app.evaluate(() => window.__in.slice());
+    check(after1 === 'running' && in2.indexOf('cancel+') >= 0, 'the next Back is the app\'s own again ' + JSON.stringify(in2));
+    await app.evaluate(() => { window.__in.length = 0; });
+
+    // --- a Drive song: MyMusic plays the folder's songs, Now playing; closing it returns to the app (the music may go on)
+    await app.evaluate((l) => MyPC.open(l[1], { list: l, folder: 'My Drive' }), files(['p1', 's1', 's2']));
+    await over('music');
+    await page.waitForSelector('.mx-np-hint', { timeout: 5000 }).catch(() => {});
+    const mu = await page.evaluate(() => ({ app: Win.current(), q: Music.state().count, cur: Music.state().track && Music.state().track.n, src: Music.state().track && Music.state().track.s, state: GameHost.state(), hint: (document.querySelector('.mx-np-hint') || {}).textContent }));
+    await shot('2-music');
+    check(mu.app === 'music' && mu.cur === 'one.mp3' && mu.q === 2 && mu.src === 'gd' && mu.state === 'paused' && /Back: return to MyDrive/.test(mu.hint), 'the Drive song opens in MyMusic (Now playing) over the app, with the folder\'s songs as the queue; "Back: return to MyDrive" ' + JSON.stringify(mu));
+    const b2 = await backToApp('key');
+    await page.evaluate(() => Music.stop && Music.stop());
+    check(okBack(b2), 'ONE Back on Now playing returns to the app at once (not MyMusic\'s library) ' + JSON.stringify(b2));
+
+    // --- a small Drive video: MyVideos reads it (no service worker here) and plays it in a <video>
+    await app.evaluate((l) => MyPC.open(l[0]), files(['v1']));
+    await page.waitForFunction(() => Win.current() === 'videos' && document.querySelector('video.vd-video'), null, { timeout: 15000 }).catch(() => {});
+    const vd = await page.evaluate(() => ({ app: Win.current(), src: (document.querySelector('video.vd-video') || {}).src || '', list: Videos.list().length }));
+    check(vd.app === 'videos' && /^blob:/.test(vd.src) && vd.list === 0, 'the Drive video opens in MyVideos over the app (read first, then a <video>), not added to MyVideos\' list ' + JSON.stringify(vd));
+    const b3 = await backToApp('key');
+    check(okBack(b3), 'Back in MyVideos returns to the app at once ' + JSON.stringify(b3));
+
+    // --- MyPC.init({ uses }): only the apps the app said it uses may open
+    await page.evaluate(() => AppOpen.hello('app-mydrive', ['photos']));
+    const gate = await app.evaluate((l) => Promise.all([MyPC.open(l[1], { list: l }).then(() => 'ok', (e) => e.code), MyPC.open(l[3]).then(() => 'ok', (e) => e.code)]), list);
+    const gateWin = await page.evaluate(() => Win.isOpen());
+    await page.evaluate(() => AppOpen.hello('app-mydrive', ['all']));
+    check(gate.join() === 'unsupported,unsupported' && !gateWin, 'an app that uses only MyPhotos cannot open a song or a video ' + JSON.stringify(gate));
+
+    // --- USB: a picture opens in MyPhotos; MyPC.usb.remove deletes a file and a whole folder, never a drive
+    const u = await app.evaluate(async (D) => {
+        await MyPC.usb.drives();
+        const out = {};
+        out.file = await MyPC.usb.remove(D + '/x.txt').then((r) => r, (e) => e.code);
+        out.dir = await MyPC.usb.remove({ path: D + '/Old' }).then((r) => r, (e) => e.code);
+        out.root = await MyPC.usb.remove(D).then(() => 'ok', (e) => e.code);
+        out.gone = await MyPC.usb.remove(D + '/nothing.txt').then(() => 'ok', (e) => e.code);
+        out.out = await MyPC.usb.remove('/etc/passwd').then(() => 'ok', (e) => e.code);
+        out.left = (await MyPC.usb.list(D)).map((f) => f.name).join(',');
+        return out;
+    }, D);
+    const tree = await page.evaluate(() => Object.keys(window.__usb.tree).filter((k) => /Old|x\.txt/.test(k)));
+    check(u.file === true && u.dir === true && u.root === 'bad-request' && u.gone === 'not-found' && u.out === 'bad-request' && u.left === 'Pics' && !tree.length,
+        'MyPC.usb.remove: a file and a folder with everything in it are deleted; the drive itself, a missing file and paths outside the drives are refused ' + JSON.stringify([u, tree]));
+    await app.evaluate((D) => MyPC.open({ path: D + '/Pics/green.png', name: 'green.png', size: 0 }), D);
+    await page.waitForFunction(() => Win.current() === 'photos' && document.querySelector('.ph-full') && document.querySelector('.ph-full').naturalWidth > 0, null, { timeout: 15000 }).catch(() => {});
+    const up = await page.evaluate(() => [Win.current(), (document.querySelector('.ph-full') || {}).naturalWidth]);
+    await shot('3-usb-photo');
+    check(up[0] === 'photos' && up[1] === 30, 'a USB picture (type from its name) opens in MyPhotos ' + JSON.stringify(up));
+    // the app goes away under it (quit, crash): the window goes too
+    await page.evaluate(() => AppOpen.appGone());
+    const gone = await page.evaluate(() => ({ win: Win.isOpen(), open: AppOpen.isOpen(), cls: document.documentElement.className }));
+    check(!gone.win && !gone.open && !/win-over-app|win-covers-app/.test(gone.cls), 'when the app goes, the window over it goes too ' + JSON.stringify(gone));
     check(!page.errors.length, 'no page errors ' + page.errors.join(' | '));
     await page.context().close();
 }

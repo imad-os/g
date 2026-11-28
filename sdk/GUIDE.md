@@ -120,7 +120,8 @@ MyPC.init({
     onInput:   function (action, pressed, repeat, dev) {},  // optional: one call per action change
     onMenu:    function (id) {},     // optional: one of your pause-menu items was chosen
     onVolume:  function (v) {},      // optional: v = { music: 0..1, sfx: 0..1 } changed in the Control Panel
-    ownMenu:   false                 // optional: true = gamepad Start (short press) sends you 'menu'
+    ownMenu:   false,                // optional: true = gamepad Start (short press) sends you 'menu'
+    uses:      []                    // optional (API 26): My PC's apps you open files in: 'photos', 'videos', 'music', 'all' (section 24)
 });
 ```
 
@@ -162,7 +163,7 @@ still slow down a hidden page by itself. Standalone, outside My PC, the SDK does
 itself. Your app only sees `info.profile` and keeps progress with `MyPC.save` / `MyPC.load`, which are already per
 profile and backed up. **Never** build your own login, accounts, cloud saves, name entry for scores, Firebase or backend.
 
-Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text, 14 drive, 15 no input while paused, 16 usb / copy, 17 video / back / keys / keyboard, 18 every button to the app: Back as `cancel`, `onInput` returns `false` = nothing to close, 19 `MyPC.buttons`, 22 `MyPC.bug`, 23 the USB copy (`MyPC.offline`), 24 `MyPC.stt` speech to text) and hide the feature
+Check `MyPC.apiLevel` before using a newer API (3 multiplayer, 4 pad, 7 bluetooth, 8 sensors, 9 gamepad, 10 net / ai / mic, 11 error reports, 12 notify / launch, 13 text, 14 drive, 15 no input while paused, 16 usb / copy, 17 video / back / keys / keyboard, 18 every button to the app: Back as `cancel`, `onInput` returns `false` = nothing to close, 19 `MyPC.buttons`, 22 `MyPC.bug`, 23 the USB copy (`MyPC.offline`), 24 `MyPC.stt` speech to text, 25 `MyPC.open` + `MyPC.usb.remove`, 26 `MyPC.open` over the app + `MyPC.init({ uses })`) and hide the feature
 when it is missing.
 
 ### App config: `MyPC.app_config`
@@ -1400,6 +1401,7 @@ if (MyPC.apiLevel >= 16 && MyPC.info().bridges.usb) {
 | `usb.stat(path)` | `{ exists, dir, size }` |
 | `usb.createFolder(parentPath, name)` | `{ name, path }` (the name is made safe for FAT / exFAT / NTFS; already there is fine) |
 | `usb.read(path, start, end)` | `{ buf: ArrayBuffer }` bytes `start`..`end` (included), 16 MB at most per call: pictures, subtitles, a preview |
+| `usb.remove(path)` | `true` (API 25): a file, or a folder **with everything in it**, deleted **for ever** (no trash on a USB drive: ask the user first, naming what goes). A whole drive (its top folder) is refused with `bad-request`; missing: `not-found`. |
 | `copy.toUsb(driveFilesOrIds, usbFolderPath, { ifExists })` | a `job` (it starts at once, in the background) |
 | `copy.toDrive(usbPathsOrItems, driveFolderId, { ifExists })` | a `job` |
 | `copy.jobs()` | this app's copies (running, waiting and the last ended ones) |
@@ -1436,7 +1438,7 @@ What My PC does for you:
 files with OK, a "Copy to USB" / "Copy to Google Drive" action, a folder picker for the destination, a list of copies with
 Pause / Resume / Cancel).
 
-Protocol (for reference): app -> My PC `usb { rid, op, args }` (`op`: drives list stat mkdir read) and `copy { rid, op, args }`
+Protocol (for reference): app -> My PC `usb { rid, op, args }` (`op`: drives list stat mkdir read remove) and `copy { rid, op, args }`
 (`op`: start jobs pause resume cancel clear watch); My PC -> app `{ rid, result | error }` and, after `watch`,
 `copy { rid: 0, ev: 'job', job }`. My PC side: `js/core/usb-fs.js`, `js/core/copy-jobs.js`, `js/launcher/bridges.js`.
 
@@ -1627,3 +1629,49 @@ My PC -> app `stt` `{ rid, result | error }` and events `{ ev, of: rid (0 = the 
 `init` carries `stt` (the status) and `bridges.stt: 1`. Phone controller (Buttons mode): TV -> phone `{ t: 'stt', on: 1, id, lang, max }` /
 `{ t: 'stt', on: 0, id, x }`, phone -> TV `{ t: 'sr', id, v, fin }` | `{ t: 'sr', id, err }` | `{ t: 'sr', id, end: 1 }`; a phone without a
 recognizer sends its microphone as sound (`mic` / `au`, section 14) and My PC's AI service writes it down.
+
+## 24. Open a file in My PC's own apps: `MyPC.open` (API level 25, over the app since 26)
+
+A picture, a video or a song of Google Drive (a `MyPC.drive` file object) or of a USB drive (a `MyPC.usb.list` entry) opens in
+My PC's own app: pictures in **MyPhotos**, videos in **MyVideos**, songs in **MyMusic**. A file browser (MyDrive) should use it
+for OK on such a file instead of a viewer or player of its own.
+
+**Since API 26 the app opens ON TOP of your app; nothing reloads.** Your app is paused (`onPause`, no input, its frame not
+drawn while the window covers it), the window zooms out of the file's tile (`from`), and Back (or the close button) shrinks it
+back: your app goes on at once (`onResume`), on the same screen, with all its state. One Back is enough, in MyMusic too (Now
+playing; the music goes on under your app). With an older My PC (API 25) My PC closed your app and opened it again with
+`MyPC.launch = { from: 'open', app, path: '' }`; keep handling that if you still support API 25.
+
+Say which of them you use when you start (MUST for API 26+): My PC gets them ready while your app starts (in idle time), so the
+first file opens as fast as the next ones, and only those may open (`unsupported` for the others). An app that says nothing may
+open all three (as with API 25).
+
+```js
+MyPC.init({ uses: ['photos', 'videos', 'music'], /* or ['all'] */ onInit() { ... }, onPause() { ... }, onResume() { ... } });
+
+if (MyPC.apiLevel >= 25 && MyPC.info().bridges.open) {
+  MyPC.open(file, { list: folderFiles, folder: 'Holidays', from: tileElement })
+    .catch((e) => showItMyself(file, e.code));            // 'unsupported', 'too-big'...: keep your own viewer as the fallback
+}
+```
+
+- `list`: the other files of the folder (any kinds, up to 1000; My PC keeps those of the same kind and place). MyPhotos
+  shows them with Left / Right (and a slideshow), MyMusic plays them as the queue from `file`. MyVideos plays only `file`.
+- `from`: the element the file is drawn in (or `{ x, y, w, h }` in your CSS pixels): the window grows out of it and shrinks
+  back into it. Without it the window fades in. On a slow TV (`quality.tier` low) or with reduced motion there is no zoom.
+- The promise resolves (`true`) once the file is shown. It rejects (and nothing opens) with `unsupported` (not a picture /
+  video / song, a kind your `uses` leaves out, or an older My PC), `too-big` (a Drive video bigger than 150 MB on a device where
+  My PC cannot stream it: the TV reads a Drive video whole first, because its player cannot send Google's sign-in; play it
+  yourself with `MyPC.drive.stream`, section 19), `denied` (the user has not allowed your app to use Google Drive / the USB
+  drives: call `MyPC.drive` / `MyPC.usb` first), `busy` (a file is already open), `bad-request` (not a file object / entry, or
+  a path outside the plugged drives).
+- Nothing is copied into My PC's apps: MyPhotos reads one picture at a time (shrunk to the screen, 40 MB at most per file),
+  MyVideos and MyMusic do not add the file to their own lists.
+- While the window is open your app gets no keys and no controller (like under My PC's menu); keep `onPause` light.
+
+Protocol (for reference): `hello` carries `uses` (array of 'photos' | 'videos' | 'music' | 'all', or null); app -> My PC
+`open { rid, op: 'open', args: { item, list, folder, from } }` (items `{ s: 'gd', id, n, mime, size }` or `{ s: 'usb', path, n,
+mime, size }`; `from` = `{ x, y, w, h, vw, vh }`, vw / vh = the app's `innerWidth` / `innerHeight`); My PC -> app
+`open { rid, result | error }`; `init` carries `bridges.open: 1`.
+My PC side: `js/launcher/app-open.js`, `js/launcher/apps/photos.js`, `js/launcher/apps/videos.js`, `js/launcher/apps/music.js`,
+`js/launcher/bridges.js`.

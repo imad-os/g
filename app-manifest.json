@@ -1,5 +1,5 @@
 {
-  "build": 188,
+  "build": 191,
   "version": "3.0.0",
   "shell": 1,
   "css": [
@@ -73,6 +73,7 @@
     "js/core/i18n-appusb.js",
     "js/core/i18n-share.js",
     "js/core/i18n-stt.js",
+    "js/core/i18n-open.js",
     "js/core/a11y.js",
     "js/core/scores.js",
     "js/core/audio.js",
@@ -123,6 +124,7 @@
     "js/launcher/controllers.js",
     "js/launcher/touchpad.js",
     "js/launcher/bridges.js",
+    "js/launcher/app-open.js",
     "js/launcher/app-video.js",
     "js/launcher/welcome.js",
     "js/launcher/game-host.js",

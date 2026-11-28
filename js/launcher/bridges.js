@@ -5,7 +5,8 @@
  *   'stt'  MyPC.stt    speech to text (js/core/stt.js, API 24): listens when the app asks or the phone's mic button is pressed
  *   'drive' MyPC.drive Google Drive of the profile (js/core/gdrive.js): one sign-in in Control Panel > Google Drive,
  *                      apps never see a token. Allowed once per app and per profile (profile key drive_apps).
- *   'usb'  MyPC.usb    the USB drives of the TV (js/core/usb-fs.js): drives, list, new folder, read. Allowed once per app (arc_dev_perm).
+ *   'usb'  MyPC.usb    the USB drives of the TV (js/core/usb-fs.js): drives, list, new folder, read, delete (API 25). Allowed once per app (arc_dev_perm).
+ *   'open' MyPC.open   a picture / video / song of Drive or USB opens in MyPhotos / MyVideos / MyMusic (js/launcher/app-open.js, API 25)
  *   'copy' MyPC.copy   copies between Google Drive and the USB drives, done by My PC (js/core/copy-jobs.js); needs both permissions.
  *                      The app gets { ev: 'job', job } messages (rid 0) once it called watch.
  * The AI services of this TV and the microphone are used only after the user allowed it, once per app (arc_dev_perm,
@@ -283,6 +284,8 @@ var Bridges = (function () {
                         case 'mkdir':
                             var q = UsbFs.join(p, UsbFs.safeName(a.name));
                             return UsbFs.mkdir(q, function (x) { reply(x, x ? null : { name: UsbFs.base(q), path: q, dir: true, size: 0 }); });
+                        case 'remove':          // API 25: deleted for ever (the app asks the user first)
+                            return UsbFs.removeAny(p, function (x) { reply(x, x ? null : true); });
                         case 'read':
                             var at = Math.max(0, Math.floor(+a.start || 0)), end = a.end === undefined || a.end === null ? at + 4194303 : Math.floor(+a.end);
                             if (!(end >= at) || end - at >= 16777216) return reply({ code: 'bad-request', message: 'Read 16 MB at most at a time.' });
@@ -374,10 +377,19 @@ var Bridges = (function () {
             send('stt', { rid: d.rid, error: { code: 'bad-request', message: 'Unknown operation ' + d.op + '.' } });
         }
 
+        /* ----- MyPC.open (API 25): a picture / video / song opens in MyPhotos / MyVideos / MyMusic (js/launcher/app-open.js) ----- */
+        function openRun(d) {
+            function reply(e, r) { send('open', e ? { rid: d.rid, error: e } : { rid: d.rid, result: r === undefined ? null : r }); }
+            if (!alive()) return reply({ code: 'not-running', message: 'The app is not running.' });
+            if (typeof AppOpen === 'undefined') return reply({ code: 'unsupported', message: 'This My PC cannot open files in its apps. Update My PC.' });
+            AppOpen.request(ctx, d.args && typeof d.args === 'object' ? d.args : {}, reply);
+        }
+
         return {
             handle: function (type, d) {
-                if (type !== 'net' && type !== 'ai' && type !== 'mic' && type !== 'drive' && type !== 'usb' && type !== 'copy' && type !== 'stt') return false;
+                if (type !== 'net' && type !== 'ai' && type !== 'mic' && type !== 'drive' && type !== 'usb' && type !== 'copy' && type !== 'stt' && type !== 'open') return false;
                 if (!d || typeof d !== 'object' || typeof d.rid !== 'number') return true;
+                if (type === 'open') return openRun(d), true;
                 if (type === 'net') net(d); else if (type === 'ai') aiRun(d); else if (type === 'drive') driveRun(d); else if (type === 'usb') usbRun(d); else if (type === 'copy') copyRun(d); else if (type === 'stt') sttRun(d); else micRun(d);
                 return true;
             },
