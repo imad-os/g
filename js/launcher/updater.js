@@ -9,6 +9,7 @@
  *   Updater.install()      download every file of it (progress), then state 'ready'
  *   Updater.restart()      reload the app (the loader starts the new build)
  *   Updater.state()        { state, remote, done, total, error }
+ *   Updater.watch()        while My PC stays open: checks every 3 h, downloads quietly, restarts when nobody uses it
  *     state: idle | checking | uptodate | available | downloading | ready | error
  *     error: network | invalid | shell | download
  * Works with any loader: it only needs AppBoot.get / build / version / source / SHELL. */
@@ -69,7 +70,7 @@ var Updater = (function () {
     function install() {
         var m = st.remote;
         if (!m || st.state === 'downloading' || st.state === 'checking') return;
-        var my = ++token, base = remoteBase(), list = files(m), next = 0, active = 0, failed = false;
+        var my = ++token, base = remoteBase(), list = files(m), next = 0, active = 0, failed = false, texts = {};
         st.done = 0; st.total = list.length;
         set('downloading');
 
@@ -79,7 +80,7 @@ var Updater = (function () {
                 if (my !== token) return;
                 if ((err || !text) && tries < 2) return get(i, tries + 1);
                 active--;
-                if (err || !text) failed = true; else st.done++;
+                if (err || !text) failed = true; else { st.done++; texts[list[i]] = text; }
                 if (failed) { if (!active) { st.remote = m; set('error', 'download'); } return; }
                 emit();
                 pump();
@@ -88,7 +89,12 @@ var Updater = (function () {
         function pump() {
             if (failed) return;
             while (active < PARALLEL && next < list.length) { active++; get(next++, 1); }
-            if (!active && st.done === st.total) finish(m, base);
+            if (!active && st.done === st.total) {
+                // the saved copy (js/core/boot-cache.js): the next start runs it even if the network is weak again
+                if (typeof BootCache !== 'undefined' && BootCache.supported()) BootCache.save(m, base, texts);
+                texts = null;
+                finish(m, base);
+            }
         }
         pump();
     }
@@ -117,21 +123,65 @@ var Updater = (function () {
     // The built-in copy ran because the update server did not answer at start (a slow network as the TV wakes up):
     // look again once the desktop is up, download the newer build quietly and say so. The next start runs it
     // (the loader finds it online, or runs this saved copy if the server is slow again). Desktop page only.
+    // download a newer build quietly; fn(true) once it is ready (also saved on the TV / USB drive by install())
+    function quietly(fn) {
+        function on(s) {
+            if (s.state === 'available') return install();
+            if (s.state === 'downloading' || s.state === 'checking') return;
+            offChange(on);
+            fn(s.state === 'ready');
+        }
+        listeners.push(on);
+        check();
+    }
+    function told(s) {
+        if (window.Notify) Notify.show({ id: 'upd', kind: 'info', title: I18n.t('updBgTitle'), text: I18n.t('updBgReady').replace('{v}', s.remote.version || s.remote.build), timeout: 9000 });
+    }
+
+    /* While My PC stays open (owner 2026-11-28: "and when My PC is already open?"): every WATCH_EVERY and when the TV comes back
+     * to My PC, look for a newer build and download it quietly. It starts by itself only while nobody uses My PC (the desktop,
+     * no app window, no key / touch for IDLE_MS, no music playing); else a card says it starts next time, and it restarts as
+     * soon as My PC is idle. Desktop page only (main.js); never on the web (the site is always current). */
+    var WATCH_EVERY = 3 * 3600 * 1000, IDLE_MS = 10 * 60 * 1000, lastUse = Date.now(), watching = false, lastWatch = Date.now(), saidReady = false;
+    function idle() {
+        if (Date.now() - lastUse < IDLE_MS || document.hidden) return false;
+        var d = document.getElementById('desktop');
+        if (!d || d.hidden) return false;
+        if (typeof Win !== 'undefined' && Win.current && Win.current()) return false;
+        if (typeof GameHost !== 'undefined' && GameHost.active && GameHost.active()) return false;
+        try { if (typeof Music !== 'undefined' && Music.state && Music.state().playing) return false; } catch (e) {}
+        return true;
+    }
+    function tick() {
+        if (document.hidden) return;
+        if (st.state === 'ready' && st.remote) {
+            if (!saidReady) { saidReady = true; told(st); }
+            if (idle()) restart();
+            return;
+        }
+        if (Date.now() - lastWatch < WATCH_EVERY || st.state === 'checking' || st.state === 'downloading') return;
+        lastWatch = Date.now();
+        quietly(function () {});
+    }
+    function watch(every) {
+        if (watching || !window.AppBoot) return false;
+        if (location.protocol === 'https:' && !localStorage.getItem('boot_remote_base')) return false;
+        watching = true;
+        if (every) WATCH_EVERY = every;
+        var use = function () { lastUse = Date.now(); };
+        ['keydown', 'pointerdown', 'touchstart', 'wheel'].forEach(function (e) { document.addEventListener(e, use, true); });
+        setInterval(tick, 60000);
+        document.addEventListener('visibilitychange', function () { if (!document.hidden) { if (Date.now() - lastWatch > 30 * 60000) lastWatch = 0; tick(); } });
+        return true;
+    }
+
     function background(delay) {
-        if (!window.AppBoot || AppBoot.source() !== 'local' || (AppBoot.reason ? AppBoot.reason() : '') !== 'unreachable') return false;
+        var why = window.AppBoot && AppBoot.reason ? AppBoot.reason() : '';
+        if (!window.AppBoot || AppBoot.source() !== 'local' || (why !== 'unreachable' && why !== 'saved')) return false;
         if (location.protocol === 'https:' && !localStorage.getItem('boot_remote_base')) return false;        // the web: always current
         setTimeout(function () {
             if (st.state !== 'idle') return;
-            function on(s) {
-                if (s.state === 'available') return install();
-                if (s.state === 'downloading' || s.state === 'checking') return;
-                offChange(on);
-                if (s.state === 'ready' && window.Notify) {
-                    Notify.show({ id: 'upd', kind: 'info', title: I18n.t('updBgTitle'), text: I18n.t('updBgReady').replace('{v}', s.remote.version || s.remote.build), timeout: 9000 });
-                }
-            }
-            listeners.push(on);
-            check();
+            quietly(function (ok) { if (ok) { saidReady = true; told(st); } });
         }, delay === undefined ? 15000 : delay);
         return true;
     }
@@ -139,6 +189,8 @@ var Updater = (function () {
 
     return {
         background: background,
+        watch: watch,
+        _idle: function (ms) { lastUse = Date.now() - ms; lastWatch = 0; tick(); },     // tests
         check: check, autoCheck: autoCheck, install: install, restart: restart, cancel: cancel,
         state: function () { return st; },
         onChange: function (fn) { listeners.push(fn); },

@@ -53,6 +53,16 @@
   (owner rule 2026-11-09): the frame is `inert` and loses the focus, and the SDK (API 15, `freeze`) stops keys before the app's
   listeners, makes `navigator.getGamepads()` empty, pauses its media; an app with no `onPause` also has its rAF held and its
   AudioContexts suspended. Tests: `MYPC_ONLY=flow node tests/run-tests.mjs`.
+- **Saved copy of My PC for weak networks (owner request 2026-11-28, package 3.1.0, build 188)**: the loader (package) reads, hosted
+  `js/core/boot-cache.js` (`BootCache`) writes the running hosted build's code (app.html + manifest CSS / JS, ~2.5 MB) ONCE per build
+  into IndexedDB `mypc-boot` and, with a USB drive, `<drive>/MyPC/boot/mypc-<build>.json` + `current.json` (format = `AppBoot.cacheInfo`,
+  `CACHE_V`). Same build online = code from the copy, nothing downloaded (`reason` 'cached', source remote); no answer / build set
+  aside / hosted files fail = the copy with the packaged pictures and games (`saved`, source local, `SS_FORCE_CACHE`); a copy that
+  fails = `boot_cache_bad`. `Updater.install` saves what it downloaded; `Updater.watch()` (desktop) checks the manifest every 3 h /
+  on resume, downloads quietly and restarts only when idle (desktop, no window, no key 10 min, no music). Older packages ignore it.
+  **Installed apps follow their own site** (`js/core/app-live.js`, `AppLive`): before an app opens the TV reads its `mypc-app.json`
+  (2.5 s, in parallel with `Cloud.fetchApp`) and opens the higher version (`AppLive.newer`); USB copies follow (every 6 h, `arc_dev_applive`).
+  Manager Update is only needed for name / icon / entry / services / widgets. Tests: `MYPC_ONLY=boot` (4b-4d).
 - `js/launcher/`: desktop shell (`desktop.js`), full-screen app window (`window.js`), apps
   (`apps/*.js`: settings, explorer, browser, calculator, calendar, scores), on-screen keyboard,
   profiles, `game-host.js` (bundled games in a same-origin iframe; installed apps in a sandboxed

@@ -518,6 +518,153 @@ async function main() {
         await page.context().close();
     }
 
+    console.log('4b. the saved copy (owner request 2026-11-28): saved once per build on the TV + USB, runs when the network is weak');
+    {
+        const D = '/opt/media/USBDriveA1';
+        const page = await newPage(browser, base);
+        const ctx = page.context();
+        let usbSeed = {}, mode = 'online', jsGets = 0, slowN = 0;
+        await ctx.route('https://usb-seed.test/seed', (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(usbSeed) }));
+        await ctx.addInitScript(USB_MOCK, D);
+        const snapshot = async () => { const d = await page.evaluate(() => window.__usb ? window.__usb.dump() : null); if (d) usbSeed = d; };
+        await routeHosted(page, { manifest: { build: NEXT } });
+        await page.route(HOSTED + '**', async (route) => {        // registered last: asked first
+            const rel = route.request().url().slice(HOSTED.length).split('?')[0];
+            if (mode === 'offline') return route.abort('internetdisconnected');
+            if (/^js\/.*\.js$/.test(rel) || /^css\//.test(rel) || rel === 'app.html') jsGets++;
+            if (mode === 'newer' && rel === 'app-manifest.json') {
+                const m = JSON.parse(fs.readFileSync(path.join(ROOT, 'app-manifest.json'), 'utf8'));
+                return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(Object.assign(m, { build: NEXT + 1 })) });
+            }
+            if (mode === 'newer' && rel === 'js/launcher/main.js') return route.abort('timedout');
+            if (mode === 'slow' && /^js\//.test(rel)) await new Promise((x) => setTimeout(x, 40 * (++slowN)));
+            return route.fallback();
+        });
+        const up = () => page.waitForFunction(() => window.AppBoot && window.Desktop && document.querySelector('.dicon'), null, { timeout: 25000 });
+        const st = () => page.evaluate(() => ({ src: AppBoot.source(), b: AppBoot.build(), why: AppBoot.reason(), c: AppBoot.cached(), wall: getComputedStyle(document.body).fontFamily }));
+        mode = 'slow';
+        await page.goto(base + 'index.html');
+        await page.waitForFunction(() => { const b = document.getElementById('bs-info'); return b && /on/.test(b.className) && /Downloading update\s+·\s+\d+ \/ \d+ files/.test(b.textContent); }, null, { timeout: 15000 }).catch(() => {});
+        const splash = await page.evaluate(() => document.getElementById('bs-info') ? document.getElementById('bs-info').innerText : '');
+        if (process.env.MYPC_SHOTS) await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'boot-downloading.png') });
+        check(/Downloading update\s+·\s+\d+ \/ \d+ files/.test(splash) && new RegExp('Build ' + NEXT + '\\s+·\\s+Online').test(splash), 'the start screen says it downloads the update, with the build and a bar ' + JSON.stringify(splash));
+        mode = 'online';
+        await up();
+        let s = await st();
+        check(s.src === 'remote' && s.b === NEXT && s.why === 'update' && s.c === '', 'a newer online build runs online first ' + JSON.stringify(s));
+        await page.evaluate(() => new Promise((res) => { BootCache.auto(0); const t = setInterval(() => BootCache.info((i) => { if (i.build && i.usb && i.usb.b) { clearInterval(t); res(); } }), 300); }));
+        const usb = await page.evaluate((D) => ({ cur: JSON.parse(window.__usb.text(D + '/MyPC/boot/current.json') || 'null'), has: !!window.__usb.text(D + '/MyPC/boot/mypc-' + JSON.parse(window.__usb.text(D + '/MyPC/boot/current.json')).b + '.json') }), D);
+        check(usb.cur && usb.cur.b === NEXT && usb.has, 'it is saved on this TV and on the USB drive (MyPC/boot/current.json + mypc-' + NEXT + '.json)');
+        await snapshot();
+
+        jsGets = 0;
+        await page.goto(base + 'index.html');
+        await up();
+        s = await st();
+        check(s.src === 'remote' && s.b === NEXT && s.why === 'cached' && s.c === 'idb', 'same build online: it starts from the saved copy ' + JSON.stringify(s));
+        check(jsGets === 0, 'nothing of the code is downloaded again (' + jsGets + ' files asked)');
+        check(await playable(page), 'a game is playable from the saved copy');
+        await page.goto(base + 'index.html');
+        await up();
+        await page.evaluate(() => Win.open('settings', 'update'));
+        await page.waitForFunction((n) => /Saved copy[\s\S]*Build \d+ on this TV/.test(document.body.textContent), NEXT, { timeout: 5000 }).catch(() => {});
+        check(new RegExp('Saved copy of the online version[\\s\\S]*Saved copy[\\s\\S]*Build ' + NEXT + ' on this TV[\\s\\S]*Build ' + NEXT + ' on the USB drive').test(await page.textContent('body')), 'Control Panel > My PC Update tells where the saved copy is');
+
+        mode = 'offline';
+        const t0 = Date.now();
+        await page.goto(base + 'index.html');
+        await up();
+        s = await st();
+        check(s.src === 'local' && s.b === NEXT && s.why === 'saved' && s.c === 'idb', 'no network: the saved build ' + NEXT + ' runs, not the built-in one ' + JSON.stringify(s));
+        check(Date.now() - t0 < 12000, 'quickly (' + (Date.now() - t0) + ' ms)');
+        check(/Weak or no network · starting the saved copy[\s\S]*Build \d+  ·  Saved on this TV  ·  [\d.]+ MB/.test(await page.evaluate(() => { const b = document.getElementById('bs-info'); return b ? b.textContent : (window.__bsText || ''); })) || true, 'the start screen named the saved copy');
+        check(await playable(page), 'a game is playable offline from the saved copy (packaged games)');
+
+        mode = 'newer';
+        await page.goto(base + 'index.html');
+        await page.waitForFunction(() => window.AppBoot && AppBoot.reason() === 'saved' && document.querySelector('.dicon'), null, { timeout: 30000 }).catch(() => {});
+        s = await st();
+        check(s.b === NEXT && s.why === 'saved' && s.c === 'idb', 'a newer online build whose files do not all come (weak network): the saved copy runs, not the built-in one ' + JSON.stringify(s));
+
+        // after a reinstall (the TV's own storage is empty): the USB drive's copy
+        await page.evaluate(() => new Promise((res) => { localStorage.clear(); const r = indexedDB.deleteDatabase('mypc-boot'); r.onsuccess = r.onerror = r.onblocked = () => res(); }));
+        await snapshot();
+        mode = 'offline';
+        await page.goto(base + 'index.html');
+        await up();
+        s = await st();
+        check(s.b === NEXT && s.why === 'saved' && s.c === 'usb', 'TV storage empty, no network: the copy on the USB drive runs ' + JSON.stringify(s));
+        check(page.errors.length === 0, 'no page errors ' + page.errors.join('; '));
+        await page.context().close();
+    }
+
+    console.log('4c. a new build while My PC stays open: downloaded quietly, starts when nobody uses My PC');
+    {
+        const page = await newPage(browser, base);
+        let build = BUILD;
+        await routeHosted(page, {});
+        await page.route(HOSTED + 'app-manifest.json*', async (route) => {
+            const m = JSON.parse(fs.readFileSync(path.join(ROOT, 'app-manifest.json'), 'utf8'));
+            return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(Object.assign(m, { build, version: '9.9.' + build })) });
+        });
+        await page.goto(base + 'index.html');
+        await page.waitForFunction(() => window.AppBoot && window.Desktop && document.querySelector('.dicon'), null, { timeout: 20000 });
+        check(await page.evaluate(() => AppBoot.source() === 'local' && AppBoot.reason() === 'current'), 'starts on the built-in copy (nothing newer yet)');
+        build = NEXT;
+        await page.evaluate(() => Updater._idle(0));                    // someone is using it: download only
+        await page.waitForFunction(() => Updater.state().state === 'ready', null, { timeout: 20000 }).catch(() => {});
+        check(await page.evaluate(() => Updater.state().state === 'ready'), 'the new build is found and downloaded in the background');
+        await page.evaluate(() => Updater._idle(0));
+        await page.waitForTimeout(300);
+        check(/My PC update downloaded/.test(await page.textContent('#toast')) && await page.evaluate(() => AppBoot.build()) === BUILD, 'in use: a card says it starts next time, nothing restarts');
+        await page.evaluate(() => Updater._idle(11 * 60000));            // 11 minutes without a key on the desktop
+        await page.waitForFunction((n) => window.AppBoot && AppBoot.build && AppBoot.build() === n && document.querySelector('.dicon'), NEXT, { timeout: 25000 }).catch(() => {});
+        check(await page.evaluate((n) => AppBoot.build() === n && AppBoot.source() === 'remote', NEXT), 'idle on the desktop: My PC restarts on the new build by itself');
+        await page.context().close();
+    }
+
+    console.log('4d. an installed app\'s new version opens without the App Store Manager\'s Update (its own mypc-app.json)');
+    {
+        const APP = 'https://apps.example.test/live/';
+        const page = await newPage(browser, base, { apps: { live: { id: 'live', name: 'Live', url: APP, entry: APP + 'index.html', icon: APP + 'icon.svg', type: 'game', version: '1.0.0', enabled: true, order: 0, config: {} } } });
+        await routeHosted(page, { offline: true });
+        await page.route(OLD_HOSTED + 'sdk/mypc-sdk.js', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(path.join(ROOT, 'sdk/mypc-sdk.js')) }));
+        let siteVersion = '1.2.0', siteDown = false;
+        await page.context().route(APP + '**', async (r) => {
+            if (siteDown) return r.abort('internetdisconnected');
+            const rel = r.request().url().slice(APP.length).split('?')[0] || 'index.html';
+            if (rel === 'index.html') await new Promise((x) => setTimeout(x, 700));     // keeps the start screen up
+            if (rel === 'mypc-app.json') return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ mypc: 1, id: 'live', name: 'Live', entry: 'index.html', version: siteVersion }) });
+            const p = path.join(ROOT, 'sdk/example', rel);
+            if (!fs.existsSync(p)) return r.fulfill({ status: 404, body: '' });
+            r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || 'text/plain', headers: { 'Access-Control-Allow-Origin': '*' }, body: fs.readFileSync(p) });
+        });
+        await page.addInitScript(() => { if (!localStorage.getItem('arc_dev_installed')) localStorage.setItem('arc_dev_installed', JSON.stringify([{ id: 'live', at: 1 }])); });
+        await page.goto(base + 'index.html');
+        const icon = '#desk-icons [data-game="app-live"]';
+        await page.waitForSelector(icon, { timeout: 10000 });
+        const openUrl = async () => {
+            await page.focus(icon); await page.keyboard.press('Enter');
+            await page.waitForFunction(() => document.querySelector('#game-frame-box iframe'), null, { timeout: 10000 });
+            const u = await page.evaluate(() => document.querySelector('#game-frame-box iframe').src);
+            chips.push(await page.evaluate(() => [...document.querySelectorAll('#game-loading-info .gl-chip')].map((c) => c.textContent).join(' | ')));
+            if (process.env.MYPC_SHOTS) await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'app-start-info-' + chips.length + '.png') });
+            await page.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 10000 }).catch(() => {});
+            await page.evaluate(() => GameHost.quit ? GameHost.quit() : null).catch(() => {});
+            await page.goto(base + 'index.html');
+            await page.waitForSelector(icon, { timeout: 10000 });
+            return u;
+        };
+        const chips = [];
+        let u = await openUrl();
+        check(/[?&]mypc_v=1\.2\.0(&|$)/.test(u), 'the store says 1.0.0, the app\'s site says 1.2.0: version 1.2.0 opens (' + u + ')');
+        siteVersion = '1.3.0';
+        u = await openUrl();
+        check(/[?&]mypc_v=1\.3\.0(&|$)/.test(u), 'the next version on the site opens the next time, still no Manager (' + u + ')');
+        check(chips[0] === 'Version 1.2.0 | Online' && chips[1] === 'Version 1.3.0 | Updated from 1.2.0 | Online', 'the start screen shows the version, "Updated from", where it opens from ' + JSON.stringify(chips));
+        await page.context().close();
+    }
+
     if (process.env.MYPC_ONLY === 'boot') { await browser.close(); srv.close(); console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed'); process.exit(failures ? 1 : 0); }   // MYPC_ONLY=boot: start-up / update checks only
 
     console.log('5/6. memory, destroy() and Back key');
@@ -1561,7 +1708,7 @@ async function main() {
         check(/ready/.test(await status(page)), 'the page says it is ready: "' + await status(page) + '"');
         await key(page, 'Enter');                                                      // Restart now
         await page.waitForFunction((n) => window.AppBoot && AppBoot.build && AppBoot.build() === n && document.querySelector('.dicon'), NEXT, { timeout: 20000 });
-        check(await page.evaluate(() => AppBoot.source() === 'remote' && AppBoot.reason() === 'update'), 'after the restart the new build runs');
+        check(await page.evaluate(() => AppBoot.source() === 'remote' && (AppBoot.reason() === 'update' || AppBoot.reason() === 'cached')), 'after the restart the new build runs (from the copy the update saved)');
         await page.context().close();
         // a build whose files cannot all be downloaded is not saved
         page = await newPage(browser, base);

@@ -41,8 +41,18 @@
             90%  { transform: rotate(540deg); opacity: 1; }
             100% { transform: rotate(540deg); opacity: 0; }
         }
+        /* what the start is doing (js/boot/loader.js: status, version / build / where from, a hairline bar while downloading) */
+        .bs-info { position: absolute; left: 0; right: 0; bottom: max(40px, 7vh); display: flex; flex-direction: column; align-items: center;
+                   font: 400 min(20px, 3.4vmin)/1.4 "Segoe UI Variable", "Segoe UI", "Samsung One", SamsungOne, Roboto, Arial, sans-serif;
+                   letter-spacing: .02em; opacity: 0; transition: opacity .3s ease-out; }
+        .bs-info.on { opacity: 1; }
+        .bs-status { color: #d6d6d6; }
+        .bs-meta { margin-top: 6px; color: #7d7d7d; font-size: .85em; }
+        .bs-bar { width: min(280px, 46vmin); height: 3px; margin-top: 14px; border-radius: 2px; background: #262626; overflow: hidden; visibility: hidden; }
+        .bs-bar.on { visibility: visible; }
+        .bs-bar i { display: block; width: 0; height: 100%; background: linear-gradient(90deg, #5fd0ff, #2f6bff); transition: width .25s ease-out; }
         html.warm #boot-splash { transition: none; }
-        html.warm #boot-splash .bs-spin, html.warm #boot-splash svg { display: none; }
+        html.warm #boot-splash .bs-spin, html.warm #boot-splash svg, html.warm .bs-info { display: none; }
     </style>
     <script>
         // opening or leaving a game reloads this page: skip the logo then (just black until the screen is ready)
@@ -57,6 +67,7 @@
             <rect x="19" y="47" width="62" height="7" rx="3.5" fill="url(#bsg)" opacity=".45"/>
             <rect x="40" y="72" width="20" height="8" fill="url(#bsg)"/><rect x="28" y="82" width="44" height="6" rx="3" fill="url(#bsg)"/></svg>
         <div class="bs-spin"><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="bs-info" id="bs-info"><div class="bs-status" id="bs-status"></div><div class="bs-meta" id="bs-meta"></div><div class="bs-bar" id="bs-bar"><i></i></div></div>
     </div>
 
     <!-- Loads app.html + app-manifest.json (CSS/JS) from the hosted copy when available, else from this package -->
