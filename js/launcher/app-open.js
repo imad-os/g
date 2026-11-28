@@ -25,7 +25,7 @@
 var AppOpen = (function () {
     'use strict';
 
-    var MAX_LIST = 500, VIDEO_MAX = 150 * 1048576, ANIM = 240;
+    var MAX_LIST = 500, VIDEO_MAX = 150 * 1048576;
     var APPS = { photo: 'photos', video: 'videos', song: 'music' };
     var EXT = {
         photo: /\.(jpe?g|png|gif|webp|bmp|avif)$/i,
@@ -104,16 +104,61 @@ var AppOpen = (function () {
         if (!(sx > 0 && sy > 0 && sx < 1.01 && sy < 1.01)) return '';
         return 'translate(' + ((left - wr.left) / unit).toFixed(1) + 'px,' + ((top - wr.top) / unit).toFixed(1) + 'px) scale(' + sx.toFixed(4) + ',' + sy.toFixed(4) + ')';
     }
-    function animate(el, from, opening, done) {
-        if (!el.animate || !smooth()) { if (done) done(); return; }
-        var tf = from || 'scale(0.92)';
-        var a = { transform: tf, opacity: from ? 0.35 : 0, borderRadius: '24px' }, b = { transform: 'none', opacity: 1, borderRadius: '0px' };
-        var an;
-        try { an = el.animate(opening ? [a, b] : [b, a], { duration: opening ? ANIM : ANIM - 60, easing: opening ? 'cubic-bezier(.2,.8,.2,1)' : 'cubic-bezier(.4,0,1,1)', fill: 'none' }); }
-        catch (e) { if (done) done(); return; }
-        var fin = false, end = function () { if (fin) return; fin = true; if (done) done(); };
+    /* The zoom (owner report 2026-11-28: "not smooth"): only a plain card in the window's colour moves, never the window with its
+     * content (a full screen of pictures / text scaled every frame, its corners re-painted, is what stuttered on the TV). The card
+     * is its own GPU layer and its keyframes are transform + opacity only, so the TV's compositor runs it by itself, even while
+     * My PC is busy building the app under it; the window then appears by opacity under the card. */
+    var ZOOM = 260, FADE = 140;
+    var EASE_OUT = 'cubic-bezier(.22,.61,.36,1)', EASE_IN = 'cubic-bezier(.55,.06,.68,.19)';
+    function card(bg) {
+        var c = document.createElement('div');
+        c.className = 'win-zoom';
+        c.setAttribute('aria-hidden', 'true');
+        if (bg) c.style.backgroundColor = bg;
+        var w = $('window');
+        w.parentNode.insertBefore(c, w.nextSibling);
+        return c;
+    }
+    function bgOf() {
+        try { var b = getComputedStyle($('window')).backgroundColor; if (b && !/rgba\(0, 0, 0, 0\)|transparent/.test(b)) return b; } catch (e) {}
+        return '#202020';
+    }
+    function later(fn) { requestAnimationFrame(function () { requestAnimationFrame(fn); }); }      // after the new screen's first layout
+    function play(el, frames, opts, done) {
+        var an, fin = false, end = function () { if (fin) return; fin = true; if (done) done(); };
+        try { an = el.animate(frames, opts); } catch (e) { end(); return null; }
         an.onfinish = end; an.oncancel = end;
-        setTimeout(end, ANIM + 200);           // a TV that drops the event
+        setTimeout(end, (opts.delay || 0) + opts.duration + 250);       // a TV that drops the event
+        return an;
+    }
+    // opening: the card grows out of the tile (or fades in, a little zoom, without one), then fades as the window shows under it
+    function zoomIn(me, done) {
+        var w = $('window');
+        if (!w.animate || !smooth()) { done(); return; }
+        var c = card(bgOf()), tf = me.tf || 'translate(48px, 27px) scale(0.95)';
+        // the window waits under the card (opacity 0 on the compositor, no layout change)
+        var wa = play(w, [{ opacity: 0 }, { opacity: 0, offset: ZOOM / (ZOOM + FADE) }, { opacity: 1 }], { duration: ZOOM + FADE, easing: 'linear' });
+        var ca = play(c, [
+            { transform: tf, opacity: me.tf ? 0.9 : 0, easing: EASE_OUT },
+            { transform: 'translate(0px, 0px) scale(1)', opacity: 1, offset: ZOOM / (ZOOM + FADE), easing: 'linear' },
+            { transform: 'translate(0px, 0px) scale(1)', opacity: 0 }
+        ], { duration: ZOOM + FADE, fill: 'both' }, function () { if (c.parentNode) c.parentNode.removeChild(c); done(); });
+        if (wa) wa.pause();
+        if (ca) ca.pause();
+        later(function () { if (wa) wa.play(); if (ca) ca.play(); });
+        me.zoom = c;
+    }
+    // closing: the window is gone, the app runs again under a card that shrinks back into the tile and fades
+    function zoomOut(me, done) {
+        var w = $('window');
+        if (!w.animate || !smooth()) { done(); return; }
+        var c = card(me.bg), tf = me.tf || 'translate(48px, 27px) scale(0.95)';
+        var ca = play(c, [
+            { transform: 'translate(0px, 0px) scale(1)', opacity: 1, easing: EASE_IN },
+            { transform: tf, opacity: 0 }
+        ], { duration: ZOOM - 40, fill: 'both' }, function () { if (c.parentNode) c.parentNode.removeChild(c); done(); });
+        // held on its first frame (covering the app) until the app's frame has been drawn again under it
+        if (ca) { ca.pause(); later(function () { ca.play(); }); }
     }
 
     /* ---------------- open over the app ---------------- */
@@ -147,9 +192,8 @@ var AppOpen = (function () {
     function show(ctx, p, from) {
         var held = GameHost.hold();
         var me = cur = { held: held, appId: ctx.appId };
-        var w = $('window');
         document.documentElement.classList.add('win-over-app');
-        var opts = { onBeforeClose: function () { snap(me); }, onClose: function () { close(me); } };
+        var opts = { onClose: function () { close(me); } };
         if (p.kind === 'photo') Win.open('photos', { open: p }, opts);
         else if (p.kind === 'video') Win.open('videos', { open: p.list[0], title: p.title }, opts);
         else {
@@ -157,44 +201,23 @@ var AppOpen = (function () {
             Music.playList(tracks, p.at, { shuffle: false, from: { n: p.folder || p.title, s: p.list[0].s, p: '' } });
             Win.open('music', { np: 1, back: p.title }, opts);
         }
-        // once the window covers it, the app's frame is not drawn at all (and the TV's video plane shows MyVideos, not the app)
         me.tf = fromTransform(from);
-        animate(w, me.tf, true, function () { if (cur === me) document.documentElement.classList.add('win-covers-app'); });
+        me.bg = bgOf();
+        // once the window covers it, the app's frame is not drawn at all (and the TV's video plane shows MyVideos, not the app)
+        zoomIn(me, function () { me.zoom = null; if (cur === me) document.documentElement.classList.add('win-covers-app'); });
     }
-    // Win is about to close it (Back on its first screen, or its close button): a copy of its screen for the closing zoom
-    function snap(me) {
-        var w = $('window');
-        if (cur !== me || !w || !w.animate || !smooth()) return;
-        var g = w.cloneNode(true);
-        g.removeAttribute('id');
-        g.removeAttribute('role');
-        g.setAttribute('aria-hidden', 'true');
-        g.classList.add('win-ghost');
-        var drop = g.querySelectorAll('video, audio, iframe, [id]');        // no second player, no duplicate ids
-        for (var i = 0; i < drop.length; i++) {
-            if (/^(VIDEO|AUDIO|IFRAME)$/.test(drop[i].tagName)) drop[i].parentNode.removeChild(drop[i]);
-            else drop[i].removeAttribute('id');
-        }
-        me.ghost = g;
-    }
-    // Win closed it: shrink back to the tile, the app goes on at once
+    // Win closed it (Back on its first screen, or its close button): the app goes on at once, the card shrinks back to the tile
     function close(me) {
         if (cur !== me) return;
-        var w = $('window'), ghost = me.ghost;
-        me.ghost = null;
+        if (me.zoom && me.zoom.parentNode) me.zoom.parentNode.removeChild(me.zoom);
         document.documentElement.classList.remove('win-covers-app');
-        if (ghost && w && w.parentNode) w.parentNode.insertBefore(ghost, w.nextSibling);
         cur = null; closedAt = Date.now();
         try { Focus.reset(); } catch (e) {}
         GameHost.release(me.held);
-        if (!ghost) { document.documentElement.classList.remove('win-over-app'); return; }
-        animate(ghost, me.tf, false, function () {
-            if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
-            if (!cur) document.documentElement.classList.remove('win-over-app');
-        });
+        zoomOut(me, function () { if (!cur) document.documentElement.classList.remove('win-over-app'); });
     }
     // the app went away under it (quit from My PC's menu, a crash): the window goes too
-    function appGone() { if (cur && typeof Win !== 'undefined' && Win.isOpen()) Win.close(true); cur = null; document.documentElement.classList.remove('win-over-app', 'win-covers-app'); }
+    function appGone() { if (cur && typeof Win !== 'undefined' && Win.isOpen()) Win.close(true); cur = null; var z = document.querySelectorAll('.win-zoom'); for (var i = 0; i < z.length; i++) z[i].parentNode.removeChild(z[i]); document.documentElement.classList.remove('win-over-app', 'win-covers-app'); }
 
     return { hello: hello, request: request, appGone: appGone, isOpen: function () { return !!cur; }, justClosed: function () { return Date.now() - closedAt < 400; }, kindOf: kindOf, canStream: canStream, VIDEO_MAX: VIDEO_MAX };
 })();

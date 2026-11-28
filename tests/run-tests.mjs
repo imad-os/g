@@ -7871,7 +7871,7 @@ MyPC.init({ uses: ['photos', 'videos', 'music'], onInit() { window.__launch = My
         if (how === 'close') await page.evaluate(() => Win.close()); else await tvBack(page);
         const st = await page.evaluate(() => ({ win: Win.isOpen(), open: AppOpen.isOpen(), state: GameHost.state(), url: location.href, focus: document.activeElement && document.activeElement.id }));
         await page.waitForTimeout(450);
-        const after = await page.evaluate(() => ({ ghost: !!document.querySelector('.win-ghost'), cls: document.documentElement.className, vis: getComputedStyle(document.getElementById('game-frame-box')).visibility }));
+        const after = await page.evaluate(() => ({ ghost: !!document.querySelector('.win-ghost, .win-zoom'), cls: document.documentElement.className, vis: getComputedStyle(document.getElementById('game-frame-box')).visibility }));
         const ap = await app.evaluate(() => ({ mark: window.__mark, loads: window.__loads, life: window.__life.slice(), cancel: window.__in.filter((x) => /cancel|back/.test(x)) }));
         await app.evaluate(() => { window.__life.length = 0; window.__in.length = 0; });
         return { st, after, ap };
@@ -7882,13 +7882,16 @@ MyPC.init({ uses: ['photos', 'videos', 'music'], onInit() { window.__launch = My
     // --- a Drive picture: MyPhotos opens over the app with a zoom from the tile, the folder's other picture with Right; Back = the app
     const list = files(['p1', 's1', 'p2', 'v1']);
     await app.evaluate((l) => MyPC.open(l[2], { list: l, folder: 'My Drive', from: { x: 100, y: 120, w: 240, h: 180 } }), list);
-    const z = await page.evaluate(() => ({ anim: document.getElementById('window').getAnimations().length, cls: document.documentElement.className, state: GameHost.state(), url: location.href }));
+    const z = await page.evaluate(() => ({ anim: document.getElementById('window').getAnimations().length, cls: document.documentElement.className, state: GameHost.state(), url: location.href,
+        props: [...new Set(document.getAnimations().flatMap((a) => a.effect.getKeyframes().flatMap((k) => Object.keys(k).filter((x) => !/^(offset|easing|composite|computedOffset)$/.test(x)))))].sort().join(),
+        zoom: document.querySelectorAll('.win-zoom').length }));
     await page.waitForFunction(() => Win.current() === 'photos' && document.querySelector('.ph-full') && document.querySelector('.ph-full').naturalWidth > 0, null, { timeout: 15000 }).catch(() => {});
-    await page.waitForTimeout(350);
+    await page.waitForTimeout(700);
     const ph1 = await page.evaluate(() => ({ app: Win.current(), title: document.getElementById('win-title').textContent, w: (document.querySelector('.ph-full') || {}).naturalWidth, hint: (document.querySelector('.ph-hint') || {}).textContent, del: !!document.querySelector('.ph-del'),
         covers: document.documentElement.classList.contains('win-covers-app'), vis: getComputedStyle(document.getElementById('game-frame-box')).visibility, zw: +getComputedStyle(document.getElementById('window')).zIndex, zg: +getComputedStyle(document.getElementById('game-layer')).zIndex }));
     await shot('1-photo');
-    check(z.url === url0 && z.state === 'paused' && /win-over-app/.test(z.cls) && z.anim >= 1, 'MyPC.open shows MyPhotos over the app at once: same page, the app paused, the window zooms in ' + JSON.stringify(z));
+    check(z.url === url0 && z.state === 'paused' && /win-over-app/.test(z.cls) && z.anim >= 1 && z.zoom === 1 && z.props === 'opacity,transform',
+        'MyPC.open shows MyPhotos over the app at once: same page, the app paused; the zoom is one plain card, transform + opacity only (GPU) ' + JSON.stringify(z));
     check(ph1.app === 'photos' && /2 \/ 2/.test(ph1.title) && ph1.w === 48 && /return to MyDrive/.test(ph1.hint) && !ph1.del && ph1.covers && ph1.vis === 'hidden' && ph1.zw > ph1.zg,
         'the Drive picture in MyPhotos: 2 / 2 (only the folder\'s pictures), "Back: return to MyDrive", no Delete; above the app, whose frame is not drawn under it ' + JSON.stringify(ph1));
     await page.keyboard.press('ArrowRight');        // the picture has the focus from the start
