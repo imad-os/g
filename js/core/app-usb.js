@@ -518,7 +518,19 @@ var AppUsb = (function () {
         });
     }
 
-    return { supported: supported, on: on, setOn: setOn, init: init, want: want, refresh: refresh, has: has, size: size, installed: installed, install: install, pick: pick, find: find, readFile: readFile,
+    // an installed copy that did not start on this TV (GameHost.usbToOnline): that version opens online until a newer one is
+    // installed or the person picks "Opens from: USB" again. TV-wide arc_dev_appusb_fail { <id>: { v, why, at } }
+    var FAIL = 'arc_dev_appusb_fail';
+    function failed(id, v) {
+        var all = lsGet(FAIL) || {}, f = all[id];
+        if (f && (!v || f.v === v)) return true;
+        // two apps whose page never ran from the drive: this TV does not open USB pages at all, every app opens online
+        return Object.keys(all).filter(function (k) { return all[k] && all[k].why === 'silent'; }).length >= 2;
+    }
+    function setFailed(id, v, why) { var f = lsGet(FAIL) || {}; f[id] = { v: String(v || ''), why: String(why || ''), at: Date.now() }; lsSet(FAIL, f); }
+    function clearFailed(id) { if (!id) { try { localStorage.removeItem(FAIL); } catch (e) {} return; } var f = lsGet(FAIL) || {}; if (f[id]) { delete f[id]; lsSet(FAIL, f); } }
+
+    return { failed: failed, setFailed: setFailed, clearFailed: clearFailed, supported: supported, on: on, setOn: setOn, init: init, want: want, refresh: refresh, has: has, size: size, installed: installed, install: install, pick: pick, find: find, readFile: readFile,
              list: list, remove: remove, onChange: function (fn) { fns.push(fn); }, offChange: function (fn) { fns = fns.filter(function (f) { return f !== fn; }); },
              probe: probe, now: function () { kick(0); }, _state: function () { return { run: run && run.id, st: load() }; } };
 })();

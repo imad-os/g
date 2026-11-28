@@ -7375,9 +7375,11 @@ MyPC.init({ onInit() {
         fsys.createDirectory = (p, ...a) => { (window.__mk = window.__mk || []).push(p); return mk(p, ...a); };
     }, USBW);
     const usbGets = [];
+    let usbBlocked = false;     // the TV's web engine refuses the drive's pages (imad's TV, build 194)
     await ctx.route(USBW + '/**', async (r) => {
         const p = decodeURI(new URL(r.request().url()).pathname);
         usbGets.push(p);
+        if (usbBlocked) return r.abort('accessdenied');
         const b64 = await page.evaluate((p) => { const v = window.__usb.tree[p]; if (!v || v === true) return null; let s = ''; for (let i = 0; i < v.length; i += 32768) s += String.fromCharCode.apply(null, v.subarray(i, i + 32768)); return btoa(s); }, p).catch(() => null);
         if (b64 === null) return r.fulfill({ status: 404, body: '' });
         r.fulfill({ status: 200, contentType: TYPES[path.extname(p)] || 'application/octet-stream', body: Buffer.from(b64, 'base64') });
@@ -7532,6 +7534,28 @@ MyPC.init({ onInit() {
     siteDown = true; db.down = true;
     o = await open();
     check(/USB copy · v1\.2\.0/.test(o.txt), 'no internet after the update: the USB copy is version 1.2.0 ' + o.txt);
+
+    // --- the installed copy does not start (the page never runs, as on imad's TV with build 194): online opens instead, at once
+    // the next time, with a card; picking "Opens from: USB" again tries the drive again
+    siteDown = false; db.down = false;
+    await page.addInitScript(() => { window.MYPC_USB_SILENT_MS = 2500; });
+    await page.evaluate(() => GameHost.setAppPref('app-quest', 'run', 'usb'));
+    usbBlocked = true;
+    let t2 = Date.now();
+    o = await open();
+    const fl = await page.evaluate(() => JSON.parse(localStorage.getItem('arc_dev_appusb_fail') || '{}'));
+    check(o.state === 'running' && o.url.indexOf(APP + 'index.html?mypc_v=1.2.0') === 0 && /online · v1\.2\.0/.test(o.txt) && fl.quest && fl.quest.v === '1.2.0' && fl.quest.why === 'silent' && /could not start from USB A1/.test(o.toast) && Date.now() - t2 < 15000,
+        'the installed copy says nothing: the online version opens after the short check, noted, with a card ' + JSON.stringify([o.url.slice(0, 60), o.txt, fl, o.toast.slice(0, 120), Date.now() - t2]));
+    usbGets.length = 0; t2 = Date.now();
+    o = await open();
+    let chipsFail = await page.evaluate(() => [...document.querySelectorAll('#game-loading-info .gl-chip')].map((c) => c.textContent).join(' | '));
+    check(o.state === 'running' && o.url.indexOf(APP) === 0 && !usbGets.some((g) => /index\.html$/.test(g)) && Date.now() - t2 < 8000,
+        'the next time that version opens online right away (the drive is not tried) ' + JSON.stringify([o.url.slice(0, 50), usbGets, Date.now() - t2, chipsFail]));
+    usbBlocked = false;
+    await page.evaluate(() => { AppUsb.clearFailed(); GameHost.setAppPref('app-quest', 'run', 'usb'); });
+    o = await open();
+    check(/USB copy · v1\.2\.0/.test(o.txt), 'after "Opens from: USB" is picked again the drive is tried again ' + o.txt);
+    await page.evaluate(() => GameHost.setAppPref('app-quest', 'run', null));
 
     // --- Control Panel > System: the switch and what is saved
     siteDown = false; db.down = false;

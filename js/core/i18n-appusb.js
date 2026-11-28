@@ -14,7 +14,8 @@
             auWait_gone: 'The USB drive was removed', auErr_full: 'The USB drive is full', auErr_off: 'Its maker does not let it be saved',
             auErr_too: 'Too big to save (over 1 GB)', auErr: 'Could not be saved', auRemove: 'Remove the saved copy',
             auDone: '%s is saved on %d for when the internet does not work.',
-            auOpened: 'No internet: %s opened from the copy saved on %d (version %v).'
+            auOpened: 'No internet: %s opened from the copy saved on %d (version %v).',
+            auUsbFailed: '%s could not start from %d, so it opened online. Next time it opens online too.'
         },
         fr: {
             auUpdTitle: 'Mise à jour disponible', auUpdText: 'La version %v de %s est prête. Ce téléviseur a la version %o installée.', auUpdNow: 'Mettre à jour', auUpdLater: 'Plus tard',
@@ -28,7 +29,8 @@
             auWait_gone: 'La clé USB a été retirée', auErr_full: 'La clé USB est pleine', auErr_off: 'Son créateur ne permet pas de l\'enregistrer',
             auErr_too: 'Trop grande pour être enregistrée (plus de 1 Go)', auErr: 'Enregistrement impossible', auRemove: 'Supprimer la copie enregistrée',
             auDone: '%s est enregistré sur %d pour quand internet ne fonctionne pas.',
-            auOpened: 'Pas d\'internet : %s ouvert depuis la copie enregistrée sur %d (version %v).'
+            auOpened: 'Pas d\'internet : %s ouvert depuis la copie enregistrée sur %d (version %v).',
+            auUsbFailed: "%s n'a pas pu démarrer depuis %d : ouvert en ligne. La prochaine fois aussi, il s'ouvrira en ligne."
         },
         es: {
             auUpdTitle: 'Actualización disponible', auUpdText: 'La versión %v de %s está lista. Este televisor tiene instalada la versión %o.', auUpdNow: 'Actualizar', auUpdLater: 'Más tarde',
@@ -42,7 +44,8 @@
             auWait_gone: 'Se quitó la memoria USB', auErr_full: 'La memoria USB está llena', auErr_off: 'Su creador no permite guardarla',
             auErr_too: 'Demasiado grande para guardarla (más de 1 GB)', auErr: 'No se pudo guardar', auRemove: 'Borrar la copia guardada',
             auDone: '%s está guardado en %d para cuando internet no funcione.',
-            auOpened: 'Sin internet: %s se abrió desde la copia guardada en %d (versión %v).'
+            auOpened: 'Sin internet: %s se abrió desde la copia guardada en %d (versión %v).',
+            auUsbFailed: '%s no pudo iniciarse desde %d: se abrió en línea. La próxima vez también se abrirá en línea.'
         },
         ar: {
             auUpdTitle: 'تحديث متوفر', auUpdText: 'الإصدار %v من %s جاهز. هذا التلفاز مثبت عليه الإصدار %o.', auUpdNow: 'تحديث', auUpdLater: 'لاحقًا',
@@ -56,7 +59,8 @@
             auWait_gone: 'أُزيلت ذاكرة USB', auErr_full: 'ذاكرة USB ممتلئة', auErr_off: 'صانعه لا يسمح بحفظه',
             auErr_too: 'أكبر من أن يُحفظ (أكثر من 1 غيغابايت)', auErr: 'تعذّر الحفظ', auRemove: 'حذف النسخة المحفوظة',
             auDone: 'تم حفظ %s على %d لاستخدامه عندما لا يعمل الإنترنت.',
-            auOpened: 'لا يوجد إنترنت: فُتح %s من النسخة المحفوظة على %d (الإصدار %v).'
+            auOpened: 'لا يوجد إنترنت: فُتح %s من النسخة المحفوظة على %d (الإصدار %v).',
+            auUsbFailed: 'تعذر تشغيل %s من %d، فتم فتحه عبر الإنترنت. وسيُفتح عبر الإنترنت في المرة القادمة أيضاً.'
         }
     });
 })();

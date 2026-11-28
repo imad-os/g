@@ -373,8 +373,9 @@ var App = (function () {
                             function () { install(info, inst); }, { yes: I18n.t('auUpdNow'), no: I18n.t('auUpdLater'), focusYes: true, onNo: function () { openInstalled(inst.v, ver); } });
                     }
                     if (mode === 'usb') {
-                        if (inst) return openInstalled(inst.v);                   // the installed version, nothing downloaded
-                        if (AppUsb.supported() && AppUsb.on()) return install(info, null);   // the first time: installed, then it opens
+                        if (inst && AppUsb.failed && AppUsb.failed(a.id, inst.v)) mode = g.remote.run = 'online';   // that copy did not start here: online
+                        else if (inst) return openInstalled(inst.v);                   // the installed version, nothing downloaded
+                        else if (AppUsb.supported() && AppUsb.on()) return install(info, null);   // the first time: installed, then it opens
                     }
                     openNow(ver);
                     // online: the online version opens, and a plugged USB drive gets (or updates) its copy (js/core/app-usb.js)

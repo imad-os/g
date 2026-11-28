@@ -72,7 +72,12 @@
   bar, then opened from the drive; file:// frame, no own origin); `"run": "online"` in its mypc-app.json (read by `AppLive.check`, `runDefault`)
   = it opens from its site (needed for service workers: MyDrive's Drive video streaming). Per person in My PC's menu > App settings > "Opens
   from" (`app_prefs[id].run` 'usb' | 'online', reopens the app at once; `GameHost.runMode`). Shown on the start screen chips. No USB drive =
-  online. Tests: `MYPC_ONLY=appusb` (section 54).
+  online. **An installed copy that does not start falls back to online (imad's TV, build 194: Tangier TAXI stayed on "Getting things ready",
+  then "check your connection"; build 195)**: no message at all from its page in 10 s (`USB_SILENT_MS`) or a load failure = `GameHost.usbToOnline`:
+  report (Manager > Errors, with the file:// address and whether the SDK ran), card `auUsbFailed`, the online version opens; that version is noted
+  in `arc_dev_appusb_fail` (`AppUsb.failed / setFailed / clearFailed`) so it opens online at once next time; two apps "silent" = this TV opens no
+  USB page, all online. "Opens from: USB" in App settings clears it. Why file:// frames fail on the TV is not known yet (read the error reports).
+  Tests: `MYPC_ONLY=appusb` (section 54).
 - `js/launcher/`: desktop shell (`desktop.js`), full-screen app window (`window.js`), apps
   (`apps/*.js`: settings, explorer, browser, calculator, calendar, scores), on-screen keyboard,
   profiles, `game-host.js` (bundled games in a same-origin iframe; installed apps in a sandboxed
