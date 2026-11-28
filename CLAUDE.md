@@ -53,7 +53,7 @@
   (owner rule 2026-11-09): the frame is `inert` and loses the focus, and the SDK (API 15, `freeze`) stops keys before the app's
   listeners, makes `navigator.getGamepads()` empty, pauses its media; an app with no `onPause` also has its rAF held and its
   AudioContexts suspended. Tests: `MYPC_ONLY=flow node tests/run-tests.mjs`.
-- **Saved copy of My PC for weak networks (owner request 2026-11-28, package 3.1.0, build 188)**: the loader (package) reads, hosted
+- **Saved copy of My PC for weak networks (owner request 2026-11-28, package 3.1.0, build 191)**: the loader (package) reads, hosted
   `js/core/boot-cache.js` (`BootCache`) writes the running hosted build's code (app.html + manifest CSS / JS, ~2.5 MB) ONCE per build
   into IndexedDB `mypc-boot` and, with a USB drive, `<drive>/MyPC/boot/mypc-<build>.json` + `current.json` (format = `AppBoot.cacheInfo`,
   `CACHE_V`). Same build online = code from the copy, nothing downloaded (`reason` 'cached', source remote); no answer / build set

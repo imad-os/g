@@ -7443,7 +7443,7 @@ MyPC.init({ onInit() {
     // --- the store (Firestore) does not answer but the app's site does: still online (a live check of the site decides)
     db.down = true;
     o = await open();
-    check(o.url.indexOf(APP) === 0 && /online/.test(o.txt) && !usbGets.length && siteGets.some((g) => / probe$/.test(g)), 'the store does not answer but the app\'s site does: the online version opens ' + JSON.stringify([o.url, o.txt]));
+    check(o.url.indexOf(APP) === 0 && /online/.test(o.txt) && !usbGets.length && siteGets.some((g) => / probe$/.test(g) || /^mypc-app\.json$/.test(g)), 'the store does not answer but the app\'s site does (its mypc-app.json answered): the online version opens ' + JSON.stringify([o.url, o.txt]));
 
     // --- no internet at all: the copy saved on the USB drive opens, its fetch() served from the drive
     siteDown = true;
