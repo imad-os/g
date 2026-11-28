@@ -15,14 +15,14 @@
 var GameHost = (function () {
     'use strict';
 
-    var LOAD_TIMEOUT_MS = 20000, FILE_TIMEOUT_MS = 10000;
+    var LOAD_TIMEOUT_MS = 20000, FILE_TIMEOUT_MS = 10000, USB_SILENT_MS = +(window.MYPC_USB_SILENT_MS || 10000);   // USB_SILENT_MS: the installed USB copy's page said nothing = online
 
     var state = 'idle';         // idle | loading | running | paused | error
     function setState(s) { state = s; if (typeof TouchPad !== 'undefined') TouchPad.state(s); }
     var game = null, base = '', triedBundled = false, triedUsb = false;
     var iframe = null, api = null, gameWin = null, loadTimer = 0, onExitCb = null;
     var pauseItems = [], loadSeq = 0;
-    var said = { hello: 0, progress: 0, at: 0, sdk: 0 };      // how far the app got (error reports when it does not open)
+    var said = { hello: 0, progress: 0, at: 0, sdk: 0, any: 0 };      // how far the app got (error reports when it does not open)
 
     function $(id) { return document.getElementById(id); }
 
@@ -263,6 +263,7 @@ var GameHost = (function () {
             var m = e.data, d;
             if (!m || m.mypc !== 1 || typeof m.type !== 'string') return;
             d = m.data || {};
+            if (!said.any) said.any = Date.now();                           // the page runs (the USB copy check below)
             // the USB copy's own files for its fetch() (the SDK asks, API 23); the answer goes straight back to that frame
             if (m.type === 'usbfile') {
                 if (usb && typeof d.rid === 'number' && typeof AppUsb !== 'undefined') {
@@ -408,7 +409,7 @@ var GameHost = (function () {
 
     function loadRemote(token) {
         // optional: the launcher refreshes the app's document first (its config) behind the loading screen
-        if (game.remote.prepare && !game.remote.usb) {
+        if (game.remote.prepare && !game.remote.usb && !game.remote.noUsb) {
             return game.remote.prepare(function (ok) {
                 if (state !== 'loading' || token !== loadSeq) return;       // cancelled or superseded
                 if (ok === false) return exit();                            // uninstalled meanwhile
@@ -438,6 +439,15 @@ var GameHost = (function () {
         if (usb) {
             iframe.src = usb.uri + '?mypc_usb=' + (usb.depth + 1);
             if (typeof Notify !== 'undefined' && !usb.chosen) Notify.show({ id: 'appusb', kind: 'warn', text: I18n.t('auOpened').replace('%s', title()).replace('%d', usb.drive).replace('%v', usb.v) });
+            // the installed copy says nothing at all within USB_SILENT_MS (its page or My PC's SDK in it never ran: imad's TV, build 194,
+            // Tangier TAXI stayed on "Getting things ready" and then failed): the online version opens instead, right away
+            if (usb.chosen) {
+                var tu = loadSeq, gu = game;
+                setTimeout(function () {
+                    if (tu !== loadSeq || game !== gu || state !== 'loading' || said.any || said.hello) return;
+                    usbToOnline('silent');
+                }, USB_SILENT_MS);
+            }
         } else iframe.src = v ? e[0] + (e[0].indexOf('?') < 0 ? '?' : '&') + 'mypc_v=' + encodeURIComponent(v) + (e[1] !== undefined ? '#' + e[1] : '') : e.join('#');
         $('game-frame-box').appendChild(iframe);
         $('game-layer').focus();
@@ -469,7 +479,7 @@ var GameHost = (function () {
         var build = game.manifest.build || 0;
         clearTimeout(loadTimer);
         loadTimer = setTimeout(function () { fail('timeout'); }, LOAD_TIMEOUT_MS);
-        said = { hello: 0, progress: 0, at: Date.now(), sdk: 0 };
+        said = { hello: 0, progress: 0, at: Date.now(), sdk: 0, any: 0 };
         var token = ++loadSeq;
         $('game-frame-box').classList.toggle('wide', wideOnly());
         if (game.remote) return loadRemote(token);
@@ -521,6 +531,8 @@ var GameHost = (function () {
         try { console.warn('[GameHost] ' + game.id + ' failed: ' + reason); } catch (e) {}
         var fallback = !triedBundled && game.bundledBase && game.bundledBase !== base;
         // an installed app whose page never answered: its copy saved on a USB drive, only if its own site does not answer now either
+        // the installed USB copy did not open: the online version, once (owner 2026-11-28)
+        if (game.remote && game.remote.usb && game.remote.usb.chosen && !game.remote.noUsb && !/^app: /.test(reason)) return usbToOnline(reason);
         var tryUsb = game.remote && !game.remote.usb && !triedUsb && !said.hello && typeof AppUsb !== 'undefined' && /^timeout/.test(reason);
         if (!/^start: /.test(reason)) report({ kind: /^app: /.test(reason) ? 'failed' : 'load', msg: loadReason(reason) + (fallback ? ' [hosted copy; trying the built-in one]' : '') + (game.remote && game.remote.usb ? ' [copy saved on USB ' + game.remote.usb.v + ']' : ''), stage: 'loading' });
         clearTimeout(loadTimer);
@@ -542,6 +554,24 @@ var GameHost = (function () {
             return load();
         }
         showError();
+    }
+    // the installed copy on the USB drive did not start: noted for this version (AppUsb.setFailed: the next opens go online until a
+    // newer version is installed or the person picks "Opens from: USB" again), reported, and the online version opens now
+    function usbToOnline(why) {
+        var copy = game.remote.usb, id = game.id.replace(/^app-/, '');
+        var msg = 'the copy installed on USB ' + (copy.drive || '') + ' (' + copy.v + ') did not start (' + (why === 'silent' ? 'no word from its page in ' + Math.round(USB_SILENT_MS / 1000) + ' s' : loadReason(why)) + ', SDK ' + (said.any ? 'ran' : 'silent') + ', ' + copy.uri + '): opening online';
+        try { console.warn('[GameHost] ' + msg); } catch (e) {}
+        report({ kind: 'load', msg: msg, stage: 'loading' });
+        if (typeof AppUsb !== 'undefined' && AppUsb.setFailed) AppUsb.setFailed(id, copy.v, said.any ? 'app' : 'silent');
+        if (typeof Notify !== 'undefined') Notify.show({ id: 'appusb', kind: 'warn', text: I18n.t('auUsbFailed').replace('%s', title()).replace('%d', copy.drive || 'USB') });
+        clearTimeout(loadTimer);
+        teardown();
+        triedUsb = true;
+        game.remote.usb = null;
+        game.remote.noUsb = true;
+        game.remote.run = 'online';
+        if (game.remote.later) game.remote.version = game.remote.later;     // "Later" kept the installed one: online = the newest
+        load();
     }
     function showError() {
         setState('error');
@@ -763,6 +793,7 @@ var GameHost = (function () {
             else if (id === '_s_run') {
                 // opens from the installed copy / online: the app opens again now the new way (the same page, prepare() decides)
                 nv = runMode(gid) === 'online' ? 'usb' : 'online';
+                if (nv === 'usb' && typeof AppUsb !== 'undefined' && AppUsb.clearFailed) AppUsb.clearFailed();   // try the USB copies again
                 setPref(gid, 'run', nv === (typeof AppLive !== 'undefined' ? AppLive.runDefault(gid.replace(/^app-/, '')) : 'usb') ? null : nv);
                 pauseRedraw(id);
                 setTimeout(function () { location.reload(); }, 350);
