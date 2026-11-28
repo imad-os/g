@@ -456,15 +456,21 @@
   while an app has `on('text')` the phone's mic button / Record key (`record` action) listens for it (`GameHost` -> `api.sttButton`). My PC's menu
   cancels. No APK change needed. GUIDE.md section 23. Tests: `MYPC_ONLY=stt` (section 55: TV + phone, fake Gemini, fake phone recognizer).
 - **Open in My PC's apps + delete on USB (API 25, owner request 2026-11-27, build 188: "in MyDrive a photo opens in MyPhotos, a video in
-  MyVideos, music in MyMusic; delete USB files and folders")**: `MyPC.open(file, { list, folder })` (bridge `open`, `js/launcher/app-open.js`
-  `AppOpen`, strings `js/core/i18n-open.js`): the app's Drive file / USB entry (+ its folder) -> profile key `open_next` -> `GameHost.exit()` ->
-  the desktop page's `AppOpen.resume()` (before `Shortcuts.resume`) opens `Win.open('photos', { open })` (album mode: one picture at a time,
-  `GDrive.download` / `UsbFs.read`, shrunk to 1920x1080, the next one read ahead, nothing saved, no Delete), `Win.open('videos', { open })`
-  (USB = AVPlay with `own: true` so no usb permission is asked for MyVideos; Drive = `MusicSrc.url` through sw.js where there is one, else the
-  file read whole (150 MB max, `AppOpen.VIDEO_MAX`; bigger = `too-big` BEFORE the app closes, the app plays it itself)) or `Music.playList` +
-  `Win.open('music', 'np')`. `Win.open(id, arg, { onClose })`: closing that app relaunches the app with `MyPC.launch = { from: 'open' }`
-  (sessionStorage `mypc_launch`). `MyPC.usb.remove(path)` = `UsbFs.removeAny` (file, or folder with everything; never a drive root); the app
-  asks the user first. GUIDE.md section 24 + section 20. Tests: `MYPC_ONLY=open` (section 56). Not proven on a real TV yet.
+  MyVideos, music in MyMusic; delete USB files and folders")**: `MyPC.open(file, { list, folder, from })` (bridge `open`, `js/launcher/app-open.js`
+  `AppOpen`, strings `js/core/i18n-open.js`). **Over the app, no reload (API 26, owner request 2026-11-28: "it unloads MyDrive, goes back to My PC
+  and reloads it with the loading screen: very bad", build 190)**: on the game page `AppOpen.request` holds the app (`GameHost.hold`: paused, inert, onPause),
+  `html.win-over-app` puts `#window` (z 42) above `.game-layer` (40) and `Win.open(id, arg, { onBeforeClose, onClose })` shows MyPhotos
+  (`{ open }` album mode: one picture at a time, `GDrive.download` / `UsbFs.read`, shrunk to 1920x1080, next one read ahead, nothing saved, no
+  Delete, the picture focused), MyVideos (`{ open }`; USB = AVPlay with `own: true`; Drive = `MusicSrc.url` through sw.js where there is one,
+  else the file read whole, 150 MB max `AppOpen.VIDEO_MAX`, bigger = `too-big` and the app plays it) or MyMusic (`Music.playList` +
+  `{ np: 1, back }`: ONE Back on Now playing closes it, the music goes on). Zoom from the tile (`from` rect in the app's px -> transform,
+  Web Animations, 240 ms, none on Perf tier low / reduced motion); once covered `html.win-covers-app` hides `#game-frame-box`. Close: a clone
+  of the window (`.win-ghost`, no video / ids) shrinks back while `GameHost.release` resumes the app at once; `AppOpen.justClosed()` keeps the
+  closing key's release from the app; `teardown` calls `AppOpen.appGone()`. main.js routes keys to `Win` while `AppOpen.isOpen()`.
+  `MyPC.init({ uses: ['photos' | 'videos' | 'music' | 'all'] })` (hello `uses`): only those open (`unsupported`), and `AppOpen.warm` gets them
+  ready in idle time (window layer, `Music.init({ lite })`); none declared = all three. `MyPC.usb.remove(path)` = `UsbFs.removeAny` (file, or
+  folder with everything; never a drive root); the app asks the user first. GUIDE.md section 24 + section 20. Tests: `MYPC_ONLY=open`
+  (section 56). Not proven on a real TV yet.
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /
   start failures and timeouts from `game-host.js` (with why: no SDK answer, no `ready()`, given up), uncaught errors of built-in games, the
   SDK's reports (uncaught, rejections, failed files, handler throws, `MyPC.fail`, `MyPC.report`; sent even before `MyPC.init`), and My PC's

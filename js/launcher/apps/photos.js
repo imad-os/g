@@ -9,7 +9,7 @@
  *   Win.open('photos', id)  opens that photo
  *   Win.open('photos', { open: { list, at, title } })  MyPC.open (API 25, js/launcher/app-open.js): the pictures of an app's folder
  *       (Google Drive or a USB drive), read one at a time and shrunk to the screen (the one shown + the next, nothing saved);
- *       Back closes MyPhotos, which opens the app again. */
+ *       It opens over the paused app (js/launcher/app-open.js); Back closes MyPhotos and the app goes on. */
 var Photos = (function () {
     'use strict';
 
@@ -261,7 +261,7 @@ var Photos = (function () {
             if (arg && typeof arg === 'object' && arg.open && Array.isArray(arg.open.list) && arg.open.list.length) {
                 album = arg.open;
                 showAlbum(Math.max(0, Math.min(album.list.length - 1, +album.at || 0)));
-                return null;
+                return body.querySelector('.ph-stage');          // Left / Right work at once
             }
             if (typeof arg === 'string') {
                 var my = ++gen;

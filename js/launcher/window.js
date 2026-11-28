@@ -13,18 +13,20 @@
 var Win = (function () {
     'use strict';
 
-    var apps = {}, cur = null, curId = null, after = null;
+    var apps = {}, cur = null, curId = null, after = null, before = null;
 
     function $(id) { return document.getElementById(id); }
 
     function register(id, def) { apps[id] = def; }
 
-    // opts.onClose: runs in place of showing the desktop when this app is closed (MyPC.open: back to the app that asked)
+    // opts.onClose: runs in place of showing the desktop when this app is closed (MyPC.open: back to the app that asked);
+    // opts.onBeforeClose: just before the app is closed, while its screen is still there (the closing zoom copies it)
     function open(id, arg, opts) {
         var def = apps[id];
         if (!def) return;
         if (cur) close(true);
         after = opts && typeof opts.onClose === 'function' ? opts.onClose : null;
+        before = opts && typeof opts.onBeforeClose === 'function' ? opts.onBeforeClose : null;
         Desktop.hide();
         Desktop.releaseImages();
         cur = def; curId = id;
@@ -54,8 +56,9 @@ var Win = (function () {
     // quiet = something else takes the screen next (a game, another app)
     function close(quiet) {
         if (!cur) return;
-        var id = curId, then = after;
-        after = null;
+        var id = curId, then = after, first = before;
+        after = null; before = null;
+        if (!quiet && first) { try { first(); } catch (e0) {} }
         try { if (cur.close) cur.close(); } catch (e) {}
         cur = null; curId = null;
         $('win-body').innerHTML = '';
