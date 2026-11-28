@@ -5903,6 +5903,17 @@ async function musicTests(browser, base) {
     const media = gcalls.filter((c) => /alt=media/.test(c));
     check(gp.playing && gp.engine === 'html' && gp.stream && /^blob:/.test(gp.ms) && !gcalls.some((c) => /access_token=/.test(c)) && media.length && media.every((c) => /Bearer AT1/.test(c)),
         'a Drive song plays at once: read in pieces with the token as a header (Google refuses it in the address) ' + JSON.stringify(gp) + ' ' + media.length + ' piece(s)');
+    // owner report 2026-11-27: a Drive song that failed always said "This song cannot be played"; the real reason is shown now
+    const why = await page.evaluate(() => {
+        const gd = { s: 'gd', n: 'x.mp3' }, usb = { s: 'usb', n: 'x.mp3' }, r = Music._reason;
+        return { gone: r({ code: 'gone' }, gd), usbGone: r({ code: 'gone' }, usb), reauth: r({ code: 'reauth' }, gd), perm: r({ code: 'permission', message: 'Google Drive: Not allowed' }, gd),
+                 quota: r({ code: 'quota' }, gd), big: r({ code: 'toobig' }, gd), media: r({ code: 4, message: 'MEDIA_ERR_SRC_NOT_SUPPORTED' }, gd), net: r({ code: 2 }, gd),
+                 other: r({ code: 'http', message: 'Google Drive: Internal error' }, gd), none: r(null, gd) };
+    });
+    check(/no longer exists, or My PC is not allowed/.test(why.gone) && /drive may have been removed/.test(why.usbGone) && /sign in to imad@example\.com again/.test(why.reauth) && !/%s/.test(why.reauth) &&
+        /does not let this account download/.test(why.perm) && /busy/.test(why.quota) && /too big/.test(why.big) && /cannot play this kind of file/.test(why.media) && /No connection/.test(why.net) &&
+        why.other === 'This song cannot be played. (Internal error)' && /cannot play this kind/.test(why.none),
+        'a song that fails says why (Drive file not allowed / gone, sign-in ran out with the address, download refused, busy, too big, format, network, Google\'s own words) ' + JSON.stringify(why));
     await page.waitForTimeout(600);
     const ld = await page.evaluate(() => ({ loaded: Music.state().loaded, mini: (document.querySelector('.mx-mini-bar .mx-load') || {}).style ? document.querySelector('.mx-mini-bar .mx-load').style.transform : '' }));
     check(ld.loaded === 1 && /scaleX\(1\)/.test(ld.mini), 'the light grey bar under the progress shows how much of the song has arrived (all of this short one) ' + JSON.stringify(ld));
