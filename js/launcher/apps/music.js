@@ -20,6 +20,7 @@
 
     var LISTS = 'music_lists', RECENT = 'music_recent', HOLD_MS = 600, CHUNK = 120;
     var body = null, ui = {}, view = null, hist = [], items = [], shown = 0, gen = 0;
+    var ext = null;         // MyPC.open (js/launcher/app-open.js): the app's name; Back on Now playing returns to it
     var holdTimer = 0, holdEl = null, swallow = false, tick = 0, artTimer = 0, menu = null, npOpen = false;
     var drives = [], locs = [];
 
@@ -1149,7 +1150,7 @@
         info.appendChild(ui.npNext);
         wrap.appendChild(info);
         n.appendChild(wrap);
-        n.appendChild(el('div', 'mx-hint mx-np-hint', t('muNpHint')));
+        n.appendChild(el('div', 'mx-hint mx-np-hint', ext !== null ? t('opMuHint').replace('%s', ext || t('back')) : t('muNpHint')));
     }
     function drawNp() {
         if (!npOpen) return;
@@ -1232,6 +1233,7 @@
             return true;
         }
         if (npOpen) {
+            if ((a === 'back' || a === 'cancel') && ext !== null) return false;     // opened by an app: Win closes MyMusic (back() below)
             if (a === 'back' || a === 'cancel') { if (!repeat) hideNp(); return true; }
             if (cur === ui.npSeek && (a === 'left' || a === 'right')) {
                 var d = (a === 'right') !== (document.documentElement.getAttribute('dir') === 'rtl') ? 1 : -1;
@@ -1261,6 +1263,7 @@
     function release(a) { if (a === 'confirm') holdEnd(); }
     function back() {
         if (closeMenu()) return true;
+        if (ext !== null && npOpen) return false;          // opened by an app: Back closes MyMusic, the app goes on
         if (hideNp()) return true;
         if (view && view.v !== 'home') { if (!goBack()) go({ v: 'home' }, true); return true; }
         return false;
@@ -1271,6 +1274,8 @@
         title: function () { return t('music'); },
         open: function (b, arg) {
             body = b; ui = {}; hist = []; view = null; menu = null; npOpen = false; swallow = false;
+            ext = arg && typeof arg === 'object' && arg.np ? String(arg.back || '') : null;
+            if (ext !== null) arg = 'np';
             build();
             drives = [];
             locs = [];
@@ -1289,7 +1294,7 @@
             Music.offChange(changed);
             MusicSrc.cancel();
             gen++;
-            body = null; ui = {}; view = null; items = []; hist = []; menu = null; npOpen = false;
+            body = null; ui = {}; view = null; items = []; hist = []; menu = null; npOpen = false; ext = null;
         },
         action: action,
         release: release,

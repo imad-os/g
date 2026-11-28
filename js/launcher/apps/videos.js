@@ -9,7 +9,7 @@
  *   Videos.add({ n, u, from, mime }) -> id      Win.open('videos', id) plays that video
  *   Win.open('videos', { open: { s, p, n, mime, size }, title })   MyPC.open (API 25, js/launcher/app-open.js): a video of an app's
  *       Google Drive or USB drive. USB = the TV's player; Drive = My PC's service worker (web / phone app), else the file read whole
- *       first (AppOpen.VIDEO_MAX) into a <video>. Not added to the list; Back closes MyVideos, which opens the app again. */
+ *       first (AppOpen.VIDEO_MAX) into a <video>. Not added to the list; it opens over the paused app, Back closes MyVideos and the app goes on. */
 var Videos = (function () {
     'use strict';
 

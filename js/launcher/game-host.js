@@ -250,6 +250,8 @@ var GameHost = (function () {
                     remote.keys = { channel: !!(d.keys && d.keys.indexOf && d.keys.indexOf('channel') >= 0), media: !!(d.keys && d.keys.indexOf && d.keys.indexOf('media') >= 0), buttons: !!(d.keys && d.keys.indexOf && d.keys.indexOf('buttons') >= 0) };
                     // MyPC.init({ keys: ['buttons'] }) (API 19): every remote button by name, the app maps them itself
                     if (remote.keys.buttons) Input.registerExtraKeys();
+                    // MyPC.init({ uses: ['photos', 'videos', 'music'] }) (API 26): the built-in apps it opens files in, got ready now (js/launcher/app-open.js)
+                    if (typeof AppOpen !== 'undefined') AppOpen.hello(id, d.uses);
                     if (typeof TouchPad !== 'undefined') { TouchPad.app(d.pad); TouchPad.relay(function (m) { send('pad', m); }); }      // MyPC.init({ pad }); presses of the app's own pad go back to it
                     send('init', {
                         lang: I18n.lang(), rtl: I18n.rtl(), quality: { tier: Perf.profile().tier },
@@ -747,6 +749,7 @@ var GameHost = (function () {
     }
 
     function teardown() {
+        if (typeof AppOpen !== 'undefined') AppOpen.appGone();      // a MyPhotos / MyVideos / MyMusic window over the app goes with it
         if (typeof TouchPad !== 'undefined') TouchPad.end();
         sensorsOff();
         if (api) { try { api.destroy(); } catch (e) {} }
