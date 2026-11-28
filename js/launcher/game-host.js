@@ -162,7 +162,8 @@ var GameHost = (function () {
         if (r && r.prev && v && r.prev !== v) chips.push({ text: t('glUpdated').replace('%v', r.prev), cls: 'gl-chip-new' });
         var bytes = r ? (r.usb && r.usb.bytes) || r.bytes || 0 : 0;
         if (bytes > 0) chips.push({ text: bytes >= 1048576 ? (Math.round(bytes / 104857.6) / 10) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB' });
-        chips.push(r ? (r.usb ? { text: t('glUsb').replace('%d', r.usb.drive || 'USB'), cls: 'gl-chip-warn' } : { text: t('glOnline') }) : { text: t('glBuiltIn') });
+        if (r && r.later) chips.push({ text: t('glAvailable').replace('%v', r.later), cls: 'gl-chip-new' });
+        if (!r || r.usb || r.run || !r.prepare) chips.push(r ? (r.usb ? (r.usb.chosen ? { text: t('glInstalled').replace('%d', r.usb.drive || 'USB'), cls: 'gl-chip-run' } : { text: t('glUsb').replace('%d', r.usb.drive || 'USB'), cls: 'gl-chip-warn' }) : { text: t(r.run === 'usb' ? 'glOnlineNow' : 'glOnline'), cls: 'gl-chip-run' }) : { text: t('glBuiltIn') });
         box.innerHTML = '';
         for (var i = 0; i < chips.length; i++) {
             var c = document.createElement('span');
@@ -172,7 +173,21 @@ var GameHost = (function () {
         }
     }
 
+    // the start screen's status line + bar while My PC installs an app's update (main.js); ok = the green "Installed" look
+    function loadingStatus(text, p, ok) {
+        var s = document.querySelector('#game-loading .gl-status span:last-child'), box = document.querySelector('#game-loading .gl-status');
+        if (s) { s.removeAttribute('data-i18n'); s.textContent = text; }
+        if (box) box.className = 'gl-status' + (ok ? ' gl-ok' : '');
+        if (p !== undefined) setProgress(p);
+    }
+    function resetStatus() {
+        var s = document.querySelector('#game-loading .gl-status span:last-child'), box = document.querySelector('#game-loading .gl-status');
+        if (s) { s.setAttribute('data-i18n', 'loadingStatus'); s.textContent = I18n.t('loadingStatus'); }
+        if (box) box.className = 'gl-status';
+    }
+
     function showLoading() {
+        resetStatus();
         showInfo();
         $('game-loading-title').textContent = title();
         setProgress(0);
@@ -422,7 +437,7 @@ var GameHost = (function () {
         var v = game.remote.version, e = String(game.remote.entry).split('#');
         if (usb) {
             iframe.src = usb.uri + '?mypc_usb=' + (usb.depth + 1);
-            if (typeof Notify !== 'undefined') Notify.show({ id: 'appusb', kind: 'warn', text: I18n.t('auOpened').replace('%s', title()).replace('%d', usb.drive).replace('%v', usb.v) });
+            if (typeof Notify !== 'undefined' && !usb.chosen) Notify.show({ id: 'appusb', kind: 'warn', text: I18n.t('auOpened').replace('%s', title()).replace('%d', usb.drive).replace('%v', usb.v) });
         } else iframe.src = v ? e[0] + (e[0].indexOf('?') < 0 ? '?' : '&') + 'mypc_v=' + encodeURIComponent(v) + (e[1] !== undefined ? '#' + e[1] : '') : e.join('#');
         $('game-frame-box').appendChild(iframe);
         $('game-layer').focus();
@@ -548,6 +563,7 @@ var GameHost = (function () {
             it.push({ id: '_s_keys', label: I18n.t('allKeys') + ': ' + onOff(allKeys()), desc: I18n.t('allKeysDesc') });
         }
         it.push({ id: '_s_quiet', label: I18n.t('asNotif') + ': ' + I18n.t(pref(id, 'quiet') ? 'asHidden' : 'asShown'), desc: I18n.t('asNotifDesc') });
+        if (game.remote && typeof AppUsb !== 'undefined' && AppUsb.supported()) it.push({ id: '_s_run', label: I18n.t('asRun') + ': ' + I18n.t(runMode(id) === 'online' ? 'asRunOnline' : 'asRunUsb'), desc: I18n.t('asRunDesc') });
         if (prefs()[id]) it.push({ id: '_s_reset', label: I18n.t('asReset') });
         it.push({ id: '_s_back', label: I18n.t('back') });
         return it;
@@ -635,12 +651,18 @@ var GameHost = (function () {
     function setPref(id, k, v) {
         if (!id) return;
         var all = prefs(), o = all[id] || {};
-        if (v === undefined || v === null) delete o[k]; else o[k] = !!v;
+        if (v === undefined || v === null) delete o[k]; else o[k] = k === 'run' ? (v === 'online' ? 'online' : 'usb') : !!v;
         if (Object.keys(o).length) all[id] = o; else delete all[id];
         Store.set('app_prefs', all);
         if (game && game.id === id && api && api.prefs) api.prefs();       // the running app follows at once
     }
     function directOk(id) { return pref(id, 'direct') === true; }     // owner decision 2026-11-13: off by default, each user allows it per app
+    // where an installed app opens from: 'usb' (the installed copy, default) | 'online' (its mypc-app.json "run": "online", or the person's choice)
+    function runMode(id) {
+        var v = pref(id, 'run');
+        if (v === 'usb' || v === 'online') return v;
+        return typeof AppLive !== 'undefined' ? AppLive.runDefault(String(id).replace(/^app-/, '')) : 'usb';
+    }
     function quiet() { return state !== 'idle' && !!game && pref(game.id, 'quiet') === true; }
 
     // My PC lost the focus (TV: another app or source; PC: window minimized or another window; phone: app switched):
@@ -738,6 +760,14 @@ var GameHost = (function () {
             else if (id === '_s_direct') setPref(gid, 'direct', directOk(gid) ? null : true);
             else if (id === '_s_keys') { nv = !allKeys(); setPref(gid, 'keys', nv === (Store.get('app_keys', true) !== false) ? null : nv); }
             else if (id === '_s_quiet') setPref(gid, 'quiet', pref(gid, 'quiet') ? null : true);
+            else if (id === '_s_run') {
+                // opens from the installed copy / online: the app opens again now the new way (the same page, prepare() decides)
+                nv = runMode(gid) === 'online' ? 'usb' : 'online';
+                setPref(gid, 'run', nv === (typeof AppLive !== 'undefined' ? AppLive.runDefault(gid.replace(/^app-/, '')) : 'usb') ? null : nv);
+                pauseRedraw(id);
+                setTimeout(function () { location.reload(); }, 350);
+                return;
+            }
             else if (id === '_s_reset') { var all = prefs(); delete all[gid]; Store.set('app_prefs', all); if (api && api.prefs) api.prefs(); return pauseRedraw('_s_bg'); }
             return pauseRedraw(id);
         }
@@ -908,9 +938,12 @@ var GameHost = (function () {
     }
 
     return {
+        loadingStatus: loadingStatus,
+        loadingInfo: showInfo,
+        runMode: runMode,
         quiet: quiet,                    // App settings > Notifications: hidden over this app (js/launcher/notify.js)
         appPrefs: function (id) { var o = prefs()[id]; return o ? JSON.parse(JSON.stringify(o)) : {}; },
-        setAppPref: setPref,             // (app id, 'bg' | 'direct' | 'keys' | 'quiet', true | false | null)
+        setAppPref: setPref,             // (app id, 'bg' | 'direct' | 'keys' | 'quiet' | 'run' ('usb' | 'online'), value | null)
         resetAppPrefs: function (id) { var all = prefs(); delete all[id]; Store.set('app_prefs', all); },
         init: init, launch: launch, exit: exit, onAction: onAction, ownsKeys: function () { return state === 'running' && ownsKeys(); }, openPause: openPause, background: background, hold: hold, release: release,
         active: function () { return state !== 'idle'; },

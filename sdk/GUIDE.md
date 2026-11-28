@@ -604,6 +604,11 @@ Voice Guide announcements.
 2. Push, and wait until GitHub Pages has published it (repository → Actions: green tick).
 3. That's it for a new version: right before an app opens, My PC also reads your site's own `mypc-app.json`
    (a few hundred bytes, no Firebase) and opens the higher of its `version` and the store's (since 2026-11-28).
+   On a TV with a USB drive, My PC **installs** the app in `MyPC/apps` and opens it from there (no download at each
+   start, works offline); a new version shows "Update available" (Update = progress bar, "Installed", then it opens).
+   An app that must run from its web address (a service worker, Google sign-in pages, streaming through `MyPC.drive.stream`)
+   adds `"run": "online"` to `mypc-app.json`: it then always opens online (the USB copy is only its offline backup).
+   Players can switch it per app in My PC's menu > App settings > Opens from.
    Press **Update** in the App Store Manager only when the name, icon, entry, `services` or `widgets` changed
    (those wait for the admin), or to show the new version number in the App Store app.
 

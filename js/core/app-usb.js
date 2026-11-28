@@ -252,6 +252,12 @@ var AppUsb = (function () {
         if (!a || !a.id || !a.url || !a.entry || !on() || !supported()) return;
         a.name = nm(a.name);
         var r = rec(a.id) || {};
+        // App updates "Ask me" (owner 2026-11-28, js/core/app-live.js): an installed version is replaced only when the person says
+        // Update (install()); a newer version is only noted (nv) until then
+        if (!a.force && r.state === 'saved' && r.sv && a.version && a.version !== r.sv && typeof AppLive !== 'undefined' && AppLive.updMode() === 'ask') {
+            if (r.nv !== a.version) set(a.id, { nv: a.version });
+            return;
+        }
         var due = r.sv !== (a.version || '') || r.state !== 'saved' || Date.now() - (r.checked || 0) > RECHECK;
         set(a.id, { name: a.name || r.name || a.id, url: a.url, entry: a.entry, v: a.version || '', q: due ? 1 : 0 });
         if (due) kick(gamePage ? 20000 : 1500);
@@ -278,18 +284,21 @@ var AppUsb = (function () {
     function next() {
         if (!started || run || !on() || !supported()) return;
         var a = load().apps, id = null;
-        for (var k in a) if (a[k].q) { id = k; break; }
+        if (fastId && a[fastId] && a[fastId].q) id = fastId;
+        else for (var k in a) if (a[k].q) { id = k; break; }
         if (!id) return freeLease();
         if (!online()) { set(id, { state: 'wait', err: 'offline' }); return kick(RETRY); }
         if (!lease()) return kick(15000);
         if (!leaseT) leaseT = setInterval(function () { if (run) lease(); }, 5000);
         go(id);
     }
-    function piece() { return gamePage ? PIECE_GAME : PIECE; }
-    function gap(fn) { setTimeout(fn, gamePage ? 150 : 10); }
+    // an install the person is waiting for (the update screen): full speed even on the game page
+    function slow() { return gamePage && !(run && run.fast); }
+    function piece() { return slow() ? PIECE_GAME : PIECE; }
+    function gap(fn) { setTimeout(fn, slow() ? 150 : 10); }
 
     function go(id) {
-        var r = rec(id), job = run = { id: id, stop: false };
+        var r = rec(id), job = run = { id: id, stop: false, fast: fastId === id };
         function end(e) {
             run = null;
             if (e) {
@@ -324,14 +333,16 @@ var AppUsb = (function () {
                         saveCopy(job, id, drive, appDir, fl, old, function (e3) {
                             if (e3) return end(e3);
                             var s = { mypc: 1, id: id, name: r.name, v: r.v, key: fl.key, entry: fl.entry, url: r.url, at: Date.now(), n: fl.files.length, bytes: fl.bytes, sha: {} };
+                            if (old && old.key !== fl.key) { s.prev = old.key; s.pv = old.v || ''; }
                             fl.files.forEach(function (f) { if (f.sha) s.sha[f.p] = f.sha; });
                             // switched to the new copy only now, when every file of it is on the drive
                             writeAll(appDir + '/' + SAVED, enc(JSON.stringify(s)), function (e4) {
                                 if (e4) return end(e4);
                                 delete found[id];
-                                if (old && old.key !== fl.key) rmdir(appDir + '/' + old.key);
-                                set(id, { state: 'saved', sv: r.v, q: 0, checked: Date.now(), drive: drive.name, done: fl.bytes, total: fl.bytes, err: '' });
-                                if (typeof Notify !== 'undefined') Notify.show({ id: 'appusb', kind: 'ok', silent: gamePage, text: t('auDone').replace('%s', r.name || id).replace('%d', drive.name) });
+                                // the version before stays as the way back (rollback); the one before that goes
+                                if (old && old.prev && old.prev !== fl.key && old.prev !== old.key) rmdir(appDir + '/' + old.prev);
+                                set(id, { state: 'saved', sv: r.v, nv: '', q: 0, checked: Date.now(), drive: drive.name, done: fl.bytes, total: fl.bytes, err: '', pv: s.pv || '' });
+                                if (typeof Notify !== 'undefined' && !job.fast) Notify.show({ id: 'appusb', kind: 'ok', silent: gamePage, text: t('auDone').replace('%s', r.name || id).replace('%d', drive.name) });
                                 end(null);
                             });
                         });
@@ -458,6 +469,36 @@ var AppUsb = (function () {
         }
     }
 
+    /* ---------------- install now (the "Update available" screen) ---------------- */
+    var fastId = null;
+    // the installed version on a USB drive: { v, drive, nv (a newer one noted) } or null
+    function installed(id) {
+        var r = rec(id);
+        return r && r.sv && r.state !== 'saving' && r.state !== 'queued' ? { v: r.sv, drive: r.drive || '', nv: r.nv || '' } : null;
+    }
+    // a: { id, name, url, entry, version }; prog(0..1); cb(err | null). Without a USB drive cb('nousb') at once.
+    function install(a, prog, cb) {
+        if (!a || !a.id || !supported() || !on()) return later(function () { cb(err('nousb')); });
+        UsbFs.drives(function (e0, ds) {
+            if (!ds || !ds.length) return cb(err('nousb'));
+            if (run && run.id !== a.id) run.stop = true;                 // the person waits for this one
+            fastId = a.id;
+            a.force = true;
+            if (!a.url && a.entry) a.url = String(a.entry).replace(/[?#].*$/, '').replace(/[^/]*$/, '');
+            set(a.id, { name: nm(a.name) || a.id, url: a.url, entry: a.entry, v: a.version || '', q: 1, state: 'queued', err: '', done: 0, total: 0 });
+            var finished = false;
+            function watch() {
+                var r = rec(a.id);
+                if (finished || !r) return;
+                if (r.total) prog(Math.min(0.99, r.done / r.total));
+                if (r.state === 'saved' && r.sv === (a.version || '')) { finished = true; fastId = null; fns = fns.filter(function (f) { return f !== watch; }); prog(1); cb(null); }
+                else if (r.state === 'error' || r.state === 'wait') { finished = true; fastId = null; fns = fns.filter(function (f) { return f !== watch; }); cb(err(r.err || 'error')); }
+            }
+            fns.push(watch);
+            (function waitFree() { if (run && run.id !== a.id) return setTimeout(waitFree, 200); kick(0); })();
+        });
+    }
+
     function init(o) {
         gamePage = !!(o && o.game);
         if (started) return;
@@ -477,7 +518,7 @@ var AppUsb = (function () {
         });
     }
 
-    return { supported: supported, on: on, setOn: setOn, init: init, want: want, refresh: refresh, has: has, size: size, pick: pick, find: find, readFile: readFile,
+    return { supported: supported, on: on, setOn: setOn, init: init, want: want, refresh: refresh, has: has, size: size, installed: installed, install: install, pick: pick, find: find, readFile: readFile,
              list: list, remove: remove, onChange: function (fn) { fns.push(fn); }, offChange: function (fn) { fns = fns.filter(function (f) { return f !== fn; }); },
              probe: probe, now: function () { kick(0); }, _state: function () { return { run: run && run.id, st: load() }; } };
 })();

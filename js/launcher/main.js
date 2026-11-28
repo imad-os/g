@@ -67,7 +67,7 @@ var App = (function () {
         dialogNo = opts.onNo || null;
         dialogOpen = true;
         $('dialog-backdrop').hidden = false;
-        Focus.push($('dialog'), $('dialog-no'));
+        Focus.push($('dialog'), opts.focusYes ? $('dialog-yes') : $('dialog-no'));
     }
     function closeDialog() {
         dialogOpen = false;
@@ -314,26 +314,72 @@ var App = (function () {
             // Before the app opens (behind its loading screen): read its document again so the config
             // is current. Offline or slow (2.5 s), the saved copy is used. Uninstalled: back to the desktop.
             g.remote.prepare = function (done) {
-                // at the same time: the app's own mypc-app.json, so a new version on its site opens without the Manager's Update
-                // (js/core/app-live.js); offline it simply does not answer
+                // at the same time: the app's own mypc-app.json (its version and "run"), so a new version on its site is seen without the
+                // Manager's Update (js/core/app-live.js); offline it simply does not answer
                 var live = null, store = null, left = 2;
                 AppLive.check(a, function (v) { live = v; if (--left === 0) both(); });
                 Cloud.fetchApp(a.id, function (err, fresh) { store = { err: err, fresh: fresh }; if (--left === 0) both(); });
+                // Opens from (owner 2026-11-28): the copy installed on the USB drive (MyPC/apps) by default, online when the app's
+                // mypc-app.json says "run": "online"; each person can change it in My PC's menu > App settings (key `run`)
+                var mode = 'usb';                                                // decided once its mypc-app.json answered (both())
+                function openNow(ver) {
+                    var seen = AppLive.seen(a.id, ver);
+                    if (!g.remote.prev) g.remote.prev = seen;                     // the start screen says "Updated from ..."
+                    g.remote.bytes = AppUsb.size ? AppUsb.size(a.id) : 0;
+                    g.remote.version = ver;
+                }
+                // the installed copy on the USB drive; none (removed meanwhile) = online
+                function openInstalled(v, later) {
+                    AppUsb.find(a.id, function (copy) {
+                        if (copy && (!v || copy.v === v)) { copy.chosen = true; g.remote.usb = copy; g.remote.version = copy.v; g.remote.later = later || ''; g.remote.bytes = copy.bytes || 0; AppLive.seen(a.id, copy.v); }
+                        else openNow(later || g.remote.version);
+                        done(true);
+                    });
+                }
+                // Install / Update: the progress bar while the version is installed on the USB drive, "Installed", then it opens
+                // (from the drive, or online in online mode). No USB drive: it simply opens online.
+                function install(info, inst) {
+                    var label = I18n.t('auInstalling').replace('%v', info.version);
+                    if (inst) g.remote.prev = inst.v;
+                    g.remote.version = info.version;
+                    GameHost.loadingInfo();
+                    GameHost.loadingStatus(label, 0);
+                    AppUsb.install(info, function (p) { GameHost.loadingStatus(label + '  ' + Math.round(p * 100) + '%', p); }, function (e) {
+                        if (e && e.code === 'nousb') { openNow(info.version); return done(true); }
+                        GameHost.loadingStatus(e ? I18n.t('auInstallFail') : I18n.t('auInstalled').replace('%v', info.version), 1, !e);
+                        setTimeout(function () {
+                            if (!e && mode === 'usb') return openInstalled(info.version);
+                            openNow(info.version); done(true);
+                        }, e ? 1500 : 1300);
+                    });
+                }
                 function both() {
-                    var err = store.err, fresh = store.fresh;
+                    var err = store.err, fresh = store.fresh, ok = !err && fresh;
                     if (err === 'notfound') return done(false);
-                    if (!err && fresh) {
-                        var ver = AppLive.newer(live, fresh.version || '');
-                        g.remote.prev = AppLive.seen(a.id, ver);                 // the start screen says "Updated from ..."
-                        g.remote.bytes = AppUsb.size ? AppUsb.size(a.id) : 0;
-                        g.remote.entry = fresh.entry; g.remote.config = fresh.config; g.remote.version = ver; g.remote.touch = fresh.touch;
-                        // online: the online version opens, and a plugged USB drive gets (or updates) its copy (js/core/app-usb.js)
-                        AppUsb.want({ id: a.id, name: fresh.name || a.name, url: fresh.url || a.url, entry: fresh.entry, version: ver });
-                        return done(true);
+                    mode = g.remote.run = GameHost.runMode(g.id);
+                    if (!ok && !live) {
+                        // nothing answers: the copy saved on a USB drive, ONLY if the app's own site does not answer now either
+                        return AppUsb.pick({ id: a.id, entry: g.remote.entry }, function (copy) { if (copy && mode === 'usb') copy.chosen = true; g.remote.usb = copy; done(true); });
                     }
-                    if (live) { live = AppLive.newer(live, g.remote.version); g.remote.version = live; AppUsb.want({ id: a.id, name: a.name, url: a.url, entry: g.remote.entry, version: live }); return done(true); }
-                    // the store did not answer: the copy saved on a USB drive, ONLY if the app's own site does not answer now either
-                    AppUsb.pick({ id: a.id, entry: g.remote.entry }, function (copy) { g.remote.usb = copy; done(true); });
+                    if (ok) { g.remote.entry = fresh.entry; g.remote.config = fresh.config; g.remote.touch = fresh.touch; }
+                    var ver = AppLive.newer(live, ok ? fresh.version || '' : g.remote.version || '');
+                    var info = { id: a.id, name: (ok && fresh.name) || a.name, url: (ok && fresh.url) || a.url, entry: g.remote.entry, version: ver };
+                    var inst = AppUsb.installed ? AppUsb.installed(a.id) : null;
+                    // installed and a newer version is out: like a PC, "Update available" (owner 2026-11-28)
+                    if (inst && ver && inst.v !== ver && AppLive.newer(ver, inst.v) === ver) {
+                        if (AppLive.updMode() === 'auto') return install(info, inst);
+                        var nm = I18n.pick ? I18n.pick(g.manifest.title) : a.name;
+                        return confirm(I18n.t('auUpdTitle'), I18n.t('auUpdText').replace('%s', nm).replace('%v', ver).replace('%o', inst.v),
+                            function () { install(info, inst); }, { yes: I18n.t('auUpdNow'), no: I18n.t('auUpdLater'), focusYes: true, onNo: function () { openInstalled(inst.v, ver); } });
+                    }
+                    if (mode === 'usb') {
+                        if (inst) return openInstalled(inst.v);                   // the installed version, nothing downloaded
+                        if (AppUsb.supported() && AppUsb.on()) return install(info, null);   // the first time: installed, then it opens
+                    }
+                    openNow(ver);
+                    // online: the online version opens, and a plugged USB drive gets (or updates) its copy (js/core/app-usb.js)
+                    AppUsb.want(info);
+                    done(true);
                 }
             };
             return go(g);

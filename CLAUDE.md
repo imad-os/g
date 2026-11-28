@@ -63,6 +63,16 @@
   **Installed apps follow their own site** (`js/core/app-live.js`, `AppLive`): before an app opens the TV reads its `mypc-app.json`
   (2.5 s, in parallel with `Cloud.fetchApp`) and opens the higher version (`AppLive.newer`); USB copies follow (every 6 h, `arc_dev_applive`).
   Manager Update is only needed for name / icon / entry / services / widgets. Tests: `MYPC_ONLY=boot` (4b-4d).
+  **Installed apps update like a PC (owner 2026-11-28, build 194)**: an app with a copy in `MyPC/apps` whose site has a newer version asks
+  "Update available" (`App.confirm`, Update focused); Update = `AppUsb.install` (full speed, `run.fast`) with the start screen's bar
+  (`GameHost.loadingStatus`), "Installed · version X", then it opens; Later / Back = the installed version from the drive (`copy.chosen`, no
+  "no internet" card). `want()` never replaces an installed version in 'ask' mode (only notes `nv`). The version before stays as `prev` (rollback).
+  Control Panel > System > App updates: Ask me (default) / Install automatically (`AppLive.updMode`, `arc_dev_appupd`).
+  **Opens from (owner 2026-11-28)**: by default an installed app opens from its installed USB copy (first open = installed with the progress
+  bar, then opened from the drive; file:// frame, no own origin); `"run": "online"` in its mypc-app.json (read by `AppLive.check`, `runDefault`)
+  = it opens from its site (needed for service workers: MyDrive's Drive video streaming). Per person in My PC's menu > App settings > "Opens
+  from" (`app_prefs[id].run` 'usb' | 'online', reopens the app at once; `GameHost.runMode`). Shown on the start screen chips. No USB drive =
+  online. Tests: `MYPC_ONLY=appusb` (section 54).
 - `js/launcher/`: desktop shell (`desktop.js`), full-screen app window (`window.js`), apps
   (`apps/*.js`: settings, explorer, browser, calculator, calendar, scores), on-screen keyboard,
   profiles, `game-host.js` (bundled games in a same-origin iframe; installed apps in a sandboxed

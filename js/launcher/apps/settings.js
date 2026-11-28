@@ -607,7 +607,7 @@
         var st = r.state;
         if (st === 'saving') return r.total ? t('auSaving').replace('%p', Math.min(99, Math.floor(r.done * 100 / r.total))) : t('auChecking');
         var saved = r.v ? t('auSaved').replace('%v', r.v).replace('%d', r.drive) : '';
-        if (st === 'saved') return saved;
+        if (st === 'saved') return r.nv ? saved + ' · ' + t('glAvailable').replace('%v', r.nv) : saved;
         var why = st === 'wait' ? t('auWait_' + r.err) : r.err === 'full' ? t('auErr_full') : r.err === 'off' ? t('auErr_off') : r.err === 'too-big' ? t('auErr_too') : t('auErr');
         if (/^auWait_/.test(why)) why = t('auErr');
         return saved ? saved + ' · ' + why : why;
@@ -615,6 +615,8 @@
     function appUsbRows(out) {
         admin(out, { kind: 'toggle', label: t('auOn'), desc: t('auOnDesc'), get: function () { return AppUsb.on(); }, set: function (v) { AppUsb.setOn(v); } });
         if (!AppUsb.on()) return;
+        if (typeof AppLive !== 'undefined') admin(out, { kind: 'select', label: t('auUpdMode'), desc: t('auUpdModeDesc'), value: function () { return t('auUpdMode_' + AppLive.updMode()); },
+            adjust: function () { AppLive.setUpdMode(AppLive.updMode() === 'ask' ? 'auto' : 'ask'); } });
         var l = AppUsb.list();
         if (!l.length) out.push({ kind: 'text', value: t('auNone') });
         l.forEach(function (r) {

@@ -3,6 +3,9 @@
     'use strict';
     I18n.add({
         en: {
+            auUpdTitle: 'Update available', auUpdText: 'Version %v of %s is ready. This TV has version %o installed.', auUpdNow: 'Update', auUpdLater: 'Later',
+            auInstalling: 'Installing version %v…', auInstalled: 'Installed · version %v', auInstallFail: 'Could not install the update: opening it online',
+            auUpdMode: 'App updates', auUpdModeDesc: 'When a new version of an installed app comes out. Ask me: "Update available" when it opens (Later opens the installed version). Install automatically: installed at once with a progress bar.', auUpdMode_ask: 'Ask me', auUpdMode_auto: 'Install automatically',
             auOn: 'Save apps on a USB drive',
             auOnDesc: 'Apps and games from the App Store that you open are saved on a plugged USB drive (folder MyPC/apps) and saved again when a new version comes out. They open from the drive only when the internet does not work; online, the online version always opens. The list of an app\'s files is read from GitHub.',
             auNone: 'No app saved yet: open an app or game from the App Store while a USB drive is plugged in.',
@@ -14,6 +17,9 @@
             auOpened: 'No internet: %s opened from the copy saved on %d (version %v).'
         },
         fr: {
+            auUpdTitle: 'Mise à jour disponible', auUpdText: 'La version %v de %s est prête. Ce téléviseur a la version %o installée.', auUpdNow: 'Mettre à jour', auUpdLater: 'Plus tard',
+            auInstalling: 'Installation de la version %v…', auInstalled: 'Installée · version %v', auInstallFail: 'Impossible d\'installer la mise à jour : ouverture en ligne',
+            auUpdMode: 'Mises à jour des applications', auUpdModeDesc: 'Quand une nouvelle version d\'une application installée sort. Me demander : « Mise à jour disponible » à l\'ouverture (Plus tard ouvre la version installée). Installer automatiquement : installée tout de suite avec une barre de progression.', auUpdMode_ask: 'Me demander', auUpdMode_auto: 'Installer automatiquement',
             auOn: 'Enregistrer les applis sur une clé USB',
             auOnDesc: 'Les applis et jeux de l\'App Store que vous ouvrez sont enregistrés sur la clé USB branchée (dossier MyPC/apps), puis de nouveau à chaque nouvelle version. Ils s\'ouvrent depuis la clé seulement quand internet ne fonctionne pas ; en ligne, c\'est toujours la version en ligne qui s\'ouvre. La liste des fichiers d\'une appli est lue sur GitHub.',
             auNone: 'Aucune appli enregistrée : ouvrez une appli ou un jeu de l\'App Store avec une clé USB branchée.',
@@ -25,6 +31,9 @@
             auOpened: 'Pas d\'internet : %s ouvert depuis la copie enregistrée sur %d (version %v).'
         },
         es: {
+            auUpdTitle: 'Actualización disponible', auUpdText: 'La versión %v de %s está lista. Este televisor tiene instalada la versión %o.', auUpdNow: 'Actualizar', auUpdLater: 'Más tarde',
+            auInstalling: 'Instalando la versión %v…', auInstalled: 'Instalada · versión %v', auInstallFail: 'No se pudo instalar la actualización: se abre en línea',
+            auUpdMode: 'Actualizaciones de apps', auUpdModeDesc: 'Cuando sale una nueva versión de una app instalada. Preguntarme: «Actualización disponible» al abrirla (Más tarde abre la versión instalada). Instalar automáticamente: se instala enseguida con una barra de progreso.', auUpdMode_ask: 'Preguntarme', auUpdMode_auto: 'Instalar automáticamente',
             auOn: 'Guardar las apps en una memoria USB',
             auOnDesc: 'Las apps y juegos de la App Store que abres se guardan en la memoria USB conectada (carpeta MyPC/apps) y se guardan otra vez con cada versión nueva. Se abren desde la memoria solo cuando internet no funciona; con conexión siempre se abre la versión en línea. La lista de archivos de una app se lee en GitHub.',
             auNone: 'Ninguna app guardada: abre una app o un juego de la App Store con una memoria USB conectada.',
@@ -36,6 +45,9 @@
             auOpened: 'Sin internet: %s se abrió desde la copia guardada en %d (versión %v).'
         },
         ar: {
+            auUpdTitle: 'تحديث متوفر', auUpdText: 'الإصدار %v من %s جاهز. هذا التلفاز مثبت عليه الإصدار %o.', auUpdNow: 'تحديث', auUpdLater: 'لاحقًا',
+            auInstalling: 'جارٍ تثبيت الإصدار %v…', auInstalled: 'تم التثبيت · الإصدار %v', auInstallFail: 'تعذر تثبيت التحديث: سيتم فتحه عبر الإنترنت',
+            auUpdMode: 'تحديثات التطبيقات', auUpdModeDesc: 'عند صدور إصدار جديد من تطبيق مثبت. اسألني: «تحديث متوفر» عند فتحه (لاحقًا يفتح الإصدار المثبت). التثبيت تلقائيًا: يُثبت فورًا مع شريط تقدم.', auUpdMode_ask: 'اسألني', auUpdMode_auto: 'التثبيت تلقائيًا',
             auOn: 'حفظ التطبيقات على ذاكرة USB',
             auOnDesc: 'تُحفظ تطبيقات وألعاب متجر التطبيقات التي تفتحها على ذاكرة USB الموصولة (مجلد MyPC/apps)، وتُحفظ من جديد عند صدور إصدار جديد. تُفتح من الذاكرة فقط عندما لا يعمل الإنترنت؛ مع الإنترنت يُفتح دائمًا الإصدار المباشر. تُقرأ قائمة ملفات التطبيق من GitHub.',
             auNone: 'لا يوجد تطبيق محفوظ بعد: افتح تطبيقًا أو لعبة من المتجر وذاكرة USB موصولة.',
