@@ -154,7 +154,7 @@ var AppVideo = (function () {
             var url = String(o.url || '');
             if (/^\/opt\/media\//.test(url)) {
                 if (typeof UsbFs === 'undefined' || !UsbFs.inside(url)) return reply(err('bad-request', 'Not a path inside a plugged USB drive.'));
-                if (!Bridges.allowed(ctx.appId, 'usb')) return reply(err('denied', 'Ask for the USB drives first (MyPC.usb).'));
+                if (!ctx.own && !Bridges.allowed(ctx.appId, 'usb')) return reply(err('denied', 'Ask for the USB drives first (MyPC.usb).'));     // own: My PC's MyVideos
                 try { var fsys = tizen.filesystem; url = fsys && fsys.toURI ? fsys.toURI(url) : 'file://' + encodeURI(url); } catch (x) { url = 'file://' + encodeURI(url); }
             } else if (!/^https?:\/\/[^\s]+$/i.test(url) && !/^(rtsp|rtmp|udp|rtp):\/\/[^\s]+$/i.test(url)) return reply(err('bad-request', 'The address must start with http(s)://, rtsp://, rtmp://, udp:// or be a USB path.'));
             close();

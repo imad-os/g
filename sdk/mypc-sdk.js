@@ -40,7 +40,7 @@
 var MyPC = (function () {
     'use strict';
 
-    var VERSION = 1, API = 24, HELLO_WAIT = 1200;
+    var VERSION = 1, API = 25, HELLO_WAIT = 1200;
     var handlers = {}, info = null, data = {}, started = false, destroyed = false, isReady = false;
     var hosted = false, hostWin = null, hostOrigin = '*', helloTimer = 0;
     var down = {};                       // action -> number of keys / buttons holding it
@@ -342,6 +342,7 @@ var MyPC = (function () {
             case 'drive': drive._message(d); break;
             case 'usb': usb._message(d); break;
             case 'copy': copy._message(d); break;
+            case 'open': openApp._message(d); break;
             case 'video': video._message(d); break;
             case 'kb': kb._message(d); break;
             case 'bug': bug._message(d); break;
@@ -2277,6 +2278,7 @@ var MyPC = (function () {
      * also needs MyPC.drive's permission. Paths are real paths like /opt/media/USBDriveA1/Photos.
      *   usb.drives() -> [{ path, name, free, total }]     usb.list(path) -> [{ name, path, dir, size }]
      *   usb.createFolder(parentPath, name) -> { name, path }    usb.read(path, start, end) -> { buf }    usb.stat(path)
+ *   usb.remove(path) -> true   (API 25) a file, or a folder with everything in it, deleted for ever: ask the user first
      *   copy.toUsb(driveFilesOrIds, usbFolderPath, { ifExists: 'skip' | 'replace' | 'keep' }) -> job
      *   copy.toDrive(usbPaths, driveFolderId, { ifExists }) -> job       copy.jobs() -> [job]
      *   copy.pause(id) / resume(id) / cancel(id) / clear(id) -> job      copy.onChange(fn(job)) -> off()
@@ -2301,8 +2303,39 @@ var MyPC = (function () {
             stat: function (path) { return shellOnly('usb', ch, 'stat', { path: pathOf(path) }); },
             createFolder: function (parent, name) { return shellOnly('usb', ch, 'mkdir', { path: pathOf(parent), name: name }); },
             read: function (path, start, end) { return shellOnly('usb', ch, 'read', { path: pathOf(path), start: start, end: end }); },
+            remove: function (path) { return shellOnly('usb', ch, 'remove', { path: pathOf(path) }); },
             _message: ch._message
         };
+    })();
+    /* MyPC.open (API 25): a picture, video or song of Google Drive (a MyPC.drive file object) or of a USB drive (a MyPC.usb.list
+     * entry) opens in My PC's own app: MyPhotos, MyVideos or MyMusic. My PC closes the app first; Back there opens the app again
+     * with MyPC.launch = { from: 'open', app, path: '' } (save where you were before calling it). The promise resolves (true) just
+     * before the app closes, or rejects: 'unsupported' (not a picture / video / song, or an older My PC: show it yourself),
+     * 'too-big' (a Drive video this device cannot stream: play it yourself), 'denied' (use MyPC.drive / MyPC.usb first).
+     *   MyPC.open(file, { list: [the folder's files], folder: 'Holidays' })   list: Left / Right in MyPhotos, the queue in MyMusic */
+    var openApp = (function () {
+        var ch = channel('open');
+        function one(f) {
+            if (!f || typeof f !== 'object') return null;
+            if (typeof f.path === 'string' && f.path) return { s: 'usb', path: f.path, n: f.name || '', mime: f.mimeType || '', size: +f.size || 0 };
+            if (typeof f.id === 'string' && f.id) return { s: 'gd', id: f.id, n: f.name || '', mime: f.mimeType || '', size: +f.size || 0 };
+            return null;
+        }
+        function open(file, opts) {
+            opts = opts || {};
+            var p = bridgeReady().then(function () {
+                if (!viaShell()) throw bridgeError({ code: 'unsupported', message: 'Opening files in My PC\'s apps needs My PC.' });
+                if (!info.bridges || !info.bridges.open) throw bridgeError({ code: 'unsupported', message: 'This My PC is too old. Update My PC (Control Panel > Update).' });
+                var item = one(file);
+                if (!item) throw bridgeError({ code: 'bad-request', message: 'Give a MyPC.drive file object or a MyPC.usb entry.' });
+                var list = Array.isArray(opts.list) ? opts.list.slice(0, 1000).map(one).filter(Boolean) : [];
+                return ch.call('open', { args: { item: item, list: list, folder: String(opts.folder || '').slice(0, 120) } });
+            });
+            p.abort = function () {};
+            return p;
+        }
+        open._message = ch._message;
+        return open;
     })();
     var copy = (function () {
         var ch = channel('copy'), fns = [], watching = null;
@@ -2436,7 +2469,7 @@ var MyPC = (function () {
 
     var pub = {
         version: VERSION,
-        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy, 17 MyPC.video + MyPC.back + init keys + MyPC.text.keyboard, 18 every button to the app: onInput returning false for 'cancel' = nothing to close (My PC's menu), 19 MyPC.buttons (init keys 'buttons': the remote's buttons by name), 22 MyPC.bug (a bug report with a log and a screenshot), 23 the USB copy for when the internet fails (MyPC.offline, fetch() from the drive), 24 MyPC.stt (speech to text) (the protocol version above stays 1: older apps and shells keep working)
+        apiLevel: API,                   // 3 added MyPC.multiplayer, 4 MyPC.pad and the pad option of init(), 7 MyPC.bluetooth, 8 MyPC.sensors, 9 MyPC.gamepad, 10 MyPC.net / ai / mic, 11 error reports (MyPC.report), 12 MyPC.notify + MyPC.launch, 13 MyPC.text, 14 MyPC.drive, 15 no input while paused, 16 MyPC.usb + MyPC.copy, 17 MyPC.video + MyPC.back + init keys + MyPC.text.keyboard, 18 every button to the app: onInput returning false for 'cancel' = nothing to close (My PC's menu), 19 MyPC.buttons (init keys 'buttons': the remote's buttons by name), 22 MyPC.bug (a bug report with a log and a screenshot), 23 the USB copy for when the internet fails (MyPC.offline, fetch() from the drive), 24 MyPC.stt (speech to text), 25 MyPC.open (a picture / video / song in MyPhotos / MyVideos / MyMusic) + MyPC.usb.remove (the protocol version above stays 1: older apps and shells keep working)
         multiplayer: multiplayer,
         pad: pad,
         bluetooth: bluetooth,
@@ -2452,6 +2485,7 @@ var MyPC = (function () {
         drive: drive,
         usb: usb,
         copy: copy,
+        open: openApp,
         video: video,
         // true in the copy My PC saved on a USB drive, opened because the internet does not work (API 23): hide what needs it
         offline: usbCopy,

@@ -6,12 +6,16 @@
  * Viewer: Left / Right = other photos, OK = its buttons (Turn, Slideshow 5 s, Delete), Back = the grid.
  *
  *   Photos.addUrl(url, { n, from }, cb(err, id))   download, shrink, save      Photos.add(blob, meta, cb)
- *   Win.open('photos', id)  opens that photo */
+ *   Win.open('photos', id)  opens that photo
+ *   Win.open('photos', { open: { list, at, title } })  MyPC.open (API 25, js/launcher/app-open.js): the pictures of an app's folder
+ *       (Google Drive or a USB drive), read one at a time and shrunk to the screen (the one shown + the next, nothing saved);
+ *       Back closes MyPhotos, which opens the app again. */
 var Photos = (function () {
     'use strict';
 
     var DB = 'mypc-photos', ST = 'p', MAX = 200, FULL_W = 1920, FULL_H = 1080, TH_W = 320, TH_H = 180;
     var body = null, items = [], urls = [], view = null, at = 0, slide = 0, rot = 0, delArm = 0, gen = 0;
+    var album = null, cache = {}, loading = {}, PIC_MAX = 40 * 1048576;     // MyPC.open: { list, at, title }; index -> shrunk Blob
 
     function t(k) { return I18n.t(k); }
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
@@ -170,18 +174,102 @@ var Photos = (function () {
         });
     }
 
+    /* ---------------- MyPC.open: an app's folder of pictures (Drive or USB) ---------------- */
+    function readEntry(e, cb) {
+        if (e.s === 'gd') {
+            if (typeof GDrive === 'undefined') return cb(null);
+            return GDrive.download(e.p, { max: PIC_MAX }, function (x, r) { cb(x || !r ? null : new Blob([r.buf], { type: r.type || e.mime || 'image/jpeg' })); });
+        }
+        if (e.s !== 'usb' || typeof UsbFs === 'undefined') return cb(null);
+        function rd(n) {
+            if (!n || n > PIC_MAX) return cb(null);
+            UsbFs.read(e.p, 0, n, function (x, u8) { cb(x || !u8 ? null : new Blob([u8], { type: e.mime || 'image/jpeg' })); });
+        }
+        if (e.size) return rd(e.size);
+        UsbFs.stat(e.p, function (x, st) { rd(!x && st && st.exists ? st.size : 0); });
+    }
+    // the picture shrunk to the screen (a 12 MP photo decoded whole would cost ~50 MB): cb(blob | null)
+    function albumPic(i, cb) {
+        if (cache[i] !== undefined) return cb(cache[i]);
+        if (loading[i]) { loading[i].push(cb); return; }
+        loading[i] = [cb];
+        var e = album.list[i], my = album;
+        readEntry(e, function (b) {
+            function done(r) {
+                if (album !== my) return;
+                cache[i] = r;
+                var w = loading[i] || []; delete loading[i];
+                // keep the one shown and its two neighbours only
+                Object.keys(cache).forEach(function (k) { var d = Math.abs(+k - at); if (d > 1 && d < album.list.length - 1) delete cache[k]; });
+                for (var j = 0; j < w.length; j++) w[j](r);
+            }
+            if (!b) return done(null);
+            decode(b, function (bmp) {
+                if (!bmp || !bmp.width) return done(null);
+                shrink(bmp, FULL_W, FULL_H, false, 0.9, function (full, w, h) { try { if (bmp.close) bmp.close(); } catch (x) {} if (full) { full.w = w; full.h = h; } done(full || null); });
+            });
+        });
+    }
+    function showAlbum(i) {
+        var n = album.list.length;
+        at = (i + n) % n;
+        view = 'one'; rot = 0;
+        var e = album.list[at], my = ++gen;
+        freeUrls();
+        body.innerHTML = '';
+        Win.setTitle(t('photos') + ' · ' + (at + 1) + ' / ' + n);
+        var box = el('div', 'ph-one'), stage = btn('ph-stage', '', function () { Focus.focus(bar.querySelector('.ph-btn:nth-child(2)')); }), img = document.createElement('img');
+        img.className = 'ph-full'; img.alt = e.n || ''; img.decoding = 'async';
+        stage.setAttribute('aria-label', (e.n || t('rxPhoto')) + ', ' + (at + 1) + ' / ' + n);
+        var wait = el('div', 'ph-empty', t('opLoad'));
+        stage.appendChild(wait);
+        box.appendChild(stage);
+        box.appendChild(el('div', 'ph-cap', e.n || ''));
+        var pw = 0, ph = 0;
+        var bar = el('div', 'ph-bar');
+        bar.appendChild(btn('ph-btn', '‹ ' + t('phPrev'), function () { showAlbum(at - 1); }));
+        bar.appendChild(btn('ph-btn', t('phTurn'), function () { rot = (rot + 90) % 360; img.style.transform = 'rotate(' + rot + 'deg)' + (rot % 180 ? ' scale(' + Math.min(1, 1080 / Math.max(1, pw), 1920 / Math.max(1, ph)) + ')' : ''); }));
+        var sl = btn('ph-btn', t('phSlide'), function () {
+            if (slide) { stopSlide(); sl.classList.remove('on'); return; }
+            sl.classList.add('on');
+            slide = setInterval(function () { if (view === 'one' && album) { showAlbum(at + 1); var s2 = body && body.querySelector('.ph-bar .ph-btn:nth-child(3)'); if (s2) s2.classList.add('on'); } }, 5000);
+        });
+        if (slide) sl.classList.add('on');
+        bar.appendChild(sl);
+        bar.appendChild(btn('ph-btn', t('phNext') + ' ›', function () { showAlbum(at + 1); }));
+        box.appendChild(bar);
+        box.appendChild(el('div', 'ph-hint', t('opHint').replace('%s', album.title || t('back'))));
+        body.appendChild(box);
+        I18n.apply(body);
+        Focus.focus(stage);
+        A11y.announce((at + 1) + ' / ' + n);
+        albumPic(at, function (b) {
+            if (!body || my !== gen) return;
+            if (!b) { wait.textContent = t('opNoPic'); return; }
+            pw = b.w || 0; ph = b.h || 0;
+            img.src = objUrl(b);
+            stage.replaceChild(img, wait);
+            if (n > 1) albumPic((at + 1) % n, function () {});          // the next one is ready when Right is pressed
+        });
+    }
+
     Win.register('photos', {
         icon: 'photos',
         title: function () { return t('photos'); },
         open: function (b, arg) {
-            body = b; items = []; view = null;
+            body = b; items = []; view = null; album = null; cache = {}; loading = {};
+            if (arg && typeof arg === 'object' && arg.open && Array.isArray(arg.open.list) && arg.open.list.length) {
+                album = arg.open;
+                showAlbum(Math.max(0, Math.min(album.list.length - 1, +album.at || 0)));
+                return null;
+            }
             if (typeof arg === 'string') {
                 var my = ++gen;
                 all(function (l) { if (!body || my !== gen) return; items = l; var k = 0; for (var i = 0; i < l.length; i++) if (l[i].id === arg) k = i; if (l.length) show(k); else grid(); });
             } else grid();
             return null;
         },
-        close: function () { stopSlide(); gen++; freeUrls(); body = null; items = []; view = null; },
+        close: function () { stopSlide(); gen++; freeUrls(); body = null; items = []; view = null; album = null; cache = {}; loading = {}; },
         action: function (a, repeat) {
             if (view !== 'one') return false;
             // Left / Right on the picture: other photos (Down = its buttons, where the arrows move between them)
@@ -189,12 +277,12 @@ var Photos = (function () {
             if ((a === 'left' || a === 'right') && f && f.classList.contains('ph-stage')) {
                 if (repeat) return true;
                 stopSlide();
-                show(at + (a === 'right' ? 1 : -1) * (document.documentElement.dir === 'rtl' ? -1 : 1));
+                (album ? showAlbum : show)(at + (a === 'right' ? 1 : -1) * (document.documentElement.dir === 'rtl' ? -1 : 1));
                 return true;
             }
             return false;
         },
-        back: function () { if (view === 'one') { var id = items[at] && items[at].id; grid(id); return true; } return false; }
+        back: function () { if (album) return false; if (view === 'one') { var id = items[at] && items[at].id; grid(id); return true; } return false; }
     });
 
     return { add: add, addUrl: addUrl, all: all, remove: remove };
