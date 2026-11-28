@@ -494,6 +494,12 @@
   ready in idle time (window layer, `Music.init({ lite })`); none declared = all three. `MyPC.usb.remove(path)` = `UsbFs.removeAny` (file, or
   folder with everything; never a drive root); the app asks the user first. GUIDE.md section 24 + section 20. Tests: `MYPC_ONLY=open`
   (section 56). Not proven on a real TV yet.
+- **TV Game Mode (owner request 2026-11-28, package 3.2.0, build 193)**: Samsung's public config.xml key
+  `<tizen:metadata key="http://samsung.com/tv/metadata/use.game.mode" value="true"/>` (Smart TV > Cloud Gaming > "Implementing a web app";
+  no privilege, 2022+ TVs / Web Engine M85+; Seller Office refuses it for apps that also target older TVs) lets the TV use Game Mode for
+  ALL of My PC. Samsung documents NO JavaScript call to switch it per game while running, so Control Panel > Gaming shows a status row
+  (`js/core/game-mode.js` `GameMode.status()`: on / package (older than 3.2.0) / tv (Tizen < 6.5) / none), not a switch; turning it off is in
+  the TV's own Game Mode Settings. Needs the new .wgt. Not proven on a real TV yet. Tests: unit section 11, `MYPC_ONLY=pads`.
 - **Error reports (API 11)**: `js/core/reports.js` saves to Firestore `errors` (TTL `exp` 30 days, rules + index in `firebase/`): app load /
   start failures and timeouts from `game-host.js` (with why: no SDK answer, no `ready()`, given up), uncaught errors of built-in games, the
   SDK's reports (uncaught, rejections, failed files, handler throws, `MyPC.fail`, `MyPC.report`; sent even before `MyPC.init`), and My PC's

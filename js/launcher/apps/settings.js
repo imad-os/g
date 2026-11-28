@@ -174,6 +174,10 @@
             padRows(out);
             out.push({ kind: 'action', label: t('asEach'), desc: t('asEachDesc'), run: function () { sub = 'appsets'; var f = renderMain(1); if (f) Focus.focus(f); } });
             out.push({ kind: 'toggle', label: t('allKeys'), desc: t('allKeysDesc'), get: function () { return Store.get('app_keys', true) !== false; }, set: function (v) { Store.set('app_keys', !!v); } });
+            // the TV's Game Mode (js/core/game-mode.js): set by the package's config.xml, no switch Samsung lets an app use while it runs
+            out.push({ kind: 'info', label: t('gmTitle'), value: t('gm_' + GameMode.status()) });
+            lines = t('gmText');
+            for (i = 0; i < lines.length; i++) out.push({ kind: 'text', value: lines[i] });
             lines = t('controlsText');
             for (i = 0; i < lines.length; i++) out.push({ kind: 'text', value: lines[i] });
             out.push({ kind: 'action', label: t('resetProgress'), desc: t('resetText'), danger: true, run: function () {
