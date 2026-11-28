@@ -1,5 +1,5 @@
 {
-  "build": 195,
+  "build": 196,
   "version": "3.0.0",
   "shell": 1,
   "css": [
@@ -45,6 +45,7 @@
     "js/core/boot-cache.js",
     "js/core/copy-jobs.js",
     "js/core/app-usb.js",
+    "js/core/usb-page.js",
     "js/core/app-live.js",
     "js/core/music.js",
     "js/core/radio.js",

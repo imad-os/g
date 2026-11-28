@@ -7408,7 +7408,7 @@ MyPC.init({ onInit() {
         r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ sha: treeSha, tree, truncated: false }) });
     });
     const shot = async (name) => { if (process.env.MYPC_SHOTS) { await page.waitForTimeout(250); await page.screenshot({ path: path.join(process.env.MYPC_SHOTS, 'appusb-' + name + '.png') }); } };
-    const appFrame = () => page.frames().find((f) => /tester\.github\.io|usb-files\.test/.test(f.url()));
+    const appFrame = () => page.frames().find((f) => /tester\.github\.io|usb-files\.test|^about:(srcdoc|blank)/.test(f.url()) && f !== page.mainFrame());
     const open = async () => {
         await snapshot();
         await page.goto(base + 'index.html?play=app-quest');
@@ -7457,7 +7457,7 @@ MyPC.init({ onInit() {
     const t0 = Date.now();
     o = await open();
     const frameInfo = await page.evaluate(() => { const f = document.querySelector('#game-frame-box iframe'); return f ? f.getAttribute('sandbox') : ''; });
-    check(o.state === 'running' && o.url.indexOf(USBW + D + '/MyPC/apps/quest/v1.0.0-aaaaaaa/index.html?mypc_usb=1') === 0, 'no internet: the copy saved on the USB drive opens ' + o.url);
+    check(o.state === 'running' && /^about:/.test(o.url) && /USB copy · v1\.0\.0/.test(o.txt), 'no internet: the copy saved on the USB drive opens ' + o.url);
     check(/^Level Forest · 5242883 bytes · USB copy · v1\.0\.0 · 404 · v$/.test(o.txt), 'the USB copy runs: its fetch() reads the drive (5 MB file, a missing file = 404), MyPC.offline, a memory localStorage: ' + o.txt);
     check(/No internet: Quest opened from the copy saved on USB A1 \(version 1\.0\.0\)/.test(o.toast) && frameInfo === 'allow-scripts allow-pointer-lock', 'a card says so; the copy has no origin of its own (no allow-same-origin) ' + JSON.stringify([o.toast, frameInfo]));
     console.log('    (opened from the USB drive ' + (Date.now() - t0) + ' ms after the page change)');
@@ -7467,7 +7467,7 @@ MyPC.init({ onInit() {
     db.down = false;
     const t1 = Date.now();
     o = await open();
-    check(o.url.indexOf(USBW) === 0 && /USB copy/.test(o.txt) && Date.now() - t1 < 16000, 'the store answers, the app\'s site does not: the USB copy opens after the 6 s check ' + (Date.now() - t1) + ' ms');
+    check(/^about:/.test(o.url) && /USB copy/.test(o.txt) && Date.now() - t1 < 16000, 'the store answers, the app\'s site does not: the USB copy opens after the 6 s check ' + (Date.now() - t1) + ' ms');
 
     // --- a new version, like a PC (owner 2026-11-28): "Update available"; Later = the installed version from the drive; Update =
     //     progress bar, "Installed", then the new version; saved in a new folder, the unchanged 5 MB file copied, the old one kept
@@ -7487,6 +7487,10 @@ MyPC.init({ onInit() {
     check(d.shown && /Update available[\s\S]*Version 1\.1\.0 of Quest is ready\. This TV has version 1\.0\.0 installed\.[\s\S]*Update[\s\S]*Later/.test(d.text) && d.focus === 'dialog-yes',
         'a new version on the site: "Update available" with both versions, Update focused ' + JSON.stringify(d));
     check(await page.evaluate(() => AppUsb._state().st.apps.quest.sv === '1.0.0'), 'nothing is installed before the person answers');
+    // the no-progress limit (20 s) waits while the question is up (owner 2026-11-28: no timeout while it is not stuck)
+    await page.waitForTimeout(21000);
+    const still = await page.evaluate(() => ({ st: GameHost.state(), dlg: !document.getElementById('dialog-backdrop').hidden }));
+    check(still.st === 'loading' && still.dlg, 'the question waits 21 s: no timeout while the person decides ' + JSON.stringify(still));
     await page.keyboard.press('Escape');                                         // Back = Later
     await page.waitForFunction(() => window.GameHost && GameHost.state() === 'running', null, { timeout: 30000 }).catch(() => {});
     let f = appFrame(), txt = f ? await f.evaluate(() => document.getElementById('d').textContent).catch(() => '') : '';
@@ -7516,7 +7520,7 @@ MyPC.init({ onInit() {
     siteGets.length = 0;
     o = await open();
     let chipsNow = await page.evaluate(() => [...document.querySelectorAll('#game-loading-info .gl-chip')].map((c) => c.textContent).join(' | '));
-    check(o.url.indexOf(USBW) === 0 && /USB copy · v1\.1\.0/.test(o.txt) && !/No internet/.test(o.toast) && /Opens from USB A1 \(installed\)/.test(chipsNow),
+    check(/^about:/.test(o.url) && /USB copy · v1\.1\.0/.test(o.txt) && !/No internet/.test(o.toast) && /Opens from USB A1 \(installed\)/.test(chipsNow),
         'installed mode, online: the installed copy opens from the drive, the start screen says so ' + JSON.stringify([o.url.slice(0, 40), o.txt, chipsNow]));
     check(!siteGets.some((g) => /^(index\.html|game\.js)/.test(g)), 'nothing of the app is downloaded (only its small mypc-app.json is read) ' + JSON.stringify(siteGets));
     // a new version in installed mode: Update installs it, then the NEW installed copy opens from the drive
@@ -7538,9 +7542,16 @@ MyPC.init({ onInit() {
     // --- the installed copy does not start (the page never runs, as on imad's TV with build 194): online opens instead, at once
     // the next time, with a card; picking "Opens from: USB" again tries the drive again
     siteDown = false; db.down = false;
-    await page.addInitScript(() => { window.MYPC_USB_SILENT_MS = 2500; });
+    await page.addInitScript(() => {
+        window.MYPC_USB_SILENT_MS = 2500;
+        // the copy's page never runs (as file:// pages on imad's TV): a page with no script at all
+        let u;
+        Object.defineProperty(window, 'UsbPage', { configurable: true, get: () => u, set: (v) => { u = v; if (window.__usbBlocked) v.build = (c, cb) => setTimeout(() => cb(null, '<p>nothing runs</p>', { files: 0, bytes: 0, sdk: 'none' }), 10); } });
+        window.__usbBlocked = localStorage.getItem('test_usb_blocked') === '1';
+    });
     await page.evaluate(() => GameHost.setAppPref('app-quest', 'run', 'usb'));
     usbBlocked = true;
+    await page.evaluate(() => localStorage.setItem('test_usb_blocked', '1'));
     let t2 = Date.now();
     o = await open();
     const fl = await page.evaluate(() => JSON.parse(localStorage.getItem('arc_dev_appusb_fail') || '{}'));
@@ -7552,7 +7563,7 @@ MyPC.init({ onInit() {
     check(o.state === 'running' && o.url.indexOf(APP) === 0 && !usbGets.some((g) => /index\.html$/.test(g)) && Date.now() - t2 < 8000,
         'the next time that version opens online right away (the drive is not tried) ' + JSON.stringify([o.url.slice(0, 50), usbGets, Date.now() - t2, chipsFail]));
     usbBlocked = false;
-    await page.evaluate(() => { AppUsb.clearFailed(); GameHost.setAppPref('app-quest', 'run', 'usb'); });
+    await page.evaluate(() => { localStorage.removeItem('test_usb_blocked'); AppUsb.clearFailed(); GameHost.setAppPref('app-quest', 'run', 'usb'); });
     o = await open();
     check(/USB copy · v1\.2\.0/.test(o.txt), 'after "Opens from: USB" is picked again the drive is tried again ' + o.txt);
     await page.evaluate(() => GameHost.setAppPref('app-quest', 'run', null));
@@ -7572,7 +7583,7 @@ MyPC.init({ onInit() {
     await page.evaluate(() => AppUsb.setOn(false));
     siteDown = true; db.down = true;
     o = await open();
-    check(o.url.indexOf(USBW) !== 0 && o.state !== 'running', 'switched off: the USB copy is never used ' + JSON.stringify([o.url, o.state]));
+    check(!/^about:/.test(o.url) && o.state !== 'running', 'switched off: the USB copy is never used ' + JSON.stringify([o.url, o.state]));
     await page.context().close();
 }
 

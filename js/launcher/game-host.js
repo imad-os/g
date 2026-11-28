@@ -15,12 +15,12 @@
 var GameHost = (function () {
     'use strict';
 
-    var LOAD_TIMEOUT_MS = 20000, FILE_TIMEOUT_MS = 10000, USB_SILENT_MS = +(window.MYPC_USB_SILENT_MS || 10000);   // USB_SILENT_MS: the installed USB copy's page said nothing = online
+    var LOAD_TIMEOUT_MS = 20000, LOAD_MAX_MS = 15 * 60000, FILE_TIMEOUT_MS = 10000, USB_SILENT_MS = +(window.MYPC_USB_SILENT_MS || 10000);   // USB_SILENT_MS: the installed USB copy's page said nothing = online
 
     var state = 'idle';         // idle | loading | running | paused | error
     function setState(s) { state = s; if (typeof TouchPad !== 'undefined') TouchPad.state(s); }
     var game = null, base = '', triedBundled = false, triedUsb = false;
-    var iframe = null, api = null, gameWin = null, loadTimer = 0, onExitCb = null;
+    var iframe = null, api = null, gameWin = null, loadTimer = 0, loadMax = 0, onExitCb = null;
     var pauseItems = [], loadSeq = 0;
     var said = { hello: 0, progress: 0, at: 0, sdk: 0, any: 0 };      // how far the app got (error reports when it does not open)
 
@@ -101,7 +101,7 @@ var GameHost = (function () {
             announce: function (text) { A11y.announce(text); },
             save: function (k, v) { return Store.set('game_' + id + '_' + k, v); },
             load: function (k, def) { return Store.get('game_' + id + '_' + k, def); },
-            progress: function (p) { said.progress = +p || 0; setProgress(p); },
+            progress: function (p) { said.progress = +p || 0; setProgress(p); if (state === 'loading') kickLoad(); },
             loaded: onLoaded,
             failed: function (msg) { fail(msg || 'game reported failure'); },
             pause: function () { openPause(); },
@@ -179,6 +179,7 @@ var GameHost = (function () {
         if (s) { s.removeAttribute('data-i18n'); s.textContent = text; }
         if (box) box.className = 'gl-status' + (ok ? ' gl-ok' : '');
         if (p !== undefined) setProgress(p);
+        if (state === 'loading') kickLoad();
     }
     function resetStatus() {
         var s = document.querySelector('#game-loading .gl-status span:last-child'), box = document.querySelector('#game-loading .gl-status');
@@ -282,7 +283,7 @@ var GameHost = (function () {
             switch (m.type) {
                 case 'hello':
                     win = e.source;
-                    said.hello = Date.now(); said.sdk = +d.sdkApi || +d.sdk || 0;
+                    said.hello = Date.now(); said.sdk = +d.sdkApi || +d.sdk || 0; if (state === 'loading') kickLoad();
                     remote.ownMenu = !!d.ownMenu;          // the app has its own menu on gamepad Start
                     // MyPC.init({ keys: ['channel', 'media'] }) (API 17): CH + / CH - (and L / R) and the remote's media keys go to the app
                     remote.keys = { channel: !!(d.keys && d.keys.indexOf && d.keys.indexOf('channel') >= 0), media: !!(d.keys && d.keys.indexOf && d.keys.indexOf('media') >= 0), buttons: !!(d.keys && d.keys.indexOf && d.keys.indexOf('buttons') >= 0) };
@@ -333,7 +334,7 @@ var GameHost = (function () {
                     if (typeof TouchPad === 'undefined') break;
                     if (d.settings) TouchPad.settings(); else TouchPad.own(!!d.own, d.cfg);
                     break;
-                case 'progress': if (state === 'loading') { said.progress = +d.p || 0; setProgress(+d.p || 0); } break;
+                case 'progress': if (state === 'loading') { said.progress = +d.p || 0; setProgress(+d.p || 0); kickLoad(); } break;
                 case 'ready':
                     onLoaded();
                     // an app with a push notification service: asks the player once (an account only), a moment after it starts
@@ -414,6 +415,7 @@ var GameHost = (function () {
                 if (state !== 'loading' || token !== loadSeq) return;       // cancelled or superseded
                 if (ok === false) return exit();                            // uninstalled meanwhile
                 showInfo();                                                 // the version read just now (store / the app's site)
+                kickLoad();
                 openRemote();
             });
         }
@@ -437,17 +439,20 @@ var GameHost = (function () {
         // the version in the address: a new version published in the App Store never opens from the TV's cache
         var v = game.remote.version, e = String(game.remote.entry).split('#');
         if (usb) {
-            iframe.src = usb.uri + '?mypc_usb=' + (usb.depth + 1);
+            // the TV runs no file:// page in a frame (imad's TV, build 194 / 195): My PC reads the copy's files and builds its page (srcdoc)
+            var tb = loadSeq, gb = game, fr = iframe;
+            if (typeof UsbPage !== 'undefined') UsbPage.build(usb, function (e, html, st) {
+                if (tb !== loadSeq || game !== gb || iframe !== fr || state !== 'loading') return;
+                if (e) return fail('usb: ' + (e.message || e.code));
+                usb.page = st;
+                fr.srcdoc = html;
+                if (usb.chosen) armSilent();
+            });
+            else iframe.src = usb.uri + '?mypc_usb=' + (usb.depth + 1);
             if (typeof Notify !== 'undefined' && !usb.chosen) Notify.show({ id: 'appusb', kind: 'warn', text: I18n.t('auOpened').replace('%s', title()).replace('%d', usb.drive).replace('%v', usb.v) });
             // the installed copy says nothing at all within USB_SILENT_MS (its page or My PC's SDK in it never ran: imad's TV, build 194,
             // Tangier TAXI stayed on "Getting things ready" and then failed): the online version opens instead, right away
-            if (usb.chosen) {
-                var tu = loadSeq, gu = game;
-                setTimeout(function () {
-                    if (tu !== loadSeq || game !== gu || state !== 'loading' || said.any || said.hello) return;
-                    usbToOnline('silent');
-                }, USB_SILENT_MS);
-            }
+            if (usb.chosen && typeof UsbPage === 'undefined') armSilent();
         } else iframe.src = v ? e[0] + (e[0].indexOf('?') < 0 ? '?' : '&') + 'mypc_v=' + encodeURIComponent(v) + (e[1] !== undefined ? '#' + e[1] : '') : e.join('#');
         $('game-frame-box').appendChild(iframe);
         $('game-layer').focus();
@@ -461,13 +466,27 @@ var GameHost = (function () {
                     if (!copy || tk !== loadSeq || game !== g0 || state !== 'loading' || said.hello || triedUsb) return;
                     triedUsb = true;
                     report({ kind: 'load', msg: 'no answer from the app\'s site in ' + Math.round((Date.now() - said.at) / 1000) + ' s: opening the copy saved on USB ' + copy.v, stage: 'loading' });
-                    clearTimeout(loadTimer);
+                    clearTimeout(loadTimer); clearTimeout(loadMax);
                     teardown();
                     game.remote.usb = copy;
                     load();
                 });
             }, 6000);
         }
+    }
+
+    function kickLoad() {
+        clearTimeout(loadTimer);
+        loadTimer = setTimeout(function () { fail('timeout'); }, LOAD_TIMEOUT_MS);
+    }
+    // a question on the start screen (Update available): no limit while the person decides; the next progress starts it again
+    function loadingWait() { clearTimeout(loadTimer); }
+    function armSilent() {
+        var tu = loadSeq, gu = game;
+        setTimeout(function () {
+            if (tu !== loadSeq || game !== gu || state !== 'loading' || said.any || said.hello) return;
+            usbToOnline('silent');
+        }, USB_SILENT_MS);
     }
 
     function load() {
@@ -477,8 +496,11 @@ var GameHost = (function () {
         var dir = abs(base + 'games/' + game.id + '/');
         var entry = game.manifest.entry || 'index.html';
         var build = game.manifest.build || 0;
-        clearTimeout(loadTimer);
-        loadTimer = setTimeout(function () { fail('timeout'); }, LOAD_TIMEOUT_MS);
+        // two limits (owner 2026-11-28: "it was progressing, then it said timeout"): LOAD_TIMEOUT_MS with NO progress at all (every
+        // progress of the app, of an install or of the start screen starts it again: kickLoad), and LOAD_MAX_MS for the whole start
+        kickLoad();
+        clearTimeout(loadMax);
+        loadMax = setTimeout(function () { if (state === 'loading') fail('timeout: over ' + Math.round(LOAD_MAX_MS / 60000) + ' min in all'); }, LOAD_MAX_MS);
         said = { hello: 0, progress: 0, at: Date.now(), sdk: 0, any: 0 };
         var token = ++loadSeq;
         $('game-frame-box').classList.toggle('wide', wideOnly());
@@ -510,7 +532,7 @@ var GameHost = (function () {
 
     function onLoaded() {
         if (state !== 'loading') return;
-        clearTimeout(loadTimer);
+        clearTimeout(loadTimer); clearTimeout(loadMax);
         hideLoading();
         setState('running');
         Input.setExternalPoll(!game.remote);    // an installed app cannot poll: the launcher reads the pads
@@ -535,7 +557,7 @@ var GameHost = (function () {
         if (game.remote && game.remote.usb && game.remote.usb.chosen && !game.remote.noUsb && !/^app: /.test(reason)) return usbToOnline(reason);
         var tryUsb = game.remote && !game.remote.usb && !triedUsb && !said.hello && typeof AppUsb !== 'undefined' && /^timeout/.test(reason);
         if (!/^start: /.test(reason)) report({ kind: /^app: /.test(reason) ? 'failed' : 'load', msg: loadReason(reason) + (fallback ? ' [hosted copy; trying the built-in one]' : '') + (game.remote && game.remote.usb ? ' [copy saved on USB ' + game.remote.usb.v + ']' : ''), stage: 'loading' });
-        clearTimeout(loadTimer);
+        clearTimeout(loadTimer); clearTimeout(loadMax);
         teardown();
         if (tryUsb) {
             triedUsb = true;
@@ -559,12 +581,12 @@ var GameHost = (function () {
     // newer version is installed or the person picks "Opens from: USB" again), reported, and the online version opens now
     function usbToOnline(why) {
         var copy = game.remote.usb, id = game.id.replace(/^app-/, '');
-        var msg = 'the copy installed on USB ' + (copy.drive || '') + ' (' + copy.v + ') did not start (' + (why === 'silent' ? 'no word from its page in ' + Math.round(USB_SILENT_MS / 1000) + ' s' : loadReason(why)) + ', SDK ' + (said.any ? 'ran' : 'silent') + ', ' + copy.uri + '): opening online';
+        var msg = 'the copy installed on USB ' + (copy.drive || '') + ' (' + copy.v + ') did not start (' + (why === 'silent' ? 'no word from its page in ' + Math.round(USB_SILENT_MS / 1000) + ' s' : loadReason(why)) + ', SDK ' + (said.any ? 'ran' : 'silent') + (copy.page ? ', page built from ' + copy.page.files + ' files ' + Math.round(copy.page.bytes / 1024) + ' KB, SDK of ' + copy.page.sdk : '') + ', ' + copy.uri + '): opening online';
         try { console.warn('[GameHost] ' + msg); } catch (e) {}
         report({ kind: 'load', msg: msg, stage: 'loading' });
         if (typeof AppUsb !== 'undefined' && AppUsb.setFailed) AppUsb.setFailed(id, copy.v, said.any ? 'app' : 'silent');
         if (typeof Notify !== 'undefined') Notify.show({ id: 'appusb', kind: 'warn', text: I18n.t('auUsbFailed').replace('%s', title()).replace('%d', copy.drive || 'USB') });
-        clearTimeout(loadTimer);
+        clearTimeout(loadTimer); clearTimeout(loadMax);
         teardown();
         triedUsb = true;
         game.remote.usb = null;
@@ -850,7 +872,7 @@ var GameHost = (function () {
         // given up while it was still loading (slow, or stuck): worth a report too
         if (state === 'loading' && game && Date.now() - said.at > 8000) report({ kind: 'load', msg: 'closed while still loading: ' + loadReason('timeout').slice(9), stage: 'loading' });
         loadSeq++;
-        clearTimeout(loadTimer);
+        clearTimeout(loadTimer); clearTimeout(loadMax);
         teardown();
         setState('idle');
         $('pause').hidden = true;
@@ -970,6 +992,7 @@ var GameHost = (function () {
 
     return {
         loadingStatus: loadingStatus,
+        loadingWait: loadingWait,       // a question on the start screen: the no-progress limit waits
         loadingInfo: showInfo,
         runMode: runMode,
         quiet: quiet,                    // App settings > Notifications: hidden over this app (js/launcher/notify.js)

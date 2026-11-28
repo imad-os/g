@@ -53,7 +53,9 @@ var MyPC = (function () {
      * (on the TV every file:// page could otherwise share My PC's storage). Here, as soon as this file runs (include it first):
      *  - fetch() of the app's own files: read from the drive (the page itself if the TV allows it, else through My PC);
      *  - localStorage / sessionStorage refused to a page with no origin: a memory copy (keep saves in MyPC.save). */
-    var usbCopy = typeof location !== 'undefined' && /[?&]mypc_usb=\d/.test(location.search), usbReqs = {}, usbRid = 0;
+    // build 196: My PC builds the copy's page itself (js/core/usb-page.js, srcdoc: the TV runs no file:// page in a frame);
+    // its first script (window.MYPC_USB) already serves the app's files, so nothing more is done here
+    var usbCopy = typeof location !== 'undefined' && (/[?&]mypc_usb=\d/.test(location.search) || !!(typeof window !== 'undefined' && window.MYPC_USB)), usbReqs = {}, usbRid = 0;
     var MIME = { js: 'text/javascript', mjs: 'text/javascript', json: 'application/json', css: 'text/css', html: 'text/html', htm: 'text/html', txt: 'text/plain', svg: 'image/svg+xml',
                  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', m4a: 'audio/mp4',
                  mp4: 'video/mp4', webm: 'video/webm', wasm: 'application/wasm', glb: 'model/gltf-binary', gltf: 'model/gltf+json', woff2: 'font/woff2', woff: 'font/woff', ttf: 'font/ttf' };
@@ -99,7 +101,7 @@ var MyPC = (function () {
             });
         };
     }
-    if (usbCopy) { try { usbShims(); } catch (e) {} }
+    if (usbCopy && !(window.MYPC_USB && window.MYPC_USB.shim)) { try { usbShims(); } catch (e) {} }
 
     function call(name) {
         var f = handlers[name];

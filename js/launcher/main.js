@@ -369,6 +369,7 @@ var App = (function () {
                     if (inst && ver && inst.v !== ver && AppLive.newer(ver, inst.v) === ver) {
                         if (AppLive.updMode() === 'auto') return install(info, inst);
                         var nm = I18n.pick ? I18n.pick(g.manifest.title) : a.name;
+                        if (GameHost.loadingWait) GameHost.loadingWait();
                         return confirm(I18n.t('auUpdTitle'), I18n.t('auUpdText').replace('%s', nm).replace('%v', ver).replace('%o', inst.v),
                             function () { install(info, inst); }, { yes: I18n.t('auUpdNow'), no: I18n.t('auUpdLater'), focusYes: true, onNo: function () { openInstalled(inst.v, ver); } });
                     }
