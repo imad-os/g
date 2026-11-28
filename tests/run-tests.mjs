@@ -7997,7 +7997,7 @@ MyPC.init({ uses: ['photos', 'videos', 'music'], onInit() { window.__launch = My
         return out;
     }, D);
     const tree = await page.evaluate(() => Object.keys(window.__usb.tree).filter((k) => /Old|x\.txt/.test(k)));
-    check(u.file === true && u.dir === true && u.root === 'bad-request' && u.gone === 'not-found' && u.out === 'bad-request' && u.left === 'Pics' && !tree.length,
+    check(u.file === true && u.dir === true && u.root === 'bad-request' && u.gone === 'not-found' && u.out === 'bad-request' && u.left.split(',').filter((n) => n !== 'MyPC').join(',') === 'Pics' && !tree.length,     // MyPC = the app installed there (build 193)
         'MyPC.usb.remove: a file and a folder with everything in it are deleted; the drive itself, a missing file and paths outside the drives are refused ' + JSON.stringify([u, tree]));
     await app.evaluate((D) => MyPC.open({ path: D + '/Pics/green.png', name: 'green.png', size: 0 }), D);
     await page.waitForFunction(() => Win.current() === 'photos' && document.querySelector('.ph-full') && document.querySelector('.ph-full').naturalWidth > 0, null, { timeout: 15000 }).catch(() => {});
